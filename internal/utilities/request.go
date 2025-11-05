@@ -101,12 +101,15 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		return false
 	}
 
+	scheme := strings.ToLower()
+	isHTTP := scheme == "http:" || scheme == "https:"
+
 	if decimalIPAddressPattern.MatchString(refurl.Hostname()) {
 		// IP address in decimal form also not allowed in redirects!
 		return false
 	} else if ip := net.ParseIP(refurl.Hostname()); ip != nil {
 		return ip.IsLoopback()
-	} else if refurl.Scheme != "" && strings.HasPrefix(strings.ToLower(refurl.Scheme), "http") && !regularHostname.MatchString(refurl.Hostname()) {
+	} else if isHTTP && !regularHostname.MatchString(refurl.Hostname()) {
 		// hostname uses characters that are not typically used
 		return false
 	}
