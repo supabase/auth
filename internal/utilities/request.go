@@ -101,8 +101,8 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		return false
 	}
 
-	scheme := strings.ToLower(refurl.Scheme)
-	isHTTP := scheme == "http:" || scheme == "https:"
+	scheme := strings.TrimSuffix(strings.ToLower(refurl.Scheme), ":")
+	isHTTP := scheme == "http" || scheme == "https"
 
 	if decimalIPAddressPattern.MatchString(refurl.Hostname()) {
 		// IP address in decimal form also not allowed in redirects!
