@@ -101,14 +101,17 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		return false
 	}
 
-	if decimalIPAddressPattern.MatchString(refurl.Hostname()) {
-		// IP address in decimal form also not allowed in redirects!
-		return false
-	} else if ip := net.ParseIP(refurl.Hostname()); ip != nil {
-		return ip.IsLoopback()
-	} else if !regularHostname.MatchString(refurl.Hostname()) {
-		// hostname uses characters that are not typically used
-		return false
+	hostname := refurl.Hostname()
+	if (hostname != "") {
+		if decimalIPAddressPattern.MatchString(hostname) {
+			// IP address in decimal form also not allowed in redirects!
+			return false
+		} else if ip := net.ParseIP(hostname); ip != nil {
+			return ip.IsLoopback()
+		} else if !regularHostname.MatchString(hostname) {
+			// hostname uses characters that are not typically used
+			return false
+		}
 	}
 
 	// For case when user came from mobile app or other permitted resource - redirect back
