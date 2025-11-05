@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.182.1](https://github.com/supabase/auth/compare/v2.182.0...v2.182.1) (2025-11-05)
+
+
+### Bug Fixes
+
+* japanese dot example fix ([#2243](https://github.com/supabase/auth/issues/2243)) ([3a5f4b2](https://github.com/supabase/auth/commit/3a5f4b211a0f50bd1957f5a41467fc5aa6a01ca6))
+
 ## [2.182.0](https://github.com/supabase/auth/compare/v2.181.0...v2.182.0) (2025-11-05)
 
 
