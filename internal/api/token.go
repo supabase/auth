@@ -348,6 +348,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 				return apierrors.NewInternalServerError("Failed to update session").WithInternalError(terr)
 			}
 		} else {
+			// Legacy RTs: swap to ensure current token is the latest one
 			refreshToken, terr := models.GrantRefreshTokenSwap(config.AuditLog, r, tx, user, currentToken)
 			if terr != nil {
 				return terr
