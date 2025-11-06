@@ -844,21 +844,25 @@ paths:
                     items:
                       type: object
                       properties:
-                        client_id:
-                          type: string
-                          format: uuid
-                          description: Unique client identifier
-                        client_name:
-                          type: string
-                          description: Human-readable name of the client application
-                        client_uri:
-                          type: string
-                          format: uri
-                          description: URL of the client application's homepage
-                        logo_uri:
-                          type: string
-                          format: uri
-                          description: URL of the client application's logo
+                        client:
+                          type: object
+                          description: OAuth client details
+                          properties:
+                            client_id:
+                              type: string
+                              format: uuid
+                              description: Unique client identifier
+                            client_name:
+                              type: string
+                              description: Human-readable name of the client application
+                            client_uri:
+                              type: string
+                              format: uri
+                              description: URL of the client application's homepage
+                            logo_uri:
+                              type: string
+                              format: uri
+                              description: URL of the client application's logo
                         scopes:
                           type: array
                           items:

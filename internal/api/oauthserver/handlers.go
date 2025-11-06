@@ -541,12 +541,9 @@ func (s *Server) getTokenService() *tokens.Service {
 
 // UserOAuthGrantResponse represents an OAuth grant that a user has authorized
 type UserOAuthGrantResponse struct {
-	ClientID   string    `json:"client_id"`
-	ClientName string    `json:"client_name,omitempty"`
-	ClientURI  string    `json:"client_uri,omitempty"`
-	LogoURI    string    `json:"logo_uri,omitempty"`
-	Scopes     []string  `json:"scopes"`
-	GrantedAt  time.Time `json:"granted_at"`
+	Client    ClientDetailsResponse `json:"client"`
+	Scopes    []string              `json:"scopes"`
+	GrantedAt time.Time             `json:"granted_at"`
 }
 
 // UserOAuthGrantsListResponse represents the response for listing user's OAuth grants
@@ -587,12 +584,14 @@ func (s *Server) UserListOAuthGrants(w http.ResponseWriter, r *http.Request) err
 		}
 
 		response := UserOAuthGrantResponse{
-			ClientID:   client.ID.String(),
-			ClientName: utilities.StringValue(client.ClientName),
-			ClientURI:  utilities.StringValue(client.ClientURI),
-			LogoURI:    utilities.StringValue(client.LogoURI),
-			Scopes:     consent.GetScopeList(),
-			GrantedAt:  consent.GrantedAt,
+			Client: ClientDetailsResponse{
+				ClientID:   client.ID.String(),
+				ClientName: utilities.StringValue(client.ClientName),
+				ClientURI:  utilities.StringValue(client.ClientURI),
+				LogoURI:    utilities.StringValue(client.LogoURI),
+			},
+			Scopes:    consent.GetScopeList(),
+			GrantedAt: consent.GrantedAt,
 		}
 
 		grants = append(grants, response)

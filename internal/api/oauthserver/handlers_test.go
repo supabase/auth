@@ -520,8 +520,8 @@ func (ts *OAuthClientTestSuite) TestUserListOAuthGrants() {
 
 	// Verify client details are included
 	for _, grant := range response.Grants {
-		assert.NotEmpty(ts.T(), grant.ClientID)
-		assert.Equal(ts.T(), "Test Client", grant.ClientName)
+		assert.NotEmpty(ts.T(), grant.Client.ClientID)
+		assert.Equal(ts.T(), "Test Client", grant.Client.ClientName)
 		assert.NotEmpty(ts.T(), grant.Scopes)
 		assert.NotEmpty(ts.T(), grant.GrantedAt)
 	}
@@ -529,7 +529,7 @@ func (ts *OAuthClientTestSuite) TestUserListOAuthGrants() {
 	// Check that client1 (with read and write scopes) is in the response
 	found := false
 	for _, grant := range response.Grants {
-		if grant.ClientID == client1.ID.String() {
+		if grant.Client.ClientID == client1.ID.String() {
 			found = true
 			assert.Contains(ts.T(), grant.Scopes, "read")
 			assert.Contains(ts.T(), grant.Scopes, "write")
