@@ -546,11 +546,6 @@ type UserOAuthGrantResponse struct {
 	GrantedAt time.Time             `json:"granted_at"`
 }
 
-// UserOAuthGrantsListResponse represents the response for listing user's OAuth grants
-type UserOAuthGrantsListResponse struct {
-	Grants []UserOAuthGrantResponse `json:"grants"`
-}
-
 // UserListOAuthGrants handles GET /user/oauth/grants
 // Lists all OAuth grants that the authenticated user has authorized (active consents)
 func (s *Server) UserListOAuthGrants(w http.ResponseWriter, r *http.Request) error {
@@ -585,10 +580,10 @@ func (s *Server) UserListOAuthGrants(w http.ResponseWriter, r *http.Request) err
 
 		response := UserOAuthGrantResponse{
 			Client: ClientDetailsResponse{
-				ClientID:   client.ID.String(),
-				ClientName: utilities.StringValue(client.ClientName),
-				ClientURI:  utilities.StringValue(client.ClientURI),
-				LogoURI:    utilities.StringValue(client.LogoURI),
+				ID:      client.ID.String(),
+				Name:    utilities.StringValue(client.ClientName),
+				URI:     utilities.StringValue(client.ClientURI),
+				LogoURI: utilities.StringValue(client.LogoURI),
 			},
 			Scopes:    consent.GetScopeList(),
 			GrantedAt: consent.GrantedAt,
@@ -597,11 +592,7 @@ func (s *Server) UserListOAuthGrants(w http.ResponseWriter, r *http.Request) err
 		grants = append(grants, response)
 	}
 
-	response := UserOAuthGrantsListResponse{
-		Grants: grants,
-	}
-
-	return shared.SendJSON(w, http.StatusOK, response)
+	return shared.SendJSON(w, http.StatusOK, grants)
 }
 
 // UserRevokeOAuthGrant handles DELETE /user/oauth/grants?client_id=...

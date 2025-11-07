@@ -511,25 +511,25 @@ func (ts *OAuthClientTestSuite) TestUserListOAuthGrants() {
 	// Check response
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	var response UserOAuthGrantsListResponse
-	err = json.Unmarshal(w.Body.Bytes(), &response)
+	var grants []UserOAuthGrantResponse
+	err = json.Unmarshal(w.Body.Bytes(), &grants)
 	require.NoError(ts.T(), err)
 
 	// Should have 2 grants
-	assert.Len(ts.T(), response.Grants, 2)
+	assert.Len(ts.T(), grants, 2)
 
 	// Verify client details are included
-	for _, grant := range response.Grants {
-		assert.NotEmpty(ts.T(), grant.Client.ClientID)
-		assert.Equal(ts.T(), "Test Client", grant.Client.ClientName)
+	for _, grant := range grants {
+		assert.NotEmpty(ts.T(), grant.Client.ID)
+		assert.Equal(ts.T(), "Test Client", grant.Client.Name)
 		assert.NotEmpty(ts.T(), grant.Scopes)
 		assert.NotEmpty(ts.T(), grant.GrantedAt)
 	}
 
 	// Check that client1 (with read and write scopes) is in the response
 	found := false
-	for _, grant := range response.Grants {
-		if grant.Client.ClientID == client1.ID.String() {
+	for _, grant := range grants {
+		if grant.Client.ID == client1.ID.String() {
 			found = true
 			assert.Contains(ts.T(), grant.Scopes, "read")
 			assert.Contains(ts.T(), grant.Scopes, "write")
@@ -553,12 +553,12 @@ func (ts *OAuthClientTestSuite) TestUserListOAuthGrantsEmpty() {
 
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	var response UserOAuthGrantsListResponse
-	err = json.Unmarshal(w.Body.Bytes(), &response)
+	var grants []UserOAuthGrantResponse
+	err = json.Unmarshal(w.Body.Bytes(), &grants)
 	require.NoError(ts.T(), err)
 
 	// Should have 0 grants
-	assert.Len(ts.T(), response.Grants, 0)
+	assert.Len(ts.T(), grants, 0)
 }
 
 func (ts *OAuthClientTestSuite) TestUserListOAuthGrantsNoAuth() {
