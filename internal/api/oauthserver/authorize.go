@@ -30,6 +30,7 @@ type AuthorizeParams struct {
 	Resource            string `json:"resource"`
 	CodeChallenge       string `json:"code_challenge"`
 	CodeChallengeMethod string `json:"code_challenge_method"`
+	Nonce               string `json:"nonce"` // OIDC nonce parameter
 }
 
 // AuthorizationDetailsResponse represents the response for getting authorization details
@@ -96,6 +97,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 		Resource:            query.Get("resource"),
 		CodeChallenge:       query.Get("code_challenge"),
 		CodeChallengeMethod: query.Get("code_challenge_method"),
+		Nonce:               query.Get("nonce"),
 	}
 
 	// validate basic required parameters (client_id, redirect_uri)
@@ -142,6 +144,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 		params.Resource,
 		params.CodeChallenge,
 		params.CodeChallengeMethod,
+		params.Nonce,
 	)
 
 	if err := models.CreateOAuthServerAuthorization(db, authorization); err != nil {

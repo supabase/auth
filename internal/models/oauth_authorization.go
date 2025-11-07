@@ -50,6 +50,7 @@ type OAuthServerAuthorization struct {
 	Resource            *string                        `json:"resource,omitempty" db:"resource"`
 	CodeChallenge       *string                        `json:"code_challenge,omitempty" db:"code_challenge"`
 	CodeChallengeMethod *string                        `json:"code_challenge_method,omitempty" db:"code_challenge_method"`
+	Nonce               *string                        `json:"nonce,omitempty" db:"nonce"` // OIDC nonce parameter
 	ResponseType        OAuthServerResponseType        `json:"response_type" db:"response_type"`
 	Status              OAuthServerAuthorizationStatus `json:"status" db:"status"`
 	AuthorizationCode   *string                        `json:"-" db:"authorization_code"`
@@ -67,7 +68,7 @@ func (OAuthServerAuthorization) TableName() string {
 }
 
 // NewOAuthServerAuthorization creates a new OAuth server authorization request without user (for initial flow)
-func NewOAuthServerAuthorization(clientID uuid.UUID, redirectURI, scope, state, resource, codeChallenge, codeChallengeMethod string) *OAuthServerAuthorization {
+func NewOAuthServerAuthorization(clientID uuid.UUID, redirectURI, scope, state, resource, codeChallenge, codeChallengeMethod, nonce string) *OAuthServerAuthorization {
 	id := uuid.Must(uuid.NewV4())
 	authorizationID := crypto.SecureAlphanumeric(32) // Generate random ID for frontend
 
@@ -101,6 +102,9 @@ func NewOAuthServerAuthorization(clientID uuid.UUID, redirectURI, scope, state, 
 		// Database enum expects 's256' and 'plain' (lowercase)
 		normalizedMethod := strings.ToLower(codeChallengeMethod)
 		auth.CodeChallengeMethod = &normalizedMethod
+	}
+	if nonce != "" {
+		auth.Nonce = &nonce
 	}
 
 	return auth
