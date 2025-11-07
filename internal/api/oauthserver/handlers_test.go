@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -436,4 +437,229 @@ func (ts *OAuthClientTestSuite) TestHandlerValidation() {
 	err = ts.Server.AdminOAuthServerClientRegister(w, req)
 	require.Error(ts.T(), err)
 	assert.Contains(ts.T(), err.Error(), "invalid redirect_uri")
+}
+
+// Helper function to create a test user
+func (ts *OAuthClientTestSuite) createTestUser(email string) *models.User {
+	user, err := models.NewUser("", email, "password123", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), user)
+
+	err = ts.DB.Create(user)
+	require.NoError(ts.T(), err)
+
+	return user
+}
+
+// Helper function to create a test OAuth consent
+func (ts *OAuthClientTestSuite) createTestConsent(userID, clientID string, scopes []string) *models.OAuthServerConsent {
+	userUUID, err := uuid.FromString(userID)
+	require.NoError(ts.T(), err)
+
+	clientUUID, err := uuid.FromString(clientID)
+	require.NoError(ts.T(), err)
+
+	consent := models.NewOAuthServerConsent(userUUID, clientUUID, scopes)
+	require.NoError(ts.T(), models.UpsertOAuthServerConsent(ts.DB, consent))
+
+	return consent
+}
+
+// Helper function to create a test session for OAuth
+func (ts *OAuthClientTestSuite) createTestSession(userID, clientID string) *models.Session {
+	userUUID, err := uuid.FromString(userID)
+	require.NoError(ts.T(), err)
+
+	clientUUID, err := uuid.FromString(clientID)
+	require.NoError(ts.T(), err)
+
+	session, err := models.NewSession(userUUID, nil)
+	require.NoError(ts.T(), err)
+	session.OAuthClientID = &clientUUID
+
+	err = ts.DB.Create(session)
+	require.NoError(ts.T(), err)
+
+	return session
+}
+
+func (ts *OAuthClientTestSuite) TestUserListOAuthGrants() {
+	// Create test user
+	user := ts.createTestUser("test@example.com")
+
+	// Create test OAuth clients
+	client1, _ := ts.createTestOAuthClient()
+	client2, _ := ts.createTestOAuthClient()
+
+	// Create consents for the user
+	ts.createTestConsent(user.ID.String(), client1.ID.String(), []string{"read", "write"})
+	ts.createTestConsent(user.ID.String(), client2.ID.String(), []string{"read"})
+
+	// Create HTTP request
+	req := httptest.NewRequest(http.MethodGet, "/user/oauth/grants", nil)
+
+	// Add user to context (normally done by requireAuthentication middleware)
+	ctx := shared.WithUser(req.Context(), user)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	// Call handler
+	err := ts.Server.UserListOAuthGrants(w, req)
+	require.NoError(ts.T(), err)
+
+	// Check response
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var response UserOAuthGrantsListResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(ts.T(), err)
+
+	// Should have 2 grants
+	assert.Len(ts.T(), response.Grants, 2)
+
+	// Verify client details are included
+	for _, grant := range response.Grants {
+		assert.NotEmpty(ts.T(), grant.ClientID)
+		assert.Equal(ts.T(), "Test Client", grant.ClientName)
+		assert.NotEmpty(ts.T(), grant.Scopes)
+		assert.NotEmpty(ts.T(), grant.GrantedAt)
+	}
+
+	// Check that client1 (with read and write scopes) is in the response
+	found := false
+	for _, grant := range response.Grants {
+		if grant.ClientID == client1.ID.String() {
+			found = true
+			assert.Contains(ts.T(), grant.Scopes, "read")
+			assert.Contains(ts.T(), grant.Scopes, "write")
+		}
+	}
+	assert.True(ts.T(), found, "client1 should be in the grants list")
+}
+
+func (ts *OAuthClientTestSuite) TestUserListOAuthGrantsEmpty() {
+	// Create test user with no grants
+	user := ts.createTestUser("test2@example.com")
+
+	req := httptest.NewRequest(http.MethodGet, "/user/oauth/grants", nil)
+	ctx := shared.WithUser(req.Context(), user)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err := ts.Server.UserListOAuthGrants(w, req)
+	require.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var response UserOAuthGrantsListResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(ts.T(), err)
+
+	// Should have 0 grants
+	assert.Len(ts.T(), response.Grants, 0)
+}
+
+func (ts *OAuthClientTestSuite) TestUserListOAuthGrantsNoAuth() {
+	// Test without user in context (unauthenticated)
+	req := httptest.NewRequest(http.MethodGet, "/user/oauth/grants", nil)
+	w := httptest.NewRecorder()
+
+	err := ts.Server.UserListOAuthGrants(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "authentication required")
+}
+
+func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrant() {
+	// Create test user
+	user := ts.createTestUser("test3@example.com")
+
+	// Create a client and consent
+	client, _ := ts.createTestOAuthClient()
+	ts.createTestConsent(user.ID.String(), client.ID.String(), []string{"read", "write"})
+
+	// Create a session for this OAuth client
+	session := ts.createTestSession(user.ID.String(), client.ID.String())
+
+	// Create HTTP request with query parameter
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants?client_id="+client.ID.String(), nil)
+
+	// Add user to context
+	ctx := shared.WithUser(req.Context(), user)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	// Call handler - should succeed
+	err := ts.Server.UserRevokeOAuthGrant(w, req)
+	require.NoError(ts.T(), err)
+
+	// Check response
+	assert.Equal(ts.T(), http.StatusNoContent, w.Code)
+	assert.Empty(ts.T(), w.Body.String())
+
+	// Verify consent was revoked
+	consent, err := models.FindOAuthServerConsentByUserAndClient(ts.DB, user.ID, client.ID)
+	require.NoError(ts.T(), err)
+	assert.NotNil(ts.T(), consent.RevokedAt, "consent should be revoked")
+
+	// Verify session was deleted
+	deletedSession, err := models.FindSessionByID(ts.DB, session.ID, false)
+	assert.Error(ts.T(), err, "session should be deleted")
+	assert.Nil(ts.T(), deletedSession)
+}
+
+func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantNotFound() {
+	// Create test user
+	user := ts.createTestUser("test4@example.com")
+
+	// Create a client but don't create a consent
+	client, _ := ts.createTestOAuthClient()
+
+	// Create HTTP request with query parameter
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants?client_id="+client.ID.String(), nil)
+
+	// Add user to context
+	ctx := shared.WithUser(req.Context(), user)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	// Call handler - should return error
+	err := ts.Server.UserRevokeOAuthGrant(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "No active grant found")
+}
+
+func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantInvalidClientID() {
+	// Create test user
+	user := ts.createTestUser("test5@example.com")
+
+	// Create HTTP request with invalid client ID query parameter
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants?client_id=invalid-uuid", nil)
+
+	// Add user to context
+	ctx := shared.WithUser(req.Context(), user)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	// Call handler - should return error
+	err := ts.Server.UserRevokeOAuthGrant(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "invalid client_id format")
+}
+
+func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantNoAuth() {
+	// Test without user in context (unauthenticated)
+	client, _ := ts.createTestOAuthClient()
+
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants?client_id="+client.ID.String(), nil)
+
+	w := httptest.NewRecorder()
+
+	err := ts.Server.UserRevokeOAuthGrant(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "authentication required")
 }
