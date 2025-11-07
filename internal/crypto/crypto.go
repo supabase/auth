@@ -29,6 +29,7 @@ func GenerateOtp(digits int) string {
 
 	return otp
 }
+
 func GenerateTokenHash(emailOrPhone, otp string) string {
 	return fmt.Sprintf("%x", sha256.Sum224([]byte(emailOrPhone+otp)))
 }

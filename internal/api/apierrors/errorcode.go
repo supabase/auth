@@ -100,4 +100,5 @@ const (
 
 	ErrorCodeOAuthClientNotFound        ErrorCode = "oauth_client_not_found"
 	ErrorCodeOAuthAuthorizationNotFound ErrorCode = "oauth_authorization_not_found"
+	ErrorCodeOAuthConsentNotFound       ErrorCode = "oauth_consent_not_found"
 )
