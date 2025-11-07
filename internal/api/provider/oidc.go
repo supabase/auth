@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -46,7 +47,7 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 
 	token, err := verifier.Verify(ctx, idToken)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("error verifying id token: %w", err)
 	}
 
 	var data *UserProvidedData
@@ -76,12 +77,12 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 	}
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("error parsing id token: %w", err)
 	}
 
 	if !options.SkipAccessTokenCheck && token.AccessTokenHash != "" {
 		if err := token.VerifyAccessToken(options.AccessToken); err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("error verifying access token: %w", err)
 		}
 	}
 
@@ -446,7 +447,7 @@ func parseGenericIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData,
 	var data UserProvidedData
 
 	if err := token.Claims(&data.Metadata); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("error parsing generic id token: %w", err)
 	}
 
 	if data.Metadata.Email != "" {
