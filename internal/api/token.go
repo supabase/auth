@@ -313,6 +313,10 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 	}
 
 	err = tx.Transaction(func(tx *storage.Connection) error {
+		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
+			return terr
+		}
+
 		session, terr := models.FindSessionByID(tx, sessionId, true)
 		if terr != nil {
 			return terr
@@ -320,10 +324,6 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 
 		if err := tx.Load(user, "Identities"); err != nil {
 			return err
-		}
-
-		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
-			return terr
 		}
 
 		// issue a new refresh token on successful verification
