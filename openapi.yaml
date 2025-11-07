@@ -2480,12 +2480,12 @@ paths:
                   client:
                     type: object
                     properties:
-                      client_id:
+                      id:
                         type: string
                         format: uuid
-                      client_name:
+                      name:
                         type: string
-                      client_uri:
+                      uri:
                         type: string
                         format: uri
                       logo_uri:
