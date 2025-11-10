@@ -353,6 +353,11 @@ func LogoutAllExceptMe(tx *storage.Connection, sessionId uuid.UUID, userID uuid.
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id != ? AND user_id = ?", sessionId, userID).Exec()
 }
 
+// RevokeOAuthSessions deletes all sessions associated with a specific OAuth client for a user
+func RevokeOAuthSessions(tx *storage.Connection, userID uuid.UUID, oauthClientID uuid.UUID) error {
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND oauth_client_id = ?", userID, oauthClientID).Exec()
+}
+
 func (s *Session) UpdateAALAndAssociatedFactor(tx *storage.Connection, aal AuthenticatorAssuranceLevel, factorID *uuid.UUID) error {
 	s.FactorID = factorID
 	aalAsString := aal.String()

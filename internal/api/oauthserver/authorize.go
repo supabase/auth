@@ -43,10 +43,10 @@ type AuthorizationDetailsResponse struct {
 
 // ClientDetailsResponse represents client details in authorization response
 type ClientDetailsResponse struct {
-	ClientID   string `json:"client_id"`
-	ClientName string `json:"client_name,omitempty"`
-	ClientURI  string `json:"client_uri,omitempty"`
-	LogoURI    string `json:"logo_uri,omitempty"`
+	ID      string `json:"id"`
+	Name    string `json:"name,omitempty"`
+	URI     string `json:"uri,omitempty"`
+	LogoURI string `json:"logo_uri,omitempty"`
 }
 
 // UserDetailsResponse represents user details in authorization response
@@ -237,10 +237,10 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 		AuthorizationID: authorization.AuthorizationID,
 		RedirectURI:     authorization.RedirectURI,
 		Client: ClientDetailsResponse{
-			ClientID:   authorization.Client.ID.String(),
-			ClientName: utilities.StringValue(authorization.Client.ClientName),
-			ClientURI:  utilities.StringValue(authorization.Client.ClientURI),
-			LogoURI:    utilities.StringValue(authorization.Client.LogoURI),
+			ID:      authorization.Client.ID.String(),
+			Name:    utilities.StringValue(authorization.Client.ClientName),
+			URI:     utilities.StringValue(authorization.Client.ClientURI),
+			LogoURI: utilities.StringValue(authorization.Client.LogoURI),
 		},
 		User: UserDetailsResponse{
 			ID:    user.ID.String(),

@@ -7,6 +7,7 @@ import (
 	"github.com/gofrs/uuid"
 
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
@@ -303,7 +304,8 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 	config := a.config
 	var tokenString string
 	var expiresAt int64
-	var refreshToken *models.RefreshToken
+	var issuedRefreshToken string
+
 	currentClaims := getClaims(ctx)
 	sessionId, err := uuid.FromString(currentClaims.SessionId)
 	if err != nil {
@@ -314,22 +316,51 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
 			return terr
 		}
-		session, terr := models.FindSessionByID(tx, sessionId, false)
+
+		session, terr := models.FindSessionByID(tx, sessionId, true)
 		if terr != nil {
 			return terr
 		}
-		currentToken, terr := models.FindTokenBySessionID(tx, &session.ID)
-		if terr != nil {
-			return terr
-		}
+
 		if err := tx.Load(user, "Identities"); err != nil {
 			return err
 		}
-		// Swap to ensure current token is the latest one
-		refreshToken, terr = models.GrantRefreshTokenSwap(config.AuditLog, r, tx, user, currentToken)
-		if terr != nil {
-			return terr
+
+		// issue a new refresh token on successful verification
+		if session.RefreshTokenHmacKey != nil && session.RefreshTokenCounter != nil {
+			signingKey, _, terr := session.GetRefreshTokenHmacKey(config.Security.DBEncryption)
+			if terr != nil {
+				return apierrors.NewInternalServerError("Failed to get session's refresh token key").WithInternalError(terr)
+			}
+
+			counter := *session.RefreshTokenCounter + 1
+			session.RefreshTokenCounter = &counter
+
+			issuedRefreshToken = (&crypto.RefreshToken{
+				Version:   0,
+				SessionID: session.ID,
+				Counter:   *session.RefreshTokenCounter,
+			}).Encode(signingKey)
+
+			if terr := session.UpdateOnlyRefreshToken(tx); terr != nil {
+				return apierrors.NewInternalServerError("Failed to update session").WithInternalError(terr)
+			}
+		} else {
+			// Legacy RTs: swap to ensure current token is the latest one
+
+			currentToken, terr := models.FindTokenBySessionID(tx, &session.ID)
+			if terr != nil {
+				return terr
+			}
+
+			refreshToken, terr := models.GrantRefreshTokenSwap(config.AuditLog, r, tx, user, currentToken)
+			if terr != nil {
+				return terr
+			}
+
+			issuedRefreshToken = refreshToken.Token
 		}
+
 		aal, _, terr := session.CalculateAALAndAMR(user)
 		if terr != nil {
 			return terr
@@ -362,7 +393,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		TokenType:    "bearer",
 		ExpiresIn:    config.JWT.Exp,
 		ExpiresAt:    expiresAt,
-		RefreshToken: refreshToken.Token,
+		RefreshToken: issuedRefreshToken,
 		User:         user,
 	}, nil
 }
