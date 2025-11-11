@@ -400,6 +400,10 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	grantParams.FillGrantParams(r)
 	grantParams.OAuthClientID = &client.ID
 
+	// Store scopes from authorization in session
+	scopes := authorization.Scope
+	grantParams.Scopes = &scopes
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		authMethod := models.OAuthProviderAuthorizationCode
 
@@ -418,26 +422,6 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 			return terr
 		}
 
-		// Generate OIDC ID Token
-		// NOTE: For now, we generate ID tokens for any OAuth authorization_code request.
-		// TODO: When scope management is implemented, check for 'openid' scope before generating ID tokens.
-		var nonce string
-		if authorization.Nonce != nil {
-			nonce = *authorization.Nonce
-		}
-
-		idToken, terr := tokenService.GenerateIDToken(tokens.GenerateIDTokenParams{
-			User:     user,
-			ClientID: client.ID,
-			Nonce:    nonce,
-			AuthTime: user.LastSignInAt,
-		})
-		if terr != nil {
-			return apierrors.NewInternalServerError("Error generating ID token").WithInternalError(terr)
-		}
-
-		tokenResponse.IDToken = idToken
-
 		// Mark authorization as used - authorization codes are single use
 		// We could either delete it or mark it as consumed
 		if terr = tx.Destroy(authorization); terr != nil {
@@ -452,6 +436,28 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 			return httpErr
 		}
 		return apierrors.NewInternalServerError("Error exchanging authorization code").WithInternalError(err)
+	}
+
+	// Check if we need to generate OIDC ID Token (only if 'openid' scope is present)
+	scopeList := models.ParseScopeString(authorization.Scope)
+	if models.HasScope(scopeList, "openid") {
+		var nonce string
+		if authorization.Nonce != nil {
+			nonce = *authorization.Nonce
+		}
+
+		idToken, err := tokenService.GenerateIDToken(tokens.GenerateIDTokenParams{
+			User:     user,
+			ClientID: client.ID,
+			Nonce:    nonce,
+			AuthTime: user.LastSignInAt,
+			Scopes:   scopeList,
+		})
+		if err != nil {
+			return apierrors.NewInternalServerError("Error generating ID token").WithInternalError(err)
+		}
+
+		tokenResponse.IDToken = idToken
 	}
 
 	// Convert to OAuth-compliant response format (exclude user info for OAuth clients)
@@ -646,46 +652,99 @@ func (s *Server) UserRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) er
 // OAuthUserInfo handles GET /oauth/userinfo (OIDC UserInfo endpoint)
 // Per OIDC Core Section 5.3
 //
-// This endpoint returns the complete user profile, similar to the /user endpoint,
-// providing OAuth clients with comprehensive user information including:
-// - Standard OIDC claims (sub, email, phone, etc.)
-// - User metadata and app metadata
-// - Identities (linked external providers)
-// - Factors (MFA configurations)
-// - Role and timestamps
+// Returns user information filtered by the scopes granted in the access token:
+// - openid: sub (user ID) - always included as base claim
+// - email: email, email_confirmed_at, new_email
+// - profile: name, picture, preferred_username, updated_at, user_metadata
+// - phone: phone, phone_confirmed_at, new_phone
 func (s *Server) OAuthUserInfo(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	// Get authenticated user from context (set by requireAuthentication middleware)
-	// The middleware guarantees the user exists, so no nil check is needed
 	user := shared.GetUser(ctx)
 
-	// Marshal user to JSON and unmarshal to map to add OIDC 'sub' claim
-	userJSON, err := json.Marshal(user)
-	if err != nil {
-		return apierrors.NewInternalServerError("Error marshaling user data").WithInternalError(err)
+	// Get the session to retrieve scopes
+	// The access token contains session_id claim, and requireAuthentication middleware
+	// loads the session into context
+	session := shared.GetSession(ctx)
+
+	// Build base userInfo response with 'sub' (required by OIDC spec)
+	userInfo := map[string]interface{}{
+		"sub": user.ID.String(),
+	}
+	if session == nil {
+		// If no session in context, this is likely a non-OAuth token
+		// Return minimal user info (just sub claim)
+		return shared.SendJSON(w, http.StatusOK, userInfo)
 	}
 
-	var userInfo map[string]interface{}
-	if err := json.Unmarshal(userJSON, &userInfo); err != nil {
-		return apierrors.NewInternalServerError("Error unmarshaling user data").WithInternalError(err)
+	// Get scopes from session
+	scopes := session.GetScopeList()
+
+	// Add scope-specific claims
+	hasEmailScope := models.HasScope(scopes, "email")
+	hasProfileScope := models.HasScope(scopes, "profile")
+	hasPhoneScope := models.HasScope(scopes, "phone")
+
+	// Email scope claims
+	if hasEmailScope {
+		if email := user.GetEmail(); email != "" {
+			userInfo["email"] = email
+		}
+		if user.EmailConfirmedAt != nil {
+			userInfo["email_confirmed_at"] = user.EmailConfirmedAt
+		}
+		if user.EmailChange != "" {
+			userInfo["new_email"] = user.EmailChange
+		}
 	}
 
-	// Add the required 'sub' claim per OIDC spec (subject identifier)
-	// The 'sub' claim must be present in UserInfo responses
-	userInfo["sub"] = user.ID.String()
+	// Profile scope claims
+	if hasProfileScope {
+		// Extract name from user metadata
+		if name, ok := user.UserMetaData["name"].(string); ok && name != "" {
+			userInfo["name"] = name
+		} else if user.GetEmail() != "" {
+			userInfo["name"] = user.GetEmail()
+		}
 
-	// Return the complete user object with the 'sub' claim
-	// This includes all relevant data: identities, app_metadata, user_metadata, factors, etc.
-	//
-	// NOTE: For now, we return all user data regardless of scopes.
-	// TODO: When scope management is implemented, filter the returned fields based on
-	// the scopes granted to the OAuth client that issued the access token:
-	// - 'openid' scope: sub (user ID) only
-	// - 'profile' scope: name, picture, preferred_username, updated_at, user_metadata
-	// - 'email' scope: email, email_confirmed_at, new_email
-	// - 'phone' scope: phone, phone_confirmed_at, new_phone
-	// - Custom scopes: could control access to app_metadata, identities, factors, etc.
+		// Extract picture
+		if picture, ok := user.UserMetaData["picture"].(string); ok && picture != "" {
+			userInfo["picture"] = picture
+		} else if avatarURL, ok := user.UserMetaData["avatar_url"].(string); ok && avatarURL != "" {
+			userInfo["picture"] = avatarURL
+		}
+
+		// Extract preferred_username
+		if username, ok := user.UserMetaData["preferred_username"].(string); ok && username != "" {
+			userInfo["preferred_username"] = username
+		} else if username, ok := user.UserMetaData["username"].(string); ok && username != "" {
+			userInfo["preferred_username"] = username
+		}
+
+		// Add updated_at
+		if user.UpdatedAt.Unix() > 0 {
+			userInfo["updated_at"] = user.UpdatedAt.Unix()
+		}
+
+		// Include user_metadata with profile scope
+		if user.UserMetaData != nil {
+			userInfo["user_metadata"] = user.UserMetaData
+		}
+	}
+
+	// Phone scope claims
+	if hasPhoneScope {
+		if phone := user.GetPhone(); phone != "" {
+			userInfo["phone"] = phone
+		}
+		if user.PhoneConfirmedAt != nil {
+			userInfo["phone_confirmed_at"] = user.PhoneConfirmedAt
+		}
+		if user.PhoneChange != "" {
+			userInfo["new_phone"] = user.PhoneChange
+		}
+	}
 
 	return shared.SendJSON(w, http.StatusOK, userInfo)
 }

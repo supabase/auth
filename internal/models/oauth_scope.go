@@ -2,6 +2,19 @@ package models
 
 import "strings"
 
+// SupportedOAuthScopes defines all OAuth/OIDC scopes supported by the server
+var SupportedOAuthScopes = []string{
+	"openid",
+	"profile",
+	"email",
+	"phone",
+}
+
+// IsSupportedScope checks if a scope is in the supported scopes list
+func IsSupportedScope(scope string) bool {
+	return HasScope(SupportedOAuthScopes, scope)
+}
+
 // ParseScopeString parses a space-separated scope string into a slice
 func ParseScopeString(scopeString string) []string {
 	if scopeString == "" {

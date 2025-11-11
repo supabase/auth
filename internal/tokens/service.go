@@ -39,6 +39,7 @@ type AccessTokenClaims struct {
 	SessionId                     string                 `json:"session_id,omitempty"`
 	IsAnonymous                   bool                   `json:"is_anonymous"`
 	ClientID                      string                 `json:"client_id,omitempty"`
+	Scope                         string                 `json:"scope,omitempty"`
 }
 
 // IDTokenClaims represents OpenID Connect ID Token claims
@@ -85,6 +86,7 @@ type GenerateIDTokenParams struct {
 	ClientID uuid.UUID  // OAuth2 client ID (required for ID tokens)
 	Nonce    string     // OIDC nonce from authorization request (optional)
 	AuthTime *time.Time // Time when authentication occurred (optional, uses user.LastSignInAt if not provided)
+	Scopes   []string   // OAuth scopes granted (used to filter claims)
 }
 
 // RefreshTokenGrantParams contains parameters for refresh token grant
@@ -580,6 +582,12 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		clientID = params.ClientID.String()
 	}
 
+	// Get scopes from session if this is an OAuth session
+	var scopes string
+	if session.Scopes != nil {
+		scopes = *session.Scopes
+	}
+
 	claims := &v0hooks.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   params.User.ID.String(),
@@ -598,6 +606,7 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		AuthenticationMethodReference: amr,
 		IsAnonymous:                   params.User.IsAnonymous,
 		ClientID:                      clientID,
+		Scope:                         scopes,
 	}
 
 	var gotrueClaims jwt.Claims = claims
@@ -628,8 +637,11 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 }
 
 // GenerateIDToken generates an OpenID Connect ID Token
-// NOTE: For now, we generate ID tokens for any OAuth authorization_code request.
-// TODO: When scope management is implemented, check for 'openid' scope before generating ID tokens.
+// Claims are filtered based on the granted scopes per OIDC spec:
+// - openid: sub (always included when openid scope is present)
+// - email: email, email_verified
+// - profile: name, picture, updated_at, preferred_username
+// - phone: phone_number, phone_number_verified
 func (s *Service) GenerateIDToken(params GenerateIDTokenParams) (string, error) {
 	config := s.config
 
@@ -648,6 +660,7 @@ func (s *Service) GenerateIDToken(params GenerateIDTokenParams) (string, error) 
 	expiresAt := issuedAt.Add(time.Hour)
 
 	// Build ID token claims per OIDC spec
+	// Base claims (always included)
 	claims := &IDTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   params.User.ID.String(),
@@ -656,44 +669,61 @@ func (s *Service) GenerateIDToken(params GenerateIDTokenParams) (string, error) 
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			Issuer:    config.JWT.Issuer,
 		},
-		AuthTime:            authTime.Unix(),
-		Email:               params.User.GetEmail(),
-		EmailVerified:       params.User.IsConfirmed(),
-		PhoneNumber:         params.User.GetPhone(),
-		PhoneNumberVerified: params.User.IsPhoneConfirmed(),
-		ClientID:            params.ClientID.String(),
+		AuthTime: authTime.Unix(),
+		ClientID: params.ClientID.String(),
 	}
 
-	// Add nonce if provided (required for implicit/hybrid flows, optional for authorization code flow)
+	// Add nonce if provided
 	if params.Nonce != "" {
 		claims.Nonce = params.Nonce
 	}
 
-	// Extract name from user metadata if available
-	if name, ok := params.User.UserMetaData["name"].(string); ok && name != "" {
-		claims.Name = name
-	} else if params.User.GetEmail() != "" {
-		// Fallback to email as name if no name is set
-		claims.Name = params.User.GetEmail()
+	// Add scope-specific claims
+	// Check if scope was granted before adding claims
+	hasEmailScope := models.HasScope(params.Scopes, "email")
+	hasProfileScope := models.HasScope(params.Scopes, "profile")
+	hasPhoneScope := models.HasScope(params.Scopes, "phone")
+
+	// Email scope: email, email_verified
+	if hasEmailScope {
+		claims.Email = params.User.GetEmail()
+		claims.EmailVerified = params.User.IsConfirmed()
 	}
 
-	// Extract picture URL from user metadata if available
-	if picture, ok := params.User.UserMetaData["picture"].(string); ok && picture != "" {
-		claims.Picture = picture
-	} else if avatarURL, ok := params.User.UserMetaData["avatar_url"].(string); ok && avatarURL != "" {
-		claims.Picture = avatarURL
+	// Phone scope: phone_number, phone_number_verified
+	if hasPhoneScope {
+		claims.PhoneNumber = params.User.GetPhone()
+		claims.PhoneNumberVerified = params.User.IsPhoneConfirmed()
 	}
 
-	// Add preferred_username if available
-	if username, ok := params.User.UserMetaData["preferred_username"].(string); ok && username != "" {
-		claims.PreferredUsername = username
-	} else if username, ok := params.User.UserMetaData["username"].(string); ok && username != "" {
-		claims.PreferredUsername = username
-	}
+	// Profile scope: name, picture, updated_at, preferred_username
+	if hasProfileScope {
+		// Extract name from user metadata if available
+		if name, ok := params.User.UserMetaData["name"].(string); ok && name != "" {
+			claims.Name = name
+		} else if params.User.GetEmail() != "" {
+			// Fallback to email as name if no name is set
+			claims.Name = params.User.GetEmail()
+		}
 
-	// Add updated_at timestamp
-	if params.User.UpdatedAt.Unix() > 0 {
-		claims.UpdatedAt = params.User.UpdatedAt.Unix()
+		// Extract picture URL from user metadata if available
+		if picture, ok := params.User.UserMetaData["picture"].(string); ok && picture != "" {
+			claims.Picture = picture
+		} else if avatarURL, ok := params.User.UserMetaData["avatar_url"].(string); ok && avatarURL != "" {
+			claims.Picture = avatarURL
+		}
+
+		// Add preferred_username if available
+		if username, ok := params.User.UserMetaData["preferred_username"].(string); ok && username != "" {
+			claims.PreferredUsername = username
+		} else if username, ok := params.User.UserMetaData["username"].(string); ok && username != "" {
+			claims.PreferredUsername = username
+		}
+
+		// Add updated_at timestamp
+		if params.User.UpdatedAt.Unix() > 0 {
+			claims.UpdatedAt = params.User.UpdatedAt.Unix()
+		}
 	}
 
 	// Sign the ID token with the same key as access tokens
