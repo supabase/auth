@@ -2,12 +2,20 @@ package models
 
 import "strings"
 
+// OAuth/OIDC scope constants
+const (
+	ScopeOpenID  = "openid"
+	ScopeEmail   = "email"
+	ScopeProfile = "profile"
+	ScopePhone   = "phone"
+)
+
 // SupportedOAuthScopes defines all OAuth/OIDC scopes supported by the server
 var SupportedOAuthScopes = []string{
-	"openid",
-	"profile",
-	"email",
-	"phone",
+	ScopeOpenID,
+	ScopeProfile,
+	ScopeEmail,
+	ScopePhone,
 }
 
 // IsSupportedScope checks if a scope is in the supported scopes list

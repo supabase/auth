@@ -440,7 +440,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 
 	// Check if we need to generate OIDC ID Token (only if 'openid' scope is present)
 	scopeList := models.ParseScopeString(authorization.Scope)
-	if models.HasScope(scopeList, "openid") {
+	if models.HasScope(scopeList, models.ScopeOpenID) {
 		var nonce string
 		if authorization.Nonce != nil {
 			nonce = *authorization.Nonce
@@ -682,9 +682,9 @@ func (s *Server) OAuthUserInfo(w http.ResponseWriter, r *http.Request) error {
 	scopes := session.GetScopeList()
 
 	// Add scope-specific claims
-	hasEmailScope := models.HasScope(scopes, "email")
-	hasProfileScope := models.HasScope(scopes, "profile")
-	hasPhoneScope := models.HasScope(scopes, "phone")
+	hasEmailScope := models.HasScope(scopes, models.ScopeEmail)
+	hasProfileScope := models.HasScope(scopes, models.ScopeProfile)
+	hasPhoneScope := models.HasScope(scopes, models.ScopePhone)
 
 	// Email scope claims
 	if hasEmailScope {

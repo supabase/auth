@@ -680,9 +680,9 @@ func (s *Service) GenerateIDToken(params GenerateIDTokenParams) (string, error) 
 
 	// Add scope-specific claims
 	// Check if scope was granted before adding claims
-	hasEmailScope := models.HasScope(params.Scopes, "email")
-	hasProfileScope := models.HasScope(params.Scopes, "profile")
-	hasPhoneScope := models.HasScope(params.Scopes, "phone")
+	hasEmailScope := models.HasScope(params.Scopes, models.ScopeEmail)
+	hasProfileScope := models.HasScope(params.Scopes, models.ScopeProfile)
+	hasPhoneScope := models.HasScope(params.Scopes, models.ScopePhone)
 
 	// Email scope: email, email_verified
 	if hasEmailScope {
