@@ -694,9 +694,6 @@ func (s *Server) OAuthUserInfo(w http.ResponseWriter, r *http.Request) error {
 		if user.EmailConfirmedAt != nil {
 			userInfo["email_confirmed_at"] = user.EmailConfirmedAt
 		}
-		if user.EmailChange != "" {
-			userInfo["new_email"] = user.EmailChange
-		}
 	}
 
 	// Profile scope claims
@@ -740,9 +737,6 @@ func (s *Server) OAuthUserInfo(w http.ResponseWriter, r *http.Request) error {
 		}
 		if user.PhoneConfirmedAt != nil {
 			userInfo["phone_confirmed_at"] = user.PhoneConfirmedAt
-		}
-		if user.PhoneChange != "" {
-			userInfo["new_phone"] = user.PhoneChange
 		}
 	}
 
