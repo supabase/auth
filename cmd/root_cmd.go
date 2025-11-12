@@ -17,12 +17,7 @@ var (
 var rootCmd = cobra.Command{
 	Use: "gotrue",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Always run migrate first
 		migrate(cmd, args)
-
-		// Run createIndexes in a goroutine so it doesn't block serve
-		go createIndexes(cmd, args)
-
 		serve(cmd.Context())
 	},
 }

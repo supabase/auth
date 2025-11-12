@@ -8,6 +8,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/indexworker"
 	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/storage"
 	"golang.org/x/sync/errgroup"
@@ -79,15 +80,19 @@ func (o *Worker) Work(ctx context.Context) error {
 		eg        errgroup.Group
 		notifyTpl = make(chan struct{}, 1)
 		notifyDb  = make(chan struct{}, 1)
+		notifyIdx = make(chan struct{}, 1)
 	)
 	eg.Go(func() error {
-		return o.configNotifier(ctx, notifyTpl, notifyDb)
+		return o.configNotifier(ctx, notifyTpl, notifyDb, notifyIdx)
 	})
 	eg.Go(func() error {
 		return o.templateWorker(ctx, notifyTpl)
 	})
 	eg.Go(func() error {
 		return o.dbWorker(ctx, notifyDb)
+	})
+	eg.Go(func() error {
+		return o.indexWorker(ctx, notifyIdx)
 	})
 	return eg.Wait()
 }
@@ -183,5 +188,33 @@ func (o *Worker) maybeReloadTemplates(
 ) {
 	if cfg.Mailer.TemplateReloadingEnabled {
 		o.tc.Reload(ctx, cfg)
+	}
+}
+
+func (o *Worker) indexWorker(ctx context.Context, cfgCh <-chan struct{}) error {
+	le := o.le.WithFields(logrus.Fields{
+		"worker_type": "apiworker_index_worker",
+	})
+	le.Info("apiworker: index worker started")
+	defer le.Info("apiworker: index worker exited")
+
+	o.maybeCreateIndexes(ctx, o.getConfig())
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-cfgCh:
+			o.maybeCreateIndexes(ctx, o.getConfig())
+		}
+	}
+}
+
+func (o *Worker) maybeCreateIndexes(
+	ctx context.Context,
+	cfg *conf.GlobalConfiguration,
+) {
+	if cfg.IndexWorker.EnsureUserSearchIndexesExist {
+		indexworker.CreateIndexes(ctx, cfg, o.le)
 	}
 }
