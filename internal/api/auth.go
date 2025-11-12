@@ -74,7 +74,22 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 	ctx := r.Context()
 	config := a.config
 
-	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
+	// Check if allow_expired query parameter is set
+	allowExpired := r.URL.Query().Get("allow_expired") == "true"
+
+	// Configure JWT parser based on allowExpired flag
+	var p *jwt.Parser
+	if allowExpired {
+		// Skip claims validation (including exp check) when explicitly requested
+		p = jwt.NewParser(
+			jwt.WithValidMethods(config.JWT.ValidMethods),
+			jwt.WithoutClaimsValidation(),
+		)
+	} else {
+		// Default behavior: validate all claims including expiration
+		p = jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
+	}
+
 	token, err := p.ParseWithClaims(bearer, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if kid, ok := token.Header["kid"]; ok {
 			if kidStr, ok := kid.(string); ok {
