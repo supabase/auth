@@ -43,14 +43,14 @@ func NewNextcloudProvider(ext conf.OAuthProviderConfiguration, scopes string) (O
 
 	oauthScopes := []string{}
 
-	host := chooseHost(ext.URL, "") // May be https://cloud.example.org or https://cloud.example.org/index.php
+	host := chooseHost(ext.URL, "")
 	return &nextcloudProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  host + "/apps/oauth2/authorize",
-				TokenURL: host + "/apps/oauth2/api/v1/token",
+				AuthURL:  host + "/index.php/apps/oauth2/authorize",
+				TokenURL: host + "/index.php/apps/oauth2/api/v1/token",
 			},
 			RedirectURL: ext.RedirectURI,
 			Scopes:      oauthScopes,
@@ -66,7 +66,7 @@ func (g nextcloudProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 func (g nextcloudProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var resp nextcloudUserResponse
 
-	err := g.makeOCSRequest(ctx, tok, g.Host+"/ocs/v2.php/cloud/user?format=json", &resp)
+	err := g.makeOCSRequest(ctx, tok, g.Host+"/ocs/v2.php/cloud/user", &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +111,7 @@ func (g nextcloudProvider) makeOCSRequest(ctx context.Context, tok *oauth2.Token
 
 	req.Header.Set("OCS-APIRequest", "true")
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{Timeout: defaultTimeout}
 	res, err := client.Do(req)
