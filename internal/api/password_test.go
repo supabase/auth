@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 )
 
@@ -109,7 +110,7 @@ func TestPasswordStrengthChecks(t *testing.T) {
 		case *WeakPasswordError:
 			require.Equal(t, e.Reasons, example.Reasons, "Example %d failed with wrong reasons", i)
 		case *HTTPError:
-			require.Equal(t, e.ErrorCode, ErrorCodeValidationFailed, "Example %d failed with wrong error code", i)
+			require.Equal(t, e.ErrorCode, apierrors.ErrorCodeValidationFailed, "Example %d failed with wrong error code", i)
 		default:
 			require.NoError(t, err, "Example %d failed with error", i)
 		}

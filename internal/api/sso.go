@@ -5,6 +5,7 @@ import (
 
 	"github.com/crewjam/saml"
 	"github.com/gofrs/uuid"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -27,9 +28,9 @@ func (p *SingleSignOnParams) validate() (bool, error) {
 	hasDomain := p.Domain != ""
 
 	if hasProviderID && hasDomain {
-		return hasProviderID, badRequestError(ErrorCodeValidationFailed, "Only one of provider_id or domain supported")
+		return hasProviderID, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only one of provider_id or domain supported")
 	} else if !hasProviderID && !hasDomain {
-		return hasProviderID, badRequestError(ErrorCodeValidationFailed, "A provider_id or domain needs to be provided")
+		return hasProviderID, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "A provider_id or domain needs to be provided")
 	}
 
 	return hasProviderID, nil
@@ -51,6 +52,30 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	if hasProviderID, err = params.validate(); err != nil {
 		return err
 	}
+
+	var ssoProvider *models.SSOProvider
+	if hasProviderID {
+		ssoProvider, err = models.FindSSOProviderByID(db, params.ProviderID)
+		if models.IsNotFoundError(err) {
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "No such SSO provider")
+		} else if err != nil {
+			return apierrors.NewInternalServerError("Unable to find SSO provider by ID").WithInternalError(err)
+		}
+	} else {
+		ssoProvider, err = models.FindSSOProviderByDomain(db, params.Domain)
+		if models.IsNotFoundError(err) {
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "No SSO provider assigned for this domain")
+		} else if err != nil {
+			return apierrors.NewInternalServerError("Unable to find SSO provider by domain").WithInternalError(err)
+		}
+	}
+
+	if !ssoProvider.IsEnabled() {
+		return apierrors.NewNotFoundError(
+			apierrors.ErrorCodeSSOProviderDisabled,
+			"SSO Provider is currently disabled")
+	}
+
 	codeChallengeMethod := params.CodeChallengeMethod
 	codeChallenge := params.CodeChallenge
 
@@ -68,27 +93,9 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		flowStateID = &flowState.ID
 	}
 
-	var ssoProvider *models.SSOProvider
-
-	if hasProviderID {
-		ssoProvider, err = models.FindSSOProviderByID(db, params.ProviderID)
-		if models.IsNotFoundError(err) {
-			return notFoundError(ErrorCodeSSOProviderNotFound, "No such SSO provider")
-		} else if err != nil {
-			return internalServerError("Unable to find SSO provider by ID").WithInternalError(err)
-		}
-	} else {
-		ssoProvider, err = models.FindSSOProviderByDomain(db, params.Domain)
-		if models.IsNotFoundError(err) {
-			return notFoundError(ErrorCodeSSOProviderNotFound, "No SSO provider assigned for this domain")
-		} else if err != nil {
-			return internalServerError("Unable to find SSO provider by domain").WithInternalError(err)
-		}
-	}
-
 	entityDescriptor, err := ssoProvider.SAMLProvider.EntityDescriptor()
 	if err != nil {
-		return internalServerError("Error parsing SAML Metadata for SAML provider").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error parsing SAML Metadata for SAML provider").WithInternalError(err)
 	}
 
 	serviceProvider := a.getSAMLServiceProvider(entityDescriptor, false /* <- idpInitiated */)
@@ -99,7 +106,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		saml.HTTPPostBinding,
 	)
 	if err != nil {
-		return internalServerError("Error creating SAML Authentication Request").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error creating SAML Authentication Request").WithInternalError(err)
 	}
 
 	// Some IdPs do not support the use of the `persistent` NameID format,
@@ -117,7 +124,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(&relayState); terr != nil {
-			return internalServerError("Error creating SAML relay state from sign up").WithInternalError(err)
+			return apierrors.NewInternalServerError("Error creating SAML relay state from sign up").WithInternalError(err)
 		}
 
 		return nil
@@ -127,7 +134,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 
 	ssoRedirectURL, err := authnRequest.Redirect(relayState.ID.String(), serviceProvider)
 	if err != nil {
-		return internalServerError("Error creating SAML authentication request redirect URL").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error creating SAML authentication request redirect URL").WithInternalError(err)
 	}
 
 	skipHTTPRedirect := false

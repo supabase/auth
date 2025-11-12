@@ -122,7 +122,7 @@ docker-compose -f docker-compose-dev.yml build postgres
 docker-compose -f docker-compose-dev.yml up postgres
 ```
 
-You should then see in Docker that `auth_postgresql` is running on `port: 5432`.
+You should then see in Docker that `auth-postgres-1` is running on `port: 5432`.
 
 > **Important** If you happen to already have a local running instance of Postgres running on the port `5432` because you
 > may have installed via [homebrew on macOS](https://formulae.brew.sh/formula/postgresql) then be certain to stop the process using:
@@ -227,6 +227,7 @@ To see the current settings, make a request to `http://localhost:9999/settings` 
     "gitlab": false,
     "google": false,
     "facebook": false,
+    "snapchat": false,
     "spotify": false,
     "slack": false,
     "slack_oidc": false,
@@ -460,17 +461,12 @@ export GOTRUE_DB_DATABASE_URL="postgres://supabase_auth_admin:root@localhost:743
 
 ## Helpful Docker Commands
 
-```
-// file: docker-compose-dev.yml
-container_name: auth_postgres
-```
-
 ```zsh
 # Command line into bash on the PostgreSQL container
-docker exec -it auth_postgres bash
+docker exec -it auth-postgres-1 bash
 
 # Removes Container
-docker container rm -f auth_postgres
+docker container rm -f auth-postgres-1
 
 # Removes volume
 docker volume rm postgres_data

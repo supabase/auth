@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -20,7 +21,7 @@ func (a *API) adminAuditLog(w http.ResponseWriter, r *http.Request) error {
 	// aud := a.requestAud(ctx, r)
 	pageParams, err := paginate(r)
 	if err != nil {
-		return badRequestError(ErrorCodeValidationFailed, "Bad Pagination Parameters: %v", err)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Bad Pagination Parameters: %v", err)
 	}
 
 	var col []string
@@ -31,14 +32,14 @@ func (a *API) adminAuditLog(w http.ResponseWriter, r *http.Request) error {
 		qparts := strings.SplitN(q, ":", 2)
 		col, exists = filterColumnMap[qparts[0]]
 		if !exists || len(qparts) < 2 {
-			return badRequestError(ErrorCodeValidationFailed, "Invalid query scope: %s", q)
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid query scope: %s", q)
 		}
 		qval = qparts[1]
 	}
 
 	logs, err := models.FindAuditLogEntries(db, col, qval, pageParams)
 	if err != nil {
-		return internalServerError("Error searching for audit logs").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error searching for audit logs").WithInternalError(err)
 	}
 
 	addPaginationHeaders(w, r, pageParams)

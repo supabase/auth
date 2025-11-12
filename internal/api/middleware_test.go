@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -327,7 +328,7 @@ func (ts *MiddlewareTestSuite) TestRequireSAMLEnabled() {
 		{
 			desc:        "SAML not enabled",
 			isEnabled:   false,
-			expectedErr: notFoundError(ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled"),
+			expectedErr: apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled"),
 		},
 		{
 			desc:        "SAML enabled",
@@ -388,7 +389,7 @@ func (ts *MiddlewareTestSuite) TestTimeoutMiddleware() {
 
 	var data map[string]interface{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-	require.Equal(ts.T(), ErrorCodeRequestTimeout, data["error_code"])
+	require.Equal(ts.T(), apierrors.ErrorCodeRequestTimeout, data["error_code"])
 	require.Equal(ts.T(), float64(504), data["code"])
 	require.NotNil(ts.T(), data["msg"])
 }

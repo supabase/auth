@@ -104,5 +104,6 @@ func TestEncryptedStringDecryptNegative(t *testing.T) {
 }
 
 func TestSecureToken(t *testing.T) {
-	assert.Equal(t, len(SecureToken()), 22)
+	assert.Equal(t, len(SecureAlphanumeric(22)), 22)
+	assert.Equal(t, len(SecureAlphanumeric(7)), 8)
 }

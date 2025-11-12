@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
 )
@@ -20,19 +21,19 @@ func TestHandleResponseErrorWithHTTPError(t *testing.T) {
 		ExpectedBody string
 	}{
 		{
-			HTTPError:    badRequestError(ErrorCodeBadJSON, "Unable to parse JSON"),
+			HTTPError:    apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Unable to parse JSON"),
 			APIVersion:   "",
-			ExpectedBody: "{\"code\":400,\"error_code\":\"" + ErrorCodeBadJSON + "\",\"msg\":\"Unable to parse JSON\"}",
+			ExpectedBody: "{\"code\":400,\"error_code\":\"" + apierrors.ErrorCodeBadJSON + "\",\"msg\":\"Unable to parse JSON\"}",
 		},
 		{
-			HTTPError:    badRequestError(ErrorCodeBadJSON, "Unable to parse JSON"),
+			HTTPError:    apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Unable to parse JSON"),
 			APIVersion:   "2023-12-31",
-			ExpectedBody: "{\"code\":400,\"error_code\":\"" + ErrorCodeBadJSON + "\",\"msg\":\"Unable to parse JSON\"}",
+			ExpectedBody: "{\"code\":400,\"error_code\":\"" + apierrors.ErrorCodeBadJSON + "\",\"msg\":\"Unable to parse JSON\"}",
 		},
 		{
-			HTTPError:    badRequestError(ErrorCodeBadJSON, "Unable to parse JSON"),
+			HTTPError:    apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Unable to parse JSON"),
 			APIVersion:   "2024-01-01",
-			ExpectedBody: "{\"code\":\"" + ErrorCodeBadJSON + "\",\"message\":\"Unable to parse JSON\"}",
+			ExpectedBody: "{\"code\":\"" + apierrors.ErrorCodeBadJSON + "\",\"message\":\"Unable to parse JSON\"}",
 		},
 		{
 			HTTPError: &HTTPError{
@@ -40,7 +41,7 @@ func TestHandleResponseErrorWithHTTPError(t *testing.T) {
 				Message:    "Uncoded failure",
 			},
 			APIVersion:   "2024-01-01",
-			ExpectedBody: "{\"code\":\"" + ErrorCodeUnknown + "\",\"message\":\"Uncoded failure\"}",
+			ExpectedBody: "{\"code\":\"" + apierrors.ErrorCodeUnknown + "\",\"message\":\"Uncoded failure\"}",
 		},
 		{
 			HTTPError: &HTTPError{
@@ -48,7 +49,7 @@ func TestHandleResponseErrorWithHTTPError(t *testing.T) {
 				Message:    "Unexpected failure",
 			},
 			APIVersion:   "2024-01-01",
-			ExpectedBody: "{\"code\":\"" + ErrorCodeUnexpectedFailure + "\",\"message\":\"Unexpected failure\"}",
+			ExpectedBody: "{\"code\":\"" + apierrors.ErrorCodeUnexpectedFailure + "\",\"message\":\"Unexpected failure\"}",
 		},
 	}
 
@@ -92,7 +93,7 @@ func TestRecoverer(t *testing.T) {
 
 	// panic should return an internal server error
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&data))
-	require.Equal(t, ErrorCodeUnexpectedFailure, data.ErrorCode)
+	require.Equal(t, apierrors.ErrorCodeUnexpectedFailure, data.ErrorCode)
 	require.Equal(t, http.StatusInternalServerError, data.HTTPStatus)
 	require.Equal(t, "Internal Server Error", data.Message)
 

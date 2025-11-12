@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
@@ -71,14 +72,14 @@ func (ts *MailTestSuite) TestValidateEmail() {
 			desc:          "empty email should return error",
 			email:         "",
 			expectedEmail: "",
-			expectedError: badRequestError(ErrorCodeValidationFailed, "An email address is required"),
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is required"),
 		},
 		{
 			desc: "email length exceeds 255 characters",
 			// email has 256 characters
 			email:         "testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest@example.com",
 			expectedEmail: "",
-			expectedError: badRequestError(ErrorCodeValidationFailed, "An email address is too long"),
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is too long"),
 		},
 	}
 

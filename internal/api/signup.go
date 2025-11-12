@@ -8,6 +8,7 @@ import (
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/metering"
@@ -32,21 +33,21 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 	config := a.config
 
 	if p.Password == "" {
-		return badRequestError(ErrorCodeValidationFailed, "Signup requires a valid password")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Signup requires a valid password")
 	}
 
 	if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
 		return err
 	}
 	if p.Email != "" && p.Phone != "" {
-		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on signup.")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided on signup.")
 	}
 	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config) {
-		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, InvalidChannelError)
 	}
 	// PKCE not needed as phone signups already return access token in body
 	if p.Phone != "" && p.CodeChallenge != "" {
-		return badRequestError(ErrorCodeValidationFailed, "PKCE not supported for phone signups")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "PKCE not supported for phone signups")
 	}
 	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
 		return err
@@ -85,7 +86,7 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
 	}
 	if err != nil {
-		err = internalServerError("Database error creating user").WithInternalError(err)
+		err = apierrors.NewInternalServerError("Database error creating user").WithInternalError(err)
 		return
 	}
 	user.IsSSOUser = isSSOUser
@@ -112,7 +113,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 
 	if config.DisableSignup {
-		return unprocessableEntityError(ErrorCodeSignupDisabled, "Signups not allowed for this instance")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSignupDisabled, "Signups not allowed for this instance")
 	}
 
 	params := &SignupParams{}
@@ -139,16 +140,16 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	switch params.Provider {
 	case "email":
 		if !config.External.Email.Enabled {
-			return badRequestError(ErrorCodeEmailProviderDisabled, "Email signups are disabled")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeEmailProviderDisabled, "Email signups are disabled")
 		}
 		params.Email, err = a.validateEmail(params.Email)
 		if err != nil {
 			return err
 		}
-		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil)
+		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain)
 	case "phone":
 		if !config.External.Phone.Enabled {
-			return badRequestError(ErrorCodePhoneProviderDisabled, "Phone signups are disabled")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodePhoneProviderDisabled, "Phone signups are disabled")
 		}
 		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
@@ -167,11 +168,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			msg = "Sign up with this provider not possible"
 		}
 
-		return badRequestError(ErrorCodeValidationFailed, msg)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, msg)
 	}
 
 	if err != nil && !models.IsNotFoundError(err) {
-		return internalServerError("Database error finding user").WithInternalError(err)
+		return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 	}
 
 	var signupUser *models.User
@@ -180,6 +181,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		// can be computationally hard and block due to password hashing
 		signupUser, err = params.ToUserModel(false /* <- isSSOUser */)
 		if err != nil {
+			return err
+		}
+		if err := a.triggerBeforeUserCreated(r, db, signupUser); err != nil {
 			return err
 		}
 	}
@@ -223,16 +227,16 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 		if params.Provider == "email" && !user.IsConfirmed() {
 			if config.Mailer.Autoconfirm {
-				if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
 				}
 				if terr = user.Confirm(tx); terr != nil {
-					return internalServerError("Database error updating user").WithInternalError(terr)
+					return apierrors.NewInternalServerError("Database error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr = models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -249,17 +253,17 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 		} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {
 			if config.Sms.Autoconfirm {
-				if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 					"channel":  params.Channel,
 				}); terr != nil {
 					return terr
 				}
 				if terr = user.ConfirmPhone(tx); terr != nil {
-					return internalServerError("Database error updating user").WithInternalError(terr)
+					return apierrors.NewInternalServerError("Database error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr = models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -276,7 +280,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		if errors.Is(err, UserExistsError) {
 			err = db.Transaction(func(tx *storage.Connection) error {
-				if terr := models.NewAuditLogEntry(r, tx, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
+				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -287,7 +291,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			if config.Mailer.Autoconfirm || config.Sms.Autoconfirm {
-				return unprocessableEntityError(ErrorCodeUserAlreadyExists, "User already registered")
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeUserAlreadyExists, "User already registered")
 			}
 			sanitizedUser, err := sanitizeUser(user, params)
 			if err != nil {
@@ -303,7 +307,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		var token *AccessTokenResponse
 		err = db.Transaction(func(tx *storage.Connection) error {
 			var terr error
-			if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
@@ -318,13 +322,24 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		metering.RecordLogin("password", user.ID)
+		metering.RecordLogin(metering.LoginTypePassword, user.ID, &metering.LoginData{
+			Provider: params.Provider,
+			// add extra context to indicate this is immediate login right after signup
+			Extra: map[string]interface{}{
+				"immediate_login_after_signup": true,
+			},
+		})
 		return sendJSON(w, http.StatusOK, token)
 	}
 	if user.HasBeenInvited() {
 		// Remove sensitive fields
 		user.UserMetaData = map[string]interface{}{}
 		user.Identities = []models.Identity{}
+	}
+
+	// Trigger the after user created hook.
+	if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+		return apierrors.NewInternalServerError("Error invoking hook").WithInternalError(err)
 	}
 	return sendJSON(w, http.StatusOK, user)
 }
@@ -368,10 +383,10 @@ func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*model
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = tx.Create(user); terr != nil {
-			return internalServerError("Database error saving new user").WithInternalError(terr)
+			return apierrors.NewInternalServerError("Database error saving new user").WithInternalError(terr)
 		}
 		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
-			return internalServerError("Database error updating user").WithInternalError(terr)
+			return apierrors.NewInternalServerError("Database error updating user").WithInternalError(terr)
 		}
 		return nil
 	})
@@ -383,8 +398,7 @@ func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*model
 	// user data as it is being inserted. thus we load the user object
 	// again to fetch those changes.
 	if err := conn.Reload(user); err != nil {
-		return nil, internalServerError("Database error loading user after sign-up").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("Database error loading user after sign-up").WithInternalError(err)
 	}
-
 	return user, nil
 }

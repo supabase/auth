@@ -4,6 +4,7 @@ import (
 	"regexp"
 
 	"github.com/gofrs/uuid"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -21,9 +22,9 @@ func isValidCodeChallenge(codeChallenge string) (bool, error) {
 	// See RFC 7636 Section 4.2: https://www.rfc-editor.org/rfc/rfc7636#section-4.2
 	switch codeChallengeLength := len(codeChallenge); {
 	case codeChallengeLength < MinCodeChallengeLength, codeChallengeLength > MaxCodeChallengeLength:
-		return false, badRequestError(ErrorCodeValidationFailed, "code challenge has to be between %v and %v characters", MinCodeChallengeLength, MaxCodeChallengeLength)
+		return false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "code challenge has to be between %v and %v characters", MinCodeChallengeLength, MaxCodeChallengeLength)
 	case !codeChallengePattern.MatchString(codeChallenge):
-		return false, badRequestError(ErrorCodeValidationFailed, "code challenge can only contain alphanumeric characters, hyphens, periods, underscores and tildes")
+		return false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "code challenge can only contain alphanumeric characters, hyphens, periods, underscores and tildes")
 	default:
 		return true, nil
 	}
@@ -41,7 +42,7 @@ func addFlowPrefixToToken(token string, flowType models.FlowType) string {
 func issueAuthCode(tx *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod) (string, error) {
 	flowState, err := models.FindFlowStateByUserID(tx, user.ID.String(), authenticationMethod)
 	if err != nil && models.IsNotFoundError(err) {
-		return "", unprocessableEntityError(ErrorCodeFlowStateNotFound, "No valid flow state found for user.")
+		return "", apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeFlowStateNotFound, "No valid flow state found for user.")
 	} else if err != nil {
 		return "", err
 	}
@@ -63,7 +64,7 @@ func isImplicitFlow(flowType models.FlowType) bool {
 func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
 	switch true {
 	case (codeChallenge == "") != (codeChallengeMethod == ""):
-		return badRequestError(ErrorCodeValidationFailed, InvalidPKCEParamsErrorMessage)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, InvalidPKCEParamsErrorMessage)
 	case codeChallenge != "":
 		if valid, err := isValidCodeChallenge(codeChallenge); !valid {
 			return err

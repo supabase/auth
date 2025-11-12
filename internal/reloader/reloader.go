@@ -4,41 +4,46 @@ package reloader
 import (
 	"context"
 	"errors"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
-	// reloadInterval is the interval between configuration reloading. At most
-	// one configuration change may be made between this duration.
-	reloadInterval = time.Second * 10
 
 	// tickerInterval is the maximum latency between configuration reloads.
-	tickerInterval = reloadInterval / 10
+	tickerInterval = time.Second
 )
 
 type ConfigFunc func(*conf.GlobalConfiguration)
 
 type Reloader struct {
-	watchDir   string
-	reloadIval time.Duration
+	watchDir string
+	rc       conf.ReloadingConfiguration
+
+	// Below here is for DI
 	tickerIval time.Duration
 	watchFn    func() (watcher, error)
 	reloadFn   func(dir string) (*conf.GlobalConfiguration, error)
+	addDirFn   func(ctx context.Context, wr watcher, dir string) error
 }
 
-func NewReloader(watchDir string) *Reloader {
+func NewReloader(rc conf.ReloadingConfiguration, watchDir string) *Reloader {
 	return &Reloader{
+		rc:         rc,
 		watchDir:   watchDir,
-		reloadIval: reloadInterval,
 		tickerIval: tickerInterval,
 		watchFn:    newFSWatcher,
 		reloadFn:   defaultReloadFn,
+		addDirFn:   defaultAddDirFn,
 	}
 }
 
@@ -54,7 +59,7 @@ func (rl *Reloader) reloadCheckAt(at, lastUpdate time.Time) bool {
 	if lastUpdate.IsZero() {
 		return false // no pending updates
 	}
-	if at.Sub(lastUpdate) < rl.reloadIval {
+	if at.Sub(lastUpdate) < rl.rc.GracePeriodInterval {
 		return false // waiting for reload interval
 	}
 
@@ -62,21 +67,69 @@ func (rl *Reloader) reloadCheckAt(at, lastUpdate time.Time) bool {
 	return true
 }
 
-func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
-	wr, err := rl.watchFn()
-	if err != nil {
-		logrus.WithError(err).Error("reloader: error creating fsnotify Watcher")
-		return err
-	}
-	defer wr.Close()
+type watchState struct {
+	eg errgroup.Group
+	fn ConfigFunc
+	ch chan struct{}
+}
 
+func (o *watchState) notify() {
+	select {
+	case o.ch <- struct{}{}:
+	default:
+	}
+}
+
+func newWatchState(
+	fn ConfigFunc,
+) *watchState {
+	return &watchState{
+		fn: fn,
+		ch: make(chan struct{}, 1),
+	}
+}
+
+func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	ws := newWatchState(fn)
+	if rl.rc.NotifyEnabled || rl.rc.SignalEnabled {
+		ws.eg.Go(func() error { return rl.watchReloads(ctx, ws) })
+	}
+
+	if rl.rc.NotifyEnabled {
+		ws.eg.Go(func() error {
+			defer func() {
+				if !rl.rc.SignalEnabled {
+					cancel()
+				}
+			}()
+
+			return rl.watchNotify(ctx, ws)
+		})
+	}
+
+	if rl.rc.SignalEnabled {
+		ws.eg.Go(func() error {
+			defer func() {
+				if rl.rc.NotifyEnabled {
+					cancel()
+				}
+			}()
+
+			return rl.watchSignal(ctx, ws)
+		})
+	}
+	return ws.eg.Wait()
+}
+
+func (rl *Reloader) watchReloads(
+	ctx context.Context,
+	ws *watchState,
+) error {
 	tr := time.NewTicker(rl.tickerIval)
 	defer tr.Stop()
-
-	// Ignore errors, if watch dir doesn't exist we can add it later.
-	if err := wr.Add(rl.watchDir); err != nil {
-		logrus.WithError(err).Error("reloader: error watching config directory")
-	}
 
 	var lastUpdate time.Time
 	for {
@@ -84,15 +137,10 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 		case <-ctx.Done():
 			return ctx.Err()
 
-		case <-tr.C:
-			// This is a simple way to solve watch dir being added later or
-			// being moved and then recreated. I've tested all of these basic
-			// scenarios and wr.WatchList() does not grow which aligns with
-			// the documented behavior.
-			if err := wr.Add(rl.watchDir); err != nil {
-				logrus.WithError(err).Error(err)
-			}
+		case <-ws.ch:
+			lastUpdate = time.Now()
 
+		case <-tr.C:
 			// Check to see if the config is ready to be relaoded.
 			if !rl.reloadCheckAt(time.Now(), lastUpdate) {
 				continue
@@ -108,7 +156,100 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 			}
 
 			// Call the callback function with the latest cfg.
-			fn(cfg)
+			ws.fn(cfg)
+		}
+	}
+}
+
+func (rl *Reloader) watchPoller(
+	ctx context.Context,
+	ws *watchState,
+) error {
+	errFn := func(err error) {
+		logrus.WithError(err).Error("reloader: error polling config directory")
+	}
+
+	pr := newPoller(rl.watchDir)
+	if _, err := pr.poll(ctx); err != nil {
+		errFn(err)
+	}
+	return pr.watch(ctx, rl.rc.PollerInterval, ws.notify, errFn)
+}
+
+func (rl *Reloader) watchSignal(
+	ctx context.Context,
+	ws *watchState,
+) error {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.Signal(rl.rc.SignalNumber))
+	defer signal.Stop(sigCh)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-sigCh:
+			ws.notify()
+		}
+	}
+}
+
+func (rl *Reloader) watchNotify(
+	ctx context.Context,
+	ws *watchState,
+) error {
+	wr, err := rl.watchFn()
+	if err != nil {
+		if rl.rc.PollerEnabled {
+			logrus.WithError(err).Error(
+				"reloader: error creating fsnotify Watcher, switching to poller")
+			return rl.watchPoller(ctx, ws)
+		}
+
+		logrus.WithError(err).Error("reloader: error creating fsnotify Watcher")
+		return err
+	}
+	defer wr.Close()
+
+	tr := time.NewTicker(rl.rc.GracePeriodInterval)
+	defer tr.Stop()
+
+	// A simple log dedupe flag to prevent endless noise if config dir missing
+	var addDirFailed bool
+
+	// Ignore errors, if watch dir doesn't exist we can add it later.
+	if err := rl.addDirFn(ctx, wr, rl.watchDir); err != nil {
+
+		// On a supported host OS like linux the watcher creation won't fail
+		// but will when adding a dir with an underlying filesystem without
+		// notification support. Checking if the directory is watchable when
+		// you get an error from addDirFn is a way to detect this.
+		if rl.rc.PollerEnabled && isWatchable(rl.watchDir) {
+			logrus.WithError(err).Error(
+				"reloader: error using fsnotify Watcher, switching to poller")
+			return rl.watchPoller(ctx, ws)
+		}
+
+		logrus.WithError(err).Error("reloader: error watching config directory")
+		addDirFailed = true
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-tr.C:
+
+			// This is a simple way to solve watch dir being added later or
+			// being moved and then recreated. I've tested all of these basic
+			// scenarios and wr.WatchList() does not grow which aligns with
+			// the documented behavior.
+			err := rl.addDirFn(ctx, wr, rl.watchDir)
+			if err != nil && !addDirFailed {
+				logrus.WithError(err).Error("reloader: error watching config directory")
+			}
+			addDirFailed = err != nil
 
 		case evt, ok := <-wr.Events():
 			if !ok {
@@ -127,7 +268,7 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 				evt.Op.Has(fsnotify.Remove),
 				evt.Op.Has(fsnotify.Rename),
 				evt.Op.Has(fsnotify.Write):
-				lastUpdate = time.Now()
+				ws.notify()
 			}
 		case err, ok := <-wr.Errors():
 			if !ok {
@@ -139,6 +280,23 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 				"reloader: fsnotify has reported an error")
 		}
 	}
+}
+
+func isWatchable(dir string) bool {
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return false
+	}
+	if !fi.IsDir() {
+		return false
+	}
+	return true
+}
+
+// defaultAddDirFn adds a dir to a watcher with a common error and sleep
+// duration if the directory doesn't exist.
+func defaultAddDirFn(ctx context.Context, wr watcher, dir string) error {
+	return wr.Add(dir)
 }
 
 func defaultReloadFn(dir string) (*conf.GlobalConfiguration, error) {

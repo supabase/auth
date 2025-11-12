@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -16,13 +17,18 @@ import (
 )
 
 type SSOProvider struct {
-	ID uuid.UUID `db:"id" json:"id"`
-
+	ID           uuid.UUID    `db:"id" json:"id"`
+	ResourceID   *string      `db:"resource_id" json:"resource_id,omitempty"`
+	Disabled     *bool        `db:"disabled" json:"disabled"`
 	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
 	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
 
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+}
+
+func (p SSOProvider) IsEnabled() bool {
+	return p.Disabled == nil || !*p.Disabled
 }
 
 func (p SSOProvider) TableName() string {
@@ -199,6 +205,19 @@ func FindSSOProviderByID(tx *storage.Connection, id uuid.UUID) (*SSOProvider, er
 
 		return nil, errors.Wrap(err, "error finding SAML SSO provider by ID")
 	}
+	return &ssoProvider, nil
+}
+
+func FindSSOProviderByResourceID(tx *storage.Connection, id string) (*SSOProvider, error) {
+	var ssoProvider SSOProvider
+
+	if err := tx.Eager().Q().Where("resource_id = ?", id).First(&ssoProvider); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SSOProviderNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error finding SAML SSO provider by Resource ID")
+	}
 
 	return &ssoProvider, nil
 }
@@ -233,7 +252,7 @@ func FindSSOProviderByDomain(tx *storage.Connection, domain string) (*SSOProvide
 	return &ssoProvider, nil
 }
 
-func FindAllSAMLProviders(tx *storage.Connection) ([]SSOProvider, error) {
+func FindAllSSOProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	var providers []SSOProvider
 
 	if err := tx.Eager().All(&providers); err != nil {
@@ -245,6 +264,33 @@ func FindAllSAMLProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	}
 
 	return providers, nil
+}
+
+const (
+	resourceIDFilter       = "resource_id"
+	resourceIDPrefixFilter = "resource_id_prefix"
+)
+
+// FindAllSSOProvidersByFilter finds SSO Providers with the matching filter.
+func FindAllSSOProvidersByFilter(
+	tx *storage.Connection,
+	queryValues url.Values,
+) ([]*SSOProvider, error) {
+	ssoProviders := []*SSOProvider{}
+
+	q := tx.Eager().Q()
+	if v := queryValues.Get(resourceIDFilter); v != "" {
+		q = q.Where("resource_id = ?", v)
+	} else if v := queryValues.Get(resourceIDPrefixFilter); v != "" {
+		q = q.Where("resource_id LIKE ?", v+"%")
+	}
+	if err := q.All(&ssoProviders); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, errors.Wrap(err, "error loading all SAML SSO providers")
+	}
+	return ssoProviders, nil
 }
 
 func FindSAMLRelayStateByID(tx *storage.Connection, id uuid.UUID) (*SAMLRelayState, error) {

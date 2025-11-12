@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -97,11 +98,8 @@ func (j *JwtKeysDecoder) Validate() error {
 			}
 		}
 
-		for _, op := range key.PrivateKey.KeyOps() {
-			if op == jwk.KeyOpSign {
-				signingKeys = append(signingKeys, key.PrivateKey)
-				break
-			}
+		if slices.Contains(key.PrivateKey.KeyOps(), jwk.KeyOpSign) {
+			signingKeys = append(signingKeys, key.PrivateKey)
 		}
 	}
 
@@ -117,11 +115,9 @@ func (j *JwtKeysDecoder) Validate() error {
 
 func GetSigningJwk(config *JWTConfiguration) (jwk.Key, error) {
 	for _, key := range config.Keys {
-		for _, op := range key.PrivateKey.KeyOps() {
-			// the private JWK with key_ops "sign" should be used as the signing key
-			if op == jwk.KeyOpSign {
-				return key.PrivateKey, nil
-			}
+		// the private JWK with key_ops "sign" should be used as the signing key
+		if slices.Contains(key.PrivateKey.KeyOps(), jwk.KeyOpSign) {
+			return key.PrivateKey, nil
 		}
 	}
 	return nil, fmt.Errorf("no signing key found")
@@ -168,5 +164,7 @@ func FindPublicKeyByKid(kid string, config *JWTConfiguration) (any, error) {
 	if kid == config.KeyID {
 		return []byte(config.Secret), nil
 	}
-	return nil, fmt.Errorf("invalid kid: %s", kid)
+
+	// don't return error, as a fallback key might be used
+	return nil, nil
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -23,7 +24,7 @@ type MagicLinkParams struct {
 
 func (p *MagicLinkParams) Validate(a *API) error {
 	if p.Email == "" {
-		return unprocessableEntityError(ErrorCodeValidationFailed, "Password recovery requires an email")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeValidationFailed, "Password recovery requires an email")
 	}
 	var err error
 	p.Email, err = a.validateEmail(p.Email)
@@ -43,18 +44,18 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	if !config.External.Email.Enabled {
-		return unprocessableEntityError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 	}
 
 	if !config.External.Email.MagicLinkEnabled {
-		return unprocessableEntityError(ErrorCodeEmailProviderDisabled, "Login with magic link is disabled")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailProviderDisabled, "Login with magic link is disabled")
 	}
 
 	params := &MagicLinkParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
-		return badRequestError(ErrorCodeBadJSON, "Could not read verification params: %v", err).WithInternalError(err)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Could not read verification params: %v", err).WithInternalError(err)
 	}
 
 	if err := params.Validate(a); err != nil {
@@ -74,7 +75,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		if models.IsNotFoundError(err) {
 			isNewUser = true
 		} else {
-			return internalServerError("Database error finding user").WithInternalError(err)
+			return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 		}
 	}
 	if user != nil {
@@ -129,13 +130,13 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if isPKCEFlow(flowType) {
-		if _, err = generateFlowState(a.db, models.MagicLink.String(), models.MagicLink, params.CodeChallengeMethod, params.CodeChallenge, &user.ID); err != nil {
+		if _, err = generateFlowState(db, models.MagicLink.String(), models.MagicLink, params.CodeChallengeMethod, params.CodeChallenge, &user.ID); err != nil {
 			return err
 		}
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
 		return a.sendMagicLink(r, tx, user, flowType)
