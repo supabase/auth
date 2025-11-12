@@ -637,7 +637,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		p, err = provider.NewLinkedinOIDCProvider(pConfig, scopes)
 	case "nextcloud":
 		pConfig = config.External.Nextcloud
-		return provider.NewNextcloudProvider(pConfig, scopes)
+		p, err = provider.NewNextcloudProvider(pConfig, scopes)
 	case "notion":
 		pConfig = config.External.Notion
 		p, err = provider.NewNotionProvider(pConfig)
