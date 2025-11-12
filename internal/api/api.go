@@ -261,6 +261,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.Get("/authorize", api.LinkIdentity)
 				r.Delete("/{identity_id}", api.DeleteIdentity)
 			})
+
+			// OAuth grant management endpoints (only if OAuth server is enabled)
+			if globalConfig.OAuthServer.Enabled {
+				r.Route("/oauth/grants", func(r *router) {
+					r.Get("/", api.oauthServer.UserListOAuthGrants)
+					r.Delete("/", api.oauthServer.UserRevokeOAuthGrant)
+				})
+			}
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
@@ -348,6 +356,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Route("/{client_id}", func(r *router) {
 							r.Use(api.oauthServer.LoadOAuthServerClient)
 							r.Get("/", api.oauthServer.OAuthServerClientGet)
+							r.Put("/", api.oauthServer.OAuthServerClientUpdate)
 							r.Delete("/", api.oauthServer.OAuthServerClientDelete)
 							r.Post("/regenerate_secret", api.oauthServer.OAuthServerClientRegenerateSecret)
 						})

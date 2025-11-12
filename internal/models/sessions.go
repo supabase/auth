@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"slices"
 	"sort"
@@ -11,6 +12,8 @@ import (
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -91,11 +94,41 @@ type Session struct {
 
 	Tag           *string    `json:"tag" db:"tag"`
 	OAuthClientID *uuid.UUID `json:"oauth_client_id" db:"oauth_client_id"`
+
+	RefreshTokenHmacKey *string `json:"-" db:"refresh_token_hmac_key"`
+	RefreshTokenCounter *int64  `json:"-" db:"refresh_token_counter"`
 }
 
 func (Session) TableName() string {
 	tableName := "sessions"
 	return tableName
+}
+
+func (s *Session) GetRefreshTokenHmacKey(dbEncryption conf.DatabaseEncryptionConfiguration) ([]byte, bool, error) {
+	if s.RefreshTokenHmacKey == nil {
+		return nil, false, nil
+	}
+
+	if es := crypto.ParseEncryptedString(*s.RefreshTokenHmacKey); es != nil {
+		bytes, err := es.Decrypt(s.ID.String(), dbEncryption.DecryptionKeys)
+		if err != nil {
+			return nil, false, err
+		}
+
+		hmacKey, err := base64.RawURLEncoding.DecodeString(string(bytes))
+		if err != nil {
+			return nil, false, err
+		}
+
+		return hmacKey, dbEncryption.Encrypt && es.ShouldReEncrypt(dbEncryption.EncryptionKeyID), nil
+	}
+
+	hmacKey, err := base64.RawURLEncoding.DecodeString(*s.RefreshTokenHmacKey)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return hmacKey, dbEncryption.Encrypt, nil
 }
 
 func (s *Session) LastRefreshedAt(refreshTokenTime *time.Time) time.Time {
@@ -124,6 +157,27 @@ func (s *Session) UpdateOnlyRefreshInfo(tx *storage.Connection) error {
 	// In the future, we should add a migration to update the type to contain the timezone.
 	*s.RefreshedAt = s.RefreshedAt.UTC()
 	return tx.UpdateOnly(s, "refreshed_at", "user_agent", "ip")
+}
+
+func (s *Session) UpdateOnlyRefreshToken(tx *storage.Connection) error {
+	return tx.UpdateOnly(s, "refresh_token_counter")
+}
+
+func (s *Session) ReEncryptRefreshTokenHmacKey(tx *storage.Connection, dbEncryption conf.DatabaseEncryptionConfiguration) error {
+	key, _, err := s.GetRefreshTokenHmacKey(dbEncryption)
+	if err != nil {
+		return err
+	}
+
+	es, err := crypto.NewEncryptedString(s.ID.String(), []byte(base64.RawURLEncoding.EncodeToString(key)), dbEncryption.EncryptionKeyID, dbEncryption.EncryptionKey)
+	if err != nil {
+		return err
+	}
+
+	encryptedValue := es.String()
+	s.RefreshTokenHmacKey = &encryptedValue
+
+	return tx.UpdateOnly(s, "refresh_token_hmac_key")
 }
 
 type SessionValidityReason = int
@@ -297,6 +351,11 @@ func LogoutSession(tx *storage.Connection, sessionId uuid.UUID) error {
 // LogoutAllExceptMe deletes all sessions for a user except the current one
 func LogoutAllExceptMe(tx *storage.Connection, sessionId uuid.UUID, userID uuid.UUID) error {
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id != ? AND user_id = ?", sessionId, userID).Exec()
+}
+
+// RevokeOAuthSessions deletes all sessions associated with a specific OAuth client for a user
+func RevokeOAuthSessions(tx *storage.Connection, userID uuid.UUID, oauthClientID uuid.UUID) error {
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND oauth_client_id = ?", userID, oauthClientID).Exec()
 }
 
 func (s *Session) UpdateAALAndAssociatedFactor(tx *storage.Connection, aal AuthenticatorAssuranceLevel, factorID *uuid.UUID) error {
