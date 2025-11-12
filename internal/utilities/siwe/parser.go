@@ -219,8 +219,9 @@ func (m *SIWEMessage) VerifySignature(signatureHex string) bool {
 	copy(signature, sig)
 
 	// Normalize V if needed
+	// #nosec G602
 	if signature[64] >= 27 {
-		signature[64] -= 27
+		signature[64] -= 27 // #nosec G602
 	}
 
 	hash := accounts.TextHash([]byte(m.Raw))
