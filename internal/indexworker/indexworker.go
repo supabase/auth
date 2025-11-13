@@ -2,6 +2,7 @@ package indexworker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -13,7 +14,16 @@ import (
 	"github.com/supabase/auth/internal/conf"
 )
 
-func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *logrus.Entry) {
+// ErrAdvisoryLockAlreadyAcquired is returned when another process already holds the advisory lock
+var ErrAdvisoryLockAlreadyAcquired = errors.New("advisory lock already acquired by another process")
+
+// CreateIndexes ensures that the necessary indexes on the users table exist.
+// If the indexes already exist and are valid, it skips creation.
+// It uses a Postgres advisory lock to prevent concurrent index creation
+// by multiple processes.
+// Returns an error either from index creation failure (partial or complete) or if the advisory lock
+// could not be acquired.
+func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *logrus.Entry) error {
 	if config.DB.Driver == "" && config.DB.URL != "" {
 		u, err := url.Parse(config.DB.URL)
 		if err != nil {
@@ -55,26 +65,30 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 
 	if err := db.RawQuery(lockQuery).First(&lockAcquired); err != nil {
 		le.Errorf("Failed to attempt advisory lock acquisition: %+v", err)
-		return
+		return err
 	}
 
 	if !lockAcquired {
 		le.Infof("Another process is currently creating indexes. Skipping index creation.")
-		return
+		return ErrAdvisoryLockAlreadyAcquired
 	}
 
-	le.Infof("Successfully acquired advisory lock for index creation")
+	le.Infof("Successfully acquired advisory lock for index creation.")
 
 	// Ensure lock is released on function exit
 	defer func() {
 		unlockQuery := fmt.Sprintf("SELECT pg_advisory_unlock(hashtext('%s')::bigint)", lockName)
 		var unlocked bool
 		if err := db.RawQuery(unlockQuery).First(&unlocked); err != nil {
-			le.Errorf("Failed to release advisory lock: %+v", err)
+			if ctx.Err() != nil {
+				le.Infof("Context cancelled. Advisory lock will be released upon session termination.")
+			} else {
+				le.Errorf("Failed to release advisory lock: %+v", err)
+			}
 		} else if unlocked {
-			le.Infof("Successfully released advisory lock")
+			le.Infof("Successfully released advisory lock.")
 		} else {
-			le.Warnf("Advisory lock was not held when attempting to release")
+			le.Warnf("Advisory lock was not held when attempting to release.")
 		}
 	}()
 
@@ -101,7 +115,7 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 
 			if allHealthy {
 				le.Infof("All %d indexes on auth.users already exist and are ready. Skipping index creation.", len(indexes))
-				return
+				return nil
 			}
 		} else {
 			le.Infof("Found %d of %d expected indexes. Proceeding with index creation.", len(existingIndexes), len(indexes))
@@ -140,9 +154,12 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 
 	if len(failedIndexes) > 0 {
 		le.Warnf("Index creation completed in %d ms with some failures: %v", totalDuration, failedIndexes)
+		return fmt.Errorf("failed to create indexes: %v", failedIndexes)
 	} else {
 		le.Infof("All indexes created successfully in %d ms", totalDuration)
 	}
+
+	return nil
 }
 
 // getUsersIndexes returns the list of indexes to create on the users table

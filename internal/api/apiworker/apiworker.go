@@ -198,14 +198,14 @@ func (o *Worker) indexWorker(ctx context.Context, cfgCh <-chan struct{}) error {
 	le.Info("apiworker: index worker started")
 	defer le.Info("apiworker: index worker exited")
 
-	o.maybeCreateIndexes(ctx, o.getConfig())
+	o.maybeCreateIndexes(ctx, o.getConfig(), le)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-cfgCh:
-			o.maybeCreateIndexes(ctx, o.getConfig())
+			o.maybeCreateIndexes(ctx, o.getConfig(), le)
 		}
 	}
 }
@@ -213,8 +213,12 @@ func (o *Worker) indexWorker(ctx context.Context, cfgCh <-chan struct{}) error {
 func (o *Worker) maybeCreateIndexes(
 	ctx context.Context,
 	cfg *conf.GlobalConfiguration,
+	le *logrus.Entry,
 ) {
 	if cfg.IndexWorker.EnsureUserSearchIndexesExist {
-		indexworker.CreateIndexes(ctx, cfg, o.le)
+		err := indexworker.CreateIndexes(ctx, cfg, le)
+		if err != nil && !errors.Is(err, indexworker.ErrAdvisoryLockAlreadyAcquired) {
+			le.WithError(err).Error("Failed to create indexes")
+		}
 	}
 }
