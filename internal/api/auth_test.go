@@ -160,6 +160,66 @@ func (ts *AuthTestSuite) TestParseJWTClaims() {
 	}
 }
 
+func (ts *AuthTestSuite) TestParseJWTClaimsWithAllowExpired() {
+	// Test that allow_expired query parameter controls JWT expiration validation
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	s, err := models.NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(s))
+
+	// Create an expired JWT token (exp set to past time)
+	expiredClaims := &AccessTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   u.ID.String(),
+			ExpiresAt: jwt.NewNumericDate(jwt.Now().Add(-1 * 3600)), // expired 1 hour ago
+		},
+		Role:      "authenticated",
+		SessionId: s.ID.String(),
+	}
+
+	expiredJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, expiredClaims).SignedString([]byte(ts.Config.JWT.Secret))
+	require.NoError(ts.T(), err)
+
+	ts.Run("Without allow_expired parameter - should reject expired token", func() {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost/user", nil)
+		req.Header.Set("Authorization", "Bearer "+expiredJwt)
+
+		_, err := ts.API.parseJWTClaims(expiredJwt, req)
+		require.Error(ts.T(), err)
+		require.Contains(ts.T(), err.Error(), "token is expired")
+	})
+
+	ts.Run("With allow_expired=false - should reject expired token", func() {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost/user?allow_expired=false", nil)
+		req.Header.Set("Authorization", "Bearer "+expiredJwt)
+
+		_, err := ts.API.parseJWTClaims(expiredJwt, req)
+		require.Error(ts.T(), err)
+		require.Contains(ts.T(), err.Error(), "token is expired")
+	})
+
+	ts.Run("With allow_expired=true - should accept expired token", func() {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost/user?allow_expired=true", nil)
+		req.Header.Set("Authorization", "Bearer "+expiredJwt)
+
+		ctx, err := ts.API.parseJWTClaims(expiredJwt, req)
+		require.NoError(ts.T(), err)
+
+		// Verify token is stored in context
+		token := getToken(ctx)
+		require.NotNil(ts.T(), token)
+		require.Equal(ts.T(), expiredJwt, token.Raw)
+
+		// Verify claims are correctly parsed
+		claims := getClaims(ctx)
+		require.NotNil(ts.T(), claims)
+		require.Equal(ts.T(), u.ID.String(), claims.Subject)
+		require.Equal(ts.T(), "authenticated", claims.Role)
+	})
+}
+
 func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
