@@ -538,3 +538,123 @@ func (s *Server) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWri
 func (s *Server) getTokenService() *tokens.Service {
 	return s.tokenService
 }
+
+// UserOAuthGrantResponse represents an OAuth grant that a user has authorized
+type UserOAuthGrantResponse struct {
+	Client    ClientDetailsResponse `json:"client"`
+	Scopes    []string              `json:"scopes"`
+	GrantedAt time.Time             `json:"granted_at"`
+}
+
+// UserListOAuthGrants handles GET /user/oauth/grants
+// Lists all OAuth grants that the authenticated user has authorized (active consents)
+func (s *Server) UserListOAuthGrants(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := shared.GetUser(ctx)
+
+	if user == nil {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "authentication required")
+	}
+
+	db := s.db.WithContext(ctx)
+
+	// Get all active (non-revoked) consents for this user
+	consents, err := models.FindOAuthServerConsentsByUser(db, user.ID, false)
+	if err != nil {
+		return apierrors.NewInternalServerError("Error fetching OAuth grants").WithInternalError(err)
+	}
+
+	// Build response with client information
+	grants := make([]UserOAuthGrantResponse, 0, len(consents))
+
+	for _, consent := range consents {
+		// Fetch client details
+		client, err := models.FindOAuthServerClientByID(db, consent.ClientID)
+		if err != nil {
+			// Skip clients that no longer exist or are deleted
+			if models.IsNotFoundError(err) {
+				continue
+			}
+			return apierrors.NewInternalServerError("Error fetching client details").WithInternalError(err)
+		}
+
+		response := UserOAuthGrantResponse{
+			Client: ClientDetailsResponse{
+				ID:      client.ID.String(),
+				Name:    utilities.StringValue(client.ClientName),
+				URI:     utilities.StringValue(client.ClientURI),
+				LogoURI: utilities.StringValue(client.LogoURI),
+			},
+			Scopes:    consent.GetScopeList(),
+			GrantedAt: consent.GrantedAt,
+		}
+
+		grants = append(grants, response)
+	}
+
+	return shared.SendJSON(w, http.StatusOK, grants)
+}
+
+// UserRevokeOAuthGrant handles DELETE /user/oauth/grants?client_id=...
+// Revokes the user's OAuth grant for a specific client
+func (s *Server) UserRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := shared.GetUser(ctx)
+
+	if user == nil {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "authentication required")
+	}
+
+	clientIDStr := r.URL.Query().Get("client_id")
+	if clientIDStr == "" {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_id query parameter is required")
+	}
+
+	// Parse client_id as UUID
+	clientID, err := uuid.FromString(clientIDStr)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid client_id format")
+	}
+
+	db := s.db.WithContext(ctx)
+
+	// Find the active consent for this user and client
+	consent, err := models.FindActiveOAuthServerConsentByUserAndClient(db, user.ID, clientID)
+	if err != nil {
+		return apierrors.NewInternalServerError("Error finding consent").WithInternalError(err)
+	}
+
+	if consent == nil {
+		return apierrors.NewNotFoundError(apierrors.ErrorCodeOAuthConsentNotFound, "No active grant found for this client")
+	}
+
+	// Revoke the consent in a transaction
+	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := consent.Revoke(tx); terr != nil {
+			return terr
+		}
+
+		// Delete all sessions associated with this OAuth client for this user
+		// This will invalidate all refresh tokens for those sessions
+		if terr := models.RevokeOAuthSessions(tx, user.ID, clientID); terr != nil {
+			return terr
+		}
+
+		// Create audit log entry
+		if terr := models.NewAuditLogEntry(s.config.AuditLog, r, tx, user, models.TokenRevokedAction, "", map[string]interface{}{
+			"oauth_client_id": clientID.String(),
+			"action":          "revoke_oauth_grant",
+		}); terr != nil {
+			return terr
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return apierrors.NewInternalServerError("Error revoking grant").WithInternalError(err)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
