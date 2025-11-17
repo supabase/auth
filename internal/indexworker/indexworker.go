@@ -201,30 +201,12 @@ func getUsersIndexes(namespace string) []struct {
 			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_last_sign_in_at_desc
 				ON %q.users (last_sign_in_at DESC);`, namespace),
 		},
-		// trigram indexes on name fields in raw_user_meta_data JSONB - enables fast LIKE '%term%' searches
+		// trigram indexes on name field in raw_user_meta_data JSONB - enables fast LIKE '%term%' searches
 		{
-			name: "idx_users_display_name_trgm",
-			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_display_name_trgm
-				ON %q.users USING gin ((raw_user_meta_data->>'display_name') gin_trgm_ops)
-				WHERE raw_user_meta_data->>'display_name' IS NOT NULL;`, namespace),
-		},
-		{
-			name: "idx_users_first_name_trgm",
-			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_first_name_trgm
-				ON %q.users USING gin ((raw_user_meta_data->>'first_name') gin_trgm_ops)
-				WHERE raw_user_meta_data->>'first_name' IS NOT NULL;`, namespace),
-		},
-		{
-			name: "idx_users_last_name_trgm",
-			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_last_name_trgm
-				ON %q.users USING gin ((raw_user_meta_data->>'last_name') gin_trgm_ops)
-				WHERE raw_user_meta_data->>'last_name' IS NOT NULL;`, namespace),
-		},
-		{
-			name: "idx_users_full_name_trgm",
-			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_full_name_trgm
-				ON %q.users USING gin ((raw_user_meta_data->>'full_name') gin_trgm_ops)
-				WHERE raw_user_meta_data->>'full_name' IS NOT NULL;`, namespace),
+			name: "idx_users_name_trgm",
+			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_name_trgm
+				ON %q.users USING gin ((raw_user_meta_data->>'name') gin_trgm_ops)
+				WHERE raw_user_meta_data->>'name' IS NOT NULL;`, namespace),
 		},
 	}
 }
