@@ -637,6 +637,8 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 }
 
 // GenerateIDToken generates an OpenID Connect ID Token
+// IDToken is generated only when the signing key is an asymmetric one.
+// HS256 is not supported for ID token signing.
 // Claims are filtered based on the granted scopes per OIDC spec:
 // - openid: sub (always included when openid scope is present)
 // - email: email, email_verified
@@ -644,6 +646,15 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 // - phone: phone_number, phone_number_verified
 func (s *Service) GenerateIDToken(params GenerateIDTokenParams) (string, error) {
 	config := s.config
+
+	signingJwk, err := conf.GetSigningJwk(&s.config.JWT)
+	if err != nil {
+		return "", fmt.Errorf("error getting signing JWK: %w", err)
+	}
+	signingMethod := conf.GetSigningAlg(signingJwk)
+	if signingMethod == jwt.SigningMethodHS256 {
+		return "", fmt.Errorf("HS256 is not supported for ID token signing")
+	}
 
 	// Determine auth_time (when authentication occurred)
 	var authTime time.Time
