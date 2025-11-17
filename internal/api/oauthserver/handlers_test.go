@@ -775,10 +775,10 @@ func (ts *OAuthClientTestSuite) TestUserInfo() {
 			// Check email claims
 			if tt.expectEmail {
 				assert.NotEmpty(t, response["email"], "email should be present")
-				assert.NotNil(t, response["email_confirmed_at"], "email_confirmed_at should be present")
+				assert.NotNil(t, response["email_verified"], "email_verified should be present")
 			} else {
 				assert.Nil(t, response["email"], "email should not be present")
-				assert.Nil(t, response["email_confirmed_at"], "email_confirmed_at should not be present")
+				assert.Nil(t, response["email_verified"], "email_verified should not be present")
 			}
 
 			// Check profile claims
@@ -793,10 +793,10 @@ func (ts *OAuthClientTestSuite) TestUserInfo() {
 			// Check phone claims
 			if tt.expectPhone {
 				assert.NotEmpty(t, response["phone"], "phone should be present")
-				assert.NotNil(t, response["phone_confirmed_at"], "phone_confirmed_at should be present")
+				assert.NotNil(t, response["phone_verified"], "phone_verified should be present")
 			} else {
 				assert.Nil(t, response["phone"], "phone should not be present")
-				assert.Nil(t, response["phone_confirmed_at"], "phone_confirmed_at should not be present")
+				assert.Nil(t, response["phone_verified"], "phone_verified should not be present")
 			}
 
 			// Clean up session for next test
