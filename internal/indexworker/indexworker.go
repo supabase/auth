@@ -16,6 +16,7 @@ import (
 
 // ErrAdvisoryLockAlreadyAcquired is returned when another process already holds the advisory lock
 var ErrAdvisoryLockAlreadyAcquired = errors.New("advisory lock already acquired by another process")
+var ErrExtensionNotFound = errors.New("extension not found")
 
 // CreateIndexes ensures that the necessary indexes on the users table exist.
 // If the indexes already exist and are valid, it skips creation.
@@ -92,7 +93,14 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 		}
 	}()
 
-	indexes := getUsersIndexes(config.DB.Namespace)
+	// Look up which schema the pg_trgm extension is installed in
+	trgmSchema, err := getTrgmExtensionSchema(db)
+	if err != nil {
+		le.Errorf("Failed to find pg_trgm extension schema: %+v", err)
+		return ErrExtensionNotFound
+	}
+
+	indexes := getUsersIndexes(config.DB.Namespace, trgmSchema)
 	indexNames := make([]string, len(indexes))
 	for i, idx := range indexes {
 		indexNames[i] = idx.name
@@ -162,8 +170,25 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 	return nil
 }
 
+// getTrgmExtensionSchema looks up which schema the pg_trgm extension is installed in
+func getTrgmExtensionSchema(db *pop.Connection) (string, error) {
+	var schema string
+	query := `
+		SELECT extnamespace::regnamespace::text AS schema_name
+		FROM pg_extension
+		WHERE extname = 'pg_trgm'
+		LIMIT 1
+	`
+
+	if err := db.RawQuery(query).First(&schema); err != nil {
+		return "", fmt.Errorf("failed to find pg_trgm extension schema: %w", err)
+	}
+
+	return schema, nil
+}
+
 // getUsersIndexes returns the list of indexes to create on the users table
-func getUsersIndexes(namespace string) []struct {
+func getUsersIndexes(namespace, trgmSchema string) []struct {
 	name  string
 	query string
 } {
@@ -182,7 +207,7 @@ func getUsersIndexes(namespace string) []struct {
 		{
 			name: "idx_users_email_trgm",
 			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email_trgm
-				ON %q.users USING gin (email gin_trgm_ops);`, namespace),
+				ON %q.users USING gin (email %s.gin_trgm_ops);`, namespace, trgmSchema),
 		},
 		// enables exact-match and prefix searches and sorting by phone number
 		{
@@ -205,8 +230,8 @@ func getUsersIndexes(namespace string) []struct {
 		{
 			name: "idx_users_name_trgm",
 			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_name_trgm
-				ON %q.users USING gin ((raw_user_meta_data->>'name') gin_trgm_ops)
-				WHERE raw_user_meta_data->>'name' IS NOT NULL;`, namespace),
+				ON %q.users USING gin ((raw_user_meta_data->>'name') %s.gin_trgm_ops)
+				WHERE raw_user_meta_data->>'name' IS NOT NULL;`, namespace, trgmSchema),
 		},
 	}
 }
