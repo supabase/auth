@@ -773,7 +773,18 @@ func parseIDTokenClaims(idToken string, config *conf.GlobalConfiguration) (jwt.M
 	claims := jwt.MapClaims{}
 	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
 	_, err := p.ParseWithClaims(idToken, claims, func(token *jwt.Token) (interface{}, error) {
-		// Return the JWT secret for verification
+		// Get the key ID from the token header
+		if kid, ok := token.Header["kid"]; ok {
+			if kidStr, ok := kid.(string); ok {
+				// Find the public key by kid for asymmetric verification
+				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				if err != nil {
+					return nil, err
+				}
+				return key, nil
+			}
+		}
+		// Fallback to symmetric key (HS256) - this should fail for ID tokens
 		return []byte(config.JWT.Secret), nil
 	})
 	if err != nil {
