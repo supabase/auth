@@ -460,6 +460,11 @@ func (s *Server) validateRemainingAuthorizeParams(params *AuthorizeParams) error
 		return errors.New("only response_type=code is supported")
 	}
 
+	// Validate scopes
+	if err := s.validateScopes(params.Scope); err != nil {
+		return err
+	}
+
 	// Resource parameter validation (per RFC 8707)
 	if err := s.validateResourceParam(params.Resource); err != nil {
 		return err
@@ -519,6 +524,27 @@ func (s *Server) validateResourceParam(resource string) error {
 	// Should not include a query component
 	if parsedURL.RawQuery != "" {
 		return errors.New("resource must not include a query component")
+	}
+
+	return nil
+}
+
+// validateScopes validates the requested scopes
+func (s *Server) validateScopes(scopeString string) error {
+	if scopeString == "" {
+		return errors.New("scope parameter is required")
+	}
+
+	scopes := models.ParseScopeString(scopeString)
+	if len(scopes) == 0 {
+		return errors.New("scope parameter cannot be empty")
+	}
+
+	// Validate each scope against the centrally defined supported scopes
+	for _, scope := range scopes {
+		if !models.IsSupportedScope(scope) {
+			return fmt.Errorf("unsupported scope: %s", scope)
+		}
 	}
 
 	return nil

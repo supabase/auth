@@ -5,6 +5,7 @@ import (
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	jwk "github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/supabase/auth/internal/models"
 )
 
 type JwksResponse struct {
@@ -86,6 +87,7 @@ func (a *API) WellKnownOpenID(w http.ResponseWriter, r *http.Request) error {
 		IDTokenSigningAlgValuesSupported:  []string{"RS256", "HS256", "ES256"}, // TODO :: should create this based on signing key config?
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "none"},
 		CodeChallengeMethodsSupported:     []string{"S256", "plain"},
+		ScopesSupported:                   models.SupportedOAuthScopes,
 
 		// OIDC Standard Claims
 		ClaimsSupported: []string{
@@ -111,10 +113,6 @@ func (a *API) WellKnownOpenID(w http.ResponseWriter, r *http.Request) error {
 	if config.OAuthServer.Enabled && config.OAuthServer.AllowDynamicRegistration {
 		response.RegistrationEndpoint = issuer + "/oauth/clients/register"
 	}
-
-	// TODO: Add scopes_supported when scope management is implemented
-	// For now, we can leave it empty or add basic scopes
-	// response.ScopesSupported = []string{"openid", "email", "profile"}
 
 	w.Header().Set("Cache-Control", "public, max-age=600")
 
