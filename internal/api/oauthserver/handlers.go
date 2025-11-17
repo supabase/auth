@@ -692,7 +692,7 @@ func (s *Server) OAuthUserInfo(w http.ResponseWriter, r *http.Request) error {
 			userInfo["email"] = email
 		}
 		if user.EmailConfirmedAt != nil {
-			userInfo["email_confirmed_at"] = user.EmailConfirmedAt
+			userInfo["email_verified"] = true
 		}
 	}
 
@@ -736,7 +736,7 @@ func (s *Server) OAuthUserInfo(w http.ResponseWriter, r *http.Request) error {
 			userInfo["phone"] = phone
 		}
 		if user.PhoneConfirmedAt != nil {
-			userInfo["phone_confirmed_at"] = user.PhoneConfirmedAt
+			userInfo["phone_verified"] = true
 		}
 	}
 
