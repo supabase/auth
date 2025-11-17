@@ -793,7 +793,7 @@ type IDTokenTestSuite struct {
 func TestIDTokenGeneration(t *testing.T) {
 	ts := &IDTokenTestSuite{}
 
-	config, err := conf.LoadGlobal("../../hack/test.env")
+	config, err := conf.LoadGlobal("../../hack/test_asymmetric.env")
 	require.NoError(t, err)
 
 	conn, err := test.SetupDBConnection(config)
