@@ -77,7 +77,7 @@ func (ts *IndexWorkerTestSuite) SetupTest() {
 }
 
 func (ts *IndexWorkerTestSuite) cleanupIndexes() {
-	indexes := getUsersIndexes(ts.namespace)
+	indexes := getUsersIndexes(ts.namespace, ts.namespace)
 	for _, idx := range indexes {
 		// Drop any existing indexes (valid or invalid)
 		dropQuery := fmt.Sprintf("DROP INDEX IF EXISTS %q.%s", ts.namespace, idx.name)
@@ -91,7 +91,7 @@ func (ts *IndexWorkerTestSuite) TestCreateIndexesHappyPath() {
 	err := CreateIndexes(ctx, ts.config, ts.logger)
 	require.NoError(ts.T(), err)
 
-	indexes := getUsersIndexes(ts.namespace)
+	indexes := getUsersIndexes(ts.namespace, ts.namespace)
 	existingIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
 	require.NoError(ts.T(), err)
 
@@ -135,7 +135,7 @@ func (ts *IndexWorkerTestSuite) TestIdempotency() {
 	require.NoError(ts.T(), err)
 
 	// Get the state after first run
-	indexes := getUsersIndexes(ts.namespace)
+	indexes := getUsersIndexes(ts.namespace, ts.namespace)
 	firstRunIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), len(indexes), len(firstRunIndexes))
@@ -191,7 +191,7 @@ func (ts *IndexWorkerTestSuite) TestOutOfBandIndexRemoval() {
 	require.NoError(ts.T(), err)
 
 	// Verify all indexes exist
-	indexes := getUsersIndexes(ts.namespace)
+	indexes := getUsersIndexes(ts.namespace, ts.namespace)
 	existingIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
 	require.NoError(ts.T(), err)
 	assert.Equal(ts.T(), len(indexes), len(existingIndexes))
@@ -277,7 +277,7 @@ func (ts *IndexWorkerTestSuite) TestConcurrentWorkers() {
 	assert.Equal(ts.T(), numWorkers-1, lockSkipCount, "Other workers should skip due to lock")
 
 	// Verify all indexes were created successfully
-	indexes := getUsersIndexes(ts.namespace)
+	indexes := getUsersIndexes(ts.namespace, ts.namespace)
 	existingIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
 	require.NoError(ts.T(), err)
 	assert.Equal(ts.T(), len(indexes), len(existingIndexes), "All indexes should be created")
@@ -306,7 +306,7 @@ func (ts *IndexWorkerTestSuite) TestCreateIndexesWithInvalidIndexes() {
 	require.NoError(ts.T(), err, "Initial CreateIndexes should succeed")
 
 	// Verify all indexes were created and are valid
-	indexes := getUsersIndexes(ts.namespace)
+	indexes := getUsersIndexes(ts.namespace, ts.namespace)
 	initialIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
 	require.NoError(ts.T(), err)
 	assert.Equal(ts.T(), len(indexes), len(initialIndexes), "All indexes should be created initially")
@@ -337,7 +337,7 @@ func (ts *IndexWorkerTestSuite) TestCreateIndexesWithInvalidIndexes() {
 	defer manipulatorDB.Close()
 
 	// Select the first 2 indexes to mark as invalid
-	allIndexes := getUsersIndexes(ts.namespace)
+	allIndexes := getUsersIndexes(ts.namespace, ts.namespace)
 	indexesToInvalidate := []string{allIndexes[0].name, allIndexes[1].name}
 
 	for _, indexName := range indexesToInvalidate {
@@ -391,6 +391,44 @@ func (ts *IndexWorkerTestSuite) TestCreateIndexesWithInvalidIndexes() {
 	}
 
 	ts.logger.Infof("Successfully recovered from %d invalid indexes", len(indexesToInvalidate))
+}
+
+// TestCreateIndexesWithoutTrgmExtension tests that CreateIndexes fails when pg_trgm extension doesn't exist
+// and that no indexes are created when this prerequisite check fails.
+func (ts *IndexWorkerTestSuite) TestCreateIndexesWithoutTrgmExtension() {
+	ctx := context.Background()
+
+	// Drop the pg_trgm extension to simulate it not being available
+	dropExtQuery := "DROP EXTENSION IF EXISTS pg_trgm CASCADE"
+	err := ts.db.RawQuery(dropExtQuery).Exec()
+	require.NoError(ts.T(), err, "Should be able to drop pg_trgm extension")
+
+	// Verify the extension is dropped
+	var extensionExists bool
+	checkExtQuery := "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')"
+	err = ts.db.RawQuery(checkExtQuery).First(&extensionExists)
+	require.NoError(ts.T(), err)
+	assert.False(ts.T(), extensionExists, "pg_trgm extension should not exist")
+
+	// Verify no indexes exist initially
+	indexes := getUsersIndexes(ts.namespace, ts.namespace)
+	existingIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), existingIndexes, "No indexes should exist initially")
+
+	// Try to create indexes without pg_trgm extension
+	err = CreateIndexes(ctx, ts.config, ts.logger)
+	assert.Error(ts.T(), err, "CreateIndexes should fail when pg_trgm extension doesn't exist")
+	assert.ErrorIs(ts.T(), err, ErrExtensionNotFound)
+
+	existingIndexes, err = getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), existingIndexes, "No indexes should have been created when pg_trgm is missing")
+
+	// Restore pg_trgm extension for other tests
+	createExtQuery := "CREATE EXTENSION IF NOT EXISTS pg_trgm"
+	err = ts.db.RawQuery(createExtQuery).Exec()
+	require.NoError(ts.T(), err, "Should be able to restore pg_trgm extension")
 }
 
 // Run the test suite
