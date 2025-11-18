@@ -136,16 +136,17 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	}
 
 	// Store authorization request in database (without user initially)
-	authorization := models.NewOAuthServerAuthorization(
-		client.ID, // Use the client's UUID instead of the public client_id string
-		params.RedirectURI,
-		params.Scope,
-		params.State,
-		params.Resource,
-		params.CodeChallenge,
-		params.CodeChallengeMethod,
-		params.Nonce,
-	)
+	authorization := models.NewOAuthServerAuthorization(models.NewOAuthServerAuthorizationParams{
+		ClientID:            client.ID,
+		RedirectURI:         params.RedirectURI,
+		Scope:               params.Scope,
+		State:               params.State,
+		Resource:            params.Resource,
+		CodeChallenge:       params.CodeChallenge,
+		CodeChallengeMethod: params.CodeChallengeMethod,
+		TTL:                 config.OAuthServer.AuthorizationTTL,
+		Nonce:               params.Nonce,
+	})
 
 	if err := models.CreateOAuthServerAuthorization(db, authorization); err != nil {
 		// Error creating authorization - redirect with server_error
