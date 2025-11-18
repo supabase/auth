@@ -43,6 +43,31 @@ func (a *audience) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// UpdatedAt is a flexible type that can unmarshal both string and numeric timestamps
+type UpdatedAt string
+
+func (u *UpdatedAt) UnmarshalJSON(b []byte) error {
+	// Try to unmarshal as string first
+	var strVal string
+	if err := json.Unmarshal(b, &strVal); err == nil {
+		*u = UpdatedAt(strVal)
+		return nil
+	}
+
+	// Try to unmarshal as number (Unix timestamp)
+	var numVal float64
+	if err := json.Unmarshal(b, &numVal); err == nil {
+		// Convert Unix timestamp to string
+		t := time.Unix(int64(numVal), 0).UTC()
+		*u = UpdatedAt(t.Format(time.RFC3339))
+		return nil
+	}
+
+	// If neither works, return empty
+	*u = ""
+	return nil
+}
+
 type Claims struct {
 	// Reserved claims
 	Issuer  string   `json:"iss,omitempty" structs:"iss,omitempty"`
@@ -60,13 +85,13 @@ type Claims struct {
 	PreferredUsername string `json:"preferred_username,omitempty" structs:"preferred_username,omitempty"`
 	Profile           string `json:"profile,omitempty" structs:"profile,omitempty"`
 	Picture           string `json:"picture,omitempty" structs:"picture,omitempty"`
-	Website           string `json:"website,omitempty" structs:"website,omitempty"`
-	Gender            string `json:"gender,omitempty" structs:"gender,omitempty"`
-	Birthdate         string `json:"birthdate,omitempty" structs:"birthdate,omitempty"`
-	ZoneInfo          string `json:"zoneinfo,omitempty" structs:"zoneinfo,omitempty"`
-	Locale            string `json:"locale,omitempty" structs:"locale,omitempty"`
-	UpdatedAt         string `json:"updated_at,omitempty" structs:"updated_at,omitempty"`
-	Email             string `json:"email,omitempty" structs:"email,omitempty"`
+	Website           string    `json:"website,omitempty" structs:"website,omitempty"`
+	Gender            string    `json:"gender,omitempty" structs:"gender,omitempty"`
+	Birthdate         string    `json:"birthdate,omitempty" structs:"birthdate,omitempty"`
+	ZoneInfo          string    `json:"zoneinfo,omitempty" structs:"zoneinfo,omitempty"`
+	Locale            string    `json:"locale,omitempty" structs:"locale,omitempty"`
+	UpdatedAt         UpdatedAt `json:"updated_at,omitempty" structs:"updated_at,omitempty"`
+	Email             string    `json:"email,omitempty" structs:"email,omitempty"`
 	EmailVerified     bool   `json:"email_verified,omitempty" structs:"email_verified"`
 	Phone             string `json:"phone,omitempty" structs:"phone,omitempty"`
 	PhoneVerified     bool   `json:"phone_verified,omitempty" structs:"phone_verified"`
@@ -102,9 +127,20 @@ type Provider interface {
 
 // OAuthProvider specifies additional methods needed for providers using OAuth
 type OAuthProvider interface {
+	// AuthCodeURL returns the URL for the authorization code flow
 	AuthCodeURL(string, ...oauth2.AuthCodeOption) string
+
+	// GetUserData retrieves user information from the provider using the access token
 	GetUserData(context.Context, *oauth2.Token) (*UserProvidedData, error)
-	GetOAuthToken(string) (*oauth2.Token, error)
+
+	// GetOAuthToken exchanges the authorization code for an access token
+	// The opts parameter can include PKCE verifier for providers that require it
+	GetOAuthToken(string, ...oauth2.AuthCodeOption) (*oauth2.Token, error)
+
+	// RequiresPKCE indicates whether this provider requires PKCE for its OAuth authorization code flow
+	// When true, the auth instance will automatically generate and manage PKCE parameters
+	// for communication with this provider, regardless of whether the end user requested PKCE
+	RequiresPKCE() bool
 }
 
 func chooseHost(base, defaultHost string) string {

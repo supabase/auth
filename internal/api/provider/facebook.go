@@ -70,8 +70,8 @@ func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	}, nil
 }
 
-func (p facebookProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return p.Exchange(context.Background(), code)
+func (p facebookProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return p.Exchange(context.Background(), code, opts...)
 }
 
 func (p facebookProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -109,4 +109,8 @@ func (p facebookProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 	}
 
 	return data, nil
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *facebookProvider) RequiresPKCE() bool {
+	return false
 }
