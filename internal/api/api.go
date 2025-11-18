@@ -288,6 +288,22 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			})
 		})
 
+		r.Route("/passkeys", func(r *router) {
+			r.With(api.limitHandler(api.limiterOpts.PasskeySignIn)).Post("/sign-in", api.PasskeySignIn)
+			r.With(api.limitHandler(api.limiterOpts.PasskeySignIn)).Post("/sign-in/verify", api.PasskeySignInVerify)
+
+			r.With(api.requireAuthentication).With(api.requireNotAnonymous).Route("/", func(r *router) {
+				r.Get("/", api.ListPasskeys)
+				r.With(api.limitHandler(api.limiterOpts.PasskeyChallenge)).Post("/", api.CreatePasskey)
+
+				r.Route("/{passkey_id}", func(r *router) {
+					r.Use(api.loadPasskey)
+					r.With(api.limitHandler(api.limiterOpts.PasskeyChallenge)).Post("/verify", api.VerifyPasskey)
+					r.Delete("/", api.DeletePasskey)
+				})
+			})
+		})
+
 		r.Route("/sso", func(r *router) {
 			r.Use(api.requireSAMLEnabled)
 			r.With(api.limitHandler(api.limiterOpts.SSO)).

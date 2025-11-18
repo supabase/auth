@@ -171,6 +171,11 @@ type MFAConfiguration struct {
 	WebAuthn                    MFAFactorTypeConfiguration   `split_words:"true"`
 }
 
+type PasskeyConfiguration struct {
+	Enabled                 bool    `json:"enabled" split_words:"true" default:"false"`
+	ChallengeExpiryDuration float64 `json:"challenge_expiry_duration" split_words:"true" default:"300"`
+}
+
 type APIConfiguration struct {
 	Host               string
 	Port               string `envconfig:"PORT" default:"8081"`
@@ -337,6 +342,8 @@ type GlobalConfiguration struct {
 	RateLimitOtp                        float64 `split_words:"true" default:"30"`
 	RateLimitWeb3                       float64 `split_words:"true" default:"30"`
 	RateLimitOAuthDynamicClientRegister float64 `split_words:"true" default:"10"`
+
+	Passkey PasskeyConfiguration `json:"passkey"`
 
 	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList    []string `json:"uri_allow_list" split_words:"true"`

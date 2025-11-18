@@ -21,6 +21,7 @@ const (
 	LoginTypePKCE      LoginType = "pkce"
 	LoginTypeToken     LoginType = "token" // for refresh token flows, to be backward-compatible with existing data
 	LoginTypeMFA       LoginType = "mfa"   // for MFA verifications
+	LoginTypePasskey   LoginType = "passkey"
 )
 
 // Provider constants for consistent login analytics
@@ -33,6 +34,7 @@ const (
 	ProviderMFATOTP     = "totp"
 	ProviderMFAPhone    = "phone"
 	ProviderMFAWebAuthn = "webauthn"
+	ProviderPasskey     = "passkey"
 
 	// SSO providers
 	ProviderSAML = "saml"
