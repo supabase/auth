@@ -316,14 +316,12 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
 			return terr
 		}
-		session, terr := models.FindSessionByID(tx, sessionId, false)
+
+		session, terr := models.FindSessionByID(tx, sessionId, true)
 		if terr != nil {
 			return terr
 		}
-		currentToken, terr := models.FindTokenBySessionID(tx, &session.ID)
-		if terr != nil {
-			return terr
-		}
+
 		if err := tx.Load(user, "Identities"); err != nil {
 			return err
 		}
@@ -349,6 +347,12 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			}
 		} else {
 			// Legacy RTs: swap to ensure current token is the latest one
+
+			currentToken, terr := models.FindTokenBySessionID(tx, &session.ID)
+			if terr != nil {
+				return terr
+			}
+
 			refreshToken, terr := models.GrantRefreshTokenSwap(config.AuditLog, r, tx, user, currentToken)
 			if terr != nil {
 				return terr

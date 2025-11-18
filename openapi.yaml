@@ -837,21 +837,22 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  grants:
-                    type: array
-                    items:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    client:
                       type: object
+                      description: OAuth client details
                       properties:
-                        client_id:
+                        id:
                           type: string
                           format: uuid
                           description: Unique client identifier
-                        client_name:
+                        name:
                           type: string
                           description: Human-readable name of the client application
-                        client_uri:
+                        uri:
                           type: string
                           format: uri
                           description: URL of the client application's homepage
@@ -859,15 +860,15 @@ paths:
                           type: string
                           format: uri
                           description: URL of the client application's logo
-                        scopes:
-                          type: array
-                          items:
-                            type: string
-                          description: List of scopes granted to this client
-                        granted_at:
-                          type: string
-                          format: date-time
-                          description: Timestamp when grant was authorized
+                    scopes:
+                      type: array
+                      items:
+                        type: string
+                      description: List of scopes granted to this client
+                    granted_at:
+                      type: string
+                      format: date-time
+                      description: Timestamp when grant was authorized
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
@@ -2479,12 +2480,12 @@ paths:
                   client:
                     type: object
                     properties:
-                      client_id:
+                      id:
                         type: string
                         format: uuid
-                      client_name:
+                      name:
                         type: string
-                      client_uri:
+                      uri:
                         type: string
                         format: uri
                       logo_uri:
