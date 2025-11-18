@@ -10,6 +10,7 @@ import (
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -147,6 +148,8 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 			return ctx, err
 		}
 		ctx = withSession(ctx, session)
+		// Also store in shared context for cross-package access (e.g., oauthserver package)
+		ctx = shared.WithSession(ctx, session)
 	}
 	return ctx, nil
 }

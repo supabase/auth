@@ -111,6 +111,7 @@ type AccessTokenClaims struct {
 	SessionId                     string                 `json:"session_id,omitempty"`
 	IsAnonymous                   bool                   `json:"is_anonymous"`
 	ClientID                      string                 `json:"client_id,omitempty"`
+	Scope                         string                 `json:"scope,omitempty"`
 }
 
 type MFAVerificationAttemptInput struct {

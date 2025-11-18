@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
@@ -764,4 +766,259 @@ func (ts *RefreshTokenV2Suite) TestInvalidRefreshTokens() {
 	require.Nil(ts.T(), nrt)
 
 	require.Equal(ts.T(), "", responseHeaders.Get("sb-auth-session-id"))
+}
+
+// parseIDTokenClaims parses an ID token and returns the claims as a map
+func parseIDTokenClaims(idToken string, config *conf.GlobalConfiguration) (jwt.MapClaims, error) {
+	claims := jwt.MapClaims{}
+	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
+	_, err := p.ParseWithClaims(idToken, claims, func(token *jwt.Token) (interface{}, error) {
+		// Get the key ID from the token header
+		if kid, ok := token.Header["kid"]; ok {
+			if kidStr, ok := kid.(string); ok {
+				// Find the public key by kid for asymmetric verification
+				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				if err != nil {
+					return nil, err
+				}
+				return key, nil
+			}
+		}
+		// Fallback to symmetric key (HS256) - this should fail for ID tokens
+		return []byte(config.JWT.Secret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return claims, nil
+}
+
+// IDTokenTestSuite tests ID token generation with different scopes
+type IDTokenTestSuite struct {
+	suite.Suite
+	Conn   *storage.Connection
+	User   *models.User
+	Config *conf.GlobalConfiguration
+}
+
+func TestIDTokenGeneration(t *testing.T) {
+	ts := &IDTokenTestSuite{}
+
+	config, err := conf.LoadGlobal("../../hack/test_asymmetric.env")
+	require.NoError(t, err)
+
+	conn, err := test.SetupDBConnection(config)
+	require.NoError(t, err)
+
+	ts.Conn = conn
+	ts.Config = config
+	defer conn.Close()
+
+	suite.Run(t, ts)
+}
+
+func (ts *IDTokenTestSuite) SetupTest() {
+	models.TruncateAll(ts.Conn)
+	u, err := models.NewUser("", "test@example.com", "password", "authenticated", nil)
+	require.NoError(ts.T(), err)
+
+	// Set user properties for testing scope-based claims
+	u.Email = "test@example.com"
+	u.EmailConfirmedAt = &u.CreatedAt
+	u.Phone = "1234567890"
+	u.PhoneConfirmedAt = &u.CreatedAt
+
+	// Set user metadata for profile claims
+	u.UserMetaData = map[string]interface{}{
+		"full_name": "Test User",
+		"name":      "Test User",
+	}
+
+	require.NoError(ts.T(), ts.Conn.Create(u))
+	ts.User = u
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithAllScopes() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail, models.ScopeProfile, models.ScopePhone},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have email claims
+	require.NotNil(ts.T(), claims["email"], "email claim should be present with email scope")
+	require.NotNil(ts.T(), claims["email_verified"], "email_verified claim should be present with email scope")
+
+	// Should have profile claims
+	require.NotNil(ts.T(), claims["name"], "name claim should be present with profile scope")
+
+	// Should have phone claims
+	require.NotNil(ts.T(), claims["phone_number"], "phone_number claim should be present with phone scope")
+	require.NotNil(ts.T(), claims["phone_number_verified"], "phone_number_verified claim should be present with phone scope")
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithOnlyOpenIDScope() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have basic claims
+	require.NotNil(ts.T(), claims["sub"], "sub claim should always be present")
+	require.NotNil(ts.T(), claims["aud"], "aud claim should always be present")
+
+	// Should NOT have scope-specific claims
+	email, hasEmail := claims["email"]
+	require.False(ts.T(), hasEmail || (email != nil && email != ""), "email claim should not be present without email scope")
+
+	require.Nil(ts.T(), claims["name"], "name claim should not be present without profile scope")
+
+	phoneNumber, hasPhone := claims["phone_number"]
+	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithEmailScope() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have email claims
+	require.NotNil(ts.T(), claims["email"], "email claim should be present with email scope")
+	require.NotNil(ts.T(), claims["email_verified"], "email_verified claim should be present with email scope")
+
+	// Should NOT have profile/phone claims
+	require.Nil(ts.T(), claims["name"], "name claim should not be present without profile scope")
+
+	phoneNumber, hasPhone := claims["phone_number"]
+	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithProfileScope() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID, models.ScopeProfile},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have profile claims
+	require.NotNil(ts.T(), claims["name"], "name claim should be present with profile scope")
+
+	// Should NOT have email/phone claims
+	email, hasEmail := claims["email"]
+	require.False(ts.T(), hasEmail || (email != nil && email != ""), "email claim should not be present without email scope")
+
+	phoneNumber, hasPhone := claims["phone_number"]
+	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithPhoneScope() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID, models.ScopePhone},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have phone claims
+	require.NotNil(ts.T(), claims["phone_number"], "phone_number claim should be present with phone scope")
+	require.NotNil(ts.T(), claims["phone_number_verified"], "phone_number_verified claim should be present with phone scope")
+
+	// Should NOT have email/profile claims
+	email, hasEmail := claims["email"]
+	require.False(ts.T(), hasEmail || (email != nil && email != ""), "email claim should not be present without email scope")
+
+	require.Nil(ts.T(), claims["name"], "name claim should not be present without profile scope")
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithMultipleScopes() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail, models.ScopeProfile},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have email claims
+	require.NotNil(ts.T(), claims["email"], "email claim should be present with email scope")
+	require.NotNil(ts.T(), claims["email_verified"], "email_verified claim should be present with email scope")
+
+	// Should have profile claims
+	require.NotNil(ts.T(), claims["name"], "name claim should be present with profile scope")
+
+	// Should NOT have phone claims
+	phoneNumber, hasPhone := claims["phone_number"]
+	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
 }

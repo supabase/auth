@@ -94,6 +94,7 @@ type Session struct {
 
 	Tag           *string    `json:"tag" db:"tag"`
 	OAuthClientID *uuid.UUID `json:"oauth_client_id" db:"oauth_client_id"`
+	Scopes        *string    `json:"scopes,omitempty" db:"scopes"` // OAuth scopes granted for this session
 
 	RefreshTokenHmacKey *string `json:"-" db:"refresh_token_hmac_key"`
 	RefreshTokenCounter *int64  `json:"-" db:"refresh_token_counter"`
@@ -421,4 +422,17 @@ func (s *Session) FindCurrentlyActiveRefreshToken(tx *storage.Connection) (*Refr
 	}
 
 	return &activeRefreshToken, nil
+}
+
+// GetScopeList returns the scopes as a slice
+func (s *Session) GetScopeList() []string {
+	if s.Scopes == nil {
+		return []string{}
+	}
+	return ParseScopeString(*s.Scopes)
+}
+
+// HasScope checks if the session has a specific scope
+func (s *Session) HasScope(scope string) bool {
+	return HasScope(s.GetScopeList(), scope)
 }

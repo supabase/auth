@@ -3,7 +3,6 @@ package oauthserver
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -261,56 +260,6 @@ func (s *Server) OAuthServerClientList(w http.ResponseWriter, r *http.Request) e
 	return shared.SendJSON(w, http.StatusOK, response)
 }
 
-// OAuthServerMetadataResponse represents the OAuth 2.1 Authorization Server Metadata per RFC 8414
-type OAuthServerMetadataResponse struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	JWKSetURI                         string   `json:"jwks_uri"`
-	RegistrationEndpoint              string   `json:"registration_endpoint,omitempty"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	ResponseModesSupported            []string `json:"response_modes_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
-	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
-
-	// TODO(cemal) :: Append the scopes supported when scope management is clarified!
-	// ScopesSupported                   []string `json:"scopes_supported"`
-}
-
-// OAuthServerMetadata handles GET /.well-known/oauth-authorization-server
-func (s *Server) OAuthServerMetadata(w http.ResponseWriter, r *http.Request) error {
-	issuer := s.config.JWT.Issuer
-
-	// Basic issuer validation - empty issuer would create broken URLs
-	if issuer == "" {
-		return apierrors.NewInternalServerError("Issuer is not set")
-	}
-
-	// Ensure issuer doesn't end with a slash to avoid double slashes in URLs
-	issuer = strings.TrimSuffix(issuer, "/")
-
-	response := OAuthServerMetadataResponse{
-		Issuer:                            issuer,
-		AuthorizationEndpoint:             fmt.Sprintf("%s/oauth/authorize", issuer),
-		TokenEndpoint:                     fmt.Sprintf("%s/oauth/token", issuer),
-		JWKSetURI:                         fmt.Sprintf("%s/.well-known/jwks.json", issuer),
-		ResponseTypesSupported:            []string{"code"},
-		ResponseModesSupported:            []string{"query"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-		TokenEndpointAuthMethodsSupported: []string{models.TokenEndpointAuthMethodClientSecretBasic, models.TokenEndpointAuthMethodClientSecretPost, models.TokenEndpointAuthMethodNone},
-		CodeChallengeMethodsSupported:     []string{"S256", "plain"},
-	}
-
-	// Include registration endpoint if dynamic registration is enabled
-	if s.config.OAuthServer.AllowDynamicRegistration {
-		response.RegistrationEndpoint = fmt.Sprintf("%s/oauth/clients/register", issuer)
-	}
-
-	// TODO: Cache response for 10 minutes, but consider dynamic registration toggle changes
-	return shared.SendJSON(w, http.StatusOK, response)
-}
-
 // OAuthTokenParams represents the parameters for the OAuth token endpoint
 type OAuthTokenParams struct {
 	GrantType    string `json:"grant_type" form:"grant_type"`
@@ -451,6 +400,10 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	grantParams.FillGrantParams(r)
 	grantParams.OAuthClientID = &client.ID
 
+	// Store scopes from authorization in session
+	scopes := authorization.Scope
+	grantParams.Scopes = &scopes
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		authMethod := models.OAuthProviderAuthorizationCode
 
@@ -485,12 +438,39 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 		return apierrors.NewInternalServerError("Error exchanging authorization code").WithInternalError(err)
 	}
 
+	// Check if we need to generate OIDC ID Token (only if 'openid' scope is present)
+	scopeList := models.ParseScopeString(authorization.Scope)
+	if models.HasScope(scopeList, models.ScopeOpenID) {
+		var nonce string
+		if authorization.Nonce != nil {
+			nonce = *authorization.Nonce
+		}
+
+		idToken, err := tokenService.GenerateIDToken(tokens.GenerateIDTokenParams{
+			User:     user,
+			ClientID: client.ID,
+			Nonce:    nonce,
+			AuthTime: user.LastSignInAt,
+			Scopes:   scopeList,
+		})
+		if err != nil {
+			return apierrors.NewInternalServerError("Error generating ID token").WithInternalError(err)
+		}
+
+		tokenResponse.IDToken = idToken
+	}
+
 	// Convert to OAuth-compliant response format (exclude user info for OAuth clients)
 	oauthResponse := map[string]interface{}{
 		"access_token":  tokenResponse.Token,
 		"token_type":    tokenResponse.TokenType,
 		"expires_in":    tokenResponse.ExpiresIn,
 		"refresh_token": tokenResponse.RefreshToken,
+	}
+
+	// Include ID token if generated (OIDC)
+	if tokenResponse.IDToken != "" {
+		oauthResponse["id_token"] = tokenResponse.IDToken
 	}
 
 	return shared.SendJSON(w, http.StatusOK, oauthResponse)
@@ -657,4 +637,98 @@ func (s *Server) UserRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) er
 
 	w.WriteHeader(http.StatusNoContent)
 	return nil
+}
+
+// OAuthUserInfo handles GET /oauth/userinfo (OIDC UserInfo endpoint)
+// Per OIDC Core Section 5.3
+//
+// Returns user information filtered by the scopes granted in the access token:
+// - openid: sub (user ID) - always included as base claim
+// - email: email, email_confirmed_at, new_email
+// - profile: name, picture, preferred_username, updated_at, user_metadata
+// - phone: phone, phone_confirmed_at, new_phone
+func (s *Server) OAuthUserInfo(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// Get authenticated user from context (set by requireAuthentication middleware)
+	user := shared.GetUser(ctx)
+
+	// Get the session to retrieve scopes
+	// The access token contains session_id claim, and requireAuthentication middleware
+	// loads the session into context
+	session := shared.GetSession(ctx)
+
+	// Build base userInfo response with 'sub' (required by OIDC spec)
+	userInfo := map[string]interface{}{
+		"sub": user.ID.String(),
+	}
+	if session == nil {
+		// If no session in context, this is likely a non-OAuth token
+		// Return minimal user info (just sub claim)
+		return shared.SendJSON(w, http.StatusOK, userInfo)
+	}
+
+	// Get scopes from session
+	scopes := session.GetScopeList()
+
+	// Add scope-specific claims
+	hasEmailScope := models.HasScope(scopes, models.ScopeEmail)
+	hasProfileScope := models.HasScope(scopes, models.ScopeProfile)
+	hasPhoneScope := models.HasScope(scopes, models.ScopePhone)
+
+	// Email scope claims
+	if hasEmailScope {
+		if email := user.GetEmail(); email != "" {
+			userInfo["email"] = email
+		}
+		if user.EmailConfirmedAt != nil {
+			userInfo["email_verified"] = true
+		}
+	}
+
+	// Profile scope claims
+	if hasProfileScope {
+		// Extract name from user metadata
+		if name, ok := user.UserMetaData["name"].(string); ok && name != "" {
+			userInfo["name"] = name
+		} else if user.GetEmail() != "" {
+			userInfo["name"] = user.GetEmail()
+		}
+
+		// Extract picture
+		if picture, ok := user.UserMetaData["picture"].(string); ok && picture != "" {
+			userInfo["picture"] = picture
+		} else if avatarURL, ok := user.UserMetaData["avatar_url"].(string); ok && avatarURL != "" {
+			userInfo["picture"] = avatarURL
+		}
+
+		// Extract preferred_username
+		if username, ok := user.UserMetaData["preferred_username"].(string); ok && username != "" {
+			userInfo["preferred_username"] = username
+		} else if username, ok := user.UserMetaData["username"].(string); ok && username != "" {
+			userInfo["preferred_username"] = username
+		}
+
+		// Add updated_at
+		if user.UpdatedAt.Unix() > 0 {
+			userInfo["updated_at"] = user.UpdatedAt.Unix()
+		}
+
+		// Include user_metadata with profile scope
+		if user.UserMetaData != nil {
+			userInfo["user_metadata"] = user.UserMetaData
+		}
+	}
+
+	// Phone scope claims
+	if hasPhoneScope {
+		if phone := user.GetPhone(); phone != "" {
+			userInfo["phone"] = phone
+		}
+		if user.PhoneConfirmedAt != nil {
+			userInfo["phone_verified"] = true
+		}
+	}
+
+	return shared.SendJSON(w, http.StatusOK, userInfo)
 }
