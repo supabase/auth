@@ -18,7 +18,7 @@ func TestNewOAuthServerAuthorization(t *testing.T) {
 	codeChallengeMethod := "S256"
 	resource := "https://api.example.com/"
 
-	auth := NewOAuthServerAuthorization(clientID, redirectURI, scope, state, resource, codeChallenge, codeChallengeMethod)
+	auth := NewOAuthServerAuthorization(clientID, redirectURI, scope, state, resource, codeChallenge, codeChallengeMethod, "")
 
 	assert.NotEmpty(t, auth.ID)
 	assert.NotEmpty(t, auth.AuthorizationID)
@@ -60,12 +60,47 @@ func TestNewOAuthServerAuthorization_CodeChallengeMethodNormalization(t *testing
 				"",
 				"challenge",
 				tc.input,
+				"", // nonce
 			)
 
 			assert.Equal(t, tc.expected, *auth.CodeChallengeMethod,
 				"Expected code_challenge_method to be normalized to %s, got %s", tc.expected, *auth.CodeChallengeMethod)
 		})
 	}
+}
+
+func TestNewOAuthServerAuthorization_WithNonce(t *testing.T) {
+	clientID := uuid.Must(uuid.NewV4())
+	nonce := "random-nonce-value-12345"
+
+	// Test with nonce
+	authWithNonce := NewOAuthServerAuthorization(
+		clientID,
+		"https://example.com/callback",
+		"openid",
+		"state",
+		"",
+		"challenge",
+		"S256",
+		nonce,
+	)
+
+	assert.NotNil(t, authWithNonce.Nonce)
+	assert.Equal(t, nonce, *authWithNonce.Nonce)
+
+	// Test without nonce (empty string)
+	authWithoutNonce := NewOAuthServerAuthorization(
+		clientID,
+		"https://example.com/callback",
+		"openid",
+		"state",
+		"",
+		"challenge",
+		"S256",
+		"",
+	)
+
+	assert.Nil(t, authWithoutNonce.Nonce)
 }
 
 func TestOAuthServerAuthorization_IsExpired(t *testing.T) {
