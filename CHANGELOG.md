@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.183.0](https://github.com/supabase/auth/compare/v2.182.1...v2.183.0) (2025-11-20)
+
+
+### Features
+
+* async, concurrent index creation for users table ([#2239](https://github.com/supabase/auth/issues/2239)) ([a1146bf](https://github.com/supabase/auth/commit/a1146bf7eecb35e237350dda7ae62328cbb5acfe))
+* **indexworker:** use `auth_trgm` extension if available ([#2263](https://github.com/supabase/auth/issues/2263)) ([05daa43](https://github.com/supabase/auth/commit/05daa437131bd220e01a0e33df75f4b9afa72bb6))
+* **oauthserver:** add OpenID Connect support ([#2250](https://github.com/supabase/auth/issues/2250)) ([162788f](https://github.com/supabase/auth/commit/162788ff960c060318324f11f673c09c0da41d5e))
+* **oauthserver:** update oauth grant list & authorization details response structure ([#2247](https://github.com/supabase/auth/issues/2247)) ([137ea92](https://github.com/supabase/auth/commit/137ea92c00a0c1a7654fb8bcf0c1b5313901349f))
+* **oauthserver:** use `NewOAuthServerAuthorizationParams` & configurable ttl for authorization ([#2254](https://github.com/supabase/auth/issues/2254)) ([61632f8](https://github.com/supabase/auth/commit/61632f8c0401b6c816ea7427d351ec623ce5258f))
+
+
+### Bug Fixes
+
+* **indexworker:** detect which schema `pg_trgm` exists in ([#2260](https://github.com/supabase/auth/issues/2260)) ([4be12b3](https://github.com/supabase/auth/commit/4be12b3e7c0a30b1e289ab81348548f72ab32ba5))
+* look for refresh token on mfa verification only in v1 ([#2249](https://github.com/supabase/auth/issues/2249)) ([2906b24](https://github.com/supabase/auth/commit/2906b2424d0aa804031e66cf92f008289b8a9c77))
+* mfa verify now works with refresh token algorithm v2 ([#2246](https://github.com/supabase/auth/issues/2246)) ([4e8275f](https://github.com/supabase/auth/commit/4e8275f915c4d84186d17b41c86a9277055a55e4))
+* **social-auth:** default to current_user:read for Figma provider ([#2195](https://github.com/supabase/auth/issues/2195)) ([f409d11](https://github.com/supabase/auth/commit/f409d118ebb958c12f2395c0bf4fb9590ab6c0af))
+
 ## [2.182.1](https://github.com/supabase/auth/compare/v2.182.0...v2.182.1) (2025-11-05)
 
 
