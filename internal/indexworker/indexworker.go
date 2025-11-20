@@ -96,7 +96,7 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 	}()
 
 	// Ensure either auth_trgm or pg_trgm extension is installed
-	extName, err := ensureTrgmExtension(db, le)
+	extName, err := ensureTrgmExtension(db, config.DB.Namespace, le)
 	if err != nil {
 		le.Errorf("Failed to ensure trgm extension is available: %+v", err)
 		return err
@@ -229,11 +229,11 @@ func getExtensionStatus(db *pop.Connection, extName string) (extensionStatus, er
 	}, nil
 }
 
-// installExtension installs the specified extension
-func installExtension(db *pop.Connection, extName string) error {
-	query := fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", extName)
+// installExtension installs the specified extension in the provided schema
+func installExtension(db *pop.Connection, extName string, schema string) error {
+	query := fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s SCHEMA %s", extName, schema)
 	if err := db.RawQuery(query).Exec(); err != nil {
-		return fmt.Errorf("failed to install extension %s: %w", extName, err)
+		return fmt.Errorf("failed to install extension %s in schema %s: %w", extName, schema, err)
 	}
 	return nil
 }
@@ -241,7 +241,7 @@ func installExtension(db *pop.Connection, extName string) error {
 // ensureTrgmExtension ensures that either auth_trgm or pg_trgm extension is installed
 // It prefers auth_trgm if available, otherwise falls back to pg_trgm
 // Returns the name of the installed extension
-func ensureTrgmExtension(db *pop.Connection, le *logrus.Entry) (string, error) {
+func ensureTrgmExtension(db *pop.Connection, authSchema string, le *logrus.Entry) (string, error) {
 	authTrgmStatus, err := getExtensionStatus(db, "auth_trgm")
 	if err != nil {
 		return "", fmt.Errorf("failed to check auth_trgm extension status: %w", err)
@@ -250,7 +250,7 @@ func ensureTrgmExtension(db *pop.Connection, le *logrus.Entry) (string, error) {
 	if authTrgmStatus.Available {
 		if !authTrgmStatus.Installed {
 			le.Infof("auth_trgm extension is available but not installed. Installing...")
-			if err := installExtension(db, "auth_trgm"); err != nil {
+			if err := installExtension(db, "auth_trgm", authSchema); err != nil {
 				le.Errorf("Failed to install auth_trgm extension: %v", err)
 				return "", fmt.Errorf("auth_trgm extension is available but failed to install: %w", err)
 			}
@@ -274,7 +274,7 @@ func ensureTrgmExtension(db *pop.Connection, le *logrus.Entry) (string, error) {
 
 	if !pgTrgmStatus.Installed {
 		le.Infof("pg_trgm extension is available but not installed. Installing...")
-		if err := installExtension(db, "pg_trgm"); err != nil {
+		if err := installExtension(db, "pg_trgm", "pg_catalog"); err != nil {
 			le.Errorf("Failed to install pg_trgm extension: %v", err)
 			return "", fmt.Errorf("pg_trgm extension is available but failed to install: %w", err)
 		}
