@@ -393,12 +393,12 @@ func (ts *IndexWorkerTestSuite) TestCreateIndexesWithInvalidIndexes() {
 	ts.logger.Infof("Successfully recovered from %d invalid indexes", len(indexesToInvalidate))
 }
 
-// TestCreateIndexesWithoutTrgmExtension tests that CreateIndexes fails when pg_trgm extension doesn't exist
-// and that no indexes are created when this prerequisite check fails.
+// TestCreateIndexesWithoutTrgmExtension tests that CreateIndexes installs pg_trgm extension
+// when it's available but not installed, and then successfully creates indexes.
 func (ts *IndexWorkerTestSuite) TestCreateIndexesWithoutTrgmExtension() {
 	ctx := context.Background()
 
-	// Drop the pg_trgm extension to simulate it not being available
+	// Drop the pg_trgm extension to simulate it not being installed
 	dropExtQuery := "DROP EXTENSION IF EXISTS pg_trgm CASCADE"
 	err := ts.db.RawQuery(dropExtQuery).Exec()
 	require.NoError(ts.T(), err, "Should be able to drop pg_trgm extension")
@@ -416,14 +416,24 @@ func (ts *IndexWorkerTestSuite) TestCreateIndexesWithoutTrgmExtension() {
 	require.NoError(ts.T(), err)
 	assert.Empty(ts.T(), existingIndexes, "No indexes should exist initially")
 
-	// Try to create indexes without pg_trgm extension
+	// Run CreateIndexes - it should install the pg_trgm extension and create indexes
 	err = CreateIndexes(ctx, ts.config, ts.logger)
-	assert.Error(ts.T(), err, "CreateIndexes should fail when pg_trgm extension doesn't exist")
-	assert.ErrorIs(ts.T(), err, ErrExtensionNotFound)
+	require.NoError(ts.T(), err, "CreateIndexes should succeed by installing the pg_trgm extension")
 
+	// Verify that pg_trgm is now installed
+	err = ts.db.RawQuery(checkExtQuery).First(&extensionExists)
+	require.NoError(ts.T(), err)
+	assert.True(ts.T(), extensionExists, "pg_trgm extension should have been installed")
+
+	// Verify all indexes were created successfully
 	existingIndexes, err = getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
 	require.NoError(ts.T(), err)
-	assert.Empty(ts.T(), existingIndexes, "No indexes should have been created when pg_trgm is missing")
+	assert.Equal(ts.T(), len(indexes), len(existingIndexes), "All indexes should have been created")
+
+	for _, idx := range existingIndexes {
+		assert.True(ts.T(), idx.IsValid, "Index %s should be valid", idx.IndexName)
+		assert.True(ts.T(), idx.IsReady, "Index %s should be ready", idx.IndexName)
+	}
 
 	// Restore pg_trgm extension for other tests
 	createExtQuery := "CREATE EXTENSION IF NOT EXISTS pg_trgm"
