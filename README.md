@@ -65,7 +65,7 @@ further clarifications on backward compatibility guarantees:
 **Go API compatibility**
 
 Auth is not meant to be used as a Go library. There are no guarantees on
-backward API compatibility when used this way regardless of which version 
+backward API compatibility when used this way regardless of which version
 number changes.
 
 **Patch**
@@ -433,7 +433,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `figma`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `snapchat`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `figma`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `nextcloud, notion`, `snapchat`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
@@ -464,7 +464,7 @@ The URI a OAuth2 provider will redirect to with the `code` and `state` values.
 
 `EXTERNAL_X_URL` - `string`
 
-The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` and `keycloak`. For `gitlab` it defaults to `https://gitlab.com`. For `keycloak` you need to set this to your instance, for example: `https://keycloak.example.com/realms/myrealm`
+The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab`, `nextcloud` and `keycloak`. For `gitlab` it defaults to `https://gitlab.com`. For `keycloak` and `nextcloud` you need to set this to your instance, for example: `https://keycloak.example.com/realms/myrealm`
 
 #### Apple OAuth
 
@@ -1379,7 +1379,7 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | figma | github | gitlab | google | keycloak | linkedin | notion | slack | snapchat | spotify | twitch | twitter | workos
+provider=apple | azure | bitbucket | discord | facebook | figma | github | gitlab | google | keycloak | linkedin | nextcloud | notion | slack | snapchat | spotify | twitch | twitter | workos
 
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```
