@@ -307,7 +307,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		Provider: provider,
 	})
 
-	return sendJSON(w, http.StatusOK, token)
+	return sendTokenJSON(w, http.StatusOK, token)
 }
 
 func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
