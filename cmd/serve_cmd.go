@@ -67,7 +67,7 @@ func serve(ctx context.Context) {
 		// If template reloading is disabled attempt an initial reload at
 		// startup for fault tolerance.
 		wg.Add(1)
-		defer func() {
+		go func() {
 			defer wg.Done()
 
 			mrCache.Reload(ctx, config)
