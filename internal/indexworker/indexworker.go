@@ -308,12 +308,6 @@ func getUsersIndexes(namespace, trgmSchema string) []struct {
 			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email_trgm
 				ON %q.users USING gin (email %s.gin_trgm_ops);`, namespace, trgmSchema),
 		},
-		// enables exact-match and prefix searches and sorting by phone number
-		{
-			name: "idx_users_phone_pattern",
-			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_phone_pattern
-				ON %q.users USING btree (phone text_pattern_ops);`, namespace),
-		},
 		// for range queries and sorting on created_at and last_sign_in_at
 		{
 			name: "idx_users_created_at_desc",
