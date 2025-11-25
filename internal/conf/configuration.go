@@ -154,6 +154,7 @@ type PhoneFactorTypeConfiguration struct {
 	// Default to false in order to ensure Phone MFA is opt-in
 	MFAFactorTypeConfiguration
 	OtpLength    int                `json:"otp_length" split_words:"true"`
+	OtpCharset   OtpCharset         `json:"otp_charset" split_words:"true"`
 	SMSTemplate  *template.Template `json:"-"`
 	MaxFrequency time.Duration      `json:"max_frequency" split_words:"true"`
 	Template     string             `json:"template"`
@@ -503,6 +504,43 @@ func (c *SMTPConfiguration) NormalizedHeaders() map[string][]string {
 	return c.normalizedHeaders
 }
 
+type OtpCharset string
+
+const (
+	Numeric           OtpCharset = "numeric"
+	LowerAlphanumeric OtpCharset = "lower_alphanumeric"
+	UpperAlphanumeric OtpCharset = "upper_alphanumeric"
+	MixedAlphanumeric OtpCharset = "mixed_alphanumeric"
+	LowerAlphabetic   OtpCharset = "lower_alphabetic"
+	UpperAlphabetic   OtpCharset = "upper_alphabetic"
+	MixedAlphabetic   OtpCharset = "mixed_alphabetic"
+)
+
+const digits = "0123456789"
+const lowercaseLetters = "abcdefghijklmnopqrstuvwxyz"
+const uppercaseLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func GetCharactersForCharset(charset OtpCharset) (string, error) {
+	switch charset {
+	case Numeric:
+		return digits, nil
+	case LowerAlphanumeric:
+		return digits + lowercaseLetters, nil
+	case UpperAlphanumeric:
+		return digits + uppercaseLetters, nil
+	case MixedAlphanumeric:
+		return digits + lowercaseLetters + uppercaseLetters, nil
+	case LowerAlphabetic:
+		return lowercaseLetters, nil
+	case UpperAlphabetic:
+		return uppercaseLetters, nil
+	case MixedAlphabetic:
+		return lowercaseLetters + uppercaseLetters, nil
+	default:
+		return "", fmt.Errorf("invalid OtpCharset option: %s", charset)
+	}
+}
+
 type MailerConfiguration struct {
 	Autoconfirm                 bool `json:"autoconfirm"`
 	AllowUnverifiedEmailSignIns bool `json:"allow_unverified_email_sign_ins" split_words:"true" default:"false"`
@@ -514,8 +552,9 @@ type MailerConfiguration struct {
 
 	SecureEmailChangeEnabled bool `json:"secure_email_change_enabled" split_words:"true" default:"true"`
 
-	OtpExp    uint `json:"otp_exp" split_words:"true"`
-	OtpLength int  `json:"otp_length" split_words:"true"`
+	OtpExp     uint       `json:"otp_exp" split_words:"true"`
+	OtpLength  int        `json:"otp_length" split_words:"true"`
+	OtpCharset OtpCharset `json:"otp_charset" split_words:"true"`
 
 	ExternalHosts []string `json:"external_hosts" split_words:"true"`
 
@@ -599,6 +638,7 @@ type SmsProviderConfiguration struct {
 	MaxFrequency      time.Duration      `json:"max_frequency" split_words:"true"`
 	OtpExp            uint               `json:"otp_exp" split_words:"true"`
 	OtpLength         int                `json:"otp_length" split_words:"true"`
+	OtpCharset        OtpCharset         `json:"otp_charset" split_words:"true"`
 	Provider          string             `json:"provider"`
 	Template          string             `json:"template"`
 	TestOTP           map[string]string  `json:"test_otp" split_words:"true"`
@@ -1126,6 +1166,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.Mailer.OtpLength = 6
 	}
 
+	if config.Mailer.OtpCharset == "" {
+		config.Mailer.OtpCharset = "numeric"
+	}
+
 	if config.SMTP.MaxFrequency == 0 {
 		config.SMTP.MaxFrequency = 1 * time.Minute
 	}
@@ -1141,6 +1185,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.Sms.OtpLength == 0 || config.Sms.OtpLength < 6 || config.Sms.OtpLength > 10 {
 		// 6-digit otp by default
 		config.Sms.OtpLength = 6
+	}
+
+	if config.Sms.OtpCharset == "" {
+		config.Sms.OtpCharset = "numeric"
 	}
 
 	if config.Sms.TestOTP != nil {
@@ -1187,6 +1235,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.MFA.Phone.OtpLength < 6 || config.MFA.Phone.OtpLength > 10 {
 		// 6-digit otp by default
 		config.MFA.Phone.OtpLength = 6
+	}
+
+	if config.MFA.Phone.OtpCharset == "" {
+		config.MFA.Phone.OtpCharset = "numeric"
 	}
 
 	if config.External.FlowStateExpiryDuration < defaultFlowStateExpiryDuration {

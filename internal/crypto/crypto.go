@@ -9,25 +9,27 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/supabase/auth/internal/conf"
 	"io"
-	"math"
 	"math/big"
-	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/hkdf"
 )
 
 // GenerateOtp generates a random n digit otp
-func GenerateOtp(digits int) string {
-	upper := math.Pow10(digits)
-	val := must(rand.Int(rand.Reader, big.NewInt(int64(upper))))
+func GenerateOtp(length int, charset conf.OtpCharset) string {
+	characters := must(conf.GetCharactersForCharset(charset))
 
-	// adds a variable zero-padding to the left to ensure otp is uniformly random
-	expr := "%0" + strconv.Itoa(digits) + "v"
-	otp := fmt.Sprintf(expr, val.String())
+	charactersLength := big.NewInt(int64(len(characters)))
 
-	return otp
+	var otp strings.Builder
+	for i := 0; i < length; i++ {
+		index := must(rand.Int(rand.Reader, charactersLength))
+		otp.WriteByte(characters[index.Int64()])
+	}
+
+	return otp.String()
 }
 
 func GenerateTokenHash(emailOrPhone, otp string) string {
