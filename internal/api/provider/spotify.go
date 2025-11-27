@@ -63,7 +63,7 @@ func NewSpotifyProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 	}, nil
 }
 
-func (g spotifyProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g spotifyProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 

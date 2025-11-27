@@ -59,7 +59,7 @@ func NewBitbucketProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, e
 	}, nil
 }
 
-func (g bitbucketProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g bitbucketProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 

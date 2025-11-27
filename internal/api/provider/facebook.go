@@ -70,7 +70,7 @@ func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	}, nil
 }
 
-func (p facebookProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (p facebookProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return p.Exchange(context.Background(), code)
 }
 

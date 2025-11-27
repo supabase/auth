@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/gofrs/uuid"
 	"github.com/mrjones/oauth"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
 )
@@ -55,6 +57,8 @@ func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Con
 }
 
 func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType string) (*OAuthProviderData, error) {
+	db := a.db.WithContext(ctx)
+
 	var rq url.Values
 	if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
 		rq = r.Form
@@ -78,12 +82,39 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 	}
 
 	log := observability.GetLogEntry(r).Entry
+
+	var oauthState *models.OAuthState
+	// if there's a non-empty OAuthStateID we perform PKCE Flow for the external provider
+	if oauthStateID := getOAuthStateID(ctx); oauthStateID != uuid.Nil {
+		oauthState, err = models.FindOAuthStateByID(db, oauthStateID)
+		if models.IsNotFoundError(err) {
+			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOAuthStateNotFound, "OAuth state not found").WithInternalError(err)
+		} else if err != nil {
+			return nil, apierrors.NewInternalServerError("Failed to find OAuth state").WithInternalError(err)
+		}
+
+		if oauthState.IsExpired() {
+			if err := db.Destroy(oauthState); err != nil {
+				log.WithError(err).Warn("Failed to delete expired OAuth state")
+			}
+			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOAuthStateExpired, "OAuth state expired")
+		}
+	}
+
 	log.WithFields(logrus.Fields{
 		"provider": providerType,
 		"code":     oauthCode,
-	}).Debug("Exchanging oauth code")
+	}).Debug("Exchanging OAuth code")
 
-	token, err := oAuthProvider.GetOAuthToken(oauthCode)
+	if err := db.Destroy(oauthState); err != nil {
+		log.WithError(err).Warn("Failed to delete OAuth state")
+	}
+
+	codeVerifier := ""
+	if oauthState != nil {
+		codeVerifier = *oauthState.CodeVerifier
+	}
+	token, err := oAuthProvider.GetOAuthToken(oauthCode, codeVerifier)
 	if err != nil {
 		return nil, apierrors.NewInternalServerError("Unable to exchange external code: %s", oauthCode).WithInternalError(err)
 	}

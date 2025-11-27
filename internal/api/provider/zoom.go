@@ -51,7 +51,7 @@ func NewZoomProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error)
 	}, nil
 }
 
-func (g zoomProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g zoomProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 

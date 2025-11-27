@@ -60,7 +60,7 @@ func NewSlackOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string) (O
 	}, nil
 }
 
-func (g slackOIDCProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g slackOIDCProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 

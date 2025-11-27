@@ -72,7 +72,7 @@ func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration,
 	}, nil
 }
 
-func (g googleProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g googleProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 

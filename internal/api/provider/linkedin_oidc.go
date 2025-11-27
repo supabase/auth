@@ -59,7 +59,7 @@ func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string)
 	}, nil
 }
 
-func (g linkedinOIDCProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g linkedinOIDCProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 

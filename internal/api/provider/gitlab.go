@@ -61,7 +61,7 @@ func NewGitlabProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	}, nil
 }
 
-func (g gitlabProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g gitlabProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 

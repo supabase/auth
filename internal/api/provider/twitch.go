@@ -75,7 +75,7 @@ func NewTwitchProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	}, nil
 }
 
-func (t twitchProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (t twitchProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return t.Exchange(context.Background(), code)
 }
 

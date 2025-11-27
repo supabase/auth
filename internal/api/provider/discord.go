@@ -61,7 +61,7 @@ func NewDiscordProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 	}, nil
 }
 
-func (g discordProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g discordProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 

@@ -60,7 +60,7 @@ func NewFigmaProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	}, nil
 }
 
-func (p figmaProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (p figmaProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return p.Exchange(context.Background(), code)
 }
 

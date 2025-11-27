@@ -59,7 +59,7 @@ func NewNotionProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, erro
 	}, nil
 }
 
-func (g notionProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g notionProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 
