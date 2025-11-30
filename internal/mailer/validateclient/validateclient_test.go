@@ -200,6 +200,8 @@ func TestValidateEmailExtended(t *testing.T) {
 	}{
 		// valid (has mx record)
 		{email: "a@supabase.io"},
+		// Single-character second-level domain should be allowed (e.g. a.com)
+		{email: "a@a.com"},
 		{email: "support@supabase.io"},
 		{email: "chris.stockton@supabase.io"},
 

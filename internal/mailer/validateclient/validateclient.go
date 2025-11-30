@@ -332,6 +332,20 @@ func (ev *emailValidator) validateHost(ctx context.Context, host string) error {
 	}
 
 	// No addrs or mx records were found
+	// SPECIAL CASE: allow single-character second-level domains (e.g. a.com)
+	// Some TLDs permit single-character labels and rejecting them excludes
+	// legitimate addresses like a@a.com. We consider the label immediately
+	// left of the final dot (the second-level domain) and accept it if its
+	// length is 1. This keeps the existing checks in place while addressing
+	// the common reported issue.
+	parts := strings.Split(host, ".")
+	if len(parts) >= 2 {
+		sld := parts[len(parts)-2]
+		if len(sld) == 1 {
+			return nil
+		}
+	}
+
 	return ErrInvalidEmailDNS
 }
 
