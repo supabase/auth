@@ -46,6 +46,8 @@ type LimiterOptions struct {
 	User                *limiter.Limiter
 	FactorVerify        *limiter.Limiter
 	FactorChallenge     *limiter.Limiter
+	PasskeySignIn       *limiter.Limiter
+	PasskeyChallenge    *limiter.Limiter
 	SSO                 *limiter.Limiter
 	SAMLAssertion       *limiter.Limiter
 	Web3                *limiter.Limiter
@@ -83,6 +85,16 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 	o.FactorChallenge = tollbooth.NewLimiter(gc.MFA.RateLimitChallengeAndVerify/60,
 		&limiter.ExpirableOptions{
 			DefaultExpirationTTL: time.Minute,
+		}).SetBurst(30)
+
+	o.PasskeySignIn = tollbooth.NewLimiter(gc.RateLimitVerify/(60*5),
+		&limiter.ExpirableOptions{
+			DefaultExpirationTTL: time.Hour,
+		}).SetBurst(30)
+
+	o.PasskeyChallenge = tollbooth.NewLimiter(gc.RateLimitVerify/(60*5),
+		&limiter.ExpirableOptions{
+			DefaultExpirationTTL: time.Hour,
 		}).SetBurst(30)
 
 	o.SSO = tollbooth.NewLimiter(gc.RateLimitSso/(60*5),

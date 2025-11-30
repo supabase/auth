@@ -92,6 +92,28 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 	return withFactor(ctx, factor), nil
 }
 
+func (a *API) loadPasskey(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+	user := getUser(ctx)
+	passkeyID, err := uuid.FromString(chi.URLParam(r, "passkey_id"))
+	if err != nil {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeValidationFailed, "passkey_id must be an UUID")
+	}
+
+	observability.LogEntrySetField(r, "passkey_id", passkeyID)
+
+	factor, err := user.FindOwnedPasskeyByID(db, passkeyID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeMFAFactorNotFound, "Passkey not found")
+		}
+		return nil, apierrors.NewInternalServerError("Database error loading passkey").WithInternalError(err)
+	}
+
+	return withFactor(ctx, factor), nil
+}
+
 func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {
 	params := &AdminUserParams{}
 	if err := retrieveRequestParams(r, params); err != nil {

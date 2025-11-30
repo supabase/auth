@@ -1330,6 +1330,254 @@ paths:
         429:
           $ref: "#/components/responses/RateLimitResponse"
 
+  /passkeys:
+    get:
+      summary: List registered passkeys for the authenticated user.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      responses:
+        200:
+          description: A collection of passkeys registered by the user.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  passkeys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PasskeySummary'
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+    post:
+      summary: Begin registering a new passkey for the authenticated user.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - webauthn
+              properties:
+                friendly_name:
+                  type: string
+                  description: Optional display name for the passkey.
+                webauthn:
+                  type: object
+                  required:
+                    - rpId
+                    - rpOrigins
+                  properties:
+                    rpId:
+                      type: string
+                      description: The relying party identifier (usually the domain).
+                    rpOrigins:
+                      type: array
+                      items:
+                        type: string
+                      minItems: 1
+                      description: List of allowed origins for WebAuthn challenges.
+      responses:
+        200:
+          description: Passkey registration challenge created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyRegistrationResponse'
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        429:
+          $ref: "#/components/responses/RateLimitResponse"
+
+  /passkeys/{passkey_id}/verify:
+    post:
+      summary: Complete passkey registration by verifying the attestation response.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      parameters:
+        - name: passkey_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - challenge_id
+                - webauthn
+              properties:
+                challenge_id:
+                  type: string
+                  format: uuid
+                  description: Identifier of the registration challenge to verify.
+                webauthn:
+                  type: object
+                  required:
+                    - rpId
+                    - rpOrigins
+                    - type
+                    - credential_response
+                  properties:
+                    rpId:
+                      type: string
+                    rpOrigins:
+                      type: array
+                      items:
+                        type: string
+                      minItems: 1
+                    type:
+                      type: string
+                      enum: [create]
+                    credential_response:
+                      type: object
+      responses:
+        200:
+          description: Passkey verified and ready for use.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyVerifyResponse'
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        429:
+          $ref: "#/components/responses/RateLimitResponse"
+
+  /passkeys/{passkey_id}:
+    delete:
+      summary: Remove a registered passkey from the authenticated user.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      parameters:
+        - name: passkey_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Passkey successfully removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  passkey_id:
+                    type: string
+                    format: uuid
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+
+  /passkeys/sign-in:
+    post:
+      summary: Begin a passkey sign-in flow.
+      tags:
+        - user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - webauthn
+              properties:
+                webauthn:
+                  type: object
+                  required:
+                    - rpId
+                    - rpOrigins
+                  properties:
+                    rpId:
+                      type: string
+                    rpOrigins:
+                      type: array
+                      items:
+                        type: string
+                      minItems: 1
+      responses:
+        200:
+          description: Passkey sign-in challenge issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeySignInChallengeResponse'
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        429:
+          $ref: "#/components/responses/RateLimitResponse"
+
+  /passkeys/sign-in/verify:
+    post:
+      summary: Complete a passkey sign-in using the authenticator response.
+      tags:
+        - user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - challenge_id
+                - webauthn
+              properties:
+                challenge_id:
+                  type: string
+                  format: uuid
+                  description: Identifier of the sign-in challenge to verify.
+                webauthn:
+                  type: object
+                  required:
+                    - rpId
+                    - rpOrigins
+                    - type
+                    - credential_response
+                  properties:
+                    rpId:
+                      type: string
+                    rpOrigins:
+                      type: array
+                      items:
+                        type: string
+                      minItems: 1
+                    type:
+                      type: string
+                      enum: [request]
+                    credential_response:
+                      type: object
+      responses:
+        200:
+          description: Passkey sign-in successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessTokenResponseSchema"
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        429:
+          $ref: "#/components/responses/RateLimitResponse"
+
   /invite:
     post:
       summary: Invite a user by email.
@@ -3031,6 +3279,70 @@ components:
                       $ref: '#/components/schemas/CredentialRequestOptions'
           discriminator:
             propertyName: type
+
+    PasskeyRegistrationResponse:
+      type: object
+      required:
+        - passkey_id
+        - challenge_id
+        - webauthn
+      properties:
+        passkey_id:
+          type: string
+          format: uuid
+        challenge_id:
+          type: string
+          format: uuid
+        friendly_name:
+          type: string
+        expires_at:
+          type: integer
+          description: UNIX seconds of the timestamp when the challenge expires.
+        webauthn:
+          type: object
+          description: WebAuthn options needed to complete registration.
+
+    PasskeySignInChallengeResponse:
+      type: object
+      required:
+        - challenge_id
+        - webauthn
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+        expires_at:
+          type: integer
+          description: UNIX seconds of the timestamp when the challenge expires.
+        webauthn:
+          type: object
+          description: WebAuthn options needed to complete sign-in.
+
+    PasskeySummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        friendly_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PasskeyVerifyResponse:
+      type: object
+      properties:
+        passkey_id:
+          type: string
+          format: uuid
 
     CredentialRequestOptions:
       type: object
