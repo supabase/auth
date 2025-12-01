@@ -93,6 +93,10 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 			return nil, apierrors.NewInternalServerError("Failed to find OAuth state").WithInternalError(err)
 		}
 
+		if oauthState.ProviderType != providerType {
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthInvalidState, "OAuth provider mismatch")
+		}
+
 		if oauthState.IsExpired() {
 			if err := db.Destroy(oauthState); err != nil {
 				log.WithError(err).Warn("Failed to delete expired OAuth state")
