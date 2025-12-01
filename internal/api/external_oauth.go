@@ -106,8 +106,10 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		"code":     oauthCode,
 	}).Debug("Exchanging OAuth code")
 
-	if err := db.Destroy(oauthState); err != nil {
-		log.WithError(err).Warn("Failed to delete OAuth state")
+	if oauthState != nil {
+		if err := db.Destroy(oauthState); err != nil {
+			log.WithError(err).Warn("Failed to delete OAuth state")
+		}
 	}
 
 	codeVerifier := ""
