@@ -109,6 +109,11 @@ func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
 // not clean up the whole database, but does a small piecemeal clean up each
 // time when called.
 func (c *Cleanup) Clean(db *storage.Connection) (int, error) {
+	// Defensive: if there are no cleanup statements configured, don't attempt modulo/indexing.
+	if len(c.cleanupStatements) == 0 {
+		return 0, nil
+	}
+
 	ctx, span := observability.Tracer("gotrue").Start(db.Context(), "database-cleanup")
 	defer span.End()
 
@@ -116,6 +121,7 @@ func (c *Cleanup) Clean(db *storage.Connection) (int, error) {
 	defer span.SetAttributes(attribute.Int64("gotrue.cleanup.affected_rows", int64(affectedRows)))
 
 	if err := db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
+		// safe now because we checked len > 0 above
 		nextIndex := atomic.AddUint32(&c.cleanupNext, 1) % uint32(len(c.cleanupStatements)) // #nosec G115
 		statement := c.cleanupStatements[nextIndex]
 
