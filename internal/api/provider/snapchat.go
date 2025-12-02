@@ -71,7 +71,7 @@ func NewSnapchatProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	}, nil
 }
 
-func (p snapchatProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
+func (p snapchatProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
 	return p.Exchange(context.Background(), code)
 }
 

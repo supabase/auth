@@ -65,7 +65,7 @@ func NewFlyProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthPr
 	}, nil
 }
 
-func (p flyProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
+func (p flyProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
 	return p.Exchange(context.Background(), code)
 }
 

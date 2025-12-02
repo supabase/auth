@@ -33,7 +33,7 @@ type kakaoUser struct {
 	} `json:"kakao_account"`
 }
 
-func (p kakaoProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
+func (p kakaoProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
 	return p.Exchange(context.Background(), code)
 }
 

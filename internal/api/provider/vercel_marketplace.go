@@ -56,8 +56,8 @@ func NewVercelMarketplaceProvider(ext conf.OAuthProviderConfiguration, scopes st
 	}, nil
 }
 
-func (g vercelMarketplaceProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g vercelMarketplaceProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(context.Background(), code, opts...)
 }
 
 func (g vercelMarketplaceProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {

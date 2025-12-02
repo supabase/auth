@@ -81,8 +81,8 @@ func NewXProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProv
 	}, nil
 }
 
-func (x xProvider) GetOAuthToken(code string, codeVerifier string) (*oauth2.Token, error) {
-	return x.Exchange(context.Background(), code, oauth2.VerifierOption(codeVerifier))
+func (x xProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return x.Exchange(context.Background(), code, opts...)
 }
 
 func (x xProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {

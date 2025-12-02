@@ -15,6 +15,7 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
+	"golang.org/x/oauth2"
 )
 
 // OAuthProviderData contains the userData and token returned by the oauth provider
@@ -116,11 +117,11 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		}
 	}
 
-	codeVerifier := ""
+	var tokenOpts []oauth2.AuthCodeOption
 	if oauthClientState != nil {
-		codeVerifier = *oauthClientState.CodeVerifier
+		tokenOpts = append(tokenOpts, oauth2.VerifierOption(*oauthClientState.CodeVerifier))
 	}
-	token, err := oAuthProvider.GetOAuthToken(oauthCode, codeVerifier)
+	token, err := oAuthProvider.GetOAuthToken(oauthCode, tokenOpts...)
 	if err != nil {
 		return nil, apierrors.NewInternalServerError("Unable to exchange external code: %s", oauthCode).WithInternalError(err)
 	}

@@ -61,8 +61,8 @@ func NewDiscordProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 	}, nil
 }
 
-func (g discordProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g discordProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(context.Background(), code, opts...)
 }
 
 func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {

@@ -91,8 +91,8 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	}, nil
 }
 
-func (g azureProvider) GetOAuthToken(code string, _ string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g azureProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(context.Background(), code, opts...)
 }
 
 func DetectAzureIDTokenIssuer(ctx context.Context, idToken string) (string, error) {
