@@ -83,25 +83,25 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 
 	log := observability.GetLogEntry(r).Entry
 
-	var oauthState *models.OAuthState
-	// if there's a non-empty OAuthStateID we perform PKCE Flow for the external provider
-	if oauthStateID := getOAuthStateID(ctx); oauthStateID != uuid.Nil {
-		oauthState, err = models.FindOAuthStateByID(db, oauthStateID)
+	var oauthClientState *models.OAuthClientState
+	// if there's a non-empty OAuthClientStateID we perform PKCE Flow for the external provider
+	if oauthClientStateID := getOAuthClientStateID(ctx); oauthClientStateID != uuid.Nil {
+		oauthClientState, err = models.FindOAuthClientStateByID(db, oauthClientStateID)
 		if models.IsNotFoundError(err) {
-			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOAuthStateNotFound, "OAuth state not found").WithInternalError(err)
+			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOAuthClientStateNotFound, "OAuth state not found").WithInternalError(err)
 		} else if err != nil {
 			return nil, apierrors.NewInternalServerError("Failed to find OAuth state").WithInternalError(err)
 		}
 
-		if oauthState.ProviderType != providerType {
+		if oauthClientState.ProviderType != providerType {
 			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthInvalidState, "OAuth provider mismatch")
 		}
 
-		if oauthState.IsExpired() {
-			if err := db.Destroy(oauthState); err != nil {
+		if oauthClientState.IsExpired() {
+			if err := db.Destroy(oauthClientState); err != nil {
 				log.WithError(err).Warn("Failed to delete expired OAuth state")
 			}
-			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOAuthStateExpired, "OAuth state expired")
+			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOAuthClientStateExpired, "OAuth state expired")
 		}
 	}
 
@@ -110,15 +110,15 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		"code":     oauthCode,
 	}).Debug("Exchanging OAuth code")
 
-	if oauthState != nil {
-		if err := db.Destroy(oauthState); err != nil {
+	if oauthClientState != nil {
+		if err := db.Destroy(oauthClientState); err != nil {
 			log.WithError(err).Warn("Failed to delete OAuth state")
 		}
 	}
 
 	codeVerifier := ""
-	if oauthState != nil {
-		codeVerifier = *oauthState.CodeVerifier
+	if oauthClientState != nil {
+		codeVerifier = *oauthClientState.CodeVerifier
 	}
 	token, err := oAuthProvider.GetOAuthToken(oauthCode, codeVerifier)
 	if err != nil {

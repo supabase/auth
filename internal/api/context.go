@@ -34,7 +34,7 @@ const (
 	ssoProviderKey      = contextKey("sso_provider")
 	externalHostKey     = contextKey("external_host")
 	flowStateKey        = contextKey("flow_state_id")
-	oauthStateKey       = contextKey("oauth_state_id")
+	oauthClientStateKey = contextKey("oauth_client_state_id")
 )
 
 // withToken adds the JWT token to the context.
@@ -139,12 +139,12 @@ func getFlowStateID(ctx context.Context) string {
 	return obj.(string)
 }
 
-func withOAuthStateID(ctx context.Context, oauthStateID uuid.UUID) context.Context {
-	return context.WithValue(ctx, oauthStateKey, oauthStateID)
+func withOAuthClientStateID(ctx context.Context, oauthClientStateID uuid.UUID) context.Context {
+	return context.WithValue(ctx, oauthClientStateKey, oauthClientStateID)
 }
 
-func getOAuthStateID(ctx context.Context) uuid.UUID {
-	obj := ctx.Value(oauthStateKey)
+func getOAuthClientStateID(ctx context.Context) uuid.UUID {
+	obj := ctx.Value(oauthClientStateKey)
 	if obj == nil {
 		return uuid.Nil
 	}

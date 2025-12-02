@@ -27,13 +27,13 @@ import (
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
 	AuthMicroserviceClaims
-	Provider        string `json:"provider"`
-	InviteToken     string `json:"invite_token,omitempty"`
-	Referrer        string `json:"referrer,omitempty"`
-	FlowStateID     string `json:"flow_state_id"`
-	OAuthStateID    string `json:"oauth_state_id,omitempty"`
-	LinkingTargetID string `json:"linking_target_id,omitempty"`
-	EmailOptional   bool   `json:"email_optional,omitempty"`
+	Provider           string `json:"provider"`
+	InviteToken        string `json:"invite_token,omitempty"`
+	Referrer           string `json:"referrer,omitempty"`
+	FlowStateID        string `json:"flow_state_id"`
+	OAuthClientStateID string `json:"oauth_client_state_id,omitempty"`
+	LinkingTargetID    string `json:"linking_target_id,omitempty"`
+	EmailOptional      bool   `json:"email_optional,omitempty"`
 }
 
 // ExternalProviderRedirect redirects the request to the oauth provider
@@ -105,15 +105,15 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	oauthStateID := ""
+	oauthClientStateID := ""
 	if providerType == "x" {
 		codeVerifier := oauth2.GenerateVerifier()
-		oauthState := models.NewOAuthState("x", &codeVerifier)
-		err := db.Create(oauthState)
+		oauthClientState := models.NewOAuthClientState("x", &codeVerifier)
+		err := db.Create(oauthClientState)
 		if err != nil {
 			return "", err
 		}
-		oauthStateID = oauthState.ID.String()
+		oauthClientStateID = oauthClientState.ID.String()
 		authUrlParams = append(authUrlParams, oauth2.S256ChallengeOption(codeVerifier))
 	}
 
@@ -125,12 +125,12 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 			SiteURL:    config.SiteURL,
 			InstanceID: uuid.Nil.String(),
 		},
-		Provider:      providerType,
-		InviteToken:   inviteToken,
-		Referrer:      redirectURL,
-		FlowStateID:   flowStateID,
-		OAuthStateID:  oauthStateID,
-		EmailOptional: pConfig.EmailOptional,
+		Provider:           providerType,
+		InviteToken:        inviteToken,
+		Referrer:           redirectURL,
+		FlowStateID:        flowStateID,
+		OAuthClientStateID: oauthClientStateID,
+		EmailOptional:      pConfig.EmailOptional,
 	}
 
 	if linkingTargetUser != nil {
@@ -579,8 +579,8 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request, db *storag
 	if claims.FlowStateID != "" {
 		ctx = withFlowStateID(ctx, claims.FlowStateID)
 	}
-	if claims.OAuthStateID != "" {
-		ctx = withOAuthStateID(ctx, uuid.FromStringOrNil(claims.OAuthStateID))
+	if claims.OAuthClientStateID != "" {
+		ctx = withOAuthClientStateID(ctx, uuid.FromStringOrNil(claims.OAuthClientStateID))
 	}
 	if claims.LinkingTargetID != "" {
 		linkingTargetUserID, err := uuid.FromString(claims.LinkingTargetID)
