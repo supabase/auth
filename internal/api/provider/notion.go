@@ -63,6 +63,10 @@ func (g notionProvider) GetOAuthToken(ctx context.Context, code string, opts ...
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g notionProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u notionUser
 

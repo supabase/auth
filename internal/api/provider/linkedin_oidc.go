@@ -63,6 +63,10 @@ func (g linkedinOIDCProvider) GetOAuthToken(ctx context.Context, code string, op
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g linkedinOIDCProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g linkedinOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	idToken := tok.Extra("id_token")
 	if tok.AccessToken == "" || idToken == nil {

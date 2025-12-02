@@ -57,6 +57,10 @@ func (g workosProvider) GetOAuthToken(ctx context.Context, code string, opts ...
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g workosProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	if tok.AccessToken == "" {
 		return &UserProvidedData{}, nil

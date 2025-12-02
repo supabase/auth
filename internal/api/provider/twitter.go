@@ -64,6 +64,10 @@ func (t TwitterProvider) GetOAuthToken(_ context.Context, _ string, _ ...oauth2.
 	return &oauth2.Token{}, nil
 }
 
+func (t TwitterProvider) RequiresPKCE() bool {
+	return false
+}
+
 // GetUserData is a stub method for OAuthProvider interface, unused in OAuth1.0 protocol
 func (t TwitterProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	return &UserProvidedData{}, nil

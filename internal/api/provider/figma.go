@@ -64,6 +64,10 @@ func (p figmaProvider) GetOAuthToken(ctx context.Context, code string, opts ...o
 	return p.Exchange(ctx, code, opts...)
 }
 
+func (p figmaProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (p figmaProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u figmaUser
 	if err := makeRequest(ctx, tok, p.Config, p.APIHost+"/v1/me", &u); err != nil {

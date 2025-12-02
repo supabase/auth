@@ -63,6 +63,10 @@ func (g bitbucketProvider) GetOAuthToken(ctx context.Context, code string, opts 
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g bitbucketProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g bitbucketProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u bitbucketUser
 	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/user", &u); err != nil {

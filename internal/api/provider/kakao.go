@@ -37,6 +37,10 @@ func (p kakaoProvider) GetOAuthToken(ctx context.Context, code string, opts ...o
 	return p.Exchange(ctx, code, opts...)
 }
 
+func (p kakaoProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (p kakaoProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u kakaoUser
 

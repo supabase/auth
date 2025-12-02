@@ -95,6 +95,10 @@ func (g azureProvider) GetOAuthToken(ctx context.Context, code string, opts ...o
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g azureProvider) RequiresPKCE() bool {
+	return false
+}
+
 func DetectAzureIDTokenIssuer(ctx context.Context, idToken string) (string, error) {
 	var payload struct {
 		Issuer string `json:"iss"`

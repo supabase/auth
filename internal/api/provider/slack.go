@@ -61,6 +61,10 @@ func (g slackProvider) GetOAuthToken(ctx context.Context, code string, opts ...o
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g slackProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g slackProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u slackUser
 	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/openid.connect.userInfo", &u); err != nil {

@@ -67,6 +67,10 @@ func (g spotifyProvider) GetOAuthToken(ctx context.Context, code string, opts ..
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g spotifyProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g spotifyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u spotifyUser
 	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/me", &u); err != nil {

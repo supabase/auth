@@ -76,6 +76,10 @@ func (g googleProvider) GetOAuthToken(ctx context.Context, code string, opts ...
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g googleProvider) RequiresPKCE() bool {
+	return false
+}
+
 const UserInfoEndpointGoogle = "https://www.googleapis.com/userinfo/v2/me"
 
 var internalUserInfoEndpointGoogle = UserInfoEndpointGoogle

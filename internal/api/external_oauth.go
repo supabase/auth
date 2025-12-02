@@ -77,7 +77,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthCallback, "OAuth callback with missing authorization code missing")
 	}
 
-	oAuthProvider, _, err := a.OAuthProvider(ctx, providerType)
+	oauthProvider, _, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
@@ -106,6 +106,10 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		}
 	}
 
+	if oauthProvider.RequiresPKCE() && oauthClientState == nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthInvalidState, "OAuth PKCE code verifier missing")
+	}
+
 	log.WithFields(logrus.Fields{
 		"provider": providerType,
 		"code":     oauthCode,
@@ -121,17 +125,17 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 	if oauthClientState != nil {
 		tokenOpts = append(tokenOpts, oauth2.VerifierOption(*oauthClientState.CodeVerifier))
 	}
-	token, err := oAuthProvider.GetOAuthToken(ctx, oauthCode, tokenOpts...)
+	token, err := oauthProvider.GetOAuthToken(ctx, oauthCode, tokenOpts...)
 	if err != nil {
 		return nil, apierrors.NewInternalServerError("Unable to exchange external code: %s", oauthCode).WithInternalError(err)
 	}
 
-	userData, err := oAuthProvider.GetUserData(ctx, token)
+	userData, err := oauthProvider.GetUserData(ctx, token)
 	if err != nil {
 		return nil, apierrors.NewInternalServerError("Error getting user profile from external provider").WithInternalError(err)
 	}
 
-	switch externalProvider := oAuthProvider.(type) {
+	switch externalProvider := oauthProvider.(type) {
 	case *provider.AppleProvider:
 		// apple only returns user info the first time
 		oauthUser := rq.Get("user")

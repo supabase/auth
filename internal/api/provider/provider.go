@@ -105,6 +105,7 @@ type OAuthProvider interface {
 	AuthCodeURL(string, ...oauth2.AuthCodeOption) string
 	GetUserData(context.Context, *oauth2.Token) (*UserProvidedData, error)
 	GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error)
+	RequiresPKCE() bool
 }
 
 func chooseHost(base, defaultHost string) string {

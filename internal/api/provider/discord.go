@@ -65,6 +65,10 @@ func (g discordProvider) GetOAuthToken(ctx context.Context, code string, opts ..
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g discordProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u discordUser
 	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/users/@me", &u); err != nil {

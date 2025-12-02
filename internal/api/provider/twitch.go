@@ -79,6 +79,10 @@ func (t twitchProvider) GetOAuthToken(ctx context.Context, code string, opts ...
 	return t.Exchange(ctx, code, opts...)
 }
 
+func (t twitchProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u twitchUsers
 

@@ -89,6 +89,10 @@ func (g keycloakProvider) GetOAuthToken(ctx context.Context, code string, opts .
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g keycloakProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g keycloakProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u keycloakUser
 

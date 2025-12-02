@@ -69,6 +69,10 @@ func (p flyProvider) GetOAuthToken(ctx context.Context, code string, opts ...oau
 	return p.Exchange(ctx, code, opts...)
 }
 
+func (p flyProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (p flyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u flyUser
 	if err := makeRequest(ctx, tok, p.Config, p.APIPath+"/oauth/token/info", &u); err != nil {

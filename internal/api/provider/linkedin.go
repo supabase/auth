@@ -101,6 +101,10 @@ func (g linkedinProvider) GetOAuthToken(ctx context.Context, code string, opts .
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g linkedinProvider) RequiresPKCE() bool {
+	return false
+}
+
 func GetName(name linkedinName) string {
 	key := name.PreferredLocale.Language + "_" + name.PreferredLocale.Country
 	myMap := name.Localized.(map[string]interface{})

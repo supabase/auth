@@ -74,6 +74,10 @@ func (g githubProvider) GetOAuthToken(ctx context.Context, code string, opts ...
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g githubProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g githubProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u githubUser
 	if err := makeRequest(ctx, tok, g.Config, g.APIHost+"/user", &u); err != nil {

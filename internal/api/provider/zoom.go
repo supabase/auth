@@ -55,6 +55,10 @@ func (g zoomProvider) GetOAuthToken(ctx context.Context, code string, opts ...oa
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g zoomProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g zoomProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u zoomUser
 	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/users/me", &u); err != nil {

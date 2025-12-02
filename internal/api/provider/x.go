@@ -85,6 +85,10 @@ func (x xProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth
 	return x.Exchange(ctx, code, opts...)
 }
 
+func (x xProvider) RequiresPKCE() bool {
+	return true
+}
+
 func (x xProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var resp xUserResponse
 

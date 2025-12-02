@@ -60,6 +60,10 @@ func (g vercelMarketplaceProvider) GetOAuthToken(ctx context.Context, code strin
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g vercelMarketplaceProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g vercelMarketplaceProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	idToken := tok.Extra("id_token")
 	if tok.AccessToken == "" || idToken == nil {

@@ -106,9 +106,9 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	}
 
 	oauthClientStateID := ""
-	if providerType == "x" {
+	if oauthProvider, ok := p.(provider.OAuthProvider); ok && oauthProvider.RequiresPKCE() {
 		codeVerifier := oauth2.GenerateVerifier()
-		oauthClientState := models.NewOAuthClientState("x", &codeVerifier)
+		oauthClientState := models.NewOAuthClientState(providerType, &codeVerifier)
 		err := db.Create(oauthClientState)
 		if err != nil {
 			return "", err

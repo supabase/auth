@@ -127,6 +127,10 @@ func (p AppleProvider) GetOAuthToken(ctx context.Context, code string, opts ...o
 	return p.Exchange(ctx, code, appleOpts...)
 }
 
+func (p AppleProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (p AppleProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {
 	opts := make([]oauth2.AuthCodeOption, 0, 1)
 	opts = append(opts, oauth2.SetAuthURLParam("response_mode", "form_post"))

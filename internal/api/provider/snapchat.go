@@ -75,6 +75,10 @@ func (p snapchatProvider) GetOAuthToken(ctx context.Context, code string, opts .
 	return p.Exchange(ctx, code, opts...)
 }
 
+func (p snapchatProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (p snapchatProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u snapchatUser
 

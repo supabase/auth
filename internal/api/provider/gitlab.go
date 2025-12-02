@@ -65,6 +65,10 @@ func (g gitlabProvider) GetOAuthToken(ctx context.Context, code string, opts ...
 	return g.Exchange(ctx, code, opts...)
 }
 
+func (g gitlabProvider) RequiresPKCE() bool {
+	return false
+}
+
 func (g gitlabProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u gitlabUser
 
