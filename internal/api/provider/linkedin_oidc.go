@@ -21,7 +21,7 @@ type linkedinOIDCProvider struct {
 }
 
 // NewLinkedinOIDCProvider creates a Linkedin account provider via OIDC.
-func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewLinkedinOIDCProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string)
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := oidc.NewProvider(context.Background(), IssuerLinkedin)
+	oidcProvider, err := oidc.NewProvider(ctx, IssuerLinkedin)
 	if err != nil {
 		return nil, err
 	}
@@ -59,8 +59,12 @@ func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string)
 	}, nil
 }
 
-func (g linkedinOIDCProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g linkedinOIDCProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(ctx, code, opts...)
+}
+
+func (g linkedinOIDCProvider) RequiresPKCE() bool {
+	return false
 }
 
 func (g linkedinOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {

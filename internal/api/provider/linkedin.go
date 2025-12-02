@@ -97,8 +97,12 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	}, nil
 }
 
-func (g linkedinProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g linkedinProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(ctx, code, opts...)
+}
+
+func (g linkedinProvider) RequiresPKCE() bool {
+	return false
 }
 
 func GetName(name linkedinName) string {

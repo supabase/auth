@@ -6,13 +6,16 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/gofrs/uuid"
 	"github.com/mrjones/oauth"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
+	"golang.org/x/oauth2"
 )
 
 // OAuthProviderData contains the userData and token returned by the oauth provider
@@ -55,6 +58,8 @@ func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Con
 }
 
 func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType string) (*OAuthProviderData, error) {
+	db := a.db.WithContext(ctx)
+
 	var rq url.Values
 	if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
 		rq = r.Form
@@ -72,28 +77,56 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthCallback, "OAuth callback with missing authorization code missing")
 	}
 
-	oAuthProvider, _, err := a.OAuthProvider(ctx, providerType)
+	oauthProvider, _, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
 	log := observability.GetLogEntry(r).Entry
+
+	var oauthClientState *models.OAuthClientState
+	// if there's a non-empty OAuthClientStateID we perform PKCE Flow for the external provider
+	if oauthClientStateID := getOAuthClientStateID(ctx); oauthClientStateID != uuid.Nil {
+		oauthClientState, err = models.FindAndDeleteOAuthClientStateByID(db, oauthClientStateID)
+		if models.IsNotFoundError(err) {
+			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOAuthClientStateNotFound, "OAuth state not found").WithInternalError(err)
+		} else if err != nil {
+			return nil, apierrors.NewInternalServerError("Failed to find OAuth state").WithInternalError(err)
+		}
+
+		if oauthClientState.ProviderType != providerType {
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthInvalidState, "OAuth provider mismatch")
+		}
+
+		if oauthClientState.IsExpired() {
+			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOAuthClientStateExpired, "OAuth state expired")
+		}
+	}
+
+	if oauthProvider.RequiresPKCE() && oauthClientState == nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthInvalidState, "OAuth PKCE code verifier missing")
+	}
+
 	log.WithFields(logrus.Fields{
 		"provider": providerType,
 		"code":     oauthCode,
-	}).Debug("Exchanging oauth code")
+	}).Debug("Exchanging OAuth code")
 
-	token, err := oAuthProvider.GetOAuthToken(oauthCode)
+	var tokenOpts []oauth2.AuthCodeOption
+	if oauthClientState != nil {
+		tokenOpts = append(tokenOpts, oauth2.VerifierOption(*oauthClientState.CodeVerifier))
+	}
+	token, err := oauthProvider.GetOAuthToken(ctx, oauthCode, tokenOpts...)
 	if err != nil {
 		return nil, apierrors.NewInternalServerError("Unable to exchange external code: %s", oauthCode).WithInternalError(err)
 	}
 
-	userData, err := oAuthProvider.GetUserData(ctx, token)
+	userData, err := oauthProvider.GetUserData(ctx, token)
 	if err != nil {
 		return nil, apierrors.NewInternalServerError("Error getting user profile from external provider").WithInternalError(err)
 	}
 
-	switch externalProvider := oAuthProvider.(type) {
+	switch externalProvider := oauthProvider.(type) {
 	case *provider.AppleProvider:
 		// apple only returns user info the first time
 		oauthUser := rq.Get("user")
