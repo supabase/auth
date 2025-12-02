@@ -20,6 +20,14 @@ import (
 var ErrAdvisoryLockAlreadyAcquired = errors.New("advisory lock already acquired by another process")
 var ErrExtensionNotFound = errors.New("extension not found")
 
+type Outcome string
+
+const (
+	OutcomeSuccess Outcome = "success"
+	OutcomeFailure Outcome = "failure"
+	OutcomeSkipped Outcome = "skipped"
+)
+
 // CreateIndexes ensures that the necessary indexes on the users table exist.
 // If the indexes already exist and are valid, it skips creation.
 // It uses a Postgres advisory lock to prevent concurrent index creation
@@ -67,16 +75,22 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 	lockQuery := fmt.Sprintf("SELECT pg_try_advisory_lock(hashtext('%s')::bigint)", lockName)
 
 	if err := db.RawQuery(lockQuery).First(&lockAcquired); err != nil {
-		le.Errorf("Failed to attempt advisory lock acquisition: %+v", err)
+		le.WithFields(logrus.Fields{
+			"outcome": OutcomeFailure,
+			"code":    "advisory_lock_acquisition_failed",
+		}).WithError(err).Error("Failed to attempt advisory lock acquisition")
 		return err
 	}
 
 	if !lockAcquired {
-		le.Infof("Another process is currently creating indexes. Skipping index creation.")
+		le.WithFields(logrus.Fields{
+			"outcome": OutcomeSkipped,
+			"code":    "advisory_lock_already_acquired",
+		}).Info("Another process is currently holding the advisory lock, skipping index creation")
 		return ErrAdvisoryLockAlreadyAcquired
 	}
 
-	le.Infof("Successfully acquired advisory lock for index creation.")
+	le.Debug("Successfully acquired advisory lock for index creation")
 
 	// Ensure lock is released on function exit
 	defer func() {
@@ -84,28 +98,35 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 		var unlocked bool
 		if err := db.RawQuery(unlockQuery).First(&unlocked); err != nil {
 			if ctx.Err() != nil {
-				le.Infof("Context cancelled. Advisory lock will be released upon session termination.")
+				le.Debug("Context cancelled, advisory lock will be released upon session termination")
 			} else {
-				le.Errorf("Failed to release advisory lock: %+v", err)
+				le.WithError(err).Error("Failed to release advisory lock")
 			}
 		} else if unlocked {
-			le.Infof("Successfully released advisory lock.")
+			le.Debug("Successfully released advisory lock")
 		} else {
-			le.Warnf("Advisory lock was not held when attempting to release.")
+			le.Debug("Advisory lock was not held when attempting to release")
 		}
 	}()
 
 	// Ensure either auth_trgm or pg_trgm extension is installed
 	extName, err := ensureTrgmExtension(db, config.DB.Namespace, le)
 	if err != nil {
-		le.Errorf("Failed to ensure trgm extension is available: %+v", err)
+		le.WithFields(logrus.Fields{
+			"outcome": OutcomeFailure,
+			"code":    "trgm_extension_unavailable",
+		}).WithError(err).Error("Failed to ensure trgm extension is available")
 		return err
 	}
 
 	// Look up which schema the trgm extension is installed in
 	trgmSchema, err := getTrgmExtensionSchema(db, extName)
 	if err != nil {
-		le.Errorf("Failed to find %s extension schema: %+v", extName, err)
+		le.WithFields(logrus.Fields{
+			"outcome":   OutcomeFailure,
+			"code":      "extension_schema_not_found",
+			"extension": extName,
+		}).WithError(err).Error("Failed to find extension schema")
 		return ErrExtensionNotFound
 	}
 
@@ -118,63 +139,103 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 	// Check existing indexes and their statuses. If all exist and are valid, skip creation.
 	existingIndexes, err := getIndexStatuses(db, config.DB.Namespace, indexNames)
 	if err != nil {
-		le.Warnf("Failed to check existing indexes: %+v. Proceeding with index creation.", err)
+		le.WithError(err).Warn("Failed to check existing index statuses, proceeding with index creation")
 	} else {
 		if len(existingIndexes) == len(indexes) {
 			allHealthy := true
 			for _, idx := range existingIndexes {
 				if !idx.IsValid || !idx.IsReady {
-					le.Infof("Index %s exists but is not healthy (valid: %v, ready: %v)", idx.IndexName, idx.IsValid, idx.IsReady)
+					le.WithFields(logrus.Fields{
+						"code":        "index_unhealthy",
+						"index_name":  idx.IndexName,
+						"index_valid": idx.IsValid,
+						"index_ready": idx.IsReady,
+					}).Info("Index exists but is not healthy")
 					allHealthy = false
 					break
 				}
 			}
 
 			if allHealthy {
-				le.Infof("All %d indexes on auth.users already exist and are ready. Skipping index creation.", len(indexes))
+				le.WithFields(logrus.Fields{
+					"outcome":     OutcomeSkipped,
+					"code":        "indexes_already_exist",
+					"index_count": len(indexes),
+				}).Debug("All indexes on auth.users already exist and are ready, skipping index creation")
 				return nil
 			}
 		} else {
-			le.Infof("Found %d of %d expected indexes. Proceeding with index creation.", len(existingIndexes), len(indexes))
+			le.WithFields(logrus.Fields{
+				"code":           "indexes_missing",
+				"existing_count": len(existingIndexes),
+				"expected_count": len(indexes),
+			}).Info("Found fewer indexes than expected, proceeding with index creation")
 		}
 	}
 
 	userCount, err := getApproximateUserCount(db, config.DB.Namespace)
 	if err != nil {
-		le.Warnf("Failed to get approximate user count: %+v. Proceeding with index creation.", err)
+		le.WithError(err).Warn("Failed to get approximate user count, proceeding with index creation")
 	}
-	le.Infof("User count: %d. Starting index creation...", userCount)
+	le.WithFields(logrus.Fields{
+		"code":       "index_creation_starting",
+		"user_count": userCount,
+	}).Info("Starting index creation")
 
 	// First, clean up any invalid indexes from previous interrupted attempts
 	dropInvalidIndexes(db, le, config.DB.Namespace, indexNames)
 
 	// Create indexes one by one
 	var failedIndexes []string
+	var succeededIndexes []string
 	totalStartTime := time.Now()
 
 	for _, idx := range indexes {
 		startTime := time.Now()
-		le.Infof("Creating index: %s", idx.name)
+		le.WithFields(logrus.Fields{
+			"code":       "index_creating",
+			"index_name": idx.name,
+		}).Info("Creating index")
 
 		if err := db.RawQuery(idx.query).Exec(); err != nil {
 			duration := time.Since(startTime).Milliseconds()
-
-			le.Errorf("Failed to create index %s after %d ms: %v", idx.name, duration, err)
+			le.WithFields(logrus.Fields{
+				"code":        "index_creation_failed",
+				"index_name":  idx.name,
+				"duration_ms": duration,
+			}).WithError(err).Error("Failed to create index")
 			failedIndexes = append(failedIndexes, idx.name)
 		} else {
 			duration := time.Since(startTime).Milliseconds()
-			le.Infof("Successfully created index %s in %d ms", idx.name, duration)
+			le.WithFields(logrus.Fields{
+				"code":        "index_created",
+				"index_name":  idx.name,
+				"duration_ms": duration,
+			}).Info("Successfully created index")
+			succeededIndexes = append(succeededIndexes, idx.name)
 		}
 	}
 
 	totalDuration := time.Since(totalStartTime).Milliseconds()
 
 	if len(failedIndexes) > 0 {
-		le.Warnf("Index creation completed in %d ms with some failures: %v", totalDuration, failedIndexes)
+		le.WithFields(logrus.Fields{
+			"outcome":           OutcomeFailure,
+			"code":              "index_creation_partial_failure",
+			"duration_ms":       totalDuration,
+			"failed_indexes":    failedIndexes,
+			"succeeded_indexes": succeededIndexes,
+		}).Error("Index creation completed with some failures")
+
 		return fmt.Errorf("failed to create indexes: %v", failedIndexes)
-	} else {
-		le.Infof("All indexes created successfully in %d ms", totalDuration)
 	}
+
+	le.WithFields(logrus.Fields{
+		"outcome":           OutcomeSuccess,
+		"code":              "index_creation_completed",
+		"duration_ms":       totalDuration,
+		"succeeded_indexes": succeededIndexes,
+	}).Info("All indexes created successfully")
 
 	return nil
 }
@@ -249,19 +310,30 @@ func ensureTrgmExtension(db *pop.Connection, authSchema string, le *logrus.Entry
 
 	if authTrgmStatus.Available {
 		if !authTrgmStatus.Installed {
-			le.Infof("auth_trgm extension is available but not installed. Installing...")
+			le.Debug("auth_trgm extension is available but not installed, installing")
+
 			if err := installExtension(db, "auth_trgm", authSchema); err != nil {
-				le.Errorf("Failed to install auth_trgm extension: %v", err)
+				le.WithFields(logrus.Fields{
+					"outcome":   OutcomeFailure,
+					"code":      "extension_install_failed",
+					"extension": "auth_trgm",
+				}).WithError(err).Error("Failed to install auth_trgm extension")
+
 				return "", fmt.Errorf("auth_trgm extension is available but failed to install: %w", err)
 			}
-			le.Infof("Successfully installed auth_trgm extension")
+
+			le.WithFields(logrus.Fields{
+				"code":      "extension_installed",
+				"extension": "auth_trgm",
+			}).Info("Successfully installed auth_trgm extension")
 		} else {
-			le.Infof("auth_trgm extension is already installed")
+			le.Debug("auth_trgm extension is already installed")
 		}
+
 		return "auth_trgm", nil
 	}
 
-	le.Infof("auth_trgm extension is not available, checking pg_trgm...")
+	le.Debug("auth_trgm extension is not available, checking pg_trgm")
 
 	pgTrgmStatus, err := getExtensionStatus(db, "pg_trgm")
 	if err != nil {
@@ -273,14 +345,23 @@ func ensureTrgmExtension(db *pop.Connection, authSchema string, le *logrus.Entry
 	}
 
 	if !pgTrgmStatus.Installed {
-		le.Infof("pg_trgm extension is available but not installed. Installing...")
+		le.Debug("pg_trgm extension is available but not installed, installing")
+
 		if err := installExtension(db, "pg_trgm", "pg_catalog"); err != nil {
-			le.Errorf("Failed to install pg_trgm extension: %v", err)
+			le.WithFields(logrus.Fields{
+				"code":      "extension_install_failed",
+				"extension": "pg_trgm",
+			}).WithError(err).Error("Failed to install pg_trgm extension")
+
 			return "", fmt.Errorf("pg_trgm extension is available but failed to install: %w", err)
 		}
-		le.Infof("Successfully installed pg_trgm extension")
+
+		le.WithFields(logrus.Fields{
+			"code":      "extension_installed",
+			"extension": "pg_trgm",
+		}).Info("Successfully installed pg_trgm extension")
 	} else {
-		le.Infof("pg_trgm extension is already installed")
+		le.Debug("pg_trgm extension is already installed")
 	}
 
 	return "pg_trgm", nil
@@ -307,12 +388,6 @@ func getUsersIndexes(namespace, trgmSchema string) []struct {
 			name: "idx_users_email_trgm",
 			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email_trgm
 				ON %q.users USING gin (email %s.gin_trgm_ops);`, namespace, trgmSchema),
-		},
-		// enables exact-match and prefix searches and sorting by phone number
-		{
-			name: "idx_users_phone_pattern",
-			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_phone_pattern
-				ON %q.users USING btree (phone text_pattern_ops);`, namespace),
 		},
 		// for range queries and sorting on created_at and last_sign_in_at
 		{
@@ -403,10 +478,16 @@ func dropInvalidIndexes(db *pop.Connection, le *logrus.Entry, namespace string, 
 	var invalidIndexes []invalidIndex
 	if err := db.RawQuery(cleanupQuery).All(&invalidIndexes); err == nil && len(invalidIndexes) > 0 {
 		for _, idx := range invalidIndexes {
-			le.Warnf("Dropping invalid index from previous interrupted run: %s", idx.IndexName)
+			le.WithFields(logrus.Fields{
+				"code":       "dropping_invalid_index",
+				"index_name": idx.IndexName,
+			}).Info("Dropping invalid index from previous interrupted run")
 			dropQuery := fmt.Sprintf("DROP INDEX CONCURRENTLY IF EXISTS %q.%s", namespace, idx.IndexName)
 			if err := db.RawQuery(dropQuery).Exec(); err != nil {
-				le.Errorf("Failed to drop invalid index %s: %v", idx.IndexName, err)
+				le.WithFields(logrus.Fields{
+					"code":       "drop_invalid_index_failed",
+					"index_name": idx.IndexName,
+				}).WithError(err).Error("Failed to drop invalid index")
 			}
 		}
 	}
