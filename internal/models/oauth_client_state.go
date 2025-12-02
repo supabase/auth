@@ -29,14 +29,13 @@ func NewOAuthClientState(providerType string, codeVerifier *string) *OAuthClient
 		CodeVerifier: codeVerifier,
 	}
 }
-
-func FindOAuthClientStateByID(tx *storage.Connection, id uuid.UUID) (*OAuthClientState, error) {
+func FindAndDeleteOAuthClientStateByID(tx *storage.Connection, id uuid.UUID) (*OAuthClientState, error) {
 	obj := &OAuthClientState{}
-	if err := tx.Q().Where("id = ?", id).First(obj); err != nil {
+	if err := tx.RawQuery("DELETE FROM "+obj.TableName()+" WHERE id = ? RETURNING *", id).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, OAuthClientStateNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding oauth state")
+		return nil, errors.Wrap(err, "error deleting oauth state")
 	}
 	return obj, nil
 }

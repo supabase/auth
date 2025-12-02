@@ -87,7 +87,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 	var oauthClientState *models.OAuthClientState
 	// if there's a non-empty OAuthClientStateID we perform PKCE Flow for the external provider
 	if oauthClientStateID := getOAuthClientStateID(ctx); oauthClientStateID != uuid.Nil {
-		oauthClientState, err = models.FindOAuthClientStateByID(db, oauthClientStateID)
+		oauthClientState, err = models.FindAndDeleteOAuthClientStateByID(db, oauthClientStateID)
 		if models.IsNotFoundError(err) {
 			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOAuthClientStateNotFound, "OAuth state not found").WithInternalError(err)
 		} else if err != nil {
@@ -99,9 +99,6 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		}
 
 		if oauthClientState.IsExpired() {
-			if err := db.Destroy(oauthClientState); err != nil {
-				log.WithError(err).Warn("Failed to delete expired OAuth state")
-			}
 			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOAuthClientStateExpired, "OAuth state expired")
 		}
 	}
@@ -114,12 +111,6 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		"provider": providerType,
 		"code":     oauthCode,
 	}).Debug("Exchanging OAuth code")
-
-	if oauthClientState != nil {
-		if err := db.Destroy(oauthClientState); err != nil {
-			log.WithError(err).Warn("Failed to delete OAuth state")
-		}
-	}
 
 	var tokenOpts []oauth2.AuthCodeOption
 	if oauthClientState != nil {
