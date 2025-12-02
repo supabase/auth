@@ -659,6 +659,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	case "vercel_marketplace":
 		pConfig = config.External.VercelMarketplace
 		p, err = provider.NewVercelMarketplaceProvider(pConfig, scopes)
+	case "wechat":
+		return provider.NewWechatProvider(config.External.Wechat)
 	case "workos":
 		pConfig = config.External.WorkOS
 		p, err = provider.NewWorkOSProvider(pConfig)

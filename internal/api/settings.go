@@ -26,6 +26,7 @@ type ProviderSettings struct {
 	WorkOS         bool `json:"workos"`
 	Twitch         bool `json:"twitch"`
 	Twitter        bool `json:"twitter"`
+	Wechat         bool `json:"wechat"`
 	Email          bool `json:"email"`
 	Phone          bool `json:"phone"`
 	Zoom           bool `json:"zoom"`
@@ -68,6 +69,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Twitch:         config.External.Twitch.Enabled,
 			Twitter:        config.External.Twitter.Enabled,
 			WorkOS:         config.External.WorkOS.Enabled,
+			Wechat:         config.External.Wechat.Enabled,
 			Email:          config.External.Email.Enabled,
 			Phone:          config.External.Phone.Enabled,
 			Zoom:           config.External.Zoom.Enabled,
