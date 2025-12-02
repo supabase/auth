@@ -651,7 +651,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		p, err = provider.NewLinkedinProvider(pConfig, scopes)
 	case "linkedin_oidc":
 		pConfig = config.External.LinkedinOIDC
-		p, err = provider.NewLinkedinOIDCProvider(pConfig, scopes)
+		p, err = provider.NewLinkedinOIDCProvider(ctx, pConfig, scopes)
 	case "notion":
 		pConfig = config.External.Notion
 		p, err = provider.NewNotionProvider(pConfig)
@@ -678,7 +678,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		p, err = provider.NewXProvider(pConfig, scopes)
 	case "vercel_marketplace":
 		pConfig = config.External.VercelMarketplace
-		p, err = provider.NewVercelMarketplaceProvider(pConfig, scopes)
+		p, err = provider.NewVercelMarketplaceProvider(ctx, pConfig, scopes)
 	case "workos":
 		pConfig = config.External.WorkOS
 		p, err = provider.NewWorkOSProvider(pConfig)

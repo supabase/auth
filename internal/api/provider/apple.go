@@ -118,13 +118,13 @@ func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration) 
 }
 
 // GetOAuthToken returns the apple provider access token
-func (p AppleProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+func (p AppleProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
 	appleOpts := []oauth2.AuthCodeOption{
 		oauth2.SetAuthURLParam("client_id", p.ClientID),
 		oauth2.SetAuthURLParam("secret", p.ClientSecret),
 	}
 	appleOpts = append(appleOpts, opts...)
-	return p.Exchange(context.Background(), code, appleOpts...)
+	return p.Exchange(ctx, code, appleOpts...)
 }
 
 func (p AppleProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {

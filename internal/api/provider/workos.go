@@ -53,8 +53,8 @@ func NewWorkOSProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, erro
 	}, nil
 }
 
-func (g workosProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code, opts...)
+func (g workosProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(ctx, code, opts...)
 }
 
 func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
