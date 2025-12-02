@@ -580,7 +580,11 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request, db *storag
 		ctx = withFlowStateID(ctx, claims.FlowStateID)
 	}
 	if claims.OAuthClientStateID != "" {
-		ctx = withOAuthClientStateID(ctx, uuid.FromStringOrNil(claims.OAuthClientStateID))
+		oauthClientStateID, err := uuid.FromString(claims.OAuthClientStateID)
+		if err != nil {
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (oauth_client_state_id must be UUID)")
+		}
+		ctx = withOAuthClientStateID(ctx, oauthClientStateID)
 	}
 	if claims.LinkingTargetID != "" {
 		linkingTargetUserID, err := uuid.FromString(claims.LinkingTargetID)
