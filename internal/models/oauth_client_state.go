@@ -19,7 +19,7 @@ type OAuthClientState struct {
 }
 
 func (OAuthClientState) TableName() string {
-	return "oauth_states"
+	return "oauth_client_states"
 }
 
 func NewOAuthClientState(providerType string, codeVerifier *string) *OAuthClientState {
