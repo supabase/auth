@@ -57,8 +57,8 @@ func NewSlackProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	}, nil
 }
 
-func (g slackProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g slackProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(context.Background(), code, opts...)
 }
 
 func (g slackProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -91,4 +91,8 @@ func (g slackProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		ProviderId: u.ID,
 	}
 	return data, nil
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *slackProvider) RequiresPKCE() bool {
+	return false
 }

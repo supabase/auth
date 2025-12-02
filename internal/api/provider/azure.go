@@ -91,8 +91,8 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	}, nil
 }
 
-func (g azureProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g azureProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(context.Background(), code, opts...)
 }
 
 func DetectAzureIDTokenIssuer(ctx context.Context, idToken string) (string, error) {
@@ -161,4 +161,8 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 	// Only ID tokens supported, UserInfo endpoint has a history of being less secure.
 
 	return nil, fmt.Errorf("azure: no OIDC ID token present in response")
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *azureProvider) RequiresPKCE() bool {
+	return false
 }

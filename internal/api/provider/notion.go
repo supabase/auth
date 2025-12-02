@@ -59,8 +59,8 @@ func NewNotionProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, erro
 	}, nil
 }
 
-func (g notionProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g notionProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(context.Background(), code, opts...)
 }
 
 func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -118,4 +118,8 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		ProviderId: u.Bot.Owner.User.ID,
 	}
 	return data, nil
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *notionProvider) RequiresPKCE() bool {
+	return false
 }

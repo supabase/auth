@@ -60,7 +60,7 @@ func NewTwitterProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 }
 
 // GetOAuthToken is a stub method for OAuthProvider interface, unused in OAuth1.0 protocol
-func (t TwitterProvider) GetOAuthToken(_ string) (*oauth2.Token, error) {
+func (t TwitterProvider) GetOAuthToken(_ string, _ ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
 	return &oauth2.Token{}, nil
 }
 
@@ -152,4 +152,8 @@ func (t TwitterProvider) Unmarshal(data string) (*oauth.RequestToken, error) {
 	requestToken := &oauth.RequestToken{}
 	err := json.NewDecoder(strings.NewReader(data)).Decode(requestToken)
 	return requestToken, err
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *TwitterProvider) RequiresPKCE() bool {
+	return false
 }
