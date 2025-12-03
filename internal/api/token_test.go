@@ -741,6 +741,43 @@ end; $$ language plpgsql;`,
 				"user_metadata": nil,
 			},
 			shouldError: false,
+		}, {
+			desc: "Modify amr to be array of strings",
+			uri:  "pg-functions://postgres/auth/custom_access_token_amr_strings",
+			hookFunctionSQL: `
+create or replace function custom_access_token_amr_strings(input jsonb)
+returns jsonb as $$
+declare
+    result jsonb;
+begin
+    input := jsonb_set(input, '{claims,amr}', '["password", "mfa"]'::jsonb);
+    result := jsonb_build_object('claims', input->'claims');
+    return result;
+end; $$ language plpgsql;`,
+			expectedClaims: map[string]interface{}{
+				"amr": []interface{}{"password", "mfa"},
+			},
+			shouldError: false,
+		}, {
+			desc: "Modify amr to be array of objects",
+			uri:  "pg-functions://postgres/auth/custom_access_token_amr_objects",
+			hookFunctionSQL: `
+create or replace function custom_access_token_amr_objects(input jsonb)
+returns jsonb as $$
+declare
+    result jsonb;
+begin
+    input := jsonb_set(input, '{claims,amr}', '[{"method": "password"}, {"method": "mfa"}]'::jsonb);
+    result := jsonb_build_object('claims', input->'claims');
+    return result;
+end; $$ language plpgsql;`,
+			expectedClaims: map[string]interface{}{
+				"amr": []interface{}{
+					map[string]interface{}{"method": "password"},
+					map[string]interface{}{"method": "mfa"},
+				},
+			},
+			shouldError: false,
 		},
 	}
 	for _, c := range cases {

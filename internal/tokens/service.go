@@ -951,7 +951,10 @@ const MinimumViableTokenSchema = `{
     "amr": {
       "type": "array",
       "items": {
-        "type": "object"
+        "anyOf": [
+          {"type": "string"},
+          {"type": "object"}
+        ]
       }
     },
     "session_id": {
