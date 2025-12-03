@@ -94,6 +94,7 @@ type Session struct {
 
 	Tag           *string    `json:"tag" db:"tag"`
 	OAuthClientID *uuid.UUID `json:"oauth_client_id" db:"oauth_client_id"`
+	Scopes        *string    `json:"scopes,omitempty" db:"scopes"` // OAuth scopes granted for this session
 
 	RefreshTokenHmacKey *string `json:"-" db:"refresh_token_hmac_key"`
 	RefreshTokenCounter *int64  `json:"-" db:"refresh_token_counter"`
@@ -353,6 +354,11 @@ func LogoutAllExceptMe(tx *storage.Connection, sessionId uuid.UUID, userID uuid.
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id != ? AND user_id = ?", sessionId, userID).Exec()
 }
 
+// RevokeOAuthSessions deletes all sessions associated with a specific OAuth client for a user
+func RevokeOAuthSessions(tx *storage.Connection, userID uuid.UUID, oauthClientID uuid.UUID) error {
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND oauth_client_id = ?", userID, oauthClientID).Exec()
+}
+
 func (s *Session) UpdateAALAndAssociatedFactor(tx *storage.Connection, aal AuthenticatorAssuranceLevel, factorID *uuid.UUID) error {
 	s.FactorID = factorID
 	aalAsString := aal.String()
@@ -416,4 +422,17 @@ func (s *Session) FindCurrentlyActiveRefreshToken(tx *storage.Connection) (*Refr
 	}
 
 	return &activeRefreshToken, nil
+}
+
+// GetScopeList returns the scopes as a slice
+func (s *Session) GetScopeList() []string {
+	if s.Scopes == nil {
+		return []string{}
+	}
+	return ParseScopeString(*s.Scopes)
+}
+
+// HasScope checks if the session has a specific scope
+func (s *Session) HasScope(scope string) bool {
+	return HasScope(s.GetScopeList(), scope)
 }

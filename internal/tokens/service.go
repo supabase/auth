@@ -39,6 +39,23 @@ type AccessTokenClaims struct {
 	SessionId                     string                 `json:"session_id,omitempty"`
 	IsAnonymous                   bool                   `json:"is_anonymous"`
 	ClientID                      string                 `json:"client_id,omitempty"`
+	Scope                         string                 `json:"scope,omitempty"`
+}
+
+// IDTokenClaims represents OpenID Connect ID Token claims
+type IDTokenClaims struct {
+	jwt.RegisteredClaims
+	Nonce               string `json:"nonce,omitempty"`
+	AuthTime            int64  `json:"auth_time"`
+	Email               string `json:"email,omitempty"`
+	EmailVerified       bool   `json:"email_verified"` // not omitempty because it's required by OIDC spec
+	PhoneNumber         string `json:"phone_number,omitempty"`
+	PhoneNumberVerified bool   `json:"phone_number_verified"` // not omitempty because it's required by OIDC spec
+	Name                string `json:"name,omitempty"`
+	Picture             string `json:"picture,omitempty"`
+	UpdatedAt           int64  `json:"updated_at,omitempty"`
+	PreferredUsername   string `json:"preferred_username,omitempty"`
+	ClientID            string `json:"client_id,omitempty"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -52,6 +69,7 @@ type AccessTokenResponse struct {
 	ProviderAccessToken  string       `json:"provider_token,omitempty"`
 	ProviderRefreshToken string       `json:"provider_refresh_token,omitempty"`
 	WeakPassword         interface{}  `json:"weak_password,omitempty"`
+	IDToken              string       `json:"id_token,omitempty"` // OIDC ID Token
 }
 
 // GenerateAccessTokenParams contains parameters for generating access tokens
@@ -60,6 +78,15 @@ type GenerateAccessTokenParams struct {
 	SessionID            *uuid.UUID
 	AuthenticationMethod models.AuthenticationMethod
 	ClientID             *uuid.UUID // OAuth2 server client ID if applicable
+}
+
+// GenerateIDTokenParams contains parameters for generating OIDC ID tokens
+type GenerateIDTokenParams struct {
+	User     *models.User
+	ClientID uuid.UUID  // OAuth2 client ID (required for ID tokens)
+	Nonce    string     // OIDC nonce from authorization request (optional)
+	AuthTime *time.Time // Time when authentication occurred (optional, uses user.LastSignInAt if not provided)
+	Scopes   []string   // OAuth scopes granted (used to filter claims)
 }
 
 // RefreshTokenGrantParams contains parameters for refresh token grant
@@ -555,6 +582,12 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		clientID = params.ClientID.String()
 	}
 
+	// Get scopes from session if this is an OAuth session
+	var scopes string
+	if session.Scopes != nil {
+		scopes = *session.Scopes
+	}
+
 	claims := &v0hooks.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   params.User.ID.String(),
@@ -573,6 +606,7 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		AuthenticationMethodReference: amr,
 		IsAnonymous:                   params.User.IsAnonymous,
 		ClientID:                      clientID,
+		Scope:                         scopes,
 	}
 
 	var gotrueClaims jwt.Claims = claims
@@ -600,6 +634,116 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		return "", 0, err
 	}
 	return signed, expiresAt.Unix(), nil
+}
+
+// GenerateIDToken generates an OpenID Connect ID Token
+// IDToken is generated only when the signing key is an asymmetric one.
+// HS256 is not supported for ID token signing.
+// Claims are filtered based on the granted scopes per OIDC spec:
+// - openid: sub (always included when openid scope is present)
+// - email: email, email_verified
+// - profile: name, picture, updated_at, preferred_username
+// - phone: phone_number, phone_number_verified
+func (s *Service) GenerateIDToken(params GenerateIDTokenParams) (string, error) {
+	config := s.config
+
+	signingJwk, err := conf.GetSigningJwk(&s.config.JWT)
+	if err != nil {
+		return "", fmt.Errorf("error getting signing JWK: %w", err)
+	}
+	signingMethod := conf.GetSigningAlg(signingJwk)
+	if signingMethod == jwt.SigningMethodHS256 {
+		return "", fmt.Errorf("HS256 is not supported for ID token signing")
+	}
+
+	// Determine auth_time (when authentication occurred)
+	var authTime time.Time
+	if params.AuthTime != nil {
+		authTime = *params.AuthTime
+	} else if params.User.LastSignInAt != nil {
+		authTime = *params.User.LastSignInAt
+	} else {
+		authTime = s.now() // Fallback to current time
+	}
+
+	issuedAt := s.now().UTC()
+	// ID tokens typically expire in 1 hour (3600 seconds) per OIDC spec
+	expiresAt := issuedAt.Add(time.Hour)
+
+	// Build ID token claims per OIDC spec
+	// Base claims (always included)
+	claims := &IDTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   params.User.ID.String(),
+			Audience:  jwt.ClaimStrings{params.ClientID.String()},
+			IssuedAt:  jwt.NewNumericDate(issuedAt),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			Issuer:    config.JWT.Issuer,
+		},
+		AuthTime: authTime.Unix(),
+		ClientID: params.ClientID.String(),
+	}
+
+	// Add nonce if provided
+	if params.Nonce != "" {
+		claims.Nonce = params.Nonce
+	}
+
+	// Add scope-specific claims
+	// Check if scope was granted before adding claims
+	hasEmailScope := models.HasScope(params.Scopes, models.ScopeEmail)
+	hasProfileScope := models.HasScope(params.Scopes, models.ScopeProfile)
+	hasPhoneScope := models.HasScope(params.Scopes, models.ScopePhone)
+
+	// Email scope: email, email_verified
+	if hasEmailScope {
+		claims.Email = params.User.GetEmail()
+		claims.EmailVerified = params.User.IsConfirmed()
+	}
+
+	// Phone scope: phone_number, phone_number_verified
+	if hasPhoneScope {
+		claims.PhoneNumber = params.User.GetPhone()
+		claims.PhoneNumberVerified = params.User.IsPhoneConfirmed()
+	}
+
+	// Profile scope: name, picture, updated_at, preferred_username
+	if hasProfileScope {
+		// Extract name from user metadata if available
+		if name, ok := params.User.UserMetaData["name"].(string); ok && name != "" {
+			claims.Name = name
+		} else if params.User.GetEmail() != "" {
+			// Fallback to email as name if no name is set
+			claims.Name = params.User.GetEmail()
+		}
+
+		// Extract picture URL from user metadata if available
+		if picture, ok := params.User.UserMetaData["picture"].(string); ok && picture != "" {
+			claims.Picture = picture
+		} else if avatarURL, ok := params.User.UserMetaData["avatar_url"].(string); ok && avatarURL != "" {
+			claims.Picture = avatarURL
+		}
+
+		// Add preferred_username if available
+		if username, ok := params.User.UserMetaData["preferred_username"].(string); ok && username != "" {
+			claims.PreferredUsername = username
+		} else if username, ok := params.User.UserMetaData["username"].(string); ok && username != "" {
+			claims.PreferredUsername = username
+		}
+
+		// Add updated_at timestamp
+		if params.User.UpdatedAt.Unix() > 0 {
+			claims.UpdatedAt = params.User.UpdatedAt.Unix()
+		}
+	}
+
+	// Sign the ID token with the same key as access tokens
+	signed, err := SignJWT(&config.JWT, claims)
+	if err != nil {
+		return "", err
+	}
+
+	return signed, nil
 }
 
 // IssueRefreshToken creates a new refresh token and access token

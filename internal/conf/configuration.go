@@ -76,7 +76,7 @@ type OAuthServerConfiguration struct {
 	Enabled                  bool          `json:"enabled" default:"false"`
 	AllowDynamicRegistration bool          `json:"allow_dynamic_registration" split_words:"true"`
 	AuthorizationPath        string        `json:"authorization_path" split_words:"true"`
-	AuthorizationTimeout     time.Duration `json:"authorization_timeout" split_words:"true" default:"5m"`
+	AuthorizationTTL         time.Duration `json:"authorization_ttl" split_words:"true" default:"10m"`
 	// Placeholder for now, for (near) future extensibility
 	DefaultScope string `json:"default_scope" split_words:"true" default:"email"`
 }
@@ -352,6 +352,7 @@ type GlobalConfiguration struct {
 	MFA             MFAConfiguration         `json:"MFA"`
 	SAML            SAMLConfiguration        `json:"saml"`
 	CORS            CORSConfiguration        `json:"cors"`
+	IndexWorker     IndexWorkerConfiguration `json:"index_worker" split_words:"true"`
 
 	Experimental ExperimentalConfiguration `json:"experimental"`
 	Reloading    ReloadingConfiguration    `json:"reloading"`
@@ -438,6 +439,7 @@ type ProviderConfiguration struct {
 	WorkOS                  OAuthProviderConfiguration     `json:"workos"`
 	Email                   EmailProviderConfiguration     `json:"email"`
 	Phone                   PhoneProviderConfiguration     `json:"phone"`
+	X                       OAuthProviderConfiguration     `json:"x" envconfig:"X"`
 	Zoom                    OAuthProviderConfiguration     `json:"zoom"`
 	IosBundleId             string                         `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL             string                         `json:"redirect_url"`
@@ -1342,4 +1344,9 @@ func (t *VonageProviderConfiguration) Validate() error {
 
 func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
 	return t.Provider == "twilio_verify"
+}
+
+// IndexWorkerConfiguration holds the configuration for database indexes.
+type IndexWorkerConfiguration struct {
+	EnsureUserSearchIndexesExist bool `json:"ensure_user_search_indexes_exist" split_words:"true" default:"false"`
 }

@@ -820,6 +820,114 @@ paths:
                   value:
                     error_code: email_conflict_identity_not_deletable
 
+  /user/oauth/grants:
+    get:
+      summary: List OAuth grants
+      description: >
+        Retrieves a list of all OAuth grants that the authenticated user has authorized. Only available when OAuth server is enabled.
+      tags:
+        - user
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      responses:
+        200:
+          description: List of user's OAuth grants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    client:
+                      type: object
+                      description: OAuth client details
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                          description: Unique client identifier
+                        name:
+                          type: string
+                          description: Human-readable name of the client application
+                        uri:
+                          type: string
+                          format: uri
+                          description: URL of the client application's homepage
+                        logo_uri:
+                          type: string
+                          format: uri
+                          description: URL of the client application's logo
+                    scopes:
+                      type: array
+                      items:
+                        type: string
+                      description: List of scopes granted to this client
+                    granted_at:
+                      type: string
+                      format: date-time
+                      description: Timestamp when grant was authorized
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+    delete:
+      summary: Revoke OAuth grant
+      description: >
+        Revokes the user's OAuth grant for a specific client. This will:
+        - Mark the consent as revoked
+        - Delete all active sessions associated with this OAuth client
+        - Invalidate all refresh tokens for those sessions
+
+        Only available when OAuth server is enabled.
+      tags:
+        - user
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      parameters:
+        - name: client_id
+          in: query
+          required: true
+          description: The OAuth client identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        204:
+          description: Grant successfully revoked
+        400:
+          description: Missing or invalid client_id parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                validation_failed:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                    msg: client_id query parameter is required
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+        404:
+          description: No active grant found for this client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                oauth_consent_not_found:
+                  summary: oauth_consent_not_found
+                  value:
+                    error_code: oauth_consent_not_found
+                    msg: No active grant found for this client
+
   /reauthenticate:
     post:
       summary: Reauthenticates the possession of an email or phone number for the purpose of password change.
@@ -1995,6 +2103,71 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
           $ref: "#/components/responses/ForbiddenResponse"
+    put:
+      summary: Update OAuth client (admin)
+      description: >
+        Updates an existing OAuth client registration. Only the provided fields will be updated.
+        Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                client_name:
+                  type: string
+                  description: Human-readable name of the client application
+                client_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's homepage
+                logo_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's logo
+                redirect_uris:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  description: Array of redirect URIs used by the client
+                grant_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - authorization_code
+                      - refresh_token
+                  description: OAuth grant types the client is authorized to use
+      responses:
+        200:
+          description: OAuth client updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        400:
+          description: Bad request - validation failed or no fields provided for update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        404:
+          description: OAuth client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
     delete:
       summary: Delete OAuth client (admin)
       description: >
@@ -2307,12 +2480,12 @@ paths:
                   client:
                     type: object
                     properties:
-                      client_id:
+                      id:
                         type: string
                         format: uuid
-                      client_name:
+                      name:
                         type: string
-                      client_uri:
+                      uri:
                         type: string
                         format: uri
                       logo_uri:

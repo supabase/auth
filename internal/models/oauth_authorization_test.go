@@ -11,24 +11,27 @@ import (
 
 func TestNewOAuthServerAuthorization(t *testing.T) {
 	clientID := uuid.Must(uuid.NewV4())
-	redirectURI := "https://example.com/callback"
-	scope := "openid profile"
-	state := "random-state"
-	codeChallenge := "test-challenge"
-	codeChallengeMethod := "S256"
-	resource := "https://api.example.com/"
 
-	auth := NewOAuthServerAuthorization(clientID, redirectURI, scope, state, resource, codeChallenge, codeChallengeMethod)
+	auth := NewOAuthServerAuthorization(NewOAuthServerAuthorizationParams{
+		ClientID:            clientID,
+		RedirectURI:         "https://example.com/callback",
+		Scope:               "openid profile",
+		State:               "random-state",
+		Resource:            "https://api.example.com/",
+		CodeChallenge:       "test-challenge",
+		CodeChallengeMethod: "S256",
+		TTL:                 10 * time.Minute,
+	})
 
 	assert.NotEmpty(t, auth.ID)
 	assert.NotEmpty(t, auth.AuthorizationID)
 	assert.Equal(t, clientID, auth.ClientID)
 	assert.Nil(t, auth.UserID)
-	assert.Equal(t, redirectURI, auth.RedirectURI)
-	assert.Equal(t, scope, auth.Scope)
-	assert.Equal(t, state, *auth.State)
-	assert.Equal(t, resource, *auth.Resource)
-	assert.Equal(t, codeChallenge, *auth.CodeChallenge)
+	assert.Equal(t, "https://example.com/callback", auth.RedirectURI)
+	assert.Equal(t, "openid profile", auth.Scope)
+	assert.Equal(t, "random-state", *auth.State)
+	assert.Equal(t, "https://api.example.com/", *auth.Resource)
+	assert.Equal(t, "test-challenge", *auth.CodeChallenge)
 	assert.Equal(t, "s256", *auth.CodeChallengeMethod) // Should be normalized to lowercase
 	assert.Equal(t, OAuthServerResponseTypeCode, auth.ResponseType)
 	assert.Equal(t, OAuthServerAuthorizationPending, auth.Status)
@@ -52,20 +55,55 @@ func TestNewOAuthServerAuthorization_CodeChallengeMethodNormalization(t *testing
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			auth := NewOAuthServerAuthorization(
-				uuid.Must(uuid.NewV4()),
-				"https://example.com/callback",
-				"openid",
-				"state",
-				"",
-				"challenge",
-				tc.input,
-			)
+			auth := NewOAuthServerAuthorization(NewOAuthServerAuthorizationParams{
+				ClientID:            uuid.Must(uuid.NewV4()),
+				RedirectURI:         "https://example.com/callback",
+				Scope:               "openid",
+				State:               "state",
+				CodeChallenge:       "challenge",
+				CodeChallengeMethod: tc.input,
+				TTL:                 10 * time.Minute,
+			})
 
 			assert.Equal(t, tc.expected, *auth.CodeChallengeMethod,
 				"Expected code_challenge_method to be normalized to %s, got %s", tc.expected, *auth.CodeChallengeMethod)
 		})
 	}
+}
+
+func TestNewOAuthServerAuthorization_WithNonce(t *testing.T) {
+	clientID := uuid.Must(uuid.NewV4())
+	nonce := "random-nonce-value-12345"
+
+	// Test with nonce
+	authWithNonce := NewOAuthServerAuthorization(
+		NewOAuthServerAuthorizationParams{
+			ClientID:            clientID,
+			RedirectURI:         "https://example.com/callback",
+			Scope:               "openid",
+			State:               "state",
+			CodeChallenge:       "challenge",
+			CodeChallengeMethod: "S256",
+			Nonce:               nonce,
+		},
+	)
+
+	assert.NotNil(t, authWithNonce.Nonce)
+	assert.Equal(t, nonce, *authWithNonce.Nonce)
+
+	// Test without nonce (empty string)
+	authWithoutNonce := NewOAuthServerAuthorization(
+		NewOAuthServerAuthorizationParams{
+			ClientID:            clientID,
+			RedirectURI:         "https://example.com/callback",
+			Scope:               "openid",
+			State:               "state",
+			CodeChallenge:       "challenge",
+			CodeChallengeMethod: "S256",
+		},
+	)
+
+	assert.Nil(t, authWithoutNonce.Nonce)
 }
 
 func TestOAuthServerAuthorization_IsExpired(t *testing.T) {

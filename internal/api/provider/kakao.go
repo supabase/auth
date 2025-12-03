@@ -33,8 +33,12 @@ type kakaoUser struct {
 	} `json:"kakao_account"`
 }
 
-func (p kakaoProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return p.Exchange(context.Background(), code)
+func (p kakaoProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return p.Exchange(ctx, code, opts...)
+}
+
+func (p kakaoProvider) RequiresPKCE() bool {
+	return false
 }
 
 func (p kakaoProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
