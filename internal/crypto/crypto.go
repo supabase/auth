@@ -20,14 +20,13 @@ import (
 
 // GenerateOtp generates a random n digit otp
 func GenerateOtp(digits int) string {
-	upper := math.Pow10(digits)
-	val := must(rand.Int(rand.Reader, big.NewInt(int64(upper))))
-
-	// adds a variable zero-padding to the left to ensure otp is uniformly random
-	expr := "%0" + strconv.Itoa(digits) + "v"
-	otp := fmt.Sprintf(expr, val.String())
-
-	return otp
+    upper := math.Pow10(digits)
+    val := must(rand.Int(rand.Reader, big.NewInt(int64(upper))))
+    s := val.String()
+    if len(s) < digits {
+        s = strings.Repeat("0", digits-len(s)) + s
+    }
+    return s
 }
 
 func GenerateTokenHash(emailOrPhone, otp string) string {
