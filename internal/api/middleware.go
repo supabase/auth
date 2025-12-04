@@ -62,18 +62,23 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
 func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
-	if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
-		key := req.Header.Get(limitHeader)
+	limitHeader := a.config.RateLimitHeader
 
-		if key == "" {
-			log := observability.GetLogEntry(req).Entry
-			log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
-		} else {
-			err := tollbooth.LimitByKeys(lmt, []string{key})
-			if err != nil {
-				return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
-			}
-		}
+	if limitHeader == "" {
+		return nil
+	}
+
+	key := req.Header.Get(limitHeader)
+
+	if key == "" {
+		log := observability.GetLogEntry(req).Entry
+		log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
+
+		return nil
+	}
+
+	if err := tollbooth.LimitByKeys(lmt, []string{key}); err != nil {
+		return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
 	}
 
 	return nil
