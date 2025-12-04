@@ -3,9 +3,79 @@ package crypto
 import (
 	"testing"
 
+	mrand "math/rand"
+
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestGenerateOtp(t *testing.T) {
+
+	// Lock in current behavior.
+	{
+		mr := mrand.New(mrand.NewSource(0))
+		tests := []struct {
+			digits int
+			exp    string
+		}{
+			{1, "1"}, {1, "4"}, {1, "2"}, {1, "0"},
+			{2, "65"}, {2, "83"}, {2, "18"}, {2, "04"},
+			{3, "883"}, {3, "110"}, {3, "677"}, {3, "744"},
+			{4, "6157"}, {4, "8369"}, {4, "3385"}, {4, "1617"},
+			{5, "69588"}, {5, "96393"}, {5, "57989"}, {5, "57681"},
+			{6, "284024"}, {6, "554454"}, {6, "975571"}, {6, "053470"},
+			{7, "7076089"}, {7, "6287428"}, {7, "3903112"}, {7, "3915653"},
+			{8, "44800453"}, {8, "38979394"}, {8, "70448040"}, {8, "29351463"},
+			{9, "526897122"}, {9, "047135939"}, {9, "351530466"}, {9, "381602894"},
+			{10, "6834743966"}, {10, "2026285792"}, {10, "7189110983"}, {10, "4023217386"},
+		}
+		for idx, test := range tests {
+			t.Logf("test #%02d - exp %v using %v digits", idx, test.exp, test.digits)
+			otp := generateOtp(mr, test.digits)
+			assert.Equal(t, test.digits, len(otp))
+			assert.Equal(t, test.exp, otp)
+		}
+	}
+
+	// and some heavily zero padded values
+	{
+		tests := []struct {
+			digits int
+			exp    string
+			seed   int64
+		}{
+			{4, "0009", 5},
+			{4, "0072", 133},
+			{4, "0040", 203},
+			{4, "0095", 551},
+			{5, "00061", 248},
+			{5, "00056", 977},
+			{5, "00013", 981},
+			{5, "00038", 2504},
+			{6, "000056", 977},
+			{6, "000094", 21852},
+			{6, "000099", 30190},
+			{6, "000012", 32646},
+			{8, "00000374", 15749},
+			{8, "00000995", 198113},
+			{8, "00000271", 213316},
+			{8, "00000612", 226219},
+			{10, "0058477947", 1},
+			{10, "0018825892", 79},
+			{10, "0039133437", 148},
+			{10, "0004026570", 248},
+			{10, "0000007968", 1380744},
+		}
+		for idx, test := range tests {
+			t.Logf("test #%02d - exp %v using %v digits (seed: %v)",
+				idx, test.exp, test.digits, test.seed)
+			mr := mrand.New(mrand.NewSource(test.seed))
+			otp := generateOtp(mr, test.digits)
+			assert.Equal(t, test.digits, len(otp))
+			assert.Equal(t, test.exp, otp)
+		}
+	}
+}
 
 func TestEncryptedStringPositive(t *testing.T) {
 	id := uuid.Must(uuid.NewV4()).String()
