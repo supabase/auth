@@ -415,6 +415,117 @@ func TestTimeoutResponseWriter(t *testing.T) {
 	require.Equal(t, w1.Result(), w2.Result())
 }
 
+func (ts *MiddlewareTestSuite) TestPerformRateLimiting() {
+	ts.Config.RateLimitHeader = "X-Test-Perform-Rate-Limiting"
+
+	tests := []struct {
+		name         string
+		headerValues []string
+		expError     error
+	}{
+		{
+			name: "no value",
+			headerValues: []string{
+				"",
+				"",
+			},
+			expError: nil,
+		},
+		{
+			name: "single end user value",
+			headerValues: []string{
+				"192.168.1.100",
+				"192.168.1.100",
+			},
+			expError: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "same end user value, multiple proxies",
+			headerValues: []string{
+				"2600:cafe:beef::1,192.168.1.100",
+				"2600:cafe:beef::1,192.168.1.200",
+			},
+			expError: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "multiple end user values, single proxy",
+			headerValues: []string{
+				"2600:cafe:beef::1,192.168.1.100",
+				"3700:dead:abcd::2,192.168.1.100",
+			},
+			expError: nil,
+		},
+		{
+			name: "same end user value, multiple proxies, with whitespace",
+			headerValues: []string{
+				"2600:cafe:beef::1     ,192.168.1.100",
+				"2600:cafe:beef::1 ,     192.168.1.200",
+			},
+			expError: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "malformed header, all whitespace",
+			headerValues: []string{
+				" ",
+			},
+			expError: apierrors.NewBadRequestError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Invalid rate limit header value",
+			),
+		},
+		{
+			name: "malformed header, no whitespace",
+			headerValues: []string{
+				",192.168.1.100",
+			},
+			expError: apierrors.NewBadRequestError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Invalid rate limit header value",
+			),
+		},
+		{
+			name: "malformed header, with whitespace",
+			headerValues: []string{
+				"     ,192.168.1.100",
+			},
+			expError: apierrors.NewBadRequestError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Invalid rate limit header value",
+			),
+		},
+	}
+
+	for _, tt := range tests {
+		// Trigger a rate limiting error if we see the same end-user key twice in the same
+		// test case
+		lmt := tollbooth.NewLimiter(
+			1,
+			&limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			},
+		)
+
+		var obsError error
+
+		for _, h := range tt.headerValues {
+			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+			req.Header.Add(ts.Config.RateLimitHeader, h)
+			obsError = ts.API.performRateLimiting(lmt, req)
+		}
+
+		require.ErrorIs(ts.T(), obsError, tt.expError, "error for test '%s'", tt.name)
+	}
+}
+
 func (ts *MiddlewareTestSuite) TestLimitHandler() {
 	ts.Config.RateLimitHeader = "X-Rate-Limit"
 	lmt := tollbooth.NewLimiter(5, &limiter.ExpirableOptions{
