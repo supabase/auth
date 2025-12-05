@@ -64,19 +64,43 @@ var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate
 func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
 	limitHeader := a.config.RateLimitHeader
 
+	// If no rate limit header was set, ignore rate limiting
 	if limitHeader == "" {
 		return nil
 	}
 
-	key := req.Header.Get(limitHeader)
+	valuesStr := req.Header.Get(limitHeader)
 
-	if key == "" {
+	// If a rate limit header was set, but has no value, ignore rate limiting but warn with an error
+	if valuesStr == "" {
 		log := observability.GetLogEntry(req).Entry
 		log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
 
 		return nil
 	}
 
+	// According to RFC 7230 section 3.2.2, multiple headers with the same name are equivalent
+	// to a single header with that name where each value is separated by a comma and whitespace.
+	//
+	// Note that there is some ambiguity in RFC 7230 where section 3.2.4 states that
+	// header field values (which can contain commas) are processed independently of the header
+	// field name, and thus it is not always clear if a comma is a list delimiter or simply par
+	// of a single value.
+	//
+	// Given that this function is primarily for use with headers like X-Forwarded-For which
+	// vendors generally combine into comma-separated lists, we opt for the simpler approach
+	// here and split the header value by commas before taking the first value.
+	values := strings.SplitN(valuesStr, ",", 2)
+
+	// We will always get at least one value back, so this operation is safe
+	key := strings.TrimSpace(values[0])
+
+	// If the rate limit header has at least one value, but the first value is all whitespace, return an error
+	if key == "" {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid rate limit header value")
+	}
+
+	// Otherwise, apply rate limiting based on the first rate limit header value
 	if err := tollbooth.LimitByKeys(lmt, []string{key}); err != nil {
 		return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
 	}
