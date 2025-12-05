@@ -13,7 +13,7 @@ func TestGenerateOtp(t *testing.T) {
 
 	// Lock in current behavior.
 	{
-		mr := mrand.New(mrand.NewSource(0))
+		mr := mrand.New(mrand.NewSource(0)) // #nosec G404
 		tests := []struct {
 			digits int
 			exp    string
@@ -69,7 +69,7 @@ func TestGenerateOtp(t *testing.T) {
 		for idx, test := range tests {
 			t.Logf("test #%02d - exp %v using %v digits (seed: %v)",
 				idx, test.exp, test.digits, test.seed)
-			mr := mrand.New(mrand.NewSource(test.seed))
+			mr := mrand.New(mrand.NewSource(test.seed)) // #nosec G404
 			otp := generateOtp(mr, test.digits)
 			assert.Equal(t, test.digits, len(otp))
 			assert.Equal(t, test.exp, otp)
