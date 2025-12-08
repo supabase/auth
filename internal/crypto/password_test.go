@@ -112,7 +112,12 @@ func TestFirebaseScrypt(t *testing.T) {
 	// all of these use the `mytestpassword` string as the valid one
 
 	examples := []string{
+		// URL-safe base64 salt and hash (contains _ instead of /)
 		"$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek_7hsg==$A91H0C35fqAvqx6So9G_jXriM8h8KvW1kQpAOpP6NEVi9bU6xfUnNN1o0PiT7HP5k9ebaLWaD7m6PwNyiGgZDg==",
+		// salt is std base64
+		"$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek/7hsg==$A91H0C35fqAvqx6So9G_jXriM8h8KvW1kQpAOpP6NEVi9bU6xfUnNN1o0PiT7HP5k9ebaLWaD7m6PwNyiGgZDg==",
+		// hash is std base64
+		"$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek_7hsg==$A91H0C35fqAvqx6So9G/jXriM8h8KvW1kQpAOpP6NEVi9bU6xfUnNN1o0PiT7HP5k9ebaLWaD7m6PwNyiGgZDg==",
 	}
 
 	for _, example := range examples {
@@ -146,10 +151,6 @@ func TestFirebaseScrypt(t *testing.T) {
 		"$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=!!!$C0sHCg9ek_7hsg==$A91H0C35fqAvqx6So9G_jXriM8h8KvW1kQpAOpP6NEVi9bU6xfUnNN1o0PiT7HP5k9ebaLWaD7m6PwNyiGgZDg==",
 		// salt separator is not base64
 		"$fbscrypt$v=1,n=14,r=8,p=1,ss=!!!,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek_7hsg==$A91H0C35fqAvqx6So9G_jXriM8h8KvW1kQpAOpP6NEVi9bU6xfUnNN1o0PiT7HP5k9ebaLWaD7m6PwNyiGgZDg==",
-		// salt is std base64
-		"$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek/7hsg==$A91H0C35fqAvqx6So9G_jXriM8h8KvW1kQpAOpP6NEVi9bU6xfUnNN1o0PiT7HP5k9ebaLWaD7m6PwNyiGgZDg==",
-		// hash is std base64
-		"$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek_7hsg==$A91H0C35fqAvqx6So9G/jXriM8h8KvW1kQpAOpP6NEVi9bU6xfUnNN1o0PiT7HP5k9ebaLWaD7m6PwNyiGgZDg==",
 	}
 
 	for _, example := range negativeExamples {

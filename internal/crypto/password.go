@@ -125,12 +125,16 @@ func ParseFirebaseScryptHash(hash string) (*FirebaseScryptHashInput, error) {
 		return nil, fmt.Errorf("crypto: Firebase scrypt hash has invalid p=0")
 	}
 
-	rawHash, err := base64.URLEncoding.DecodeString(hashB64)
+	// Normalize URL-safe Base64 to standard Base64
+	// Firebase exports use URL-safe Base64 (-,_) but some data may use standard Base64 (+,/)
+	normalizedHash := strings.ReplaceAll(strings.ReplaceAll(hashB64, "-", "+"), "_", "/")
+	rawHash, err := base64.StdEncoding.DecodeString(normalizedHash)
 	if err != nil {
 		return nil, fmt.Errorf("crypto: Firebase scrypt hash has invalid base64 in the hash section %w", err)
 	}
 
-	salt, err := base64.URLEncoding.DecodeString(saltB64)
+	normalizedSalt := strings.ReplaceAll(strings.ReplaceAll(saltB64, "-", "+"), "_", "/")
+	salt, err := base64.StdEncoding.DecodeString(normalizedSalt)
 	if err != nil {
 		return nil, fmt.Errorf("crypto: Firebase scrypt salt has invalid base64 in the hash section %w", err)
 	}
