@@ -473,34 +473,25 @@ func (ts *MiddlewareTestSuite) TestPerformRateLimiting() {
 			),
 		},
 		{
-			name: "malformed header, all whitespace",
+			name: "empty header, all whitespace",
 			headerValues: []string{
 				" ",
 			},
-			expError: apierrors.NewBadRequestError(
-				apierrors.ErrorCodeOverRequestRateLimit,
-				"Invalid rate limit header value",
-			),
+			expError: nil,
 		},
 		{
-			name: "malformed header, no whitespace",
+			name: "empty first key, no whitespace",
 			headerValues: []string{
 				",192.168.1.100",
 			},
-			expError: apierrors.NewBadRequestError(
-				apierrors.ErrorCodeOverRequestRateLimit,
-				"Invalid rate limit header value",
-			),
+			expError: nil,
 		},
 		{
-			name: "malformed header, with whitespace",
+			name: "empty first key, with whitespace",
 			headerValues: []string{
 				"     ,192.168.1.100",
 			},
-			expError: apierrors.NewBadRequestError(
-				apierrors.ErrorCodeOverRequestRateLimit,
-				"Invalid rate limit header value",
-			),
+			expError: nil,
 		},
 	}
 

@@ -95,9 +95,13 @@ func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error
 	// We will always get at least one value back, so this operation is safe
 	key := strings.TrimSpace(values[0])
 
-	// If the rate limit header has at least one value, but the first value is all whitespace, return an error
+	// If the rate limit header has at least one value, but the first value is all whitespace, return a warning.
+	// This will happen if the header is something like "X-Foo-Bar: ,baz".
 	if key == "" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid rate limit header value")
+		log := observability.GetLogEntry(req).Entry
+		log.WithField("header", limitHeader).Warn("first rate limit header value is empty, rate limiting is not applied")
+
+		return nil
 	}
 
 	// Otherwise, apply rate limiting based on the first rate limit header value
