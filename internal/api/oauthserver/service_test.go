@@ -62,7 +62,7 @@ func (ts *OAuthServiceTestSuite) SetupTest() {
 	ts.Config.OAuthServer.AllowDynamicRegistration = true
 	
 	// Add test URIs to allow list for testing
-	ts.Config.URIAllowList = append(ts.Config.URIAllowList, "https://example.com/**", "https://app.example.com/**", "http://localhost:3000/**")
+	ts.Config.URIAllowList = append(ts.Config.URIAllowList, "https://example.com/**", "https://app.example.com/**", "http://localhost:3000/**", "http://127.0.0.1:8080/**")
 	// Rebuild the allow list map
 	ts.Config.URIAllowListMap = make(map[string]glob.Glob)
 	for _, uri := range ts.Config.URIAllowList {

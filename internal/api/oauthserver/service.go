@@ -203,36 +203,32 @@ func (s *Server) validateRedirectURI(uri string) error {
 	}
 
 	// For OAuth client registration, we need stricter validation than general redirects
-	// Check if it's a standard web scheme (http/https)
-	isStandardScheme := scheme == "http" || scheme == "https"
+	// All redirect URIs must explicitly match the allow list (no hostname-matching shortcuts)
+	
+	// Special validation for HTTP scheme
+	if scheme == "http" {
+		// HTTP only allowed for localhost
+		host := parsedURL.Hostname()
+		if host != "localhost" && host != "127.0.0.1" && !strings.HasPrefix(host, "127.") {
+			return fmt.Errorf("HTTP scheme only allowed for localhost")
+		}
+	}
 
-	if isStandardScheme {
-		// For HTTP/HTTPS, use standard validation
-		if scheme == "http" {
-			// HTTP only allowed for localhost
-			host := parsedURL.Hostname()
-			if host != "localhost" && host != "127.0.0.1" && !strings.HasPrefix(host, "127.") {
-				return fmt.Errorf("HTTP scheme only allowed for localhost")
-			}
-		}
-		// HTTPS is always allowed if in the allow list
-		if !utilities.IsRedirectURLValid(s.config, uri) {
-			return fmt.Errorf("redirect URI not allowed by configuration")
-		}
-	} else {
-		// For custom schemes (cursor://, exp://, etc.), require explicit allow list match
-		// This prevents the hostname-matching bypass in IsRedirectURLValid
-		if !isCustomSchemeAllowed(s.config, uri) {
-			return fmt.Errorf("custom scheme '%s' not allowed by configuration", scheme)
-		}
+	// For OAuth Dynamic Client Registration, require strict allow-list matching
+	// This prevents exploitation of hostname-matching shortcuts that could allow
+	// arbitrary paths on the auth server (e.g., https://auth.example.com/arbitrary/path)
+	if !isURIExplicitlyAllowed(s.config, uri) {
+		return fmt.Errorf("redirect URI not allowed by configuration")
 	}
 
 	return nil
 }
 
-// isCustomSchemeAllowed checks if a custom URI scheme is explicitly allowed in the configuration
-// This provides stricter validation for non-HTTP(S) schemes used in OAuth client registration
-func isCustomSchemeAllowed(config *conf.GlobalConfiguration, uri string) bool {
+// isURIExplicitlyAllowed checks if a URI is explicitly allowed in the configuration
+// This provides strict validation for OAuth client registration by requiring exact
+// pattern matches from the allow list, without hostname-matching shortcuts.
+// This prevents attackers from registering arbitrary paths on the auth server.
+func isURIExplicitlyAllowed(config *conf.GlobalConfiguration, uri string) bool {
 	if uri == "" {
 		return false
 	}
@@ -244,10 +240,9 @@ func isCustomSchemeAllowed(config *conf.GlobalConfiguration, uri string) bool {
 
 	scheme := strings.ToLower(parsedURL.Scheme)
 	
-	// Only check against allow list for custom schemes
-	// This bypasses the hostname-matching shortcut in IsRedirectURLValid
+	// Check against allow list patterns
+	// Only match patterns that start with the same scheme to prevent cross-scheme exploitation
 	for pattern, glob := range config.URIAllowListMap {
-		// Only match patterns that start with the same custom scheme
 		patternURL, err := url.Parse(pattern)
 		if err != nil {
 			continue
