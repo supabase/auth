@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.184.0](https://github.com/supabase/auth/compare/v2.183.0...v2.184.0) (2025-12-08)
+
+
+### Features
+
+* increment refresh token counter by 2 for mfa verify ([#2284](https://github.com/supabase/auth/issues/2284)) ([2a38668](https://github.com/supabase/auth/commit/2a3866854fe7cb58a6cb84e7a82ce5d07bb920ee))
+* load template cache at startup for fault tolerance ([#2261](https://github.com/supabase/auth/issues/2261)) ([511c3a4](https://github.com/supabase/auth/commit/511c3a4e12819d313840cd5342ae6a76d4708cfc))
+* **oauth:** add support for X/Twitter v2 provider ([#2275](https://github.com/supabase/auth/issues/2275)) ([7f36eb0](https://github.com/supabase/auth/commit/7f36eb053286038d01ba1650dd48a15508550ce0))
+
 ## [2.183.0](https://github.com/supabase/auth/compare/v2.182.1...v2.183.0) (2025-11-20)
 
 
