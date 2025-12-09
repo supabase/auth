@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/utilities"
 )
@@ -170,7 +172,7 @@ func (p *OAuthServerClientRegisterParams) validate(s *Server) error {
 	return nil
 }
 
-// validateRedirectURI validates OAuth 2.1 redirect URIs against the allow list configuration
+// validateRedirectURI validates OAuth 2.1 redirect URIs with enhanced security checks
 func (s *Server) validateRedirectURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("redirect URI cannot be empty")
@@ -191,12 +193,77 @@ func (s *Server) validateRedirectURI(uri string) error {
 		return fmt.Errorf("fragment not allowed in redirect URI")
 	}
 
-	// Check against the URI allow list (supports custom schemes like cursor://, exp://, etc.)
-	if !utilities.IsRedirectURLValid(s.config, uri) {
-		return fmt.Errorf("redirect URI not allowed by configuration")
+	// Block dangerous schemes that could be used for attacks
+	scheme := strings.ToLower(parsedURL.Scheme)
+	dangerousSchemes := []string{"javascript", "data", "file", "vbscript", "about"}
+	for _, dangerous := range dangerousSchemes {
+		if scheme == dangerous {
+			return fmt.Errorf("scheme '%s' is not allowed for security reasons", scheme)
+		}
+	}
+
+	// For OAuth client registration, we need stricter validation than general redirects
+	// Check if it's a standard web scheme (http/https)
+	isStandardScheme := scheme == "http" || scheme == "https"
+
+	if isStandardScheme {
+		// For HTTP/HTTPS, use standard validation
+		if scheme == "http" {
+			// HTTP only allowed for localhost
+			host := parsedURL.Hostname()
+			if host != "localhost" && host != "127.0.0.1" && !strings.HasPrefix(host, "127.") {
+				return fmt.Errorf("HTTP scheme only allowed for localhost")
+			}
+		}
+		// HTTPS is always allowed if in the allow list
+		if !utilities.IsRedirectURLValid(s.config, uri) {
+			return fmt.Errorf("redirect URI not allowed by configuration")
+		}
+	} else {
+		// For custom schemes (cursor://, exp://, etc.), require explicit allow list match
+		// This prevents the hostname-matching bypass in IsRedirectURLValid
+		if !isCustomSchemeAllowed(s.config, uri) {
+			return fmt.Errorf("custom scheme '%s' not allowed by configuration", scheme)
+		}
 	}
 
 	return nil
+}
+
+// isCustomSchemeAllowed checks if a custom URI scheme is explicitly allowed in the configuration
+// This provides stricter validation for non-HTTP(S) schemes used in OAuth client registration
+func isCustomSchemeAllowed(config *conf.GlobalConfiguration, uri string) bool {
+	if uri == "" {
+		return false
+	}
+
+	parsedURL, err := url.Parse(uri)
+	if err != nil {
+		return false
+	}
+
+	scheme := strings.ToLower(parsedURL.Scheme)
+	
+	// Only check against allow list for custom schemes
+	// This bypasses the hostname-matching shortcut in IsRedirectURLValid
+	for pattern, glob := range config.URIAllowListMap {
+		// Only match patterns that start with the same custom scheme
+		patternURL, err := url.Parse(pattern)
+		if err != nil {
+			continue
+		}
+		
+		patternScheme := strings.ToLower(patternURL.Scheme)
+		if patternScheme == scheme {
+			// Match without fragment
+			matchAgainst, _, _ := strings.Cut(uri, "#")
+			if glob.Match(matchAgainst) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // generateClientSecret generates a secure random client secret

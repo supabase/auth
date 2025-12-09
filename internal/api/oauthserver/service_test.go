@@ -62,7 +62,7 @@ func (ts *OAuthServiceTestSuite) SetupTest() {
 	ts.Config.OAuthServer.AllowDynamicRegistration = true
 	
 	// Add test URIs to allow list for testing
-	ts.Config.URIAllowList = append(ts.Config.URIAllowList, "https://example.com/**", "https://app.example.com/**")
+	ts.Config.URIAllowList = append(ts.Config.URIAllowList, "https://example.com/**", "https://app.example.com/**", "http://localhost:3000/**")
 	// Rebuild the allow list map
 	ts.Config.URIAllowListMap = make(map[string]glob.Glob)
 	for _, uri := range ts.Config.URIAllowList {
@@ -301,7 +301,25 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			name:        "URI not in allow list",
 			uri:         "ftp://example.com/callback",
 			shouldError: true,
-			errorMsg:    "redirect URI not allowed by configuration",
+			errorMsg:    "not allowed by configuration",
+		},
+		{
+			name:        "Dangerous javascript scheme blocked",
+			uri:         "javascript:alert('xss')",
+			shouldError: true,
+			errorMsg:    "not allowed for security reasons",
+		},
+		{
+			name:        "Dangerous data scheme blocked",
+			uri:         "data:text/html,<script>alert('xss')</script>",
+			shouldError: true,
+			errorMsg:    "not allowed for security reasons",
+		},
+		{
+			name:        "Dangerous file scheme blocked",
+			uri:         "file:///etc/passwd",
+			shouldError: true,
+			errorMsg:    "not allowed for security reasons",
 		},
 	}
 
