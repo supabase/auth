@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gobwas/glob"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -59,6 +60,15 @@ func (ts *OAuthServiceTestSuite) SetupTest() {
 	// Enable OAuth server and dynamic client registration for tests
 	ts.Config.OAuthServer.Enabled = true
 	ts.Config.OAuthServer.AllowDynamicRegistration = true
+	
+	// Add test URIs to allow list for testing
+	ts.Config.URIAllowList = append(ts.Config.URIAllowList, "https://example.com/**", "https://app.example.com/**")
+	// Rebuild the allow list map
+	ts.Config.URIAllowListMap = make(map[string]glob.Glob)
+	for _, uri := range ts.Config.URIAllowList {
+		g := glob.MustCompile(uri, '.', '/')
+		ts.Config.URIAllowListMap[uri] = g
+	}
 }
 
 // Helper function to create test OAuth client
@@ -276,18 +286,6 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			errorMsg:    "redirect URI cannot be empty",
 		},
 		{
-			name:        "Invalid scheme",
-			uri:         "ftp://example.com/callback",
-			shouldError: true,
-			errorMsg:    "scheme must be HTTPS or HTTP (localhost only)",
-		},
-		{
-			name:        "Invalid HTTP non-localhost",
-			uri:         "http://example.com/callback",
-			shouldError: true,
-			errorMsg:    "HTTP scheme only allowed for localhost",
-		},
-		{
 			name:        "Invalid URI with fragment",
 			uri:         "https://example.com/callback#fragment",
 			shouldError: true,
@@ -297,13 +295,19 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			name:        "Invalid URI format",
 			uri:         "not-a-uri",
 			shouldError: true,
-			errorMsg:    "must have scheme and host",
+			errorMsg:    "must have scheme",
+		},
+		{
+			name:        "URI not in allow list",
+			uri:         "ftp://example.com/callback",
+			shouldError: true,
+			errorMsg:    "redirect URI not allowed by configuration",
 		},
 	}
 
 	for _, tc := range testCases {
 		ts.T().Run(tc.name, func(t *testing.T) {
-			err := validateRedirectURI(tc.uri)
+			err := ts.Server.validateRedirectURI(tc.uri)
 			if tc.shouldError {
 				assert.Error(t, err)
 				if tc.errorMsg != "" {
@@ -335,4 +339,92 @@ func (ts *OAuthServiceTestSuite) TestGrantTypeDefaults() {
 	assert.Contains(ts.T(), grantTypes, "authorization_code")
 	assert.Contains(ts.T(), grantTypes, "refresh_token")
 	assert.Len(ts.T(), grantTypes, 2)
+}
+
+func (ts *OAuthServiceTestSuite) TestCustomURISchemes() {
+	// Test custom URI schemes when they're in the allow list
+	// This tests the fix for issue #2285
+
+	// Save original allow list
+	originalAllowList := ts.Config.URIAllowList
+	originalAllowListMap := ts.Config.URIAllowListMap
+	defer func() {
+		ts.Config.URIAllowList = originalAllowList
+		ts.Config.URIAllowListMap = originalAllowListMap
+	}()
+
+	// Configure allow list with custom schemes (keep existing + add custom)
+	ts.Config.URIAllowList = append([]string{}, originalAllowList...)
+	ts.Config.URIAllowList = append(ts.Config.URIAllowList, "cursor://**", "com.example.app://**", "exp://**")
+	// Rebuild the allow list map
+	ts.Config.URIAllowListMap = make(map[string]glob.Glob)
+	for _, uri := range ts.Config.URIAllowList {
+		g := glob.MustCompile(uri, '.', '/')
+		ts.Config.URIAllowListMap[uri] = g
+	}
+
+	ctx := context.Background()
+
+	// Test 1: cursor:// scheme (for Cursor IDE)
+	params := &OAuthServerClientRegisterParams{
+		ClientName:       "Cursor IDE",
+		RedirectURIs:     []string{"cursor://anysphere.cursor-mcp/callback"},
+		RegistrationType: "dynamic",
+	}
+
+	client, secret, err := ts.Server.registerOAuthServerClient(ctx, params)
+	require.NoError(ts.T(), err, "Should allow cursor:// scheme when in allow list")
+	require.NotNil(ts.T(), client)
+	require.NotEmpty(ts.T(), secret)
+	assert.Equal(ts.T(), "Cursor IDE", *client.ClientName)
+	assert.Equal(ts.T(), []string{"cursor://anysphere.cursor-mcp/callback"}, client.GetRedirectURIs())
+
+	// Test 2: Mobile app scheme (com.example.app://)
+	params = &OAuthServerClientRegisterParams{
+		ClientName:       "Mobile App",
+		RedirectURIs:     []string{"com.example.app://sign-in/v2"},
+		RegistrationType: "dynamic",
+	}
+
+	client, secret, err = ts.Server.registerOAuthServerClient(ctx, params)
+	require.NoError(ts.T(), err, "Should allow com.example.app:// scheme when in allow list")
+	require.NotNil(ts.T(), client)
+	require.NotEmpty(ts.T(), secret)
+	assert.Equal(ts.T(), "Mobile App", *client.ClientName)
+
+	// Test 3: Expo scheme (exp://)
+	params = &OAuthServerClientRegisterParams{
+		ClientName:       "Expo App",
+		RedirectURIs:     []string{"exp://192.168.1.1:19000/--/auth/callback"},
+		RegistrationType: "dynamic",
+	}
+
+	client, secret, err = ts.Server.registerOAuthServerClient(ctx, params)
+	require.NoError(ts.T(), err, "Should allow exp:// scheme when in allow list")
+	require.NotNil(ts.T(), client)
+	require.NotEmpty(ts.T(), secret)
+
+	// Test 4: Unauthorized custom scheme should fail
+	params = &OAuthServerClientRegisterParams{
+		ClientName:       "Malicious App",
+		RedirectURIs:     []string{"malicious://attack"},
+		RegistrationType: "dynamic",
+	}
+
+	_, _, err = ts.Server.registerOAuthServerClient(ctx, params)
+	assert.Error(ts.T(), err, "Should reject custom scheme not in allow list")
+	assert.Contains(ts.T(), err.Error(), "redirect URI not allowed by configuration")
+
+	// Test 5: Mix of custom and standard schemes
+	params = &OAuthServerClientRegisterParams{
+		ClientName:       "Multi-Platform App",
+		RedirectURIs:     []string{"https://example.com/callback", "cursor://app/callback"},
+		RegistrationType: "dynamic",
+	}
+
+	client, secret, err = ts.Server.registerOAuthServerClient(ctx, params)
+	require.NoError(ts.T(), err, "Should allow mix of standard and custom schemes")
+	require.NotNil(ts.T(), client)
+	require.NotEmpty(ts.T(), secret)
+	assert.Len(ts.T(), client.GetRedirectURIs(), 2)
 }

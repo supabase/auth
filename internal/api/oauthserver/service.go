@@ -19,7 +19,7 @@ import (
 )
 
 // validateRedirectURIList validates a list of redirect URIs
-func validateRedirectURIList(redirectURIs []string, required bool) error {
+func (s *Server) validateRedirectURIList(redirectURIs []string, required bool) error {
 	if required && len(redirectURIs) == 0 {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "redirect_uris is required")
 	}
@@ -33,7 +33,7 @@ func validateRedirectURIList(redirectURIs []string, required bool) error {
 	}
 
 	for _, uri := range redirectURIs {
-		if err := validateRedirectURI(uri); err != nil {
+		if err := s.validateRedirectURI(uri); err != nil {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid redirect_uri '%s': %v", uri, err)
 		}
 	}
@@ -117,9 +117,9 @@ type OAuthServerClientRegisterParams struct {
 }
 
 // validate validates the OAuth client registration parameters
-func (p *OAuthServerClientRegisterParams) validate() error {
+func (p *OAuthServerClientRegisterParams) validate(s *Server) error {
 	// Validate redirect URIs (required for registration)
-	if err := validateRedirectURIList(p.RedirectURIs, true); err != nil {
+	if err := s.validateRedirectURIList(p.RedirectURIs, true); err != nil {
 		return err
 	}
 
@@ -170,8 +170,8 @@ func (p *OAuthServerClientRegisterParams) validate() error {
 	return nil
 }
 
-// validateRedirectURI validates OAuth 2.1 redirect URIs
-func validateRedirectURI(uri string) error {
+// validateRedirectURI validates OAuth 2.1 redirect URIs against the allow list configuration
+func (s *Server) validateRedirectURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("redirect URI cannot be empty")
 	}
@@ -181,25 +181,19 @@ func validateRedirectURI(uri string) error {
 		return fmt.Errorf("invalid URL format")
 	}
 
-	// Must have scheme and host
-	if parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return fmt.Errorf("must have scheme and host")
-	}
-
-	// Check scheme requirements
-	if parsedURL.Scheme == "http" {
-		// HTTP only allowed for localhost
-		host := parsedURL.Hostname()
-		if host != "localhost" && host != "127.0.0.1" {
-			return fmt.Errorf("HTTP scheme only allowed for localhost")
-		}
-	} else if parsedURL.Scheme != "https" {
-		return fmt.Errorf("scheme must be HTTPS or HTTP (localhost only)")
+	// Must have scheme
+	if parsedURL.Scheme == "" {
+		return fmt.Errorf("must have scheme")
 	}
 
 	// Must not have fragment
 	if parsedURL.Fragment != "" {
 		return fmt.Errorf("fragment not allowed in redirect URI")
+	}
+
+	// Check against the URI allow list (supports custom schemes like cursor://, exp://, etc.)
+	if !utilities.IsRedirectURLValid(s.config, uri) {
+		return fmt.Errorf("redirect URI not allowed by configuration")
 	}
 
 	return nil
@@ -235,7 +229,7 @@ func ValidateClientSecret(providedSecret, storedHash string) bool {
 // registerOAuthServerClient creates a new OAuth server client with generated credentials
 func (s *Server) registerOAuthServerClient(ctx context.Context, params *OAuthServerClientRegisterParams) (*models.OAuthServerClient, string, error) {
 	// Validate all parameters
-	if err := params.validate(); err != nil {
+	if err := params.validate(s); err != nil {
 		return nil, "", err
 	}
 
@@ -362,10 +356,10 @@ func (p *OAuthServerClientUpdateParams) isEmpty() bool {
 }
 
 // validate validates the OAuth client update parameters
-func (p *OAuthServerClientUpdateParams) validate() error {
+func (p *OAuthServerClientUpdateParams) validate(s *Server) error {
 	// Validate redirect URIs if provided
 	if p.RedirectURIs != nil {
-		if err := validateRedirectURIList(*p.RedirectURIs, false); err != nil {
+		if err := s.validateRedirectURIList(*p.RedirectURIs, false); err != nil {
 			return err
 		}
 	}
@@ -404,7 +398,7 @@ func (p *OAuthServerClientUpdateParams) validate() error {
 // updateOAuthServerClient updates an existing OAuth client
 func (s *Server) updateOAuthServerClient(ctx context.Context, clientID uuid.UUID, params *OAuthServerClientUpdateParams) (*models.OAuthServerClient, error) {
 	// Validate all parameters
-	if err := params.validate(); err != nil {
+	if err := params.validate(s); err != nil {
 		return nil, err
 	}
 
