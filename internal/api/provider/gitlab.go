@@ -61,8 +61,12 @@ func NewGitlabProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	}, nil
 }
 
-func (g gitlabProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g gitlabProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(ctx, code, opts...)
+}
+
+func (g gitlabProvider) RequiresPKCE() bool {
+	return false
 }
 
 func (g gitlabProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {

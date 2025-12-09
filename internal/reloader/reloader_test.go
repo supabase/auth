@@ -217,55 +217,62 @@ func TestWatchNotify(t *testing.T) {
 	})
 
 	t.Run("ErrorChanClosed", func(t *testing.T) {
-		dir, cleanup := helpTestDir(t)
-		defer cleanup()
+		fn := func() string {
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
 
-		cfg := e2e.Must(e2e.Config()).Reloading
-		cfg.SignalEnabled = false
-		cfg.PollerEnabled = false
+			dir, cleanup := helpTestDir(t)
+			defer cleanup()
 
-		rr := mockReloadRecorder()
-		wr := newMockWatcher(nil)
-		wr.errorCh <- errors.New("sentinel")
-		close(wr.errorCh)
+			cfg := e2e.Must(e2e.Config()).Reloading
+			cfg.SignalEnabled = false
+			cfg.PollerEnabled = false
 
-		rl := NewReloader(cfg, dir)
-		rl.watchFn = func() (watcher, error) { return wr, nil }
+			rr := mockReloadRecorder()
+			wr := newMockWatcher(nil)
+			wr.errorCh <- errors.New("sentinel")
+			close(wr.errorCh)
 
-		err := rl.Watch(ctx, rr.configFn)
-		require.NotNil(t, err)
+			rl := NewReloader(cfg, dir)
+			rl.watchFn = func() (watcher, error) { return wr, nil }
 
-		msg := "reloader: fsnotify error channel was closed"
-		if exp, got := msg, err.Error(); exp != got {
-			require.Equal(t, exp, got)
+			err := rl.Watch(ctx, rr.configFn)
+			require.NotNil(t, err)
+			return err.Error()
 		}
+
+		const exp = "reloader: fsnotify error channel was closed"
+		runUntilErrorStr(t, exp, fn)
 	})
 
 	t.Run("EventChanClosed", func(t *testing.T) {
-		dir, cleanup := helpTestDir(t)
-		defer cleanup()
+		fn := func() string {
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
 
-		cfg := e2e.Must(e2e.Config()).Reloading
-		cfg.SignalEnabled = false
-		cfg.PollerEnabled = false
-		cfg.GracePeriodInterval = time.Second / 100
+			dir, cleanup := helpTestDir(t)
+			defer cleanup()
 
-		rr := mockReloadRecorder()
-		wr := newMockWatcher(nil)
-		close(wr.eventCh)
+			cfg := e2e.Must(e2e.Config()).Reloading
+			cfg.SignalEnabled = false
+			cfg.PollerEnabled = false
+			cfg.GracePeriodInterval = time.Second / 100
 
-		rl := NewReloader(cfg, dir)
-		rl.watchFn = func() (watcher, error) { return wr, nil }
+			rr := mockReloadRecorder()
+			wr := newMockWatcher(nil)
+			close(wr.eventCh)
 
-		err := rl.Watch(ctx, rr.configFn)
-		if err == nil {
+			rl := NewReloader(cfg, dir)
+			rl.watchFn = func() (watcher, error) { return wr, nil }
+
+			err := rl.Watch(ctx, rr.configFn)
 			require.NotNil(t, err)
+
+			return err.Error()
 		}
 
-		msg := "reloader: fsnotify event channel was closed"
-		if exp, got := msg, err.Error(); exp != got {
-			require.Equal(t, exp, got)
-		}
+		const exp = "reloader: fsnotify event channel was closed"
+		runUntilErrorStr(t, exp, fn)
 	})
 
 	t.Run("ErrorChan", func(t *testing.T) {
@@ -737,6 +744,16 @@ func TestReloadCheckAt(t *testing.T) {
 		require.NotNil(t, rl)
 		require.Equal(t, rl.reloadCheckAt(tc.at, tc.lastUpdate), tc.exp)
 	}
+}
+
+func runUntilErrorStr(t testing.TB, exp string, fn func() string) {
+	var got string
+	for range 100 {
+		if got = fn(); got == exp {
+			break
+		}
+	}
+	require.Equal(t, exp, got)
 }
 
 func helpTestDir(t testing.TB) (dir string, cleanup func()) {

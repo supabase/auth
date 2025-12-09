@@ -31,6 +31,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case OAuthServerAuthorizationNotFoundError, *OAuthServerAuthorizationNotFoundError:
 		return true
+	case OAuthClientStateNotFoundError, *OAuthClientStateNotFoundError:
+		return true
 	}
 	return false
 }
@@ -126,4 +128,10 @@ type UserEmailUniqueConflictError struct{}
 
 func (e UserEmailUniqueConflictError) Error() string {
 	return "User email unique constraint violated"
+}
+
+type OAuthClientStateNotFoundError struct{}
+
+func (e OAuthClientStateNotFoundError) Error() string {
+	return "OAuth state not found"
 }

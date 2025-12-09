@@ -27,12 +27,13 @@ import (
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
 	AuthMicroserviceClaims
-	Provider        string `json:"provider"`
-	InviteToken     string `json:"invite_token,omitempty"`
-	Referrer        string `json:"referrer,omitempty"`
-	FlowStateID     string `json:"flow_state_id"`
-	LinkingTargetID string `json:"linking_target_id,omitempty"`
-	EmailOptional   bool   `json:"email_optional,omitempty"`
+	Provider           string `json:"provider"`
+	InviteToken        string `json:"invite_token,omitempty"`
+	Referrer           string `json:"referrer,omitempty"`
+	FlowStateID        string `json:"flow_state_id"`
+	OAuthClientStateID string `json:"oauth_client_state_id,omitempty"`
+	LinkingTargetID    string `json:"linking_target_id,omitempty"`
+	EmailOptional      bool   `json:"email_optional,omitempty"`
 }
 
 // ExternalProviderRedirect redirects the request to the oauth provider
@@ -90,31 +91,6 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		flowStateID = flowState.ID.String()
 	}
 
-	claims := ExternalProviderClaims{
-		AuthMicroserviceClaims: AuthMicroserviceClaims{
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
-			},
-			SiteURL:    config.SiteURL,
-			InstanceID: uuid.Nil.String(),
-		},
-		Provider:      providerType,
-		InviteToken:   inviteToken,
-		Referrer:      redirectURL,
-		FlowStateID:   flowStateID,
-		EmailOptional: pConfig.EmailOptional,
-	}
-
-	if linkingTargetUser != nil {
-		// this means that the user is performing manual linking
-		claims.LinkingTargetID = linkingTargetUser.ID.String()
-	}
-
-	tokenString, err := tokens.SignJWT(&config.JWT, claims)
-	if err != nil {
-		return "", apierrors.NewInternalServerError("Error creating state").WithInternalError(err)
-	}
-
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
 	query.Del("provider")
@@ -127,6 +103,44 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		} else {
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
+	}
+
+	oauthClientStateID := ""
+	if oauthProvider, ok := p.(provider.OAuthProvider); ok && oauthProvider.RequiresPKCE() {
+		codeVerifier := oauth2.GenerateVerifier()
+		oauthClientState := models.NewOAuthClientState(providerType, &codeVerifier)
+		err := db.Create(oauthClientState)
+		if err != nil {
+			return "", err
+		}
+		oauthClientStateID = oauthClientState.ID.String()
+		authUrlParams = append(authUrlParams, oauth2.S256ChallengeOption(codeVerifier))
+	}
+
+	claims := ExternalProviderClaims{
+		AuthMicroserviceClaims: AuthMicroserviceClaims{
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			},
+			SiteURL:    config.SiteURL,
+			InstanceID: uuid.Nil.String(),
+		},
+		Provider:           providerType,
+		InviteToken:        inviteToken,
+		Referrer:           redirectURL,
+		FlowStateID:        flowStateID,
+		OAuthClientStateID: oauthClientStateID,
+		EmailOptional:      pConfig.EmailOptional,
+	}
+
+	if linkingTargetUser != nil {
+		// this means that the user is performing manual linking
+		claims.LinkingTargetID = linkingTargetUser.ID.String()
+	}
+
+	tokenString, err := tokens.SignJWT(&config.JWT, claims)
+	if err != nil {
+		return "", apierrors.NewInternalServerError("Error creating state").WithInternalError(err)
 	}
 
 	authURL := p.AuthCodeURL(tokenString, authUrlParams...)
@@ -565,6 +579,13 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request, db *storag
 	if claims.FlowStateID != "" {
 		ctx = withFlowStateID(ctx, claims.FlowStateID)
 	}
+	if claims.OAuthClientStateID != "" {
+		oauthClientStateID, err := uuid.FromString(claims.OAuthClientStateID)
+		if err != nil {
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (oauth_client_state_id must be UUID)")
+		}
+		ctx = withOAuthClientStateID(ctx, oauthClientStateID)
+	}
 	if claims.LinkingTargetID != "" {
 		linkingTargetUserID, err := uuid.FromString(claims.LinkingTargetID)
 		if err != nil {
@@ -634,7 +655,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		p, err = provider.NewLinkedinProvider(pConfig, scopes)
 	case "linkedin_oidc":
 		pConfig = config.External.LinkedinOIDC
-		p, err = provider.NewLinkedinOIDCProvider(pConfig, scopes)
+		p, err = provider.NewLinkedinOIDCProvider(ctx, pConfig, scopes)
 	case "notion":
 		pConfig = config.External.Notion
 		p, err = provider.NewNotionProvider(pConfig)
@@ -656,9 +677,12 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	case "twitter":
 		pConfig = config.External.Twitter
 		p, err = provider.NewTwitterProvider(pConfig, scopes)
+	case "x":
+		pConfig = config.External.X
+		p, err = provider.NewXProvider(pConfig, scopes)
 	case "vercel_marketplace":
 		pConfig = config.External.VercelMarketplace
-		p, err = provider.NewVercelMarketplaceProvider(pConfig, scopes)
+		p, err = provider.NewVercelMarketplaceProvider(ctx, pConfig, scopes)
 	case "workos":
 		pConfig = config.External.WorkOS
 		p, err = provider.NewWorkOSProvider(pConfig)

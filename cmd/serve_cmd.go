@@ -63,6 +63,17 @@ func serve(ctx context.Context) {
 	defer wg.Wait() // Do not return to caller until this goroutine is done.
 
 	mrCache := templatemailer.NewCache()
+	if !config.Mailer.TemplateReloadingEnabled {
+		// If template reloading is disabled attempt an initial reload at
+		// startup for fault tolerance.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			mrCache.Reload(ctx, config)
+		}()
+	}
+
 	limiterOpts := api.NewLimiterOptions(config)
 	initialAPI := api.NewAPIWithVersion(
 		config, db, utilities.Version,

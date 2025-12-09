@@ -333,7 +333,13 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 				return apierrors.NewInternalServerError("Failed to get session's refresh token key").WithInternalError(terr)
 			}
 
-			counter := *session.RefreshTokenCounter + 1
+			// Incrementing the refresh token counter by 2 here is
+			// counter intuitive, but is important for security. It
+			// means that the previous refresh token (issued with
+			// AAL1) will no longer be able to issue AAL2 sessions.
+			// It forces the client to have received the refresh
+			// token from the MFA verification flow.
+			counter := *session.RefreshTokenCounter + 2
 			session.RefreshTokenCounter = &counter
 
 			issuedRefreshToken = (&crypto.RefreshToken{

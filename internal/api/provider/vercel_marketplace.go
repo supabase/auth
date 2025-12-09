@@ -22,7 +22,7 @@ type vercelMarketplaceProvider struct {
 }
 
 // NewVercelMarketplaceProvider creates a VercelMarketplace account provider via OIDC.
-func NewVercelMarketplaceProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewVercelMarketplaceProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func NewVercelMarketplaceProvider(ext conf.OAuthProviderConfiguration, scopes st
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := oidc.NewProvider(context.Background(), IssuerVercelMarketplace)
+	oidcProvider, err := oidc.NewProvider(ctx, IssuerVercelMarketplace)
 	if err != nil {
 		return nil, err
 	}
@@ -56,8 +56,12 @@ func NewVercelMarketplaceProvider(ext conf.OAuthProviderConfiguration, scopes st
 	}, nil
 }
 
-func (g vercelMarketplaceProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g vercelMarketplaceProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(ctx, code, opts...)
+}
+
+func (g vercelMarketplaceProvider) RequiresPKCE() bool {
+	return false
 }
 
 func (g vercelMarketplaceProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
