@@ -631,14 +631,36 @@ func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
 }
 
-// FindUsersByProvider finds all users with an identity for the given provider.
-func FindUsersByProvider(tx *storage.Connection, provider string) ([]*User, error) {
-	users := []*User{}
-	err := tx.Eager().RawQuery(`
-		SELECT DISTINCT u.* FROM `+(&User{}).TableName()+` u
+func CountUsersByProvider(tx *storage.Connection, provider string) (int, error) {
+	var count int
+	err := tx.RawQuery(`
+		SELECT COUNT(DISTINCT u.id) FROM `+(&User{}).TableName()+` u
 		INNER JOIN identities i ON u.id = i.user_id
 		WHERE i.provider = ? AND u.instance_id = ?
-	`, provider, uuid.Nil).All(&users)
+	`, provider, uuid.Nil).First(&count)
+	if err != nil {
+		return 0, errors.Wrap(err, "error counting users by provider")
+	}
+	return count, nil
+}
+
+// startIndex is 1-indexed per SCIM spec. count is the max number of results to return.
+func FindUsersByProvider(tx *storage.Connection, provider string, startIndex, count int) ([]*User, error) {
+	users := []*User{}
+
+	offset := startIndex - 1
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := `
+		SELECT DISTINCT u.* FROM ` + (&User{}).TableName() + ` u
+		INNER JOIN identities i ON u.id = i.user_id
+		WHERE i.provider = ? AND u.instance_id = ?
+		ORDER BY u.created_at ASC
+		LIMIT ? OFFSET ?
+	`
+	err := tx.Eager().RawQuery(query, provider, uuid.Nil, count, offset).All(&users)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return users, nil
