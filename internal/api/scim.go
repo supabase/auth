@@ -286,7 +286,6 @@ func (a *API) parseSCIMBody(r *http.Request, v interface{}) error {
 
 // User Endpoints
 
-// scimListUsers handles GET /scim/v2/Users
 func (a *API) scimListUsers(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -295,29 +294,19 @@ func (a *API) scimListUsers(w http.ResponseWriter, r *http.Request) error {
 	startIndex, count := parseSCIMPagination(r)
 
 	providerType := "sso:" + provider.ID.String()
-	users, err := models.FindUsersByProvider(db, providerType)
+
+	totalResults, err := models.CountUsersByProvider(db, providerType)
+	if err != nil {
+		return apierrors.NewInternalServerError("Error counting users").WithInternalError(err)
+	}
+
+	users, err := models.FindUsersByProvider(db, providerType, startIndex, count)
 	if err != nil {
 		return apierrors.NewInternalServerError("Error fetching users").WithInternalError(err)
 	}
 
-	totalResults := len(users)
-
-	// Apply pagination (SCIM uses 1-based indexing)
-	start := startIndex - 1
-	if start < 0 {
-		start = 0
-	}
-	if start > len(users) {
-		start = len(users)
-	}
-	end := start + count
-	if end > len(users) {
-		end = len(users)
-	}
-	pagedUsers := users[start:end]
-
-	resources := make([]interface{}, len(pagedUsers))
-	for i, user := range pagedUsers {
+	resources := make([]interface{}, len(users))
+	for i, user := range users {
 		resources[i] = a.userToSCIMResponse(user)
 	}
 
@@ -325,12 +314,11 @@ func (a *API) scimListUsers(w http.ResponseWriter, r *http.Request) error {
 		Schemas:      []string{SCIMSchemaListResponse},
 		TotalResults: totalResults,
 		StartIndex:   startIndex,
-		ItemsPerPage: len(pagedUsers),
+		ItemsPerPage: len(users),
 		Resources:    resources,
 	})
 }
 
-// scimGetUser handles GET /scim/v2/Users/{id}
 func (a *API) scimGetUser(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -371,8 +359,8 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	email := strings.ToLower(params.UserName)
-	if err := a.validateEmail(email); err != nil {
+	email, err := a.validateEmail(params.UserName)
+	if err != nil {
 		return err
 	}
 
@@ -461,7 +449,6 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusCreated, a.userToSCIMResponse(user))
 }
 
-// scimReplaceUser handles PUT /scim/v2/Users/{id}
 func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -544,7 +531,6 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, a.userToSCIMResponse(user))
 }
 
-// scimPatchUser handles PATCH /scim/v2/Users/{id}
 func (a *API) scimPatchUser(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -685,7 +671,6 @@ func (a *API) scimDeleteUser(w http.ResponseWriter, r *http.Request) error {
 
 // Group Endpoints
 
-// scimListGroups handles GET /scim/v2/Groups
 func (a *API) scimListGroups(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -693,28 +678,18 @@ func (a *API) scimListGroups(w http.ResponseWriter, r *http.Request) error {
 
 	startIndex, count := parseSCIMPagination(r)
 
-	groups, err := models.FindSCIMGroupsBySSOProvider(db, provider.ID, nil)
+	totalResults, err := models.CountSCIMGroupsBySSOProvider(db, provider.ID)
+	if err != nil {
+		return apierrors.NewInternalServerError("Error counting groups").WithInternalError(err)
+	}
+
+	groups, err := models.FindSCIMGroupsBySSOProvider(db, provider.ID, startIndex, count)
 	if err != nil {
 		return apierrors.NewInternalServerError("Error fetching groups").WithInternalError(err)
 	}
 
-	totalResults := len(groups)
-
-	start := startIndex - 1
-	if start < 0 {
-		start = 0
-	}
-	if start > len(groups) {
-		start = len(groups)
-	}
-	end := start + count
-	if end > len(groups) {
-		end = len(groups)
-	}
-	pagedGroups := groups[start:end]
-
-	resources := make([]interface{}, len(pagedGroups))
-	for i, group := range pagedGroups {
+	resources := make([]interface{}, len(groups))
+	for i, group := range groups {
 		members, _ := group.GetMembers(db)
 		resources[i] = a.groupToSCIMResponse(group, members)
 	}
@@ -723,12 +698,11 @@ func (a *API) scimListGroups(w http.ResponseWriter, r *http.Request) error {
 		Schemas:      []string{SCIMSchemaListResponse},
 		TotalResults: totalResults,
 		StartIndex:   startIndex,
-		ItemsPerPage: len(pagedGroups),
+		ItemsPerPage: len(groups),
 		Resources:    resources,
 	})
 }
 
-// scimGetGroup handles GET /scim/v2/Groups/{id}
 func (a *API) scimGetGroup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -759,7 +733,6 @@ func (a *API) scimGetGroup(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, a.groupToSCIMResponse(group, members))
 }
 
-// scimCreateGroup handles POST /scim/v2/Groups
 func (a *API) scimCreateGroup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -809,7 +782,6 @@ func (a *API) scimCreateGroup(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusCreated, a.groupToSCIMResponse(group, members))
 }
 
-// scimReplaceGroup handles PUT /scim/v2/Groups/{id}
 func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -869,7 +841,6 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, a.groupToSCIMResponse(group, members))
 }
 
-// scimPatchGroup handles PATCH /scim/v2/Groups/{id}
 func (a *API) scimPatchGroup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -992,7 +963,6 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 	return nil
 }
 
-// scimDeleteGroup handles DELETE /scim/v2/Groups/{id}
 func (a *API) scimDeleteGroup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -1029,7 +999,6 @@ func (a *API) scimDeleteGroup(w http.ResponseWriter, r *http.Request) error {
 
 // Service Provider Config Endpoints
 
-// scimServiceProviderConfig handles GET /scim/v2/ServiceProviderConfig
 func (a *API) scimServiceProviderConfig(w http.ResponseWriter, r *http.Request) error {
 	baseURL := a.getSCIMBaseURL()
 
@@ -1058,7 +1027,6 @@ func (a *API) scimServiceProviderConfig(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// scimResourceTypes handles GET /scim/v2/ResourceTypes
 func (a *API) scimResourceTypes(w http.ResponseWriter, r *http.Request) error {
 	baseURL := a.getSCIMBaseURL()
 
@@ -1084,7 +1052,6 @@ func (a *API) scimResourceTypes(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-// scimSchemas handles GET /scim/v2/Schemas
 func (a *API) scimSchemas(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, []map[string]interface{}{
 		{

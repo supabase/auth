@@ -67,13 +67,30 @@ func FindSCIMGroupByExternalID(tx *storage.Connection, ssoProviderID uuid.UUID, 
 	return &group, nil
 }
 
-func FindSCIMGroupsBySSOProvider(tx *storage.Connection, ssoProviderID uuid.UUID, page *Pagination) ([]*SCIMGroup, error) {
-	groups := []*SCIMGroup{}
-	q := tx.Q().Where("sso_provider_id = ?", ssoProviderID).Order("created_at ASC")
-	if page != nil {
-		q = q.Paginate(page.Page, page.PerPage)
+func CountSCIMGroupsBySSOProvider(tx *storage.Connection, ssoProviderID uuid.UUID) (int, error) {
+	count, err := tx.Q().Where("sso_provider_id = ?", ssoProviderID).Count(&SCIMGroup{})
+	if err != nil {
+		return 0, errors.Wrap(err, "error counting SCIM groups by SSO provider")
 	}
-	if err := q.All(&groups); err != nil {
+	return count, nil
+}
+
+// startIndex is 1-indexed per SCIM spec. count is the max number of results to return.
+func FindSCIMGroupsBySSOProvider(tx *storage.Connection, ssoProviderID uuid.UUID, startIndex, count int) ([]*SCIMGroup, error) {
+	groups := []*SCIMGroup{}
+
+	offset := startIndex - 1
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := `
+		SELECT * FROM scim_groups
+		WHERE sso_provider_id = ?
+		ORDER BY created_at ASC
+		LIMIT ? OFFSET ?
+	`
+	if err := tx.RawQuery(query, ssoProviderID, count, offset).All(&groups); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return []*SCIMGroup{}, nil
 		}
@@ -143,10 +160,3 @@ func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 	return nil
 }
 
-func CountSCIMGroupsBySSOProvider(tx *storage.Connection, ssoProviderID uuid.UUID) (int, error) {
-	count, err := tx.Q().Where("sso_provider_id = ?", ssoProviderID).Count(&SCIMGroup{})
-	if err != nil {
-		return 0, errors.Wrap(err, "error counting SCIM groups")
-	}
-	return count, nil
-}
