@@ -201,6 +201,40 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.Post("/", api.ExternalProviderCallback)
 	})
 
+	// SCIM v2 API endpoints
+	r.Route("/scim/v2", func(r *router) {
+		r.Use(api.requireSCIMAuthentication)
+
+		// Service Provider Configuration
+		r.Get("/ServiceProviderConfig", api.scimServiceProviderConfig)
+		r.Get("/ResourceTypes", api.scimResourceTypes)
+		r.Get("/Schemas", api.scimSchemas)
+
+		// User endpoints
+		r.Route("/Users", func(r *router) {
+			r.Get("/", api.scimListUsers)
+			r.Post("/", api.scimCreateUser)
+			r.Route("/{user_id}", func(r *router) {
+				r.Get("/", api.scimGetUser)
+				r.Put("/", api.scimReplaceUser)
+				r.Patch("/", api.scimPatchUser)
+				r.Delete("/", api.scimDeleteUser)
+			})
+		})
+
+		// Group endpoints
+		r.Route("/Groups", func(r *router) {
+			r.Get("/", api.scimListGroups)
+			r.Post("/", api.scimCreateGroup)
+			r.Route("/{group_id}", func(r *router) {
+				r.Get("/", api.scimGetGroup)
+				r.Put("/", api.scimReplaceGroup)
+				r.Patch("/", api.scimPatchGroup)
+				r.Delete("/", api.scimDeleteGroup)
+			})
+		})
+	})
+
 	r.Route("/", func(r *router) {
 
 		r.Use(api.isValidExternalHost)
@@ -352,6 +386,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Get("/", api.adminSSOProvidersGet)
 						r.Put("/", api.adminSSOProvidersUpdate)
 						r.Delete("/", api.adminSSOProvidersDelete)
+
+						// SCIM management endpoints
+						r.Route("/scim", func(r *router) {
+							r.Get("/", api.adminSSOProviderGetSCIM)
+							r.Post("/", api.adminSSOProviderEnableSCIM)
+							r.Delete("/", api.adminSSOProviderDisableSCIM)
+							r.Post("/rotate", api.adminSSOProviderRotateSCIMToken)
+						})
 					})
 				})
 			})
