@@ -631,6 +631,23 @@ func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
 }
 
+// FindUsersByProvider finds all users with an identity for the given provider.
+func FindUsersByProvider(tx *storage.Connection, provider string) ([]*User, error) {
+	users := []*User{}
+	err := tx.Eager().RawQuery(`
+		SELECT DISTINCT u.* FROM `+(&User{}).TableName()+` u
+		INNER JOIN identities i ON u.id = i.user_id
+		WHERE i.provider = ? AND u.instance_id = ?
+	`, provider, uuid.Nil).All(&users)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return users, nil
+		}
+		return nil, errors.Wrap(err, "error finding users by provider")
+	}
+	return users, nil
+}
+
 // FindUserWithRefreshToken finds a user from the provided refresh token. If
 // forUpdate is set to true, then the SELECT statement used by the query has
 // the form SELECT ... FOR UPDATE SKIP LOCKED. This means that a FOR UPDATE
