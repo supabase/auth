@@ -20,6 +20,12 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 )
 
+const SCIMTokenPrefix = "scim_"
+
+func generateSCIMToken() string {
+	return SCIMTokenPrefix + crypto.SecureAlphanumeric(32)
+}
+
 // loadSSOProvider looks for an idp_id and first checks it for a "resource_"
 // prefix, if present the provider is loaded by resource_id. Otherwise the
 // provider is loaded by id.
@@ -480,8 +486,7 @@ func (a *API) adminSSOProviderEnableSCIM(w http.ResponseWriter, r *http.Request)
 
 	provider := getSSOProvider(ctx)
 
-	// Generate a new SCIM token with scim_ prefix
-	token := "scim_" + crypto.SecureAlphanumeric(32)
+	token := generateSCIMToken()
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		if err := provider.SetSCIMToken(ctx, token); err != nil {
@@ -529,8 +534,7 @@ func (a *API) adminSSOProviderRotateSCIMToken(w http.ResponseWriter, r *http.Req
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeSCIMDisabled, "SCIM is not enabled for this provider")
 	}
 
-	// Generate a new SCIM token with scim_ prefix
-	token := "scim_" + crypto.SecureAlphanumeric(32)
+	token := generateSCIMToken()
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		if err := provider.SetSCIMToken(ctx, token); err != nil {
