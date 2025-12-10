@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -22,6 +24,9 @@ type SSOProvider struct {
 	Disabled     *bool        `db:"disabled" json:"disabled"`
 	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
 	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
+
+	SCIMEnabled         *bool   `db:"scim_enabled" json:"scim_enabled,omitempty"`
+	SCIMBearerTokenHash *string `db:"scim_bearer_token_hash" json:"-"`
 
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
@@ -37,6 +42,35 @@ func (p SSOProvider) TableName() string {
 
 func (p SSOProvider) Type() string {
 	return "saml"
+}
+
+func (p SSOProvider) IsSCIMEnabled() bool {
+	return p.SCIMEnabled != nil && *p.SCIMEnabled
+}
+
+func (p *SSOProvider) SetSCIMToken(ctx context.Context, token string) error {
+	hash, err := crypto.GenerateFromPassword(ctx, token)
+	if err != nil {
+		return err
+	}
+	p.SCIMBearerTokenHash = &hash
+	enabled := true
+	p.SCIMEnabled = &enabled
+	return nil
+}
+
+func (p *SSOProvider) VerifySCIMToken(ctx context.Context, token string) bool {
+	if p.SCIMBearerTokenHash == nil {
+		return false
+	}
+	err := crypto.CompareHashAndPassword(ctx, *p.SCIMBearerTokenHash, token)
+	return err == nil
+}
+
+func (p *SSOProvider) ClearSCIMToken() {
+	p.SCIMBearerTokenHash = nil
+	enabled := false
+	p.SCIMEnabled = &enabled
 }
 
 type SAMLAttribute struct {
@@ -266,12 +300,30 @@ func FindAllSSOProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	return providers, nil
 }
 
+func FindSSOProviderBySCIMToken(ctx context.Context, tx *storage.Connection, token string) (*SSOProvider, error) {
+	var providers []SSOProvider
+
+	if err := tx.Eager().Q().Where("scim_enabled = ? AND scim_bearer_token_hash IS NOT NULL", true).All(&providers); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SSOProviderNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding SCIM-enabled SSO providers")
+	}
+
+	for i := range providers {
+		if providers[i].VerifySCIMToken(ctx, token) {
+			return &providers[i], nil
+		}
+	}
+
+	return nil, SSOProviderNotFoundError{}
+}
+
 const (
 	resourceIDFilter       = "resource_id"
 	resourceIDPrefixFilter = "resource_id_prefix"
 )
 
-// FindAllSSOProvidersByFilter finds SSO Providers with the matching filter.
 func FindAllSSOProvidersByFilter(
 	tx *storage.Connection,
 	queryValues url.Values,

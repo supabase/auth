@@ -1,0 +1,152 @@
+package models
+
+import (
+	"database/sql"
+	"time"
+
+	"github.com/gofrs/uuid"
+	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/storage"
+)
+
+type SCIMGroup struct {
+	ID            uuid.UUID `db:"id" json:"id"`
+	SSOProviderID uuid.UUID `db:"sso_provider_id" json:"-"`
+	ExternalID    string    `db:"external_id" json:"external_id"`
+	DisplayName   string    `db:"display_name" json:"display_name"`
+	CreatedAt     time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at" json:"updated_at"`
+
+	SSOProvider *SSOProvider `belongs_to:"sso_providers" json:"-"`
+	Members     []User       `many_to_many:"scim_group_members" json:"members,omitempty"`
+}
+
+func (SCIMGroup) TableName() string {
+	return "scim_groups"
+}
+
+type SCIMGroupMember struct {
+	GroupID   uuid.UUID `db:"group_id" json:"-"`
+	UserID    uuid.UUID `db:"user_id" json:"-"`
+	CreatedAt time.Time `db:"created_at" json:"-"`
+}
+
+func (SCIMGroupMember) TableName() string {
+	return "scim_group_members"
+}
+
+func NewSCIMGroup(ssoProviderID uuid.UUID, externalID, displayName string) *SCIMGroup {
+	id := uuid.Must(uuid.NewV4())
+	return &SCIMGroup{
+		ID:            id,
+		SSOProviderID: ssoProviderID,
+		ExternalID:    externalID,
+		DisplayName:   displayName,
+	}
+}
+
+func FindSCIMGroupByID(tx *storage.Connection, id uuid.UUID) (*SCIMGroup, error) {
+	var group SCIMGroup
+	if err := tx.Find(&group, id); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SCIMGroupNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding SCIM group by ID")
+	}
+	return &group, nil
+}
+
+func FindSCIMGroupByExternalID(tx *storage.Connection, ssoProviderID uuid.UUID, externalID string) (*SCIMGroup, error) {
+	var group SCIMGroup
+	if err := tx.Q().Where("sso_provider_id = ? AND external_id = ?", ssoProviderID, externalID).First(&group); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SCIMGroupNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding SCIM group by external ID")
+	}
+	return &group, nil
+}
+
+func FindSCIMGroupsBySSOProvider(tx *storage.Connection, ssoProviderID uuid.UUID, page *Pagination) ([]*SCIMGroup, error) {
+	groups := []*SCIMGroup{}
+	q := tx.Q().Where("sso_provider_id = ?", ssoProviderID).Order("created_at ASC")
+	if page != nil {
+		q = q.Paginate(page.Page, page.PerPage)
+	}
+	if err := q.All(&groups); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return []*SCIMGroup{}, nil
+		}
+		return nil, errors.Wrap(err, "error finding SCIM groups by SSO provider")
+	}
+	return groups, nil
+}
+
+func FindSCIMGroupsForUser(tx *storage.Connection, userID uuid.UUID) ([]*SCIMGroup, error) {
+	groups := []*SCIMGroup{}
+	if err := tx.RawQuery(`
+		SELECT g.* FROM scim_groups g
+		INNER JOIN scim_group_members m ON g.id = m.group_id
+		WHERE m.user_id = ?
+		ORDER BY g.display_name ASC
+	`, userID).All(&groups); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return []*SCIMGroup{}, nil
+		}
+		return nil, errors.Wrap(err, "error finding SCIM groups for user")
+	}
+	return groups, nil
+}
+
+func (g *SCIMGroup) AddMember(tx *storage.Connection, userID uuid.UUID) error {
+	member := &SCIMGroupMember{
+		GroupID:   g.ID,
+		UserID:    userID,
+		CreatedAt: time.Now(),
+	}
+	return tx.Create(member)
+}
+
+func (g *SCIMGroup) RemoveMember(tx *storage.Connection, userID uuid.UUID) error {
+	return tx.RawQuery(
+		"DELETE FROM scim_group_members WHERE group_id = ? AND user_id = ?",
+		g.ID, userID,
+	).Exec()
+}
+
+func (g *SCIMGroup) GetMembers(tx *storage.Connection) ([]*User, error) {
+	users := []*User{}
+	if err := tx.RawQuery(`
+		SELECT u.* FROM users u
+		INNER JOIN scim_group_members m ON u.id = m.user_id
+		WHERE m.group_id = ?
+		ORDER BY u.email ASC
+	`, g.ID).All(&users); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return []*User{}, nil
+		}
+		return nil, errors.Wrap(err, "error getting SCIM group members")
+	}
+	return users, nil
+}
+
+func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) error {
+	if err := tx.RawQuery("DELETE FROM scim_group_members WHERE group_id = ?", g.ID).Exec(); err != nil {
+		return errors.Wrap(err, "error clearing SCIM group members")
+	}
+
+	for _, userID := range userIDs {
+		if err := g.AddMember(tx, userID); err != nil {
+			return errors.Wrap(err, "error adding SCIM group member")
+		}
+	}
+	return nil
+}
+
+func CountSCIMGroupsBySSOProvider(tx *storage.Connection, ssoProviderID uuid.UUID) (int, error) {
+	count, err := tx.Q().Where("sso_provider_id = ?", ssoProviderID).Count(&SCIMGroup{})
+	if err != nil {
+		return 0, errors.Wrap(err, "error counting SCIM groups")
+	}
+	return count, nil
+}
