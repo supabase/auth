@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks/hookserrors"
 	"github.com/supabase/auth/internal/observability"
 
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
@@ -232,15 +233,24 @@ func (o *Dispatcher) runHTTPHook(
 			}
 			return nil, apierrors.NewInternalServerError(
 				"Service currently unavailable due to hook")
-		case http.StatusBadRequest:
-			return nil, apierrors.NewInternalServerError(
-				"Invalid payload sent to hook")
-		case http.StatusUnauthorized:
-			return nil, apierrors.NewInternalServerError(
-				"Hook requires authorization token")
 		default:
-			return nil, apierrors.NewInternalServerError(
-				"Unexpected status code returned from hook: %d", rsp.StatusCode)
+			body, err := io.ReadAll(io.LimitReader(rsp.Body, o.limitResponse))
+			if err == nil && len(body) > 0 {
+				if err := hookserrors.Check(body); err != nil {
+					return nil, err
+				}
+			}
+			switch rsp.StatusCode {
+			case http.StatusBadRequest:
+				return nil, apierrors.NewInternalServerError(
+					"Invalid payload sent to hook")
+			case http.StatusUnauthorized:
+				return nil, apierrors.NewInternalServerError(
+					"Hook requires authorization token")
+			default:
+				return nil, apierrors.NewInternalServerError(
+					"Unexpected status code returned from hook: %d", rsp.StatusCode)
+			}
 		}
 	}
 

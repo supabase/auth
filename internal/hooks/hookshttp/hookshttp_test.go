@@ -187,11 +187,32 @@ func TestDispatch(t *testing.T) {
 		},
 	}
 
-	// error status codes
 	{
-		addCase := func(statusIn, statusOut int, msg string) {
+		addCaseWithCustomError := func(statusIn int, customHTTPCode int, customMsg string) {
 			cases = append(cases, testCase{
-				desc: fmt.Sprintf("fail - invalid status code %d", statusIn),
+				desc:   fmt.Sprintf("fail - status %d with custom error propagates", statusIn),
+				req:    M{"empty": true},
+				errStr: fmt.Sprintf("%d: %s", customHTTPCode, customMsg),
+				hr: &mockHandler{
+					status: statusIn,
+					ctype:  "application/json",
+					data: M{
+						"error": M{
+							"http_code": customHTTPCode,
+							"message":   customMsg,
+						},
+					},
+				},
+			})
+		}
+		addCaseWithCustomError(http.StatusBadRequest, 403, "Signups from this domain not allowed")
+		addCaseWithCustomError(http.StatusForbidden, 422, "Email validation failed")
+		addCaseWithCustomError(http.StatusUnauthorized, 401, "Custom auth error")
+		addCaseWithCustomError(http.StatusTeapot, 500, "Custom server error from hook")
+
+		addCaseFallback := func(statusIn, statusOut int, msg string) {
+			cases = append(cases, testCase{
+				desc: fmt.Sprintf("fail - status %d without error object falls back", statusIn),
 				req:  M{"empty": true},
 				err: &apierrors.HTTPError{
 					HTTPStatus: statusOut,
@@ -201,41 +222,64 @@ func TestDispatch(t *testing.T) {
 				hr: &mockHandler{
 					status: statusIn,
 					ctype:  "application/json",
-					data: M{
-						"error": M{
-							// This is not propagated in current implementation
-							"http_code": 500,
-							"message":   "sentinel error",
-						},
-					},
+					data:   M{"no_error_key": true},
 				},
 			})
 		}
-		addCase(
-			http.StatusServiceUnavailable,
-			http.StatusInternalServerError,
-			"Service currently unavailable due to hook",
-		)
-		addCase(
-			http.StatusTooManyRequests,
-			http.StatusInternalServerError,
-			"Service currently unavailable due to hook",
-		)
-		addCase(
+		addCaseFallback(
 			http.StatusBadRequest,
 			http.StatusInternalServerError,
 			"Invalid payload sent to hook",
 		)
-		addCase(
+		addCaseFallback(
 			http.StatusUnauthorized,
 			http.StatusInternalServerError,
 			"Hook requires authorization token",
 		)
-		addCase(
+		addCaseFallback(
 			http.StatusTeapot,
 			http.StatusInternalServerError,
 			"Unexpected status code returned from hook: 418",
 		)
+
+		cases = append(cases, testCase{
+			desc: "fail - 503 uses retry logic",
+			req:  M{"empty": true},
+			err: &apierrors.HTTPError{
+				HTTPStatus: http.StatusInternalServerError,
+				ErrorCode:  apierrors.ErrorCodeUnexpectedFailure,
+				Message:    "Service currently unavailable due to hook",
+			},
+			hr: &mockHandler{
+				status: http.StatusServiceUnavailable,
+				ctype:  "application/json",
+				data: M{
+					"error": M{
+						"http_code": 500,
+						"message":   "custom error ignored for 503",
+					},
+				},
+			},
+		})
+		cases = append(cases, testCase{
+			desc: "fail - 429 uses retry logic",
+			req:  M{"empty": true},
+			err: &apierrors.HTTPError{
+				HTTPStatus: http.StatusInternalServerError,
+				ErrorCode:  apierrors.ErrorCodeUnexpectedFailure,
+				Message:    "Service currently unavailable due to hook",
+			},
+			hr: &mockHandler{
+				status: http.StatusTooManyRequests,
+				ctype:  "application/json",
+				data: M{
+					"error": M{
+						"http_code": 500,
+						"message":   "custom error ignored for 429",
+					},
+				},
+			},
+		})
 	}
 
 	for _, tc := range cases {
