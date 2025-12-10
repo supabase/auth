@@ -392,6 +392,13 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 				if err := existingUser.Ban(tx, 0, nil); err != nil {
 					return apierrors.NewInternalServerError("Error reactivating user").WithInternalError(err)
 				}
+				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, existingUser, models.UserModifiedAction, "", map[string]interface{}{
+					"provider":        "scim",
+					"sso_provider_id": provider.ID,
+					"action":          "reactivated",
+				}); terr != nil {
+					return apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
+				}
 				user = existingUser
 				return nil
 			}
@@ -425,17 +432,19 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewInternalServerError("Error saving user").WithInternalError(err)
 		}
 
-		identity, err := models.NewIdentity(user, providerType, map[string]interface{}{
+		if _, err := a.createNewIdentity(tx, user, providerType, map[string]interface{}{
 			"sub":         params.ExternalID,
 			"external_id": params.ExternalID,
-		})
-		if err != nil {
-			return apierrors.NewInternalServerError("Error creating identity").WithInternalError(err)
+			"email":       email,
+		}); err != nil {
+			return err
 		}
-		identity.ProviderID = params.ExternalID
 
-		if err := tx.Create(identity); err != nil {
-			return apierrors.NewInternalServerError("Error saving identity").WithInternalError(err)
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			"provider":        "scim",
+			"sso_provider_id": provider.ID,
+		}); terr != nil {
+			return apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
 		if err := tx.Eager().Find(user, user.ID); err != nil {
@@ -457,6 +466,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	provider := getSSOProvider(ctx)
+	config := a.config
 
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
@@ -517,6 +527,13 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewInternalServerError("Error updating user").WithInternalError(err)
 		}
 
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", map[string]interface{}{
+			"provider":        "scim",
+			"sso_provider_id": provider.ID,
+		}); terr != nil {
+			return apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
+		}
+
 		return nil
 	})
 
@@ -532,6 +549,7 @@ func (a *API) scimPatchUser(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	provider := getSSOProvider(ctx)
+	config := a.config
 
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
@@ -562,6 +580,13 @@ func (a *API) scimPatchUser(w http.ResponseWriter, r *http.Request) error {
 			if err := a.applySCIMUserPatch(tx, user, op); err != nil {
 				return err
 			}
+		}
+
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", map[string]interface{}{
+			"provider":        "scim",
+			"sso_provider_id": provider.ID,
+		}); terr != nil {
+			return apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
 		return nil
@@ -615,6 +640,7 @@ func (a *API) scimDeleteUser(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	provider := getSSOProvider(ctx)
+	config := a.config
 
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
@@ -637,6 +663,13 @@ func (a *API) scimDeleteUser(w http.ResponseWriter, r *http.Request) error {
 		// Soft delete: ban with infinity duration
 		if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
 			return apierrors.NewInternalServerError("Error deprovisioning user").WithInternalError(err)
+		}
+
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserDeletedAction, "", map[string]interface{}{
+			"provider":        "scim",
+			"sso_provider_id": provider.ID,
+		}); terr != nil {
+			return apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
 		return models.Logout(tx, user.ID)
