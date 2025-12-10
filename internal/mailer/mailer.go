@@ -20,7 +20,13 @@ const (
 	ReauthenticationVerification   = "reauthentication"
 
 	// Account Changes Notifications
-	PasswordChangedNotification = "password_changed_notification"
+	PasswordChangedNotification     = "password_changed_notification"
+	EmailChangedNotification        = "email_changed_notification"
+	PhoneChangedNotification        = "phone_changed_notification"
+	IdentityLinkedNotification      = "identity_linked_notification"
+	IdentityUnlinkedNotification    = "identity_unlinked_notification"
+	MFAFactorEnrolledNotification   = "mfa_factor_enrolled_notification"
+	MFAFactorUnenrolledNotification = "mfa_factor_unenrolled_notification"
 )
 
 // Mailer defines the interface a mailer must implement.
@@ -35,6 +41,12 @@ type Mailer interface {
 
 	// Account Changes Notifications
 	PasswordChangedNotificationMail(r *http.Request, user *models.User) error
+	EmailChangedNotificationMail(r *http.Request, user *models.User, oldEmail string) error
+	PhoneChangedNotificationMail(r *http.Request, user *models.User, oldPhone string) error
+	IdentityLinkedNotificationMail(r *http.Request, user *models.User, provider string) error
+	IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider string) error
+	MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error
+	MFAFactorUnenrolledNotificationMail(r *http.Request, user *models.User, factorType string) error
 }
 
 // TODO(cstockton): Mail(...) -> Mail(Email{...}) ?
@@ -57,4 +69,8 @@ type EmailData struct {
 	SiteURL         string `json:"site_url"`
 	TokenNew        string `json:"token_new"`
 	TokenHashNew    string `json:"token_hash_new"`
+	OldEmail        string `json:"old_email"`
+	OldPhone        string `json:"old_phone"`
+	Provider        string `json:"provider"`
+	FactorType      string `json:"factor_type"`
 }

@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"net/http"
 	"time"
 
@@ -46,6 +47,7 @@ type GrantParams struct {
 	SessionTag      *string
 
 	OAuthClientID *uuid.UUID
+	Scopes        *string
 
 	UserAgent string
 	IP        string
@@ -118,6 +120,54 @@ func FindTokenBySessionID(tx *storage.Connection, sessionId *uuid.UUID) (*Refres
 	return refreshToken, nil
 }
 
+func (s *Session) ApplyGrantParams(params *GrantParams) {
+	s.FactorID = params.FactorID
+
+	if params.SessionNotAfter != nil {
+		s.NotAfter = params.SessionNotAfter
+	}
+
+	if params.UserAgent != "" {
+		s.UserAgent = &params.UserAgent
+	}
+
+	if params.IP != "" {
+		s.IP = &params.IP
+	}
+
+	if params.SessionTag != nil && *params.SessionTag != "" {
+		s.Tag = params.SessionTag
+	}
+
+	if params.OAuthClientID != nil && *params.OAuthClientID != uuid.Nil {
+		s.OAuthClientID = params.OAuthClientID
+	}
+
+	if params.Scopes != nil && *params.Scopes != "" {
+		s.Scopes = params.Scopes
+	}
+}
+
+func (s *Session) SetupRefreshTokenData(dbEncryption conf.DatabaseEncryptionConfiguration) error {
+	hmacKey := base64.RawURLEncoding.EncodeToString(crypto.GenerateRefreshTokenHmacKey())
+
+	if dbEncryption.Encrypt {
+		es, err := crypto.NewEncryptedString(s.ID.String(), []byte(hmacKey), dbEncryption.EncryptionKeyID, dbEncryption.EncryptionKey)
+		if err != nil {
+			return err
+		}
+
+		hmacKey = es.String()
+	}
+
+	counter := int64(0)
+
+	s.RefreshTokenHmacKey = &hmacKey
+	s.RefreshTokenCounter = &counter
+
+	return nil
+}
+
 func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken, params *GrantParams) (*RefreshToken, error) {
 	token := &RefreshToken{
 		UserID: user.ID,
@@ -135,25 +185,7 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 			return nil, errors.Wrap(err, "error instantiating new session object")
 		}
 
-		if params.SessionNotAfter != nil {
-			session.NotAfter = params.SessionNotAfter
-		}
-
-		if params.UserAgent != "" {
-			session.UserAgent = &params.UserAgent
-		}
-
-		if params.IP != "" {
-			session.IP = &params.IP
-		}
-
-		if params.SessionTag != nil && *params.SessionTag != "" {
-			session.Tag = params.SessionTag
-		}
-
-		if params.OAuthClientID != nil && *params.OAuthClientID != uuid.Nil {
-			session.OAuthClientID = params.OAuthClientID
-		}
+		session.ApplyGrantParams(params)
 
 		if err := tx.Create(session); err != nil {
 			return nil, errors.Wrap(err, "error creating new session")

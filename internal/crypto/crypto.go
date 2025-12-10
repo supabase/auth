@@ -20,8 +20,20 @@ import (
 
 // GenerateOtp generates a random n digit otp
 func GenerateOtp(digits int) string {
+	return generateOtp(rand.Reader, digits)
+}
+
+func generateOtp(r io.Reader, digits int) string {
+	// TODO(cstockton): Change the code to be below and propagate errors so we
+	// can have non-panicing bounds checks. This is just a defensive change so
+	// if someone changes OTP length in the future we don't end up with an
+	// overflowed float64 / panic.
+	//
+	// 	upper := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(digits)), nil)
+	// 	val := must(rand.Int(r, upper))
+	//
 	upper := math.Pow10(digits)
-	val := must(rand.Int(rand.Reader, big.NewInt(int64(upper))))
+	val := must(rand.Int(r, big.NewInt(int64(upper))))
 
 	// adds a variable zero-padding to the left to ensure otp is uniformly random
 	expr := "%0" + strconv.Itoa(digits) + "v"
@@ -29,6 +41,7 @@ func GenerateOtp(digits int) string {
 
 	return otp
 }
+
 func GenerateTokenHash(emailOrPhone, otp string) string {
 	return fmt.Sprintf("%x", sha256.Sum224([]byte(emailOrPhone+otp)))
 }

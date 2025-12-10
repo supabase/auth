@@ -76,7 +76,7 @@ type OAuthServerConfiguration struct {
 	Enabled                  bool          `json:"enabled" default:"false"`
 	AllowDynamicRegistration bool          `json:"allow_dynamic_registration" split_words:"true"`
 	AuthorizationPath        string        `json:"authorization_path" split_words:"true"`
-	AuthorizationTimeout     time.Duration `json:"authorization_timeout" split_words:"true" default:"5m"`
+	AuthorizationTTL         time.Duration `json:"authorization_ttl" split_words:"true" default:"10m"`
 	// Placeholder for now, for (near) future extensibility
 	DefaultScope string `json:"default_scope" split_words:"true" default:"email"`
 }
@@ -104,6 +104,11 @@ type DBConfiguration struct {
 	Driver    string `json:"driver" required:"true"`
 	URL       string `json:"url" envconfig:"DATABASE_URL" required:"true"`
 	Namespace string `json:"namespace" envconfig:"DB_NAMESPACE" default:"auth"`
+
+	// Percentage of DB conns the auth server may use in
+	// integer form i.e.: [1, 100] -> [1%, 100%]
+	ConnPercentage int `json:"conn_percentage" split_words:"true"`
+
 	// MaxPoolSize defaults to 0 (unlimited).
 	MaxPoolSize       int           `json:"max_pool_size" split_words:"true"`
 	MaxIdlePoolSize   int           `json:"max_idle_pool_size" split_words:"true"`
@@ -117,6 +122,7 @@ type DBConfiguration struct {
 }
 
 func (c *DBConfiguration) Validate() error {
+	c.ConnPercentage = min(max(c.ConnPercentage, 0), 100)
 	return nil
 }
 
@@ -346,6 +352,7 @@ type GlobalConfiguration struct {
 	MFA             MFAConfiguration         `json:"MFA"`
 	SAML            SAMLConfiguration        `json:"saml"`
 	CORS            CORSConfiguration        `json:"cors"`
+	IndexWorker     IndexWorkerConfiguration `json:"index_worker" split_words:"true"`
 
 	Experimental ExperimentalConfiguration `json:"experimental"`
 	Reloading    ReloadingConfiguration    `json:"reloading"`
@@ -385,12 +392,24 @@ type EmailContentConfiguration struct {
 	Reauthentication string `json:"reauthentication"`
 
 	// Account Changes Notifications
-	PasswordChangedNotification string `json:"password_changed_notification" split_words:"true"`
+	PasswordChangedNotification     string `json:"password_changed_notification" split_words:"true"`
+	EmailChangedNotification        string `json:"email_changed_notification" split_words:"true"`
+	PhoneChangedNotification        string `json:"phone_changed_notification" split_words:"true"`
+	IdentityLinkedNotification      string `json:"identity_linked_notification" split_words:"true"`
+	IdentityUnlinkedNotification    string `json:"identity_unlinked_notification" split_words:"true"`
+	MFAFactorEnrolledNotification   string `json:"mfa_factor_enrolled_notification" split_words:"true"`
+	MFAFactorUnenrolledNotification string `json:"mfa_factor_unenrolled_notification" split_words:"true"`
 }
 
 // NotificationsConfiguration holds the configuration for notification email states to indicate whether they are enabled or disabled.
 type NotificationsConfiguration struct {
-	PasswordChangedEnabled bool `json:"password_changed_enabled" split_words:"true" default:"false"`
+	PasswordChangedEnabled     bool `json:"password_changed_enabled" split_words:"true" default:"false"`
+	EmailChangedEnabled        bool `json:"email_changed_enabled" split_words:"true" default:"false"`
+	PhoneChangedEnabled        bool `json:"phone_changed_enabled" split_words:"true" default:"false"`
+	IdentityLinkedEnabled      bool `json:"identity_linked_enabled" split_words:"true" default:"false"`
+	IdentityUnlinkedEnabled    bool `json:"identity_unlinked_enabled" split_words:"true" default:"false"`
+	MFAFactorEnrolledEnabled   bool `json:"mfa_factor_enrolled_enabled" split_words:"true" default:"false"`
+	MFAFactorUnenrolledEnabled bool `json:"mfa_factor_unenrolled_enabled" split_words:"true" default:"false"`
 }
 
 type ProviderConfiguration struct {
@@ -420,6 +439,7 @@ type ProviderConfiguration struct {
 	WorkOS                  OAuthProviderConfiguration     `json:"workos"`
 	Email                   EmailProviderConfiguration     `json:"email"`
 	Phone                   PhoneProviderConfiguration     `json:"phone"`
+	X                       OAuthProviderConfiguration     `json:"x" envconfig:"X"`
 	Zoom                    OAuthProviderConfiguration     `json:"zoom"`
 	IosBundleId             string                         `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL             string                         `json:"redirect_url"`
@@ -705,8 +725,10 @@ func (c *DatabaseEncryptionConfiguration) Validate() error {
 
 type SecurityConfiguration struct {
 	Captcha                               CaptchaConfiguration `json:"captcha"`
+	RefreshTokenAlgorithmVersion          int                  `json:"refresh_token_algorithm_version" split_words:"true"`
 	RefreshTokenRotationEnabled           bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
 	RefreshTokenReuseInterval             int                  `json:"refresh_token_reuse_interval" split_words:"true"`
+	RefreshTokenAllowReuse                bool                 `json:"refresh_token_allow_reuse" split_words:"true"`
 	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
 
@@ -1322,4 +1344,9 @@ func (t *VonageProviderConfiguration) Validate() error {
 
 func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
 	return t.Provider == "twilio_verify"
+}
+
+// IndexWorkerConfiguration holds the configuration for database indexes.
+type IndexWorkerConfiguration struct {
+	EnsureUserSearchIndexesExist bool `json:"ensure_user_search_indexes_exist" split_words:"true" default:"false"`
 }

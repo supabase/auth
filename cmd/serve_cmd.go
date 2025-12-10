@@ -44,7 +44,9 @@ func serve(ctx context.Context) {
 		logrus.WithError(err).Fatal("unable to load config")
 	}
 
-	db, err := storage.Dial(config)
+	// Include serve ctx which carries cancelation signals so DialContext does
+	// not hang indefinitely at startup.
+	db, err := storage.DialContext(ctx, config)
 	if err != nil {
 		logrus.Fatalf("error opening database: %+v", err)
 	}
@@ -53,10 +55,25 @@ func serve(ctx context.Context) {
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	defer baseCancel()
 
+	// Add the base context to the db, this is so during the shutdown sequence
+	// the DB will be available while connections drain.
+	db = db.WithContext(ctx)
+
 	var wg sync.WaitGroup
 	defer wg.Wait() // Do not return to caller until this goroutine is done.
 
 	mrCache := templatemailer.NewCache()
+	if !config.Mailer.TemplateReloadingEnabled {
+		// If template reloading is disabled attempt an initial reload at
+		// startup for fault tolerance.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			mrCache.Reload(ctx, config)
+		}()
+	}
+
 	limiterOpts := api.NewLimiterOptions(config)
 	initialAPI := api.NewAPIWithVersion(
 		config, db, utilities.Version,
@@ -79,7 +96,7 @@ func serve(ctx context.Context) {
 	log := logrus.WithField("component", "api")
 
 	wrkLog := logrus.WithField("component", "apiworker")
-	wrk := apiworker.New(config, mrCache, wrkLog)
+	wrk := apiworker.New(config, mrCache, db, wrkLog)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

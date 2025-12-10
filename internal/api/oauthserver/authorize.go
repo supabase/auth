@@ -30,6 +30,7 @@ type AuthorizeParams struct {
 	Resource            string `json:"resource"`
 	CodeChallenge       string `json:"code_challenge"`
 	CodeChallengeMethod string `json:"code_challenge_method"`
+	Nonce               string `json:"nonce"` // OIDC nonce parameter
 }
 
 // AuthorizationDetailsResponse represents the response for getting authorization details
@@ -43,10 +44,10 @@ type AuthorizationDetailsResponse struct {
 
 // ClientDetailsResponse represents client details in authorization response
 type ClientDetailsResponse struct {
-	ClientID   string `json:"client_id"`
-	ClientName string `json:"client_name,omitempty"`
-	ClientURI  string `json:"client_uri,omitempty"`
-	LogoURI    string `json:"logo_uri,omitempty"`
+	ID      string `json:"id"`
+	Name    string `json:"name,omitempty"`
+	URI     string `json:"uri,omitempty"`
+	LogoURI string `json:"logo_uri,omitempty"`
 }
 
 // UserDetailsResponse represents user details in authorization response
@@ -96,6 +97,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 		Resource:            query.Get("resource"),
 		CodeChallenge:       query.Get("code_challenge"),
 		CodeChallengeMethod: query.Get("code_challenge_method"),
+		Nonce:               query.Get("nonce"),
 	}
 
 	// validate basic required parameters (client_id, redirect_uri)
@@ -134,15 +136,17 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	}
 
 	// Store authorization request in database (without user initially)
-	authorization := models.NewOAuthServerAuthorization(
-		client.ID, // Use the client's UUID instead of the public client_id string
-		params.RedirectURI,
-		params.Scope,
-		params.State,
-		params.Resource,
-		params.CodeChallenge,
-		params.CodeChallengeMethod,
-	)
+	authorization := models.NewOAuthServerAuthorization(models.NewOAuthServerAuthorizationParams{
+		ClientID:            client.ID,
+		RedirectURI:         params.RedirectURI,
+		Scope:               params.Scope,
+		State:               params.State,
+		Resource:            params.Resource,
+		CodeChallenge:       params.CodeChallenge,
+		CodeChallengeMethod: params.CodeChallengeMethod,
+		TTL:                 config.OAuthServer.AuthorizationTTL,
+		Nonce:               params.Nonce,
+	})
 
 	if err := models.CreateOAuthServerAuthorization(db, authorization); err != nil {
 		// Error creating authorization - redirect with server_error
@@ -237,10 +241,10 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 		AuthorizationID: authorization.AuthorizationID,
 		RedirectURI:     authorization.RedirectURI,
 		Client: ClientDetailsResponse{
-			ClientID:   authorization.Client.ID.String(),
-			ClientName: utilities.StringValue(authorization.Client.ClientName),
-			ClientURI:  utilities.StringValue(authorization.Client.ClientURI),
-			LogoURI:    utilities.StringValue(authorization.Client.LogoURI),
+			ID:      authorization.Client.ID.String(),
+			Name:    utilities.StringValue(authorization.Client.ClientName),
+			URI:     utilities.StringValue(authorization.Client.ClientURI),
+			LogoURI: utilities.StringValue(authorization.Client.LogoURI),
 		},
 		User: UserDetailsResponse{
 			ID:    user.ID.String(),
@@ -457,6 +461,11 @@ func (s *Server) validateRemainingAuthorizeParams(params *AuthorizeParams) error
 		return errors.New("only response_type=code is supported")
 	}
 
+	// Validate scopes
+	if err := s.validateScopes(params.Scope); err != nil {
+		return err
+	}
+
 	// Resource parameter validation (per RFC 8707)
 	if err := s.validateResourceParam(params.Resource); err != nil {
 		return err
@@ -516,6 +525,27 @@ func (s *Server) validateResourceParam(resource string) error {
 	// Should not include a query component
 	if parsedURL.RawQuery != "" {
 		return errors.New("resource must not include a query component")
+	}
+
+	return nil
+}
+
+// validateScopes validates the requested scopes
+func (s *Server) validateScopes(scopeString string) error {
+	if scopeString == "" {
+		return errors.New("scope parameter is required")
+	}
+
+	scopes := models.ParseScopeString(scopeString)
+	if len(scopes) == 0 {
+		return errors.New("scope parameter cannot be empty")
+	}
+
+	// Validate each scope against the centrally defined supported scopes
+	for _, scope := range scopes {
+		if !models.IsSupportedScope(scope) {
+			return fmt.Errorf("unsupported scope: %s", scope)
+		}
 	}
 
 	return nil

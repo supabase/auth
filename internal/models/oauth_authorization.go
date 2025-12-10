@@ -50,6 +50,7 @@ type OAuthServerAuthorization struct {
 	Resource            *string                        `json:"resource,omitempty" db:"resource"`
 	CodeChallenge       *string                        `json:"code_challenge,omitempty" db:"code_challenge"`
 	CodeChallengeMethod *string                        `json:"code_challenge_method,omitempty" db:"code_challenge_method"`
+	Nonce               *string                        `json:"nonce,omitempty" db:"nonce"` // OIDC nonce parameter
 	ResponseType        OAuthServerResponseType        `json:"response_type" db:"response_type"`
 	Status              OAuthServerAuthorizationStatus `json:"status" db:"status"`
 	AuthorizationCode   *string                        `json:"-" db:"authorization_code"`
@@ -66,41 +67,57 @@ func (OAuthServerAuthorization) TableName() string {
 	return "oauth_authorizations"
 }
 
+// NewOAuthServerAuthorizationParams contains parameters for creating a new OAuth server authorization
+type NewOAuthServerAuthorizationParams struct {
+	ClientID            uuid.UUID
+	RedirectURI         string
+	Scope               string
+	State               string
+	Resource            string
+	CodeChallenge       string
+	CodeChallengeMethod string
+	TTL                 time.Duration
+	Nonce               string
+}
+
 // NewOAuthServerAuthorization creates a new OAuth server authorization request without user (for initial flow)
-func NewOAuthServerAuthorization(clientID uuid.UUID, redirectURI, scope, state, resource, codeChallenge, codeChallengeMethod string) *OAuthServerAuthorization {
+func NewOAuthServerAuthorization(params NewOAuthServerAuthorizationParams) *OAuthServerAuthorization {
 	id := uuid.Must(uuid.NewV4())
 	authorizationID := crypto.SecureAlphanumeric(32) // Generate random ID for frontend
 
 	now := time.Now()
-	expiresAt := now.Add(10 * time.Minute) // 10 minute expiration
+	expiresAt := now.Add(params.TTL)
 
 	auth := &OAuthServerAuthorization{
 		ID:              id,
 		AuthorizationID: authorizationID,
-		ClientID:        clientID,
+		ClientID:        params.ClientID,
 		UserID:          nil, // No user yet
-		RedirectURI:     redirectURI,
-		Scope:           scope,
+		RedirectURI:     params.RedirectURI,
+		Scope:           params.Scope,
 		ResponseType:    OAuthServerResponseTypeCode,
 		Status:          OAuthServerAuthorizationPending,
 		CreatedAt:       now,
 		ExpiresAt:       expiresAt,
 	}
 
-	if state != "" {
-		auth.State = &state
+	if params.State != "" {
+		auth.State = &params.State
 	}
-	if resource != "" {
-		auth.Resource = &resource
+	if params.Resource != "" {
+		auth.Resource = &params.Resource
 	}
-	if codeChallenge != "" {
-		auth.CodeChallenge = &codeChallenge
+	if params.CodeChallenge != "" {
+		auth.CodeChallenge = &params.CodeChallenge
 	}
-	if codeChallengeMethod != "" {
+	if params.CodeChallengeMethod != "" {
 		// Normalize code challenge method to lowercase for database storage
 		// Database enum expects 's256' and 'plain' (lowercase)
-		normalizedMethod := strings.ToLower(codeChallengeMethod)
+		normalizedMethod := strings.ToLower(params.CodeChallengeMethod)
 		auth.CodeChallengeMethod = &normalizedMethod
+	}
+	if params.Nonce != "" {
+		auth.Nonce = &params.Nonce
 	}
 
 	return auth

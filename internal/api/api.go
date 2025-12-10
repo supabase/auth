@@ -174,10 +174,13 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	}
 
 	r.Get("/health", api.HealthCheck)
-	r.Get("/.well-known/jwks.json", api.Jwks)
+	r.Get("/.well-known/jwks.json", api.WellKnownJwks)
 
+	// Both OIDC Discovery and OAuth Authorization Server Metadata use the same unified handler
+	// OIDC Discovery is an extension of RFC 8414, so one response satisfies both specs
+	r.Get("/.well-known/openid-configuration", api.WellKnownOpenID)
 	if globalConfig.OAuthServer.Enabled {
-		r.Get("/.well-known/oauth-authorization-server", api.oauthServer.OAuthServerMetadata)
+		r.Get("/.well-known/oauth-authorization-server", api.WellKnownOpenID)
 	}
 
 	r.Route("/callback", func(r *router) {
@@ -260,6 +263,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.Get("/authorize", api.LinkIdentity)
 				r.Delete("/{identity_id}", api.DeleteIdentity)
 			})
+
+			// OAuth grant management endpoints (only if OAuth server is enabled)
+			if globalConfig.OAuthServer.Enabled {
+				r.Route("/oauth/grants", func(r *router) {
+					r.Get("/", api.oauthServer.UserListOAuthGrants)
+					r.Delete("/", api.oauthServer.UserRevokeOAuthGrant)
+				})
+			}
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
@@ -347,6 +358,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Route("/{client_id}", func(r *router) {
 							r.Use(api.oauthServer.LoadOAuthServerClient)
 							r.Get("/", api.oauthServer.OAuthServerClientGet)
+							r.Put("/", api.oauthServer.OAuthServerClientUpdate)
 							r.Delete("/", api.oauthServer.OAuthServerClientDelete)
 							r.Post("/regenerate_secret", api.oauthServer.OAuthServerClientRegenerateSecret)
 						})
@@ -363,6 +375,9 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 				// OAuth Token endpoint (public, with client authentication)
 				r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
+
+				// OIDC UserInfo endpoint (requires user authentication via Bearer token)
+				r.With(api.requireAuthentication).Get("/userinfo", api.oauthServer.OAuthUserInfo)
 
 				// OAuth 2.1 Authorization endpoints
 				// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider

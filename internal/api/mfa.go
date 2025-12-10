@@ -18,6 +18,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
@@ -686,7 +687,7 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 	}
 
 	var token *AccessTokenResponse
-
+	verified := false
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
@@ -703,6 +704,7 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 				return terr
 			}
+			verified = true
 		}
 		if shouldReEncrypt && config.Security.DBEncryption.Encrypt {
 			es, terr := crypto.NewEncryptedString(factor.ID.String(), []byte(secret), config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
@@ -736,6 +738,14 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 	})
 	if err != nil {
 		return err
+	}
+
+	// Send MFA factor enrolled notification email if enabled and the factor was just verified
+	if verified && config.Mailer.Notifications.MFAFactorEnrolledEnabled && user.GetEmail() != "" {
+		if err := a.sendMFAFactorEnrolledNotification(r, db, user, factor.FactorType); err != nil {
+			// Log the error but don't fail the verification
+			logrus.WithError(err).Warn("Unable to send MFA factor enrolled notification email")
+		}
 	}
 
 	metering.RecordLogin(metering.LoginTypeMFA, user.ID, &metering.LoginData{
@@ -828,7 +838,7 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	}
 
 	var token *AccessTokenResponse
-
+	verified := false
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
@@ -845,6 +855,7 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 				return terr
 			}
+			verified = true
 		}
 		user, terr = models.FindUserByID(tx, user.ID)
 		if terr != nil {
@@ -867,6 +878,14 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	})
 	if err != nil {
 		return err
+	}
+
+	// Send MFA factor enrolled notification email if enabled and the factor was just verified
+	if verified && config.Mailer.Notifications.MFAFactorEnrolledEnabled && user.GetEmail() != "" {
+		if err := a.sendMFAFactorEnrolledNotification(r, db, user, factor.FactorType); err != nil {
+			// Log the error but don't fail the verification
+			logrus.WithError(err).Warn("Unable to send MFA factor enrolled notification email")
+		}
 	}
 
 	metering.RecordLogin(metering.LoginTypeMFA, user.ID, &metering.LoginData{
@@ -906,33 +925,36 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 		return err
 	}
 	webAuthnSession := *challenge.WebAuthnSessionData.SessionData
-	// Once the challenge is validated, we consume the challenge
-	if err := db.Destroy(challenge); err != nil {
-		return apierrors.NewInternalServerError("Database error deleting challenge").WithInternalError(err)
-	}
 
+	var parsedResponse interface{}
 	switch params.WebAuthn.Type {
 	case "create":
-		parsedResponse, err := wbnprotocol.ParseCredentialCreationResponseBody(bytes.NewReader(params.WebAuthn.CredentialResponse))
+		parsedResponse, err = wbnprotocol.ParseCredentialCreationResponseBody(bytes.NewReader(params.WebAuthn.CredentialResponse))
 		if err != nil {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid credential_response")
 		}
-		credential, err = webAuthn.CreateCredential(user, webAuthnSession, parsedResponse)
+		credential, err = webAuthn.CreateCredential(user, webAuthnSession, parsedResponse.(*wbnprotocol.ParsedCredentialCreationData))
 		if err != nil {
 			return err
 		}
 
 	case "request":
-		parsedResponse, err := wbnprotocol.ParseCredentialRequestResponseBody(bytes.NewReader(params.WebAuthn.CredentialResponse))
+		parsedResponse, err = wbnprotocol.ParseCredentialRequestResponseBody(bytes.NewReader(params.WebAuthn.CredentialResponse))
 		if err != nil {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid credential_response")
 		}
-		credential, err = webAuthn.ValidateLogin(user, webAuthnSession, parsedResponse)
+		credential, err = webAuthn.ValidateLogin(user, webAuthnSession, parsedResponse.(*wbnprotocol.ParsedCredentialAssertionData))
 		if err != nil {
 			return apierrors.NewInternalServerError("Failed to validate WebAuthn MFA response").WithInternalError(err)
 		}
 	}
+
+	// Once the challenge is validated, we consume the challenge
+	if err := db.Destroy(challenge); err != nil {
+		return apierrors.NewInternalServerError("Database error deleting challenge").WithInternalError(err)
+	}
 	var token *AccessTokenResponse
+	verified := false
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
@@ -950,6 +972,11 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 			if terr = factor.SaveWebAuthnCredential(tx, credential); terr != nil {
 				return terr
 			}
+			verified = true
+		}
+
+		if terr = factor.UpdateLastWebAuthnChallenge(tx, challenge, params.WebAuthn.Type, parsedResponse); terr != nil {
+			return terr
 		}
 		user, terr = models.FindUserByID(tx, user.ID)
 		if terr != nil {
@@ -971,6 +998,14 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 	})
 	if err != nil {
 		return err
+	}
+
+	// Send MFA factor enrolled notification email if enabled and the factor was just verified
+	if verified && config.Mailer.Notifications.MFAFactorEnrolledEnabled && user.GetEmail() != "" {
+		if err := a.sendMFAFactorEnrolledNotification(r, db, user, factor.FactorType); err != nil {
+			// Log the error but don't fail the verification
+			logrus.WithError(err).Warn("Unable to send MFA factor enrolled notification email")
+		}
 	}
 
 	metering.RecordLogin(metering.LoginTypeMFA, user.ID, &metering.LoginData{
@@ -1033,6 +1068,8 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeInsufficientAAL, "AAL2 required to unenroll verified factor")
 	}
 
+	factorType := factor.FactorType
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr := tx.Destroy(factor); terr != nil {
@@ -1052,6 +1089,14 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// Send MFA factor unenrolled notification email if enabled
+	if config.Mailer.Notifications.MFAFactorUnenrolledEnabled && user.GetEmail() != "" {
+		if err := a.sendMFAFactorUnenrolledNotification(r, db, user, factorType); err != nil {
+			// Log the error but don't fail the unenrollment
+			logrus.WithError(err).Warn("Unable to send MFA factor unenrolled notification email")
+		}
 	}
 
 	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
