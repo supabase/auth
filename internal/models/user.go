@@ -65,11 +65,12 @@ type User struct {
 	Factors    []Factor   `json:"factors,omitempty" has_many:"factors"`
 	Identities []Identity `json:"identities" has_many:"identities"`
 
-	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
-	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
-	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
+	BannedUntil  *time.Time `json:"banned_until,omitempty" db:"banned_until"`
+	BannedReason *string    `json:"banned_reason,omitempty" db:"banned_reason"`
+	DeletedAt    *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+	IsAnonymous  bool       `json:"is_anonymous" db:"is_anonymous"`
 
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
@@ -838,15 +839,17 @@ func IsDuplicatedPhone(tx *storage.Connection, phone, aud string) (bool, error) 
 	return true, nil
 }
 
-// Ban a user for a given duration.
-func (u *User) Ban(tx *storage.Connection, duration time.Duration) error {
+// Ban a user for a given duration with an optional reason.
+func (u *User) Ban(tx *storage.Connection, duration time.Duration, reason *string) error {
 	if duration == time.Duration(0) {
 		u.BannedUntil = nil
+		u.BannedReason = nil
 	} else {
 		t := time.Now().Add(duration)
 		u.BannedUntil = &t
+		u.BannedReason = reason
 	}
-	return tx.UpdateOnly(u, "banned_until")
+	return tx.UpdateOnly(u, "banned_until", "banned_reason")
 }
 
 // IsBanned checks if a user is banned or not

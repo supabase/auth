@@ -124,6 +124,17 @@ func (e SAMLRelayStateNotFoundError) Is(target error) bool {
 	return target == errNotFound
 }
 
+// SCIMGroupNotFoundError represents an error when a SCIM group can't be found.
+type SCIMGroupNotFoundError struct{}
+
+func (e SCIMGroupNotFoundError) Error() string {
+	return "SCIM Group not found"
+}
+
+func (e SCIMGroupNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
+
 // FlowStateNotFoundError represents an error when an FlowState can't be
 // found.
 type FlowStateNotFoundError struct{}
