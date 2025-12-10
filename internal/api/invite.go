@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/fatih/structs"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -19,6 +20,7 @@ type InviteParams struct {
 func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
+	config := a.config
 	adminUser := getAdminUser(ctx)
 	params := &InviteParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
@@ -34,30 +36,39 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil && !models.IsNotFoundError(err) {
-		return internalServerError("Database error finding user").WithInternalError(err)
+		return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
+	}
+
+	isCreate := user == nil
+	isConfirmed := user != nil && user.IsConfirmed()
+
+	if isCreate {
+		signupParams := SignupParams{
+			Email:    params.Email,
+			Data:     params.Data,
+			Aud:      aud,
+			Provider: "email",
+		}
+
+		// because params above sets no password, this method
+		// is not computationally hard so it can be used within
+		// a database transaction
+		user, err = signupParams.ToUserModel(false /* <- isSSOUser */)
+		if err != nil {
+			return err
+		}
+
+		if err := a.triggerBeforeUserCreated(r, db, user); err != nil {
+			return err
+		}
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if user != nil {
-			if user.IsConfirmed() {
-				return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
+		if !isCreate {
+			if isConfirmed {
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
 		} else {
-			signupParams := SignupParams{
-				Email:    params.Email,
-				Data:     params.Data,
-				Aud:      aud,
-				Provider: "email",
-			}
-
-			// because params above sets no password, this method
-			// is not computationally hard so it can be used within
-			// a database transaction
-			user, err = signupParams.ToUserModel(false /* <- isSSOUser */)
-			if err != nil {
-				return err
-			}
-
 			user, err = a.signupNewUser(tx, user)
 			if err != nil {
 				return err
@@ -72,7 +83,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 			user.Identities = []models.Identity{*identity}
 		}
 
-		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 		}); terr != nil {
@@ -88,5 +99,8 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+		return err
+	}
 	return sendJSON(w, http.StatusOK, user)
 }

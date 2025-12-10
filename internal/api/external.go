@@ -12,11 +12,14 @@ import (
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
@@ -24,11 +27,13 @@ import (
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
 	AuthMicroserviceClaims
-	Provider        string `json:"provider"`
-	InviteToken     string `json:"invite_token,omitempty"`
-	Referrer        string `json:"referrer,omitempty"`
-	FlowStateID     string `json:"flow_state_id"`
-	LinkingTargetID string `json:"linking_target_id,omitempty"`
+	Provider           string `json:"provider"`
+	InviteToken        string `json:"invite_token,omitempty"`
+	Referrer           string `json:"referrer,omitempty"`
+	FlowStateID        string `json:"flow_state_id"`
+	OAuthClientStateID string `json:"oauth_client_state_id,omitempty"`
+	LinkingTargetID    string `json:"linking_target_id,omitempty"`
+	EmailOptional      bool   `json:"email_optional,omitempty"`
 }
 
 // ExternalProviderRedirect redirects the request to the oauth provider
@@ -53,9 +58,9 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	codeChallenge := query.Get("code_challenge")
 	codeChallengeMethod := query.Get("code_challenge_method")
 
-	p, err := a.Provider(ctx, providerType, scopes)
+	p, pConfig, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
-		return "", badRequestError(ErrorCodeValidationFailed, "Unsupported provider: %+v", err).WithInternalError(err)
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
 	inviteToken := query.Get("invite_token")
@@ -63,9 +68,9 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		_, userErr := models.FindUserByConfirmationToken(db, inviteToken)
 		if userErr != nil {
 			if models.IsNotFoundError(userErr) {
-				return "", notFoundError(ErrorCodeUserNotFound, "User identified by token not found")
+				return "", apierrors.NewNotFoundError(apierrors.ErrorCodeUserNotFound, "User identified by token not found")
 			}
-			return "", internalServerError("Database error finding user").WithInternalError(userErr)
+			return "", apierrors.NewInternalServerError("Database error finding user").WithInternalError(userErr)
 		}
 	}
 
@@ -79,35 +84,11 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	flowStateID := ""
 	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(a.db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
+		flowState, err := generateFlowState(db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
 		if err != nil {
 			return "", err
 		}
 		flowStateID = flowState.ID.String()
-	}
-
-	claims := ExternalProviderClaims{
-		AuthMicroserviceClaims: AuthMicroserviceClaims{
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
-			},
-			SiteURL:    config.SiteURL,
-			InstanceID: uuid.Nil.String(),
-		},
-		Provider:    providerType,
-		InviteToken: inviteToken,
-		Referrer:    redirectURL,
-		FlowStateID: flowStateID,
-	}
-
-	if linkingTargetUser != nil {
-		// this means that the user is performing manual linking
-		claims.LinkingTargetID = linkingTargetUser.ID.String()
-	}
-
-	tokenString, err := signJwt(&config.JWT, claims)
-	if err != nil {
-		return "", internalServerError("Error creating state").WithInternalError(err)
 	}
 
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
@@ -122,6 +103,44 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		} else {
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
+	}
+
+	oauthClientStateID := ""
+	if oauthProvider, ok := p.(provider.OAuthProvider); ok && oauthProvider.RequiresPKCE() {
+		codeVerifier := oauth2.GenerateVerifier()
+		oauthClientState := models.NewOAuthClientState(providerType, &codeVerifier)
+		err := db.Create(oauthClientState)
+		if err != nil {
+			return "", err
+		}
+		oauthClientStateID = oauthClientState.ID.String()
+		authUrlParams = append(authUrlParams, oauth2.S256ChallengeOption(codeVerifier))
+	}
+
+	claims := ExternalProviderClaims{
+		AuthMicroserviceClaims: AuthMicroserviceClaims{
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			},
+			SiteURL:    config.SiteURL,
+			InstanceID: uuid.Nil.String(),
+		},
+		Provider:           providerType,
+		InviteToken:        inviteToken,
+		Referrer:           redirectURL,
+		FlowStateID:        flowStateID,
+		OAuthClientStateID: oauthClientStateID,
+		EmailOptional:      pConfig.EmailOptional,
+	}
+
+	if linkingTargetUser != nil {
+		// this means that the user is performing manual linking
+		claims.LinkingTargetID = linkingTargetUser.ID.String()
+	}
+
+	tokenString, err := tokens.SignJWT(&config.JWT, claims)
+	if err != nil {
+		return "", apierrors.NewInternalServerError("Error creating state").WithInternalError(err)
 	}
 
 	authURL := p.AuthCodeURL(tokenString, authUrlParams...)
@@ -142,7 +161,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 
 func (a *API) handleOAuthCallback(r *http.Request) (*OAuthProviderData, error) {
 	ctx := r.Context()
-	providerType := getExternalProviderType(ctx)
+	providerType, _ := getExternalProviderType(ctx)
 
 	var oAuthResponseData *OAuthProviderData
 	var err error
@@ -166,16 +185,18 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
-	providerType := getExternalProviderType(ctx)
+	providerType, emailOptional := getExternalProviderType(ctx)
 	data, err := a.handleOAuthCallback(r)
 	if err != nil {
 		return err
 	}
 
 	userData := data.userData
-	if len(userData.Emails) <= 0 {
-		return internalServerError("Error getting user email from external provider")
+
+	if len(userData.Emails) == 0 && !emailOptional {
+		return apierrors.NewInternalServerError("Error getting user email from external provider")
 	}
+
 	userData.Metadata.EmailVerified = false
 	for _, email := range userData.Emails {
 		if email.Primary {
@@ -193,29 +214,40 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var flowState *models.FlowState
 	// if there's a non-empty FlowStateID we perform PKCE Flow
 	if flowStateID := getFlowStateID(ctx); flowStateID != "" {
-		flowState, err = models.FindFlowStateByID(a.db, flowStateID)
+		flowState, err = models.FindFlowStateByID(db, flowStateID)
 		if models.IsNotFoundError(err) {
-			return unprocessableEntityError(ErrorCodeFlowStateNotFound, "Flow state not found").WithInternalError(err)
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeFlowStateNotFound, "Flow state not found").WithInternalError(err)
 		} else if err != nil {
-			return internalServerError("Failed to find flow state").WithInternalError(err)
+			return apierrors.NewInternalServerError("Failed to find flow state").WithInternalError(err)
 		}
 
 	}
 
+	targetUser := getTargetUser(ctx)
+	inviteToken := getInviteToken(ctx)
+	if targetUser == nil && inviteToken == "" {
+		if err := a.triggerBeforeUserCreatedExternal(
+			r, db, userData, providerType); err != nil {
+			return err
+		}
+	}
+
+	var createdUser bool
 	var user *models.User
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if targetUser := getTargetUser(ctx); targetUser != nil {
+		if targetUser != nil {
 			if user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType); terr != nil {
 				return terr
 			}
-		} else if inviteToken := getInviteToken(ctx); inviteToken != "" {
+		} else if inviteToken != "" {
 			if user, terr = a.processInvite(r, tx, userData, inviteToken, providerType); terr != nil {
 				return terr
 			}
 		} else {
-			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+			createdUser = true
+			if _, user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional); terr != nil {
 				return terr
 			}
 		}
@@ -233,13 +265,24 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 
 		if terr != nil {
-			return oauthError("server_error", terr.Error())
+			return apierrors.NewOAuthError("server_error", terr.Error())
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
+	}
+	if createdUser {
+		if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+			return err
+		}
+	}
+
+	// Record login for analytics - only when token is issued (not during pkce authorize)
+	if token != nil {
+		metering.RecordLogin(metering.LoginTypeOAuth, user.ID, &metering.LoginData{
+			Provider: providerType,
+		})
 	}
 
 	rurl := a.getExternalRedirectURL(r)
@@ -267,7 +310,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
+func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string, emailOptional bool) (models.AccountLinkingDecision, *models.User, error) {
 	ctx := r.Context()
 	aud := a.requestAud(ctx, r)
 	config := a.config
@@ -281,7 +324,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 
 	decision, terr := models.DetermineAccountLinking(tx, config, userData.Emails, aud, providerType, userData.Metadata.Subject)
 	if terr != nil {
-		return nil, terr
+		return 0, nil, terr
 	}
 
 	switch decision.Decision {
@@ -289,20 +332,20 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		user = decision.User
 
 		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
-			return nil, terr
+			return 0, nil, terr
 		}
 
 		if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
-			return nil, terr
+			return 0, nil, terr
 		}
 
 		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
-			return nil, terr
+			return 0, nil, terr
 		}
 
 	case models.CreateAccount:
 		if config.DisableSignup {
-			return nil, unprocessableEntityError(ErrorCodeSignupDisabled, "Signups not allowed for this instance")
+			return 0, nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSignupDisabled, "Signups not allowed for this instance")
 		}
 
 		params := &SignupParams{
@@ -312,104 +355,118 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			Data:     identityData,
 		}
 
-		isSSOUser := false
-		if strings.HasPrefix(decision.LinkingDomain, "sso:") {
-			isSSOUser = true
-		}
+		// This is a little bit of a hack. Let me explain: When
+		// is_sso_user == true, it allows there to be different user
+		// rows with the same email address. Initially it was added to
+		// support SSO accounts, but at this point renaming the column
+		// or adding a new one requires re-indexing the table which is
+		// expensive and introduces a potentially unnecessary API
+		// surface change. It therefore set to true for other linking
+		// domains, not just SSO ones. This enables different linking
+		// domains to co-exist, such as when using
+		// GOTRUE_EXPERIMENTAL_PROVIDERS_WITH_OWN_LINKING_DOMAIN="provider_a,provider_b".
+		isSSOUser := decision.LinkingDomain != "default"
 
 		// because params above sets no password, this method is not
 		// computationally hard so it can be used within a database
 		// transaction
 		user, terr = params.ToUserModel(isSSOUser)
 		if terr != nil {
-			return nil, terr
+			return 0, nil, terr
 		}
 
 		if user, terr = a.signupNewUser(tx, user); terr != nil {
-			return nil, terr
+			return 0, nil, terr
 		}
 
 		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
-			return nil, terr
+			return 0, nil, terr
 		}
 		user.Identities = append(user.Identities, *identity)
+
 	case models.AccountExists:
 		user = decision.User
 		identity = decision.Identities[0]
 
 		identity.IdentityData = identityData
 		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
-			return nil, terr
+			return 0, nil, terr
 		}
 		if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
-			return nil, terr
+			return 0, nil, terr
 		}
 		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
-			return nil, terr
+			return 0, nil, terr
 		}
 
 	case models.MultipleAccounts:
-		return nil, internalServerError("Multiple accounts with the same email address in the same linking domain detected: %v", decision.LinkingDomain)
+		return 0, nil, apierrors.NewInternalServerError("Multiple accounts with the same email address in the same linking domain detected: %v", decision.LinkingDomain)
 
 	default:
-		return nil, internalServerError("Unknown automatic linking decision: %v", decision.Decision)
+		return 0, nil, apierrors.NewInternalServerError("Unknown automatic linking decision: %v", decision.Decision)
 	}
 
 	if user.IsBanned() {
-		return nil, forbiddenError(ErrorCodeUserBanned, "User is banned")
+		return 0, nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
-	if !user.IsConfirmed() {
+	hasEmails := providerType != "web3" && !(emailOptional && decision.CandidateEmail.Email == "")
+
+	if hasEmails && !user.IsConfirmed() {
 		// The user may have other unconfirmed email + password
 		// combination, phone or oauth identities. These identities
 		// need to be removed when a new oauth identity is being added
 		// to prevent pre-account takeover attacks from happening.
 		if terr = user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
-			return nil, internalServerError("Error updating user").WithInternalError(terr)
+			return 0, nil, apierrors.NewInternalServerError("Error updating user").WithInternalError(terr)
 		}
 		if decision.CandidateEmail.Verified || config.Mailer.Autoconfirm {
-			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 				"provider": providerType,
 			}); terr != nil {
-				return nil, terr
+				return 0, nil, terr
 			}
 			// fall through to auto-confirm and issue token
 			if terr = user.Confirm(tx); terr != nil {
-				return nil, internalServerError("Error updating user").WithInternalError(terr)
+				return 0, nil, apierrors.NewInternalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
 			emailConfirmationSent := false
 			if decision.CandidateEmail.Email != "" {
 				if terr = a.sendConfirmation(r, tx, user, models.ImplicitFlow); terr != nil {
-					return nil, terr
+					return 0, nil, terr
 				}
 				emailConfirmationSent = true
 			}
+
 			if !config.Mailer.AllowUnverifiedEmailSignIns {
 				if emailConfirmationSent {
-					return nil, storage.NewCommitWithError(unprocessableEntityError(ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
+					return 0, nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
 				}
-				return nil, storage.NewCommitWithError(unprocessableEntityError(ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)))
+
+				return 0, nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)))
 			}
 		}
 	} else {
-		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": providerType,
 		}); terr != nil {
-			return nil, terr
+			return 0, nil, terr
 		}
 	}
 
-	return user, nil
+	return decision.Decision, user, nil
 }
 
 func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
+	config := a.config
+
 	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError(ErrorCodeInviteNotFound, "Invite not found")
+			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeInviteNotFound, "Invite not found")
 		}
-		return nil, internalServerError("Database error finding user").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 	}
 
 	var emailData *provider.Email
@@ -423,7 +480,7 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 	}
 
 	if emailData == nil {
-		return nil, badRequestError(ErrorCodeValidationFailed, "Invited email does not match emails from external provider").WithInternalMessage("invited=%s external=%s", user.Email, strings.Join(emails, ", "))
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invited email does not match emails from external provider").WithInternalMessage("invited=%s external=%s", user.Email, strings.Join(emails, ", "))
 	}
 
 	var identityData map[string]interface{}
@@ -443,10 +500,10 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 		return nil, err
 	}
 	if err := user.UpdateUserMetaData(tx, identityData); err != nil {
-		return nil, internalServerError("Database error updating user").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("Database error updating user").WithInternalError(err)
 	}
 
-	if err := models.NewAuditLogEntry(r, tx, user, models.InviteAcceptedAction, "", map[string]interface{}{
+	if err := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.InviteAcceptedAction, "", map[string]interface{}{
 		"provider": providerType,
 	}); err != nil {
 		return nil, err
@@ -459,7 +516,7 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 	// potentially malicious door exists into their account; thus
 	// the password and phone needs to be removed.
 	if err := user.RemoveUnconfirmedIdentities(tx, identity); err != nil {
-		return nil, internalServerError("Error updating user").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("Error updating user").WithInternalError(err)
 	}
 
 	// confirm because they were able to respond to invite email
@@ -469,7 +526,7 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 	return user, nil
 }
 
-func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.Context, error) {
+func (a *API) loadExternalState(ctx context.Context, r *http.Request, db *storage.Connection) (context.Context, error) {
 	var state string
 	switch r.Method {
 	case http.MethodPost:
@@ -478,7 +535,7 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.C
 		state = r.URL.Query().Get("state")
 	}
 	if state == "" {
-		return ctx, badRequestError(ErrorCodeBadOAuthCallback, "OAuth state parameter missing")
+		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthCallback, "OAuth state parameter missing")
 	}
 	config := a.config
 	claims := ExternalProviderClaims{}
@@ -486,22 +543,32 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.C
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
 		if kid, ok := token.Header["kid"]; ok {
 			if kidStr, ok := kid.(string); ok {
-				return conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				if err != nil {
+					return nil, err
+				}
+
+				if key != nil {
+					return key, nil
+				}
+
+				// otherwise try to use fallback
 			}
 		}
 		if alg, ok := token.Header["alg"]; ok {
 			if alg == jwt.SigningMethodHS256.Name {
-				// preserve backward compatibility for cases where the kid is not set
+				// preserve backward compatibility for cases where the kid is not set or potentially invalid but the key can be decoded with the secret
 				return []byte(config.JWT.Secret), nil
 			}
 		}
-		return nil, fmt.Errorf("missing kid")
+
+		return nil, fmt.Errorf("unrecognized JWT kid %v for algorithm %v", token.Header["kid"], token.Header["alg"])
 	})
 	if err != nil {
-		return ctx, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
+		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
 	}
 	if claims.Provider == "" {
-		return ctx, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state (missing provider)")
+		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (missing provider)")
 	}
 	if claims.InviteToken != "" {
 		ctx = withInviteToken(ctx, claims.InviteToken)
@@ -512,79 +579,121 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.C
 	if claims.FlowStateID != "" {
 		ctx = withFlowStateID(ctx, claims.FlowStateID)
 	}
+	if claims.OAuthClientStateID != "" {
+		oauthClientStateID, err := uuid.FromString(claims.OAuthClientStateID)
+		if err != nil {
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (oauth_client_state_id must be UUID)")
+		}
+		ctx = withOAuthClientStateID(ctx, oauthClientStateID)
+	}
 	if claims.LinkingTargetID != "" {
 		linkingTargetUserID, err := uuid.FromString(claims.LinkingTargetID)
 		if err != nil {
-			return nil, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state (linking_target_id must be UUID)")
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (linking_target_id must be UUID)")
 		}
-		u, err := models.FindUserByID(a.db, linkingTargetUserID)
+		u, err := models.FindUserByID(db, linkingTargetUserID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return nil, unprocessableEntityError(ErrorCodeUserNotFound, "Linking target user not found")
+				return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeUserNotFound, "Linking target user not found")
 			}
-			return nil, internalServerError("Database error loading user").WithInternalError(err)
+			return nil, apierrors.NewInternalServerError("Database error loading user").WithInternalError(err)
 		}
 		ctx = withTargetUser(ctx, u)
 	}
-	ctx = withExternalProviderType(ctx, claims.Provider)
+	ctx = withExternalProviderType(ctx, claims.Provider, claims.EmailOptional)
 	return withSignature(ctx, state), nil
 }
 
 // Provider returns a Provider interface for the given name.
-func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, error) {
+func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, conf.OAuthProviderConfiguration, error) {
 	config := a.config
 	name = strings.ToLower(name)
 
+	var err error
+	var p provider.Provider
+	var pConfig conf.OAuthProviderConfiguration
+
 	switch name {
 	case "apple":
-		return provider.NewAppleProvider(ctx, config.External.Apple)
+		pConfig = config.External.Apple
+		p, err = provider.NewAppleProvider(ctx, pConfig)
 	case "azure":
-		return provider.NewAzureProvider(config.External.Azure, scopes)
+		pConfig = config.External.Azure
+		p, err = provider.NewAzureProvider(pConfig, scopes)
 	case "bitbucket":
-		return provider.NewBitbucketProvider(config.External.Bitbucket)
+		pConfig = config.External.Bitbucket
+		p, err = provider.NewBitbucketProvider(pConfig)
 	case "discord":
-		return provider.NewDiscordProvider(config.External.Discord, scopes)
+		pConfig = config.External.Discord
+		p, err = provider.NewDiscordProvider(pConfig, scopes)
 	case "facebook":
-		return provider.NewFacebookProvider(config.External.Facebook, scopes)
+		pConfig = config.External.Facebook
+		p, err = provider.NewFacebookProvider(pConfig, scopes)
 	case "figma":
-		return provider.NewFigmaProvider(config.External.Figma, scopes)
+		pConfig = config.External.Figma
+		p, err = provider.NewFigmaProvider(pConfig, scopes)
 	case "fly":
-		return provider.NewFlyProvider(config.External.Fly, scopes)
+		pConfig = config.External.Fly
+		p, err = provider.NewFlyProvider(pConfig, scopes)
 	case "github":
-		return provider.NewGithubProvider(config.External.Github, scopes)
+		pConfig = config.External.Github
+		p, err = provider.NewGithubProvider(pConfig, scopes)
 	case "gitlab":
-		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
+		pConfig = config.External.Gitlab
+		p, err = provider.NewGitlabProvider(pConfig, scopes)
 	case "google":
-		return provider.NewGoogleProvider(ctx, config.External.Google, scopes)
+		pConfig = config.External.Google
+		p, err = provider.NewGoogleProvider(ctx, pConfig, scopes)
 	case "kakao":
-		return provider.NewKakaoProvider(config.External.Kakao, scopes)
+		pConfig = config.External.Kakao
+		p, err = provider.NewKakaoProvider(pConfig, scopes)
 	case "keycloak":
-		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
+		pConfig = config.External.Keycloak
+		p, err = provider.NewKeycloakProvider(pConfig, scopes)
 	case "linkedin":
-		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
+		pConfig = config.External.Linkedin
+		p, err = provider.NewLinkedinProvider(pConfig, scopes)
 	case "linkedin_oidc":
-		return provider.NewLinkedinOIDCProvider(config.External.LinkedinOIDC, scopes)
+		pConfig = config.External.LinkedinOIDC
+		p, err = provider.NewLinkedinOIDCProvider(ctx, pConfig, scopes)
 	case "notion":
-		return provider.NewNotionProvider(config.External.Notion)
+		pConfig = config.External.Notion
+		p, err = provider.NewNotionProvider(pConfig)
+	case "snapchat":
+		pConfig = config.External.Snapchat
+		p, err = provider.NewSnapchatProvider(pConfig, scopes)
 	case "spotify":
-		return provider.NewSpotifyProvider(config.External.Spotify, scopes)
+		pConfig = config.External.Spotify
+		p, err = provider.NewSpotifyProvider(pConfig, scopes)
 	case "slack":
-		return provider.NewSlackProvider(config.External.Slack, scopes)
+		pConfig = config.External.Slack
+		p, err = provider.NewSlackProvider(pConfig, scopes)
 	case "slack_oidc":
-		return provider.NewSlackOIDCProvider(config.External.SlackOIDC, scopes)
+		pConfig = config.External.SlackOIDC
+		p, err = provider.NewSlackOIDCProvider(pConfig, scopes)
 	case "twitch":
-		return provider.NewTwitchProvider(config.External.Twitch, scopes)
+		pConfig = config.External.Twitch
+		p, err = provider.NewTwitchProvider(pConfig, scopes)
 	case "twitter":
-		return provider.NewTwitterProvider(config.External.Twitter, scopes)
+		pConfig = config.External.Twitter
+		p, err = provider.NewTwitterProvider(pConfig, scopes)
+	case "x":
+		pConfig = config.External.X
+		p, err = provider.NewXProvider(pConfig, scopes)
 	case "vercel_marketplace":
-		return provider.NewVercelMarketplaceProvider(config.External.VercelMarketplace, scopes)
+		pConfig = config.External.VercelMarketplace
+		p, err = provider.NewVercelMarketplaceProvider(ctx, pConfig, scopes)
 	case "workos":
-		return provider.NewWorkOSProvider(config.External.WorkOS)
+		pConfig = config.External.WorkOS
+		p, err = provider.NewWorkOSProvider(pConfig)
 	case "zoom":
-		return provider.NewZoomProvider(config.External.Zoom)
+		pConfig = config.External.Zoom
+		p, err = provider.NewZoomProvider(pConfig)
 	default:
-		return nil, fmt.Errorf("Provider %s could not be found", name)
+		return nil, pConfig, fmt.Errorf("Provider %s could not be found", name)
 	}
+
+	return p, pConfig, err
 }
 
 func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
@@ -615,11 +724,11 @@ func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, 
 func getErrorQueryString(err error, errorID string, log logrus.FieldLogger, q url.Values) *url.Values {
 	switch e := err.(type) {
 	case *HTTPError:
-		if e.ErrorCode == ErrorCodeSignupDisabled {
+		if e.ErrorCode == apierrors.ErrorCodeSignupDisabled {
 			q.Set("error", "access_denied")
-		} else if e.ErrorCode == ErrorCodeUserBanned {
+		} else if e.ErrorCode == apierrors.ErrorCodeUserBanned {
 			q.Set("error", "access_denied")
-		} else if e.ErrorCode == ErrorCodeProviderEmailNeedsVerification {
+		} else if e.ErrorCode == apierrors.ErrorCodeProviderEmailNeedsVerification {
 			q.Set("error", "access_denied")
 		} else if str, ok := oauthErrorMap[e.HTTPStatus]; ok {
 			q.Set("error", str)
@@ -677,7 +786,7 @@ func (a *API) createNewIdentity(tx *storage.Connection, user *models.User, provi
 	}
 
 	if terr := tx.Create(identity); terr != nil {
-		return nil, internalServerError("Error creating identity").WithInternalError(terr)
+		return nil, apierrors.NewInternalServerError("Error creating identity").WithInternalError(terr)
 	}
 
 	return identity, nil

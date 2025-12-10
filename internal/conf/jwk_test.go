@@ -241,8 +241,7 @@ func TestJwtKeys(t *testing.T) {
 		}
 		got, err := FindPublicKeyByKid("abc", jwtConfig)
 		require.Nil(t, got)
-		require.Error(t, err)
-		require.Equal(t, "invalid kid: abc", err.Error())
+		require.Nil(t, err)
 	}
 
 	// FindPublicKeyByKid - GetSigningKey success

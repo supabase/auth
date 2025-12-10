@@ -14,6 +14,11 @@ info:
     - Rate limit errors are consistently raised with the HTTP 429 code.
     - Enums are used only in request bodies / parameters and not in responses to ensure wide compatibility with code generators that fail to include an unknown enum case.
 
+    **OAuth Support:**
+    - This service supports two OAuth modes:
+      - **OAuth Client**: Endpoints tagged `oauth-client` are used when this service connects to external OAuth providers (like Google, GitHub)
+      - **OAuth Server**: Endpoints tagged `oauth-server` are used when this service acts as an OAuth provider for other applications
+
     **Backward compatibility:**
     - Endpoints marked as _Experimental_ may change without notice.
     - Endpoints marked as _Deprecated_ will be supported for at least 3 months since being marked as deprecated.
@@ -41,8 +46,10 @@ tags:
     description: APIs for authentication and authorization.
   - name: user
     description: APIs used by a user to manage their account.
-  - name: oauth
-    description: APIs for dealing with OAuth flows.
+  - name: oauth-client
+    description: APIs for OAuth flows where this service acts as an OAuth client (connecting to external providers).
+  - name: oauth-server
+    description: APIs for OAuth 2.1 flows where this service acts as an OAuth provider/server for other applications. Requires `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard. (Experimental.)
   - name: sso
     description: APIs for authenticating using SSO providers (SAML). (Experimental.)
   - name: saml
@@ -76,6 +83,7 @@ paths:
               - refresh_token
               - id_token
               - pkce
+              - web3
       security:
         - APIKeyAuth: []
       requestBody:
@@ -93,12 +101,23 @@ paths:
                 value:
                   auth_code: 009e5066-fc11-4eca-8c8c-6fd82aa263f2
                   code_verifier: ktPNXpR65N6JtgzQA8_5HHtH6PBSAahMNoLKRzQEa0Tzgl.vdV~b6lPk004XOd.4lR0inCde.NoQx5K63xPfzL8o7tJAjXncnhw5Niv9ycQ.QRV9JG.y3VapqbgLfIrJ
+              web3_solana:
+                value:
+                  message: "example.com wants you to sign in with your Solana account:\n0x1234...5678\n\nSign in with Solana\n\nURI: https://example.com\nVersion: 1\nNonce: abc123def456\nIssued At: 2023-09-19T12:00:00Z"
+                  signature: "base64_encoded_signature_string"
+                  chain: "solana"
+              web3_ethereum:
+                value:
+                  message: "example.com wants you to sign in with your Ethereum account:\n0x1234567890123456789012345678901234567890\n\nSign in with Ethereum\n\nURI: https://example.com\nVersion: 1\nIssued At: 2023-09-19T12:00:00Z"
+                  signature: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1b"
+                  chain: "ethereum"
             schema:
               type: object
               description: |-
                 For the refresh token flow, supply only `refresh_token`.
                 For the email/phone with password flow, supply `email`, `phone` and `password` with an optional `gotrue_meta_security`.
                 For the OIDC ID token flow, supply `id_token`, `nonce`, `provider`, `client_id`, `issuer` with an optional `gotrue_meta_security`.
+                For the Web3 flow, supply `message`, `signature`, and `chain`.
               properties:
                 refresh_token:
                   type: string
@@ -137,6 +156,23 @@ paths:
                   format: uuid
                 code_verifier:
                   type: string
+                message:
+                  type: string
+                  description: |
+                    Signed message for Web3 authentication following the Sign in with Solana (SIWS) or Sign in with Ethereum (SIWE) standard. Must include: `Issued At`, `URI`, `Version`.
+                signature:
+                  type: string
+                  description: |
+                    The signature of the message for Web3 authentication. 
+                    For Solana: Base64 or Base64-URL encoded. 
+                    For Ethereum: hexadecimal string with 0x prefix.
+                chain:
+                  type: string
+                  description: What blockchain is the Web3 message and signature for.
+                  enum:
+                    - solana
+                    - ethereum
+                  example: solana
       responses:
         200:
           description: >
@@ -274,7 +310,7 @@ paths:
     get:
       summary: Redirects to an external OAuth provider. Usually for use as clickable links.
       tags:
-        - oauth
+        - oauth-client
       security:
         - APIKeyAuth: []
       parameters:
@@ -784,6 +820,114 @@ paths:
                   value:
                     error_code: email_conflict_identity_not_deletable
 
+  /user/oauth/grants:
+    get:
+      summary: List OAuth grants
+      description: >
+        Retrieves a list of all OAuth grants that the authenticated user has authorized. Only available when OAuth server is enabled.
+      tags:
+        - user
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      responses:
+        200:
+          description: List of user's OAuth grants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    client:
+                      type: object
+                      description: OAuth client details
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                          description: Unique client identifier
+                        name:
+                          type: string
+                          description: Human-readable name of the client application
+                        uri:
+                          type: string
+                          format: uri
+                          description: URL of the client application's homepage
+                        logo_uri:
+                          type: string
+                          format: uri
+                          description: URL of the client application's logo
+                    scopes:
+                      type: array
+                      items:
+                        type: string
+                      description: List of scopes granted to this client
+                    granted_at:
+                      type: string
+                      format: date-time
+                      description: Timestamp when grant was authorized
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+    delete:
+      summary: Revoke OAuth grant
+      description: >
+        Revokes the user's OAuth grant for a specific client. This will:
+        - Mark the consent as revoked
+        - Delete all active sessions associated with this OAuth client
+        - Invalidate all refresh tokens for those sessions
+
+        Only available when OAuth server is enabled.
+      tags:
+        - user
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      parameters:
+        - name: client_id
+          in: query
+          required: true
+          description: The OAuth client identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        204:
+          description: Grant successfully revoked
+        400:
+          description: Missing or invalid client_id parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                validation_failed:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                    msg: client_id query parameter is required
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+        404:
+          description: No active grant found for this client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                oauth_consent_not_found:
+                  summary: oauth_consent_not_found
+                  value:
+                    error_code: oauth_consent_not_found
+                    msg: No active grant found for this client
+
   /reauthenticate:
     post:
       summary: Reauthenticates the possession of an email or phone number for the purpose of password change.
@@ -896,6 +1040,21 @@ paths:
                   enum:
                     - sms
                     - whatsapp
+                webauthn:
+                  type: object
+                  required:
+                    - rpId
+                    - rpOrigins
+                  properties:
+                    rpId:
+                      type: string
+                      description: The relying party identifier (usually the domain)
+                    rpOrigins:
+                      type: array
+                      items:
+                        type: string
+                      minItems: 1
+                      description: List of allowed origins for WebAuthn
 
       responses:
         200:
@@ -941,6 +1100,30 @@ paths:
                   format: uuid
                 code:
                   type: string
+                webauthn:
+                  type: object
+                  required:
+                    - rpId
+                    - rpOrigins
+                    - type
+                    - credential_response
+                  properties:
+                    rpId:
+                      type: string
+                      description: The relying party identifier
+                    rpOrigins:
+                      type: array
+                      items:
+                        type: string
+                      minItems: 1
+                      description: List of allowed origins for WebAuthn
+                    type:
+                      type: string
+                      enum: [create, request]
+                      description: Type of WebAuthn operation
+                    credential_response:
+                      type: object
+                      description: WebAuthn credential response from the client
       responses:
         200:
           description: >
@@ -992,7 +1175,7 @@ paths:
       description: >
         When an OAuth sign-in flow fails for any reason, the error message needs to be delivered to the frontend app requesting the flow. This callback delivers the errors as `error` and `error_description` query params. Usually this request is not called directly.
       tags:
-        - oauth
+        - oauth-client
       security:
         - APIKeyAuth: []
       responses:
@@ -1003,7 +1186,7 @@ paths:
       description: >
         When an OAuth sign-in flow fails for any reason, the error message needs to be delivered to the frontend app requesting the flow. This callback delivers the errors as `error` and `error_description` query params. Usually this request is not called directly.
       tags:
-        - oauth
+        - oauth-client
       responses:
         302:
           $ref: "#/components/responses/OAuthCallbackRedirectResponse"
@@ -1759,6 +1942,621 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorSchema"
 
+  /admin/oauth/clients:
+    get:
+      summary: List OAuth clients (admin)
+      description: >
+        Retrieves a list of all registered OAuth clients. Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+      responses:
+        200:
+          description: List of OAuth clients
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clients:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OAuthClientSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+    post:
+      summary: Register OAuth client (admin)
+      description: >
+        Manually register a new OAuth client (admin endpoint). Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - client_name
+                - redirect_uris
+              properties:
+                client_name:
+                  type: string
+                  description: Human-readable name of the client application
+                client_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's homepage
+                logo_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's logo
+                redirect_uris:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  description: Array of redirect URIs used by the client (maximum 10)
+                client_type:
+                  type: string
+                  enum:
+                    - public
+                    - confidential
+                  description: >
+                    Type of the client. Optional. If not provided, will be inferred from token_endpoint_auth_method or defaults to 'confidential'.
+                    Public clients are used for applications that cannot securely store credentials (e.g., SPAs, mobile apps).
+                    Confidential clients can securely store credentials (e.g., server-side applications).
+                token_endpoint_auth_method:
+                  type: string
+                  enum:
+                    - none
+                    - client_secret_basic
+                    - client_secret_post
+                  description: >
+                    Authentication method for the token endpoint. Optional.
+                    'none' is for public clients, 'client_secret_basic' and 'client_secret_post' are for confidential clients.
+                    If provided, must be consistent with client_type. If not provided, will be inferred from client_type.
+                grant_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - authorization_code
+                      - refresh_token
+                  description: OAuth grant types the client will use (defaults to both if not specified)
+                response_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - code
+                  description: OAuth response types the client can use
+                scope:
+                  type: string
+                  description: Space-separated list of scope values
+      responses:
+        201:
+          description: OAuth client created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+
+  /admin/oauth/clients/{client_id}:
+    parameters:
+      - name: client_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get OAuth client details (admin)
+      description: >
+        Retrieves details of a specific OAuth client. Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        200:
+          description: OAuth client details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        404:
+          description: OAuth client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+    put:
+      summary: Update OAuth client (admin)
+      description: >
+        Updates an existing OAuth client registration. Only the provided fields will be updated.
+        Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                client_name:
+                  type: string
+                  description: Human-readable name of the client application
+                client_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's homepage
+                logo_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's logo
+                redirect_uris:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  description: Array of redirect URIs used by the client
+                grant_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - authorization_code
+                      - refresh_token
+                  description: OAuth grant types the client is authorized to use
+      responses:
+        200:
+          description: OAuth client updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        400:
+          description: Bad request - validation failed or no fields provided for update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        404:
+          description: OAuth client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+    delete:
+      summary: Delete OAuth client (admin)
+      description: >
+        Removes an OAuth client registration. Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        204:
+          description: OAuth client deleted
+        404:
+          description: OAuth client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+
+  /admin/oauth/clients/{client_id}/regenerate_secret:
+    parameters:
+      - name: client_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Regenerate OAuth client secret (admin)
+      description: >
+        Regenerates the client secret for a confidential OAuth client. Only available when OAuth server is enabled.
+        This endpoint can only be used for confidential clients, not public clients.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        200:
+          description: OAuth client secret regenerated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        400:
+          description: Bad request - cannot regenerate secret for public client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        404:
+          description: OAuth client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+
+  /oauth/clients/register:
+    post:
+      summary: Register a new OAuth client dynamically (public endpoint).
+      description: >
+        Allows applications to register as OAuth clients with this server dynamically. This follows the OAuth 2.0 Dynamic Client Registration Protocol. Only available when OAuth server is enabled and dynamic registration is allowed (set `GOTRUE_OAUTH_SERVER_ENABLED=true` and `GOTRUE_OAUTH_SERVER_ALLOW_DYNAMIC_REGISTRATION=true` for self-hosted or enable both settings in Supabase Dashboard).
+      tags:
+        - oauth-server
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - client_name
+                - redirect_uris
+              properties:
+                client_name:
+                  type: string
+                  description: Human-readable name of the client application
+                client_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's homepage
+                logo_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's logo
+                redirect_uris:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  description: Array of redirect URIs used by the client (maximum 10)
+                client_type:
+                  type: string
+                  enum:
+                    - public
+                    - confidential
+                  description: >
+                    Type of the client. Optional. If not provided, will be inferred from token_endpoint_auth_method or defaults to 'confidential'.
+                    Public clients are used for applications that cannot securely store credentials (e.g., SPAs, mobile apps).
+                    Confidential clients can securely store credentials (e.g., server-side applications).
+                token_endpoint_auth_method:
+                  type: string
+                  enum:
+                    - none
+                    - client_secret_basic
+                    - client_secret_post
+                  description: >
+                    Authentication method for the token endpoint. Optional.
+                    'none' is for public clients, 'client_secret_basic' and 'client_secret_post' are for confidential clients.
+                    If provided, must be consistent with client_type. If not provided, will be inferred from client_type.
+                grant_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - authorization_code
+                      - refresh_token
+                  description: OAuth grant types the client will use (defaults to both if not specified)
+                response_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - code
+                  description: OAuth response types the client will use
+                scope:
+                  type: string
+                  description: Space-separated list of scope values
+      responses:
+        201:
+          description: OAuth client registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        429:
+          $ref: "#/components/responses/RateLimitResponse"
+
+  /oauth/token:
+    post:
+      summary: OAuth 2.1 Token endpoint
+      description: >
+        Issues access tokens in exchange for authorization codes or refresh tokens. Supports authorization_code and refresh_token grant types. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
+      tags:
+        - oauth-server
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - grant_type
+              properties:
+                grant_type:
+                  type: string
+                  enum:
+                    - authorization_code
+                    - refresh_token
+                  description: The grant type being used
+                code:
+                  type: string
+                  description: Authorization code (required for authorization_code grant)
+                redirect_uri:
+                  type: string
+                  format: uri
+                  description: Redirect URI (required for authorization_code grant)
+                code_verifier:
+                  type: string
+                  description: PKCE code verifier (required for authorization_code grant)
+                refresh_token:
+                  type: string
+                  description: Refresh token (required for refresh_token grant)
+                client_id:
+                  type: string
+                  description: OAuth client identifier
+                client_secret:
+                  type: string
+                  description: OAuth client secret (for confidential clients)
+      responses:
+        200:
+          description: Access token issued successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: The access token
+                  token_type:
+                    type: string
+                    example: Bearer
+                    description: Type of token issued
+                  expires_in:
+                    type: integer
+                    description: Lifetime in seconds of the access token
+                  refresh_token:
+                    type: string
+                    description: Refresh token (if applicable)
+                  scope:
+                    type: string
+                    description: Authorized scopes
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+
+  /oauth/authorize:
+    get:
+      summary: OAuth 2.1 Authorization endpoint
+      description: >
+        Initiates the OAuth authorization code flow. Redirects users to login and authorize the requesting application. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
+      tags:
+        - oauth-server
+      parameters:
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - code
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The client identifier
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Client's redirect URI
+        - name: scope
+          in: query
+          schema:
+            type: string
+          description: Requested access scope
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: State parameter for CSRF protection
+        - name: code_challenge
+          in: query
+          required: true
+          schema:
+            type: string
+          description: PKCE code challenge
+        - name: code_challenge_method
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - S256
+          description: PKCE code challenge method
+      responses:
+        302:
+          description: Redirect to login or authorization page
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+
+  /oauth/authorizations/{authorization_id}:
+    parameters:
+      - name: authorization_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get OAuth authorization details
+      description: >
+        Retrieves details about a pending OAuth authorization request. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
+      tags:
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      responses:
+        200:
+          description: Authorization details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorization_id:
+                    type: string
+                  redirect_uri:
+                    type: string
+                    format: uri
+                  client:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      uri:
+                        type: string
+                        format: uri
+                      logo_uri:
+                        type: string
+                        format: uri
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      email:
+                        type: string
+                        format: email
+                  scope:
+                    type: string
+        404:
+          description: Authorization not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+
+  /oauth/authorizations/{authorization_id}/consent:
+    parameters:
+      - name: authorization_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Approve or deny OAuth authorization
+      description: >
+        User approves or denies authorization to the OAuth client. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
+      tags:
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum:
+                    - approve
+                    - deny
+                  description: Whether to approve or deny the authorization
+      responses:
+        200:
+          description: Authorization consent processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  redirect_url:
+                    type: string
+                    format: uri
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+
   /health:
     get:
       summary: Service healthcheck.
@@ -2110,7 +2908,7 @@ components:
             - totp
             - phone
             - webauthn
-        web_authn_credential:
+        webauthn_credential:
           type: string
         phone:
           type: string
@@ -2182,8 +2980,7 @@ components:
       required:
         - id
         - type
-        - expires_at
-        - credential_options
+        - webauthn
       properties:
         id:
           type: string
@@ -2198,128 +2995,52 @@ components:
           type: integer
           example: 1674840917
           description: UNIX seconds of the timestamp past which the challenge should not be verified.
-        credential_request_options:
-          $ref: '#/components/schemas/CredentialRequestOptions'
-        credential_creation_options:
-          $ref: '#/components/schemas/CredentialCreationOptions'
-
-    CredentialAssertion:
-      type: object
-      description: WebAuthn credential assertion options
-      required:
-        - challenge
-        - rpId
-        - allowCredentials
-        - timeout
-      properties:
-        challenge:
-          type: string
-          description: A random challenge generated by the server, base64url encoded
-          example: "Y2hhbGxlbmdlAyv-5P0kw1SG-OxhLbSHpRLdWaVR1w"
-        rpId:
-          type: string
-          description: The relying party's identifier (usually the domain name)
-          example: "example.com"
-        allowCredentials:
-          type: array
-          description: List of credentials acceptable for this authentication
-          items:
-            type: object
-            required:
-              - id
-              - type
-            properties:
-              id:
-                type: string
-                description: Credential ID, base64url encoded
-                example: "AXwyVxYT7BgNKwNq0YqUXaHHIdRK6OdFGCYgZF9K6zNu"
-              type:
-                type: string
-                enum: [public-key]
-                description: Type of the credential
-        timeout:
-          type: integer
-          description: Time (in milliseconds) that the user has to respond to the authentication prompt
-          example: 60000
-        userVerification:
-          type: string
-          enum: [required, preferred, discouraged]
-          description: The relying party's requirements for user verification
-          default: preferred
-        extensions:
-          type: object
-          description: Additional parameters requesting additional processing by the client
-        status:
-          type: string
-          enum: [ok, failed]
-          description: Status of the credential assertion
-        errorMessage:
-          type: string
-          description: Error message if the assertion failed
-        userHandle:
-          type: string
-          description: User handle, base64url encoded
-        authenticatorAttachment:
-          type: string
-          enum: [platform, cross-platform]
-          description: Type of authenticator to use
-
-    CredentialRequest:
-      type: object
-      description: WebAuthn credential request (for the response from the client)
-      required:
-        - id
-        - rawId
-        - type
-        - response
-      properties:
-        id:
-          type: string
-          description: Base64url encoding of the credential ID
-          example: "AXwyVxYT7BgNKwNq0YqUXaHHIdRK6OdFGCYgZF9K6zNu"
-        rawId:
-          type: string
-          description: Base64url encoding of the credential ID (same as id)
-          example: "AXwyVxYT7BgNKwNq0YqUXaHHIdRK6OdFGCYgZF9K6zNu"
-        type:
-          type: string
-          enum: [public-key]
-          description: Type of the credential
-        response:
-          type: object
-          required:
-            - clientDataJSON
-            - authenticatorData
-            - signature
-            - userHandle
-          properties:
-            clientDataJSON:
-              type: string
-              description: Base64url encoding of the client data
-              example: "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiY2hhbGxlbmdlIiwib3JpZ2luIjoiaHR0cHM6Ly9leGFtcGxlLmNvbSJ9"
-            authenticatorData:
-              type: string
-              description: Base64url encoding of the authenticator data
-              example: "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAXwyVxYT7BgNKwNq0YqUXaHHIdRK6OdFGCYgZF9K6zNu"
-            signature:
-              type: string
-              description: Base64url encoding of the signature
-              example: "MEUCIQCx5cJVAB3kGP6bqCIoAV6CkBpVAf8rcx0WSZ22fIxXvQIgCKFt9pEu1vK8U4JKYTfn6tGjvGNfx2F4uXrHSXlefvM"
-            userHandle:
-              type: string
-              description: Base64url encoding of the user handle
-              example: "MQ"
-        clientExtensionResults:
-          type: object
-          description: Client extension results
+        webauthn:
+          oneOf:
+            - type: object
+              required:
+                - type
+                - credential_options
+              properties:
+                type:
+                  type: string
+                  enum: [create]
+                  description: Credential creation operation
+                credential_options:
+                  type: object
+                  required:
+                    - publicKey
+                  properties:
+                    publicKey:
+                      $ref: '#/components/schemas/CredentialCreationOptions'
+            - type: object
+              required:
+                - type
+                - credential_options
+              properties:
+                type:
+                  type: string
+                  enum: [request]
+                  description: Credential request operation
+                credential_options:
+                  type: object
+                  required:
+                    - publicKey
+                  properties:
+                    publicKey:
+                      $ref: '#/components/schemas/CredentialRequestOptions'
+          discriminator:
+            propertyName: type
 
     CredentialRequestOptions:
       type: object
-      description: Options for requesting an assertion
+      description: PublicKeyCredentialRequestOptions for WebAuthn authentication
+      required:
+        - challenge
       properties:
         challenge:
           type: string
-          format: byte
+          format: base64url
           description: A challenge to be signed by the authenticator
         timeout:
           type: integer
@@ -2329,46 +3050,88 @@ components:
           description: Relying Party ID
         allowCredentials:
           type: array
+          description: List of acceptable credentials for authentication
           items:
             $ref: '#/components/schemas/PublicKeyCredentialDescriptor'
         userVerification:
           type: string
           enum: [required, preferred, discouraged]
           description: User verification requirement
+        hints:
+          type: array
+          description: Hints for the browser about what types of authenticators to show
+          items:
+            type: string
+            enum: [security-key, client-device, hybrid]
+        extensions:
+          type: object
+          description: WebAuthn extensions to enable
 
     CredentialCreationOptions:
       type: object
-      description: Options for creating a new credential
+      description: PublicKeyCredentialCreationOptions for WebAuthn registration
+      required:
+        - rp
+        - user
+        - challenge
+        - pubKeyCredParams
       properties:
         rp:
           type: object
+          required:
+            - name
+            - id
           properties:
             id:
               type: string
+              description: Relying Party ID (usually the domain)
             name:
               type: string
+              description: Human-readable Relying Party name
         user:
-          $ref: '#/components/schemas/UserSchema'
-
+          type: object
+          required:
+            - id
+            - name
+            - displayName
+          properties:
+            id:
+              description: User handle (opaque byte sequence, base64url encoded string or raw bytes)
+              oneOf:
+                - type: string
+                  format: base64url
+                - type: string
+            name:
+              type: string
+              description: User account identifier (e.g., username or email)
+            displayName:
+              type: string
+              description: Human-readable user display name
         challenge:
           type: string
-          format: byte
+          format: base64url
           description: A challenge to be signed by the authenticator
         pubKeyCredParams:
           type: array
+          description: List of supported public key algorithms
           items:
             type: object
+            required:
+              - type
+              - alg
             properties:
               type:
                 type: string
                 enum: [public-key]
               alg:
                 type: integer
+                description: COSE algorithm identifier (e.g., -7 for ES256, -257 for RS256)
         timeout:
           type: integer
           description: Time (in milliseconds) that the caller is willing to wait for the call to complete
         excludeCredentials:
           type: array
+          description: List of credentials to exclude (prevent re-registration)
           items:
             $ref: '#/components/schemas/PublicKeyCredentialDescriptor'
         authenticatorSelection:
@@ -2377,31 +3140,128 @@ components:
             authenticatorAttachment:
               type: string
               enum: [platform, cross-platform]
+              description: Preferred authenticator type
             requireResidentKey:
               type: boolean
+              description: Whether to require a resident key (deprecated, use residentKey)
+            residentKey:
+              type: string  
+              enum: [required, preferred, discouraged]
+              description: Resident key requirement
             userVerification:
               type: string
               enum: [required, preferred, discouraged]
+              description: User verification requirement
         attestation:
           type: string
-          enum: [none, indirect, direct]
-          description: Preferred attestation conveyance
+          enum: [none, indirect, direct, enterprise]
+          description: Attestation conveyance preference
+        attestationFormats:
+          type: array
+          description: Preferred attestation statement formats
+          items:
+            type: string
+        hints:
+          type: array
+          description: Hints for the browser about what types of authenticators to show
+          items:
+            type: string
+            enum: [security-key, client-device, hybrid]
+        extensions:
+          type: object
+          description: WebAuthn extensions to enable
 
     PublicKeyCredentialDescriptor:
       type: object
+      required:
+        - type
+        - id
       properties:
         type:
           type: string
           enum: [public-key]
+          description: Credential type
         id:
           type: string
-          format: byte
+          format: base64url
           description: Credential ID
         transports:
           type: array
+          description: Supported transports for this credential
           items:
             type: string
-            enum: [usb, nfc, ble, internal]
+            enum: [usb, nfc, ble, internal, hybrid]
+
+    OAuthClientSchema:
+      type: object
+      description: Represents an OAuth 2.1 client
+      properties:
+        client_id:
+          type: string
+          description: Unique client identifier
+        client_name:
+          type: string
+          description: Human-readable name of the client application
+        client_secret:
+          type: string
+          description: Client secret for confidential clients (only returned on registration/regeneration)
+        client_type:
+          type: string
+          enum:
+            - public
+            - confidential
+          description: Type of the client
+        token_endpoint_auth_method:
+          type: string
+          enum:
+            - none
+            - client_secret_basic
+            - client_secret_post
+          description: Authentication method for the token endpoint
+        registration_type:
+          type: string
+          enum:
+            - dynamic
+            - manual
+          description: Registration type of the client
+        client_uri:
+          type: string
+          format: uri
+          description: URL of the client application's homepage
+        logo_uri:
+          type: string
+          format: uri
+          description: URL of the client application's logo
+        redirect_uris:
+          type: array
+          items:
+            type: string
+            format: uri
+          description: Array of redirect URIs used by the client
+        grant_types:
+          type: array
+          items:
+            type: string
+            enum:
+              - authorization_code
+              - refresh_token
+          description: OAuth grant types the client is authorized to use
+        response_types:
+          type: array
+          items:
+            type: string
+            enum:
+              - code
+          description: OAuth response types the client can use
+        scope:
+          type: string
+          description: Space-separated list of scope values
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
   responses:
     OAuthCallbackRedirectResponse:
@@ -2453,7 +3313,7 @@ components:
 
     UnauthorizedResponse:
       description: >
-        HTTP Unauthorizred response.
+        HTTP Unauthorized response.
       content:
         application/json:
           schema:

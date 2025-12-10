@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"net/http/httptest"
@@ -12,7 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/hooks/hookserrors"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
+	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 
@@ -47,6 +50,19 @@ func TestHooks(t *testing.T) {
 	defer api.db.Close()
 
 	suite.Run(t, ts)
+
+	t.Run("CheckTX", func(t *testing.T) {
+		require.NoError(t, checkTX(api.db))
+
+		err := api.db.Transaction(func(tx *storage.Connection) error {
+			require.Error(t, checkTX(tx))
+
+			err := checkTX(tx)
+			require.Error(t, err)
+			return nil
+		})
+		require.NoError(t, err)
+	})
 }
 
 func (ts *HooksTestSuite) SetupTest() {
@@ -61,16 +77,16 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 	// setup mock requests for hooks
 	defer gock.OffAll()
 
-	input := hooks.SendSMSInput{
+	input := v0hooks.SendSMSInput{
 		User: ts.TestUser,
-		SMS: hooks.SMS{
+		SMS: v0hooks.SMS{
 			OTP: "123456",
 		},
 	}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
 	ts.Config.Hook.SendSMS.URI = testURL
 
-	unsuccessfulResponse := hooks.AuthHookError{
+	unsuccessfulResponse := hookserrors.Error{
 		HTTPCode: http.StatusUnprocessableEntity,
 		Message:  "test error",
 	}
@@ -78,12 +94,12 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 	testCases := []struct {
 		description  string
 		expectError  bool
-		mockResponse hooks.AuthHookError
+		mockResponse hookserrors.Error
 	}{
 		{
 			description:  "Hook returns success",
 			expectError:  false,
-			mockResponse: hooks.AuthHookError{},
+			mockResponse: hookserrors.Error{},
 		},
 		{
 			description:  "Hook returns error",
@@ -96,29 +112,28 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusOK).
-		JSON(hooks.SendSMSOutput{})
+		JSON(v0hooks.SendSMSOutput{})
 
 	gock.New(ts.Config.Hook.SendSMS.URI).
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusUnprocessableEntity).
-		JSON(hooks.SendSMSOutput{HookError: unsuccessfulResponse})
+		JSON(struct {
+			Error *hookserrors.Error `json:"error,omitempty"`
+		}{Error: &unsuccessfulResponse})
 
 	for _, tc := range testCases {
 		ts.Run(tc.description, func() {
 			req, _ := http.NewRequest("POST", ts.Config.Hook.SendSMS.URI, nil)
-			body, err := ts.API.runHTTPHook(req, ts.Config.Hook.SendSMS, &input)
+
+			var output v0hooks.SendSMSOutput
+			err := ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
 
 			if !tc.expectError {
 				require.NoError(ts.T(), err)
 			} else {
 				require.Error(ts.T(), err)
-				if body != nil {
-					var output hooks.SendSMSOutput
-					require.NoError(ts.T(), json.Unmarshal(body, &output))
-					require.Equal(ts.T(), unsuccessfulResponse.HTTPCode, output.HookError.HTTPCode)
-					require.Equal(ts.T(), unsuccessfulResponse.Message, output.HookError.Message)
-				}
+				require.Equal(ts.T(), output, v0hooks.SendSMSOutput{})
 			}
 		})
 	}
@@ -128,9 +143,9 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 	defer gock.OffAll()
 
-	input := hooks.SendSMSInput{
+	input := v0hooks.SendSMSInput{
 		User: ts.TestUser,
-		SMS: hooks.SMS{
+		SMS: v0hooks.SMS{
 			OTP: "123456",
 		},
 	}
@@ -148,18 +163,15 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusOK).
-		JSON(hooks.SendSMSOutput{}).SetHeader("content-type", "application/json")
+		JSON(v0hooks.SendSMSOutput{}).SetHeader("content-type", "application/json")
 
 	// Simulate the original HTTP request which triggered the hook
 	req, err := http.NewRequest("POST", "http://localhost:9998/otp", nil)
 	require.NoError(ts.T(), err)
 
-	body, err := ts.API.runHTTPHook(req, ts.Config.Hook.SendSMS, &input)
+	var output v0hooks.SendSMSOutput
+	err = ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
 	require.NoError(ts.T(), err)
-
-	var output hooks.SendSMSOutput
-	err = json.Unmarshal(body, &output)
-	require.NoError(ts.T(), err, "Unmarshal should not fail")
 
 	// Ensure that all expected HTTP interactions (mocks) have been called
 	require.True(ts.T(), gock.IsDone(), "Expected all mocks to have been called including retry")
@@ -168,9 +180,9 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 func (ts *HooksTestSuite) TestShouldReturnErrorForNonJSONContentType() {
 	defer gock.OffAll()
 
-	input := hooks.SendSMSInput{
+	input := v0hooks.SendSMSInput{
 		User: ts.TestUser,
-		SMS: hooks.SMS{
+		SMS: v0hooks.SMS{
 			OTP: "123456",
 		},
 	}
@@ -186,10 +198,10 @@ func (ts *HooksTestSuite) TestShouldReturnErrorForNonJSONContentType() {
 	req, err := http.NewRequest("POST", "http://localhost:9999/otp", nil)
 	require.NoError(ts.T(), err)
 
-	_, err = ts.API.runHTTPHook(req, ts.Config.Hook.SendSMS, &input)
+	var output v0hooks.SendSMSOutput
+	err = ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
 	require.Error(ts.T(), err, "Expected an error due to wrong content type")
 	require.Contains(ts.T(), err.Error(), "Invalid JSON response.")
-
 	require.True(ts.T(), gock.IsDone(), "Expected all mocks to have been called")
 }
 
@@ -234,32 +246,32 @@ func (ts *HooksTestSuite) TestInvokeHookIntegration() {
 			description: "HTTP endpoint success",
 			conn:        nil,
 			request:     httptest.NewRequest("POST", authEndpoint, nil),
-			input:       &hooks.SendEmailInput{},
-			output:      &hooks.SendEmailOutput{},
+			input:       &v0hooks.SendEmailInput{},
+			output:      &v0hooks.SendEmailOutput{},
 			uri:         testHTTPUri,
 		},
 		{
 			description: "HTTPS endpoint success",
 			conn:        nil,
 			request:     httptest.NewRequest("POST", authEndpoint, nil),
-			input:       &hooks.SendEmailInput{},
-			output:      &hooks.SendEmailOutput{},
+			input:       &v0hooks.SendEmailInput{},
+			output:      &v0hooks.SendEmailOutput{},
 			uri:         testHTTPSUri,
 		},
 		{
 			description: "PostgreSQL function success",
 			conn:        ts.API.db,
 			request:     httptest.NewRequest("POST", authEndpoint, nil),
-			input:       &hooks.SendEmailInput{},
-			output:      &hooks.SendEmailOutput{},
+			input:       &v0hooks.SendEmailInput{},
+			output:      &v0hooks.SendEmailOutput{},
 			uri:         testPGUri,
 		},
 		{
 			description:   "Unsupported protocol error",
 			conn:          nil,
 			request:       httptest.NewRequest("POST", authEndpoint, nil),
-			input:         &hooks.SendEmailInput{},
-			output:        &hooks.SendEmailOutput{},
+			input:         &v0hooks.SendEmailInput{},
+			output:        &v0hooks.SendEmailOutput{},
 			uri:           "ftp://example.com/path",
 			expectedError: errors.New("unsupported protocol: \"ftp://example.com/path\" only postgres hooks and HTTPS functions are supported at the moment"),
 		},
@@ -273,7 +285,7 @@ func (ts *HooksTestSuite) TestInvokeHookIntegration() {
 		require.NoError(ts.T(), ts.Config.Hook.SendEmail.PopulateExtensibilityPoint())
 
 		ts.Run(tc.description, func() {
-			err = ts.API.invokeHook(tc.conn, tc.request, tc.input, tc.output)
+			err = ts.API.hooksMgr.InvokeHook(tc.conn, tc.request, tc.input, tc.output)
 			if tc.expectedError != nil {
 				require.EqualError(ts.T(), err, tc.expectedError.Error())
 			} else {
@@ -284,4 +296,174 @@ func (ts *HooksTestSuite) TestInvokeHookIntegration() {
 	}
 	// Ensure that all expected HTTP interactions (mocks) have been called
 	require.True(ts.T(), gock.IsDone(), "Expected all mocks to have been called including retry")
+}
+
+func (ts *HooksTestSuite) TestAccountChangesNotificationsHookPayload() {
+	// Setup hook config for send_email hook
+	defer gock.OffAll()
+
+	testURL := "http://localhost:8888/functions/v1/send-email"
+	ts.Config.Hook.SendEmail.URI = testURL
+	ts.Config.Hook.SendEmail.Enabled = true
+
+	// Mock the hook endpoint to capture the payload
+	var capturedPayload *v0hooks.SendEmailInput
+
+	gock.New(testURL).
+		Post("/").
+		MatchType("json").
+		SetMatcher(gock.NewMatcher()).
+		AddMatcher(func(req *http.Request, greq *gock.Request) (bool, error) {
+			// Capture the payload
+			payload := &v0hooks.SendEmailInput{}
+			if err := json.NewDecoder(req.Body).Decode(payload); err != nil {
+				return false, err
+			}
+			capturedPayload = payload
+			return true, nil
+		}).
+		Persist().
+		Reply(http.StatusOK).
+		JSON(v0hooks.SendEmailOutput{})
+
+	testCases := []struct {
+		description        string
+		expectedActionType string
+		expectedProvider   string
+		expectedOldEmail   string
+		expectedOldPhone   string
+		expectedFactorType string
+		setupFunc          func() error
+		enableNotification func()
+	}{
+		{
+			description:        "IdentityLinkedNotification contains provider",
+			expectedActionType: mail.IdentityLinkedNotification,
+			expectedProvider:   "google",
+			enableNotification: func() {
+				ts.Config.Mailer.Notifications.IdentityLinkedEnabled = true
+			},
+			setupFunc: func() error {
+				req := httptest.NewRequest("POST", "/identities", nil)
+				externalHost, err := url.Parse("http://example.com")
+				require.NoError(ts.T(), err)
+				req = req.WithContext(withExternalHost(req.Context(), externalHost))
+				return ts.API.sendIdentityLinkedNotification(req, ts.API.db, ts.TestUser, "google")
+			},
+		},
+		{
+			description:        "IdentityUnlinkedNotification contains provider",
+			expectedActionType: mail.IdentityUnlinkedNotification,
+			expectedProvider:   "github",
+			enableNotification: func() {
+				ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = true
+			},
+			setupFunc: func() error {
+				req := httptest.NewRequest("DELETE", "/identities/123", nil)
+				externalHost, err := url.Parse("http://example.com")
+				require.NoError(ts.T(), err)
+				req = req.WithContext(withExternalHost(req.Context(), externalHost))
+				return ts.API.sendIdentityUnlinkedNotification(req, ts.API.db, ts.TestUser, "github")
+			},
+		},
+		{
+			description:        "EmailChangedNotification contains old_email",
+			expectedActionType: mail.EmailChangedNotification,
+			expectedOldEmail:   "old@example.com",
+			enableNotification: func() {
+				ts.Config.Mailer.Notifications.EmailChangedEnabled = true
+			},
+			setupFunc: func() error {
+				req := httptest.NewRequest("PUT", "/user", nil)
+				externalHost, err := url.Parse("http://example.com")
+				require.NoError(ts.T(), err)
+				req = req.WithContext(withExternalHost(req.Context(), externalHost))
+				return ts.API.sendEmailChangedNotification(req, ts.API.db, ts.TestUser, "old@example.com")
+			},
+		},
+		{
+			description:        "PhoneChangedNotification contains old_phone",
+			expectedActionType: mail.PhoneChangedNotification,
+			expectedOldPhone:   "+15551234567",
+			enableNotification: func() {
+				ts.Config.Mailer.Notifications.PhoneChangedEnabled = true
+			},
+			setupFunc: func() error {
+				req := httptest.NewRequest("PUT", "/user", nil)
+				externalHost, err := url.Parse("http://example.com")
+				require.NoError(ts.T(), err)
+				req = req.WithContext(withExternalHost(req.Context(), externalHost))
+				return ts.API.sendPhoneChangedNotification(req, ts.API.db, ts.TestUser, "+15551234567")
+			},
+		},
+		{
+			description:        "MFAFactorEnrolledNotification contains factor_type",
+			expectedActionType: mail.MFAFactorEnrolledNotification,
+			expectedFactorType: "totp",
+			enableNotification: func() {
+				ts.Config.Mailer.Notifications.MFAFactorEnrolledEnabled = true
+			},
+			setupFunc: func() error {
+				req := httptest.NewRequest("POST", "/factors", nil)
+				externalHost, err := url.Parse("http://example.com")
+				require.NoError(ts.T(), err)
+				req = req.WithContext(withExternalHost(req.Context(), externalHost))
+				return ts.API.sendMFAFactorEnrolledNotification(req, ts.API.db, ts.TestUser, "totp")
+			},
+		},
+		{
+			description:        "MFAFactorUnenrolledNotification contains factor_type",
+			expectedActionType: mail.MFAFactorUnenrolledNotification,
+			expectedFactorType: "phone",
+			enableNotification: func() {
+				ts.Config.Mailer.Notifications.MFAFactorUnenrolledEnabled = true
+			},
+			setupFunc: func() error {
+				req := httptest.NewRequest("DELETE", "/factors/123", nil)
+				externalHost, err := url.Parse("http://example.com")
+				require.NoError(ts.T(), err)
+				req = req.WithContext(withExternalHost(req.Context(), externalHost))
+				return ts.API.sendMFAFactorUnenrolledNotification(req, ts.API.db, ts.TestUser, "phone")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		ts.Run(tc.description, func() {
+			// Reset captured payload
+			capturedPayload = nil
+
+			// Enable the notification
+			tc.enableNotification()
+
+			// Execute the setup function that triggers the notification
+			err := tc.setupFunc()
+			require.NoError(ts.T(), err)
+
+			// Verify the payload was captured
+			require.NotNil(ts.T(), capturedPayload, "Hook should have been called")
+
+			// Verify email action type
+			require.Equal(ts.T(), tc.expectedActionType, capturedPayload.EmailData.EmailActionType)
+
+			// Verify notification-specific fields
+			if tc.expectedProvider != "" {
+				require.Equal(ts.T(), tc.expectedProvider, capturedPayload.EmailData.Provider, "Provider should be set in EmailData")
+			}
+			if tc.expectedOldEmail != "" {
+				require.Equal(ts.T(), tc.expectedOldEmail, capturedPayload.EmailData.OldEmail, "OldEmail should be set in EmailData")
+			}
+			if tc.expectedOldPhone != "" {
+				require.Equal(ts.T(), tc.expectedOldPhone, capturedPayload.EmailData.OldPhone, "OldPhone should be set in EmailData")
+			}
+			if tc.expectedFactorType != "" {
+				require.Equal(ts.T(), tc.expectedFactorType, capturedPayload.EmailData.FactorType, "FactorType should be set in EmailData")
+			}
+
+			// Verify common fields
+			require.Equal(ts.T(), ts.TestUser.ID, capturedPayload.User.ID, "User ID should match")
+			require.NotEmpty(ts.T(), capturedPayload.EmailData.SiteURL, "SiteURL should be set")
+			require.NotEmpty(ts.T(), capturedPayload.EmailData.RedirectTo, "RedirectTo should be set")
+		})
+	}
 }

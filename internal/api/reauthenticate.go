@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
@@ -15,28 +16,29 @@ const InvalidNonceMessage = "Nonce has expired or is invalid"
 // Reauthenticate sends a reauthentication otp to either the user's email or phone
 func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	config := a.config
 	db := a.db.WithContext(ctx)
 
 	user := getUser(ctx)
 	email, phone := user.GetEmail(), user.GetPhone()
 
 	if email == "" && phone == "" {
-		return badRequestError(ErrorCodeValidationFailed, "Reauthentication requires the user to have an email or a phone number")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Reauthentication requires the user to have an email or a phone number")
 	}
 
 	if email != "" {
 		if !user.IsConfirmed() {
-			return unprocessableEntityError(ErrorCodeEmailNotConfirmed, "Please verify your email first.")
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "Please verify your email first.")
 		}
 	} else if phone != "" {
 		if !user.IsPhoneConfirmed() {
-			return unprocessableEntityError(ErrorCodePhoneNotConfirmed, "Please verify your phone first.")
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodePhoneNotConfirmed, "Please verify your phone first.")
 		}
 	}
 
 	messageID := ""
 	err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, user, models.UserReauthenticateAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserReauthenticateAction, "", nil); terr != nil {
 			return terr
 		}
 		if email != "" {
@@ -67,7 +69,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 // verifyReauthentication checks if the nonce provided is valid
 func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.GlobalConfiguration, user *models.User) error {
 	if user.ReauthenticationToken == "" || user.ReauthenticationSentAt == nil {
-		return unprocessableEntityError(ErrorCodeReauthenticationNotValid, InvalidNonceMessage)
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeReauthenticationNotValid, InvalidNonceMessage)
 	}
 	var isValid bool
 	if user.GetEmail() != "" {
@@ -77,7 +79,7 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 		if config.Sms.IsTwilioVerifyProvider() {
 			smsProvider, _ := sms_provider.GetSmsProvider(*config)
 			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(string(user.Phone), nonce); err != nil {
-				return forbiddenError(ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+				return apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
 			}
 			return nil
 		} else {
@@ -85,13 +87,13 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 			isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
 		}
 	} else {
-		return unprocessableEntityError(ErrorCodeReauthenticationNotValid, "Reauthentication requires an email or a phone number")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeReauthenticationNotValid, "Reauthentication requires an email or a phone number")
 	}
 	if !isValid {
-		return unprocessableEntityError(ErrorCodeReauthenticationNotValid, InvalidNonceMessage)
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeReauthenticationNotValid, InvalidNonceMessage)
 	}
 	if err := user.ConfirmReauthentication(tx); err != nil {
-		return internalServerError("Error during reauthentication").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error during reauthentication").WithInternalError(err)
 	}
 	return nil
 }

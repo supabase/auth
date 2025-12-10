@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/url"
 
+	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -15,22 +17,24 @@ func (c contextKey) String() string {
 }
 
 const (
-	tokenKey                = contextKey("jwt")
-	inviteTokenKey          = contextKey("invite_token")
-	signatureKey            = contextKey("signature")
-	externalProviderTypeKey = contextKey("external_provider_type")
-	userKey                 = contextKey("user")
-	targetUserKey           = contextKey("target_user")
-	factorKey               = contextKey("factor")
-	sessionKey              = contextKey("session")
-	externalReferrerKey     = contextKey("external_referrer")
-	functionHooksKey        = contextKey("function_hooks")
-	adminUserKey            = contextKey("admin_user")
-	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
-	oauthVerifierKey        = contextKey("oauth_verifier")
-	ssoProviderKey          = contextKey("sso_provider")
-	externalHostKey         = contextKey("external_host")
-	flowStateKey            = contextKey("flow_state_id")
+	externalProviderTypeKey          = contextKey("external_provider_type")
+	externalProviderEmailOptionalKey = contextKey("external_provider_allow_no_email")
+
+	tokenKey            = contextKey("jwt")
+	inviteTokenKey      = contextKey("invite_token")
+	signatureKey        = contextKey("signature")
+	targetUserKey       = contextKey("target_user")
+	factorKey           = contextKey("factor")
+	sessionKey          = contextKey("session")
+	externalReferrerKey = contextKey("external_referrer")
+	functionHooksKey    = contextKey("function_hooks")
+	adminUserKey        = contextKey("admin_user")
+	oauthTokenKey       = contextKey("oauth_token") // for OAuth1.0, also known as request token
+	oauthVerifierKey    = contextKey("oauth_verifier")
+	ssoProviderKey      = contextKey("sso_provider")
+	externalHostKey     = contextKey("external_host")
+	flowStateKey        = contextKey("flow_state_id")
+	oauthClientStateKey = contextKey("oauth_client_state_id")
 )
 
 // withToken adds the JWT token to the context.
@@ -58,7 +62,7 @@ func getClaims(ctx context.Context) *AccessTokenClaims {
 
 // withUser adds the user to the context.
 func withUser(ctx context.Context, u *models.User) context.Context {
-	return context.WithValue(ctx, userKey, u)
+	return shared.WithUser(ctx, u)
 }
 
 // withTargetUser adds the target user for linking to the context.
@@ -73,14 +77,7 @@ func withFactor(ctx context.Context, f *models.Factor) context.Context {
 
 // getUser reads the user from the context.
 func getUser(ctx context.Context) *models.User {
-	if ctx == nil {
-		return nil
-	}
-	obj := ctx.Value(userKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.User)
+	return shared.GetUser(ctx)
 }
 
 // getTargetUser reads the user from the context.
@@ -142,6 +139,19 @@ func getFlowStateID(ctx context.Context) string {
 	return obj.(string)
 }
 
+func withOAuthClientStateID(ctx context.Context, oauthClientStateID uuid.UUID) context.Context {
+	return context.WithValue(ctx, oauthClientStateKey, oauthClientStateID)
+}
+
+func getOAuthClientStateID(ctx context.Context) uuid.UUID {
+	obj := ctx.Value(oauthClientStateKey)
+	if obj == nil {
+		return uuid.Nil
+	}
+
+	return obj.(uuid.UUID)
+}
+
 func getInviteToken(ctx context.Context) string {
 	obj := ctx.Value(inviteTokenKey)
 	if obj == nil {
@@ -152,18 +162,26 @@ func getInviteToken(ctx context.Context) string {
 }
 
 // withExternalProviderType adds the provided request ID to the context.
-func withExternalProviderType(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, externalProviderTypeKey, id)
+func withExternalProviderType(ctx context.Context, id string, emailOptional bool) context.Context {
+	return context.WithValue(context.WithValue(ctx, externalProviderTypeKey, id), externalProviderEmailOptionalKey, emailOptional)
 }
 
-// getExternalProviderType reads the request ID from the context.
-func getExternalProviderType(ctx context.Context) string {
-	obj := ctx.Value(externalProviderTypeKey)
-	if obj == nil {
-		return ""
+// getExternalProviderType returns the provider type and whether user data without email address should be allowed.
+func getExternalProviderType(ctx context.Context) (string, bool) {
+	idValue := ctx.Value(externalProviderTypeKey)
+	emailOptionalValue := ctx.Value(externalProviderEmailOptionalKey)
+
+	id, okID := idValue.(string)
+	if !okID {
+		return "", false
 	}
 
-	return obj.(string)
+	emailOptional, okEmailOptional := emailOptionalValue.(bool)
+	if !okEmailOptional {
+		return "", false
+	}
+
+	return id, emailOptional
 }
 
 func withExternalReferrer(ctx context.Context, token string) context.Context {

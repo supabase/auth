@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -20,6 +21,7 @@ const (
 // Logout is the endpoint for logging out a user and thereby revoking any refresh tokens
 func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	config := a.config
 	db := a.db.WithContext(ctx)
 	scope := LogoutGlobal
 
@@ -35,7 +37,7 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 			scope = LogoutOthers
 
 		default:
-			return badRequestError(ErrorCodeValidationFailed, fmt.Sprintf("Unsupported logout scope %q", r.URL.Query().Get("scope")))
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Unsupported logout scope %q", r.URL.Query().Get("scope")))
 		}
 	}
 
@@ -43,7 +45,7 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 	u := getUser(ctx)
 
 	err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, u, models.LogoutAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, u, models.LogoutAction, "", nil); terr != nil {
 			return terr
 		}
 
@@ -64,7 +66,7 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 		return models.Logout(tx, u.ID)
 	})
 	if err != nil {
-		return internalServerError("Error logging out user").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error logging out user").WithInternalError(err)
 	}
 
 	w.WriteHeader(http.StatusNoContent)

@@ -16,7 +16,7 @@ It is originally based on the excellent
 
 If you wish to contribute to the project, please refer to the [contributing guide](/CONTRIBUTING.md).
 
-## Table Of Contents
+## Table of Contents
 
 - [Quick Start](#quick-start)
 - [Running in Production](#running-in-production)
@@ -25,9 +25,9 @@ If you wish to contribute to the project, please refer to the [contributing guid
 
 ## Quick Start
 
-Create a `.env` file to store your own custom env vars. See [`example.env`](example.env)
+Create a `.env` file to store your own custom environment variables. See [`example.env`](example.env)
 
-1. Start the local postgres database in a postgres container: `docker-compose -f docker-compose-dev.yml up postgres`
+1. Start the local Postgres database in a Postgres container: `docker-compose -f docker-compose-dev.yml up postgres`
 2. Build the auth binary: `make build` . You should see an output like this:
 
 ```bash
@@ -37,14 +37,14 @@ GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/auth/cmd.Versi
 
 3. Execute the auth binary: `./auth`
 
-### If you have docker installed
+### If you have Docker installed
 
 Create a `.env.docker` file to store your own custom env vars. See [`example.docker.env`](example.docker.env)
 
 1. `make build`
 2. `make dev`
-3. `docker ps` should show 2 docker containers (`auth_postgresql` and `gotrue_gotrue`)
-4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that auth is running.
+3. `docker ps` should show two Docker containers (`auth-auth-1` and `auth-postgres-1`)
+4. That's it! Visit the [health check endpoint](http://localhost:9999/health) to confirm that auth is running.
 
 ## Running in production
 
@@ -52,7 +52,7 @@ Running an authentication server in production is not an easy feat. We
 recommend using [Supabase Auth](https://supabase.com/auth) which gets regular
 security updates.
 
-Otherwise, please make sure you setup a process to promptly update to the
+Otherwise, please make sure you set up a process to promptly update to the
 latest version. You can do that by following this repository, specifically the
 [Releases](https://github.com/supabase/auth/releases) and [Security
 Advisories](https://github.com/supabase/auth/security/advisories) sections.
@@ -65,8 +65,8 @@ further clarifications on backward compatibility guarantees:
 **Go API compatibility**
 
 Auth is not meant to be used as a Go library. There are no guarantees on
-backward API compatibility when used this way regardless which version number
-changes.
+backward API compatibility when used this way regardless of which version 
+number changes.
 
 **Patch**
 
@@ -145,9 +145,12 @@ comprehensive list of those features:
 3. Super admin via the `is_super_admin` column.
 4. Group information in JWTs via `GOTRUE_JWT_ADMIN_GROUP_NAME` and other
    configuration fields.
-5. Symmetrics JWTs. In the future it is very likely that Auth will begin
-   issuing asymmetric JWTs (subject to configuration), so do not rely on the
-   assumption that only HS256 signed JWTs will be issued long term.
+5. JWT signing. Supabase Auth supports asymmetric keys (RS256 by default;
+   ECC/Ed25519 optional). HS256 is still supported for compatibility, but
+   migrating to asymmetric keys is recommended for easier validation and
+   rotation. Future deprecations will be announced in the changelog. See the
+   [JWT Signing Keys](https://supabase.com/docs/guides/auth/signing-keys) and
+   [JWTs guide](https://supabase.com/docs/guides/auth/jwts) for details.
 
 Note that this is not an exhaustive list and it may change.
 
@@ -158,7 +161,7 @@ compatibility with Auth:
 
 1. Do not modify the schema managed by Auth. You can see all of the
    migrations in the `migrations` directory.
-2. Do not rely on schema and structure of data in the database. Always use
+2. Do not rely on the schema and the structure of data in the database. Always use
    Auth APIs and JWTs to infer information about users.
 3. Always run Auth behind a TLS-capable proxy such as a load balancer, CDN,
    nginx or other similar software.
@@ -180,7 +183,7 @@ The base URL your site is located at. Currently used in combination with other s
 
 `URI_ALLOW_LIST` - `string`
 
-A comma separated list of URIs (e.g. `"https://foo.example.com,https://*.foo.example.com,https://bar.example.com"`) which are permitted as valid `redirect_to` destinations. Defaults to []. Supports wildcard matching through globbing. e.g. `https://*.foo.example.com` will allow `https://a.foo.example.com` and `https://b.foo.example.com` to be accepted. Globbing is also supported on subdomains. e.g. `https://foo.example.com/*` will allow `https://foo.example.com/page1` and `https://foo.example.com/page2` to be accepted.
+A comma-separated list of URIs (e.g. `"https://foo.example.com,https://*.foo.example.com,https://bar.example.com"`) which are permitted as valid `redirect_to` destinations. Defaults to []. Supports wildcard matching through globbing. e.g. `https://*.foo.example.com` will allow `https://a.foo.example.com` and `https://b.foo.example.com` to be accepted. Globbing is also supported on subdomains. e.g. `https://foo.example.com/*` will allow `https://foo.example.com/page1` and `https://foo.example.com/page2` to be accepted.
 
 For more common glob patterns, check out the [following link](https://pkg.go.dev/github.com/gobwas/glob#Compile).
 
@@ -195,11 +198,11 @@ When signup is disabled the only way to create new users is through invites. Def
 
 `GOTRUE_EXTERNAL_EMAIL_ENABLED` - `bool`
 
-Use this to disable email signups (users can still use external oauth providers to sign up / sign in)
+Use this to disable email signups (users can still use external OAuth providers to sign up / sign in)
 
 `GOTRUE_EXTERNAL_PHONE_ENABLED` - `bool`
 
-Use this to disable phone signups (users can still use external oauth providers to sign up / sign in)
+Use this to disable phone signups (users can still use external OAuth providers to sign up / sign in)
 
 `GOTRUE_RATE_LIMIT_HEADER` - `string`
 
@@ -207,7 +210,7 @@ Header on which to rate limit the `/token` endpoint.
 
 `GOTRUE_RATE_LIMIT_EMAIL_SENT` - `string`
 
-Rate limit the number of emails sent per hr on the following endpoints: `/signup`, `/invite`, `/magiclink`, `/recover`, `/otp`, & `/user`.
+Rate limit the number of emails sent per hour on the following endpoints: `/signup`, `/invite`, `/magiclink`, `/recover`, `/otp`, & `/user`.
 
 `GOTRUE_PASSWORD_MIN_LENGTH` - `int`
 
@@ -217,7 +220,7 @@ Minimum password length, defaults to 6.
 
 `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` - `bool`
 
-If refresh token rotation is enabled, auth will automatically detect malicious attempts to reuse a revoked refresh token. When a malicious attempt is detected, gotrue immediately revokes all tokens that descended from the offending token.
+If refresh token rotation is enabled, auth will automatically detect malicious attempts to reuse a revoked refresh token. When a malicious attempt is detected, GoTrue immediately revokes all tokens that descended from the offending token.
 
 `GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL` - `string`
 
@@ -247,7 +250,7 @@ Controls what endpoint Netlify can access this API on.
 
 `API_EXTERNAL_URL` - `string` **required**
 
-The URL on which Gotrue might be accessed at.
+The URL on which GoTrue might be accessed at.
 
 `REQUEST_ID_HEADER` - `string`
 
@@ -307,7 +310,7 @@ Auth has basic observability built in. It is able to export
 
 To enable tracing configure these variables:
 
-`GOTRUE_TRACING_ENABLED` - `boolean`
+`GOTRUE_TRACING_ENABLED` - `bool`
 
 `GOTRUE_TRACING_EXPORTER` - `string` only `opentelemetry` supported
 
@@ -430,7 +433,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `figma`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `figma`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `snapchat`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
@@ -498,7 +501,7 @@ To try out external authentication with Apple locally, you will need to do the f
 3. Generate the crt and key file. See [here](https://www.freecodecamp.org/news/how-to-get-https-working-on-your-local-development-environment-in-5-minutes-7af615770eec/) for more information.
 4. Generate the `GOTRUE_EXTERNAL_APPLE_SECRET` by following this [post](https://medium.com/identity-beyond-borders/how-to-configure-sign-in-with-apple-77c61e336003)!
 
-### E-Mail
+### Email
 
 Sending email is not required, but highly recommended for password recovery.
 If enabled, you must provide the required values below.
@@ -546,7 +549,7 @@ If you do not require email confirmation, you may set this to `true`. Defaults t
 
 `MAILER_OTP_EXP` - `number`
 
-Controls the duration an email link or otp is valid for.
+Controls the duration an email link or OTP is valid for.
 
 `MAILER_URLPATHS_INVITE` - `string`
 
@@ -583,6 +586,22 @@ Email subject to use for magic link email. Defaults to `Your Magic Link`.
 `MAILER_SUBJECTS_EMAIL_CHANGE` - `string`
 
 Email subject to use for email change confirmation. Defaults to `Confirm Email Change`.
+
+`MAILER_SUBJECTS_PASSWORD_CHANGED_NOTIFICATION` - `string`
+
+Email subject to use for password changed notification. Defaults to `Your password has been changed`.
+
+`MAILER_SUBJECTS_EMAIL_CHANGED_NOTIFICATION` - `string`
+
+Email subject to use for email changed notification. Defaults to `Your email address has been changed`.
+
+`GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
+
+Email subject to use for MFA factor enrolled notification. Defaults to `A new MFA factor has been enrolled`.
+
+`GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_UNENROLLED_NOTIFICATION` - `string`
+
+Email subject to use for MFA factor unenrolled notification. Defaults to `An MFA factor has been unenrolled`.
 
 `MAILER_TEMPLATES_INVITE` - `string`
 
@@ -660,6 +679,153 @@ Default Content (if template is unavailable):
 <p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
 ```
 
+`MAILER_TEMPLATES_PASSWORD_CHANGED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that their password has been changed. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>Your password has been changed</h2>
+
+<p>
+  This is a confirmation that the password for your account {{ .Email }} has
+  just been changed. If you did not make this change, please contact support
+  immediately.
+</p>
+<p>If you did not make this change, please contact support.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_PASSWORD_CHANGED_ENABLED` - `bool`
+
+Whether to send a notification email when a user's password is changed. Defaults to `false`.
+
+`MAILER_TEMPLATES_EMAIL_CHANGED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that their email has been changed. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `OldEmail` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>Your email address has been changed</h2>
+
+<p>
+  The email address for your account has been changed from {{ .OldEmail }} to {{
+  .Email }}.
+</p>
+<p>If you did not make this change, please contact support.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_EMAIL_CHANGED_ENABLED` - `bool`
+
+Whether to send a notification email when a user's email is changed. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_PHONE_CHANGED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that their phone number has been changed. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email`, `Phone`, and `OldPhone` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>Your phone number has been changed</h2>
+
+<p>
+  The phone number for your account {{ .Email }} has been changed from {{
+  .OldPhone }} to {{ .Phone }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_PHONE_CHANGED_ENABLED` - `bool`
+
+Whether to send a notification email when a user's phone number is changed. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_IDENTITY_LINKED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that a new identity has been linked to their account. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `Provider` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>A new identity has been linked</h2>
+
+<p>
+  A new identity ({{ .Provider }}) has been linked to your account {{ .Email }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_IDENTITY_LINKED_ENABLED` - `bool`
+
+Whether to send a notification email when a new identity is linked to a user's account. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_IDENTITY_UNLINKED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that an identity has been unlinked from their account. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `Provider` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>An identity has been unlinked</h2>
+
+<p>
+  An identity ({{ .Provider }}) has been unlinked from your account {{ .Email
+  }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_IDENTITY_UNLINKED_ENABLED` - `bool`
+
+Whether to send a notification email when an identity is unlinked from a user's account. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that they have enrolled in a new MFA factor. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `FactorType` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>MFA factor has been enrolled</h2>
+
+<p>
+  A new factor ({{ .FactorType }}) has been enrolled for your account {{ .Email
+  }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_MFA_FACTOR_ENROLLED_ENABLED` - `bool`
+
+Whether to send a notification email when a user enrolls in a new MFA factor. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_UNENROLLED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that they have unenrolled from an MFA factor. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `FactorType` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>MFA factor has been unenrolled</h2>
+
+<p>
+  A factor ({{ .FactorType }}) has been unenrolled for your account {{ .Email
+  }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_MFA_FACTOR_UNENROLLED_ENABLED` - `bool`
+
+Whether to send a notification email when a user unenrolls from an MFA factor. Defaults to `false`.
+
 ### Phone Auth
 
 `SMS_AUTOCONFIRM` - `bool`
@@ -668,15 +834,15 @@ If you do not require phone confirmation, you may set this to `true`. Defaults t
 
 `SMS_MAX_FREQUENCY` - `number`
 
-Controls the minimum amount of time that must pass before sending another sms otp. The value is the number of seconds. Defaults to 60 (1 minute)).
+Controls the minimum amount of time that must pass before sending another SMS OTP. The value is the number of seconds. Defaults to 60 (1 minute).
 
 `SMS_OTP_EXP` - `number`
 
-Controls the duration an sms otp is valid for.
+Controls the duration an SMS OTP is valid for.
 
 `SMS_OTP_LENGTH` - `number`
 
-Controls the number of digits of the sms otp sent.
+Controls the number of digits of the SMS OTP sent.
 
 `SMS_PROVIDER` - `string`
 
@@ -703,7 +869,7 @@ Whether captcha middleware is enabled
 
 `SECURITY_CAPTCHA_PROVIDER` - `string`
 
-for now the only options supported are: `hcaptcha` and `turnstile`
+for now the only options supported are: hCaptcha and Turnstile
 
 - `SECURITY_CAPTCHA_SECRET` - `string`
 - `SECURITY_CAPTCHA_TIMEOUT` - `string`
@@ -746,6 +912,7 @@ Returns the publicly available settings for this auth instance.
     "linkedin": true,
     "notion": true,
     "slack": true,
+    "snapchat": true,
     "spotify": true,
     "twitch": true,
     "twitter": true,
@@ -868,8 +1035,8 @@ if AUTOCONFIRM is enabled and the sign up is a duplicate, then the endpoint will
 
 ```json
 {
-  "code":400,
-  "msg":"User already registered"
+  "code": 400,
+  "msg": "User already registered"
 }
 ```
 
@@ -957,7 +1124,7 @@ Returns:
 }
 ```
 
-Verify a phone signup or sms otp. Type should be set to `sms`.
+Verify a phone signup or SMS OTP. Type should be set to `sms`.
 
 ```json
 {
@@ -1007,7 +1174,7 @@ or show an account confirmed/welcome message in the case of `signup`, or direct 
 
 ### **POST /otp**
 
-One-Time-Password. Will deliver a magiclink or sms otp to the user depending on whether the request body contains an "email" or "phone" key.
+One-Time-Password. Will deliver a magic link or SMS OTP to the user depending on whether the request body contains an "email" or "phone" key.
 
 If `"create_user": true`, user will not be automatically signed up if the user doesn't exist.
 
@@ -1053,7 +1220,7 @@ Returns:
 {}
 ```
 
-when clicked the magic link will redirect the user to `<SITE_URL>#access_token=x&refresh_token=y&expires_in=z&token_type=bearer&type=magiclink` (see `/verify` above)
+When the magic link is clicked, it will redirect to `<SITE_URL>#access_token=x&refresh_token=y&expires_in=z&token_type=bearer&type=magiclink` (see `/verify` above)
 
 ### **POST /recover**
 
@@ -1150,7 +1317,7 @@ Returns:
 ### **PUT /user**
 
 Update a user (Requires authentication). Apart from changing email/password, this
-method can be used to set custom user data. Changing the email will result in a magiclink being sent out.
+method can be used to set custom user data. Changing the email will result in a magic link being sent out.
 
 ```json
 {
@@ -1203,7 +1370,7 @@ headers: {
 Logout a user (Requires authentication).
 
 This will revoke all refresh tokens for the user. Remember that the JWT tokens
-will still be valid for stateless auth until they expires.
+will still be valid for stateless auth until they expire.
 
 ### **GET /authorize**
 
@@ -1212,18 +1379,18 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | figma | github | gitlab | google | keycloak | linkedin | notion | slack | spotify | twitch | twitter | workos
+provider=apple | azure | bitbucket | discord | facebook | figma | github | gitlab | google | keycloak | linkedin | notion | slack | snapchat | spotify | twitch | twitter | workos
 
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```
 
 Redirects to provider and then to `/callback`
 
-For apple specific setup see: <https://github.com/supabase/auth#apple-oauth>
+For Apple-specific setup see: <https://github.com/supabase/auth#apple-oauth>
 
 ### **GET /callback**
 
-External provider should redirect to here
+External provider should redirect to this endpoint
 
 Redirects to `<GOTRUE_SITE_URL>#access_token=<access_token>&refresh_token=<refresh_token>&provider_token=<provider_oauth_token>&expires_in=3600&provider=<provider_name>`
 If additional scopes were requested then `provider_token` will be populated, you can use this to fetch additional data from the provider or interact with their services

@@ -54,6 +54,8 @@ const (
 	EmailChange
 	TokenRefresh
 	Anonymous
+	Web3
+	OAuthProviderAuthorizationCode
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -86,6 +88,10 @@ func (authMethod AuthenticationMethod) String() string {
 		return "mfa/phone"
 	case MFAWebAuthn:
 		return "mfa/webauthn"
+	case Web3:
+		return "web3"
+	case OAuthProviderAuthorizationCode:
+		return "oauth_provider/authorization_code"
 	}
 	return ""
 }
@@ -121,6 +127,11 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return MFAPhone, nil
 	case "mfa/webauthn":
 		return MFAWebAuthn, nil
+	case "web3":
+		return Web3, nil
+	case "oauth_provider/authorization_code":
+		return OAuthProviderAuthorizationCode, nil
+
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
@@ -128,19 +139,20 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 type Factor struct {
 	ID uuid.UUID `json:"id" db:"id"`
 	// TODO: Consider removing this nested user field. We don't use it.
-	User               User                `json:"-" belongs_to:"user"`
-	UserID             uuid.UUID           `json:"-" db:"user_id"`
-	CreatedAt          time.Time           `json:"created_at" db:"created_at"`
-	UpdatedAt          time.Time           `json:"updated_at" db:"updated_at"`
-	Status             string              `json:"status" db:"status"`
-	FriendlyName       string              `json:"friendly_name,omitempty" db:"friendly_name"`
-	Secret             string              `json:"-" db:"secret"`
-	FactorType         string              `json:"factor_type" db:"factor_type"`
-	Challenge          []Challenge         `json:"-" has_many:"challenges"`
-	Phone              storage.NullString  `json:"phone" db:"phone"`
-	LastChallengedAt   *time.Time          `json:"last_challenged_at" db:"last_challenged_at"`
-	WebAuthnCredential *WebAuthnCredential `json:"-" db:"web_authn_credential"`
-	WebAuthnAAGUID     *uuid.UUID          `json:"web_authn_aaguid,omitempty" db:"web_authn_aaguid"`
+	User                      User                       `json:"-" belongs_to:"user"`
+	UserID                    uuid.UUID                  `json:"-" db:"user_id"`
+	CreatedAt                 time.Time                  `json:"created_at" db:"created_at"`
+	UpdatedAt                 time.Time                  `json:"updated_at" db:"updated_at"`
+	Status                    string                     `json:"status" db:"status"`
+	FriendlyName              string                     `json:"friendly_name,omitempty" db:"friendly_name"`
+	Secret                    string                     `json:"-" db:"secret"`
+	FactorType                string                     `json:"factor_type" db:"factor_type"`
+	Challenge                 []Challenge                `json:"-" has_many:"challenges"`
+	Phone                     storage.NullString         `json:"phone" db:"phone"`
+	LastChallengedAt          *time.Time                 `json:"last_challenged_at" db:"last_challenged_at"`
+	WebAuthnCredential        *WebAuthnCredential        `json:"-" db:"web_authn_credential"`
+	WebAuthnAAGUID            *uuid.UUID                 `json:"web_authn_aaguid,omitempty" db:"web_authn_aaguid"`
+	LastWebAuthnChallengeData *LastWebAuthnChallengeData `json:"last_webauthn_challenge_data,omitempty" db:"last_webauthn_challenge_data"`
 }
 
 type WebAuthnCredential struct {
@@ -152,6 +164,40 @@ func (wc *WebAuthnCredential) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return json.Marshal(wc)
+}
+
+type LastWebAuthnChallengeData struct {
+	Challenge          Challenge       `json:"challenge"`
+	Type               string          `json:"type"`
+	CredentialResponse json.RawMessage `json:"credential_response"`
+}
+
+func (lwcd *LastWebAuthnChallengeData) Value() (driver.Value, error) {
+	if lwcd == nil {
+		return nil, nil
+	}
+	return json.Marshal(lwcd)
+}
+
+func (lwcd *LastWebAuthnChallengeData) Scan(value interface{}) error {
+	if value == nil {
+		*lwcd = LastWebAuthnChallengeData{}
+		return nil
+	}
+	var data []byte
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		return fmt.Errorf("unsupported type for last_webauthn_challenge_data: %T", value)
+	}
+	if len(data) == 0 {
+		*lwcd = LastWebAuthnChallengeData{}
+		return nil
+	}
+	return json.Unmarshal(data, lwcd)
 }
 
 func (wc *WebAuthnCredential) Scan(value interface{}) error {
@@ -252,6 +298,21 @@ func (f *Factor) SaveWebAuthnCredential(tx *storage.Connection, credential *weba
 	}
 
 	return tx.UpdateOnly(f, "web_authn_credential", "web_authn_aaguid", "updated_at")
+}
+
+func (f *Factor) UpdateLastWebAuthnChallenge(tx *storage.Connection, challenge *Challenge, challengeType string, credentialResponse interface{}) error {
+	responseData, err := json.Marshal(credentialResponse)
+	if err != nil {
+		return fmt.Errorf("failed to marshal credential response: %w", err)
+	}
+
+	f.LastWebAuthnChallengeData = &LastWebAuthnChallengeData{
+		Challenge:          *challenge,
+		Type:               challengeType,
+		CredentialResponse: json.RawMessage(responseData),
+	}
+
+	return tx.UpdateOnly(f, "last_webauthn_challenge_data", "updated_at")
 }
 
 func FindFactorByFactorID(conn *storage.Connection, factorID uuid.UUID) (*Factor, error) {

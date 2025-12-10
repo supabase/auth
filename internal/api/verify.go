@@ -11,10 +11,13 @@ import (
 
 	"github.com/fatih/structs"
 	"github.com/sethvargo/go-password/password"
+	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/crypto"
 	mail "github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -48,18 +51,18 @@ type VerifyParams struct {
 func (p *VerifyParams) Validate(r *http.Request, a *API) error {
 	var err error
 	if p.Type == "" {
-		return badRequestError(ErrorCodeValidationFailed, "Verify requires a verification type")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Verify requires a verification type")
 	}
 	switch r.Method {
 	case http.MethodGet:
 		if p.Token == "" {
-			return badRequestError(ErrorCodeValidationFailed, "Verify requires a token or a token hash")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Verify requires a token or a token hash")
 		}
 		// TODO: deprecate the token query param from GET /verify and use token_hash instead (breaking change)
 		p.TokenHash = p.Token
 	case http.MethodPost:
 		if (p.Token == "" && p.TokenHash == "") || (p.Token != "" && p.TokenHash != "") {
-			return badRequestError(ErrorCodeValidationFailed, "Verify requires either a token or a token hash")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Verify requires either a token or a token hash")
 		}
 		if p.Token != "" {
 			if isPhoneOtpVerification(p) {
@@ -71,15 +74,15 @@ func (p *VerifyParams) Validate(r *http.Request, a *API) error {
 			} else if isEmailOtpVerification(p) {
 				p.Email, err = a.validateEmail(p.Email)
 				if err != nil {
-					return unprocessableEntityError(ErrorCodeValidationFailed, "Invalid email format").WithInternalError(err)
+					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeValidationFailed, "Invalid email format").WithInternalError(err)
 				}
 				p.TokenHash = crypto.GenerateTokenHash(p.Email, p.Token)
 			} else {
-				return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on verify")
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided on verify")
 			}
 		} else if p.TokenHash != "" {
 			if p.Email != "" || p.Phone != "" || p.RedirectTo != "" {
-				return badRequestError(ErrorCodeValidationFailed, "Only the token_hash and type should be provided")
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only the token_hash and type should be provided")
 			}
 		}
 	default:
@@ -161,7 +164,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 				return nil
 			}
 		default:
-			return badRequestError(ErrorCodeValidationFailed, "Unsupported verification type")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unsupported verification type")
 		}
 
 		if terr != nil {
@@ -186,7 +189,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 
 		} else if isPKCEFlow(flowType) {
 			if authCode, terr = issueAuthCode(tx, user, authenticationMethod); terr != nil {
-				return badRequestError(ErrorCodeFlowStateNotFound, "No associated flow state found. %s", terr)
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeFlowStateNotFound, "No associated flow state found. %s", terr)
 			}
 		}
 		return nil
@@ -210,6 +213,9 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		q := url.Values{}
 		q.Set("type", params.Type)
 		rurl = token.AsRedirectURL(rurl, q)
+
+		metering.RecordLogin(metering.LoginTypeImplicit, token.User.ID, nil)
+
 	} else if isPKCEFlow(flowType) {
 		rurl, err = a.prepPKCERedirectURL(rurl, authCode)
 		if err != nil {
@@ -260,7 +266,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		case smsVerification, phoneChangeVerification:
 			user, terr = a.smsVerify(r, tx, user, params)
 		default:
-			return badRequestError(ErrorCodeValidationFailed, "Unsupported verification type")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unsupported verification type")
 		}
 
 		if terr != nil {
@@ -291,6 +297,16 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 			"code": strconv.Itoa(http.StatusOK),
 		})
 	}
+
+	// Record login for analytics - determine provider based on verification type
+	provider := metering.ProviderEmail // default
+	if params.Type == smsVerification || params.Type == phoneChangeVerification {
+		provider = metering.ProviderPhone
+	}
+	metering.RecordLogin(metering.LoginTypeOTP, user.ID, &metering.LoginData{
+		Provider: provider,
+	})
+
 	return sendJSON(w, http.StatusOK, token)
 }
 
@@ -317,16 +333,18 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 		var terr error
 		if shouldUpdatePassword {
 			if terr = user.UpdatePassword(tx, nil); terr != nil {
-				return internalServerError("Error storing password").WithInternalError(terr)
+				return apierrors.NewInternalServerError("Error storing password").WithInternalError(terr)
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			"provider": EmailProvider,
+		}); terr != nil {
 			return terr
 		}
 
 		if terr = user.Confirm(tx); terr != nil {
-			return internalServerError("Error confirming user").WithInternalError(terr)
+			return apierrors.NewInternalServerError("Error confirming user").WithInternalError(terr)
 		}
 
 		for _, identity := range user.Identities {
@@ -337,7 +355,7 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 			if terr = identity.UpdateIdentityData(tx, map[string]interface{}{
 				"email_verified": true,
 			}); terr != nil {
-				return internalServerError("Error setting email_verified to true on identity").WithInternalError(terr)
+				return apierrors.NewInternalServerError("Error setting email_verified to true on identity").WithInternalError(terr)
 			}
 		}
 
@@ -350,13 +368,17 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 }
 
 func (a *API) recoverVerify(r *http.Request, conn *storage.Connection, user *models.User) (*models.User, error) {
+	config := a.config
+
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = user.Recover(tx); terr != nil {
 			return terr
 		}
 		if !user.IsConfirmed() {
-			if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				"provider": EmailProvider,
+			}); terr != nil {
 				return terr
 			}
 
@@ -364,7 +386,7 @@ func (a *API) recoverVerify(r *http.Request, conn *storage.Connection, user *mod
 				return terr
 			}
 		} else {
-			if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", nil); terr != nil {
 				return terr
 			}
 		}
@@ -372,24 +394,29 @@ func (a *API) recoverVerify(r *http.Request, conn *storage.Connection, user *mod
 	})
 
 	if err != nil {
-		return nil, internalServerError("Database error updating user").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("Database error updating user").WithInternalError(err)
 	}
 	return user, nil
 }
 
 func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.User, params *VerifyParams) (*models.User, error) {
+	config := a.config
 
+	oldPhone := user.GetPhone()
+	phoneIdentityWasCreated := false
 	err := conn.Transaction(func(tx *storage.Connection) error {
 
 		if params.Type == smsVerification {
-			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				"provider": PhoneProvider,
+			}); terr != nil {
 				return terr
 			}
 			if terr := user.ConfirmPhone(tx); terr != nil {
-				return internalServerError("Error confirming user").WithInternalError(terr)
+				return apierrors.NewInternalServerError("Error confirming user").WithInternalError(terr)
 			}
 		} else if params.Type == phoneChangeVerification {
-			if terr := models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 				return terr
 			}
 			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil {
@@ -404,6 +431,7 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 				})); terr != nil {
 					return terr
 				}
+				phoneIdentityWasCreated = true
 			} else {
 				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
 					"phone":          params.Phone,
@@ -413,7 +441,7 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 				}
 			}
 			if terr := user.ConfirmPhoneChange(tx); terr != nil {
-				return internalServerError("Error confirming user").WithInternalError(terr)
+				return apierrors.NewInternalServerError("Error confirming user").WithInternalError(terr)
 			}
 		}
 
@@ -425,13 +453,30 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 		}
 
 		if terr := tx.Load(user, "Identities"); terr != nil {
-			return internalServerError("Error refetching identities").WithInternalError(terr)
+			return apierrors.NewInternalServerError("Error refetching identities").WithInternalError(terr)
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	// Send phone changed notification email if enabled and phone was changed
+	if params.Type == phoneChangeVerification && config.Mailer.Notifications.PhoneChangedEnabled && user.GetEmail() != "" && phoneNumberChanged(oldPhone, user.GetPhone()) {
+		if err := a.sendPhoneChangedNotification(r, conn, user, oldPhone); err != nil {
+			// Log the error but don't fail the verification
+			logrus.WithError(err).Warn("Unable to send phone changed notification email")
+		}
+	}
+
+	// Send identity linked notification email if a new phone identity was created
+	if phoneIdentityWasCreated && config.Mailer.Notifications.IdentityLinkedEnabled && user.GetEmail() != "" {
+		if err := a.sendIdentityLinkedNotification(r, conn, user, "phone"); err != nil {
+			// Log the error but don't fail the verification
+			logrus.WithError(err).Warn("Unable to send identity linked notification email")
+		}
+	}
+
 	return user, nil
 }
 
@@ -535,8 +580,9 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 	}
 
 	// one email is confirmed at this point if GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED is enabled
+	oldEmail := user.GetEmail()
 	err := conn.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 			return terr
 		}
 
@@ -567,16 +613,24 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 			}
 		}
 		if terr := tx.Load(user, "Identities"); terr != nil {
-			return internalServerError("Error refetching identities").WithInternalError(terr)
+			return apierrors.NewInternalServerError("Error refetching identities").WithInternalError(terr)
 		}
 		if terr := user.ConfirmEmailChange(tx, zeroConfirmation); terr != nil {
-			return internalServerError("Error confirm email").WithInternalError(terr)
+			return apierrors.NewInternalServerError("Error confirm email").WithInternalError(terr)
 		}
 
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// send an Email Changed email notification to the user's old email address
+	if config.Mailer.Notifications.EmailChangedEnabled && emailAddressChanged(oldEmail, user.GetEmail()) {
+		if err := a.sendEmailChangedNotification(r, conn, user, oldEmail); err != nil {
+			// we don't want to fail the whole request if the email can't be sent
+			logrus.WithError(err).Warn("Unable to send email changed notification")
+		}
 	}
 
 	return user, nil
@@ -598,18 +652,18 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 	case mail.EmailChangeVerification:
 		user, err = models.FindUserByEmailChangeToken(conn, params.TokenHash)
 	default:
-		return nil, badRequestError(ErrorCodeValidationFailed, "Invalid email verification type")
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid email verification type")
 	}
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, forbiddenError(ErrorCodeOTPExpired, "Email link is invalid or has expired").WithInternalError(err)
+			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Email link is invalid or has expired").WithInternalError(err)
 		}
-		return nil, internalServerError("Database error finding user from email link").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("Database error finding user from email link").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
-		return nil, forbiddenError(ErrorCodeUserBanned, "User is banned")
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
 	var isExpired bool
@@ -631,7 +685,7 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 	}
 
 	if isExpired {
-		return nil, forbiddenError(ErrorCodeOTPExpired, "Email link is invalid or has expired").WithInternalMessage("email link has expired")
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Email link is invalid or has expired").WithInternalMessage("email link has expired")
 	}
 
 	return user, nil
@@ -660,13 +714,13 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, forbiddenError(ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
 		}
-		return nil, internalServerError("Database error finding user").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
-		return nil, forbiddenError(ErrorCodeUserBanned, "User is banned")
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
 	var isValid bool
@@ -709,7 +763,7 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 		if !config.Hook.SendSMS.Enabled && config.Sms.IsTwilioVerifyProvider() {
 			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(phone, params.Token); err != nil {
-				return nil, forbiddenError(ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+				return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
 			}
 			return user, nil
 		}
@@ -717,7 +771,7 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 	}
 
 	if !isValid {
-		return nil, forbiddenError(ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("token has expired or is invalid")
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("token has expired or is invalid")
 	}
 	return user, nil
 }
@@ -746,4 +800,14 @@ func isEmailOtpVerification(params *VerifyParams) bool {
 
 func isUsingTokenHash(params *VerifyParams) bool {
 	return params.TokenHash != "" && params.Token == "" && params.Phone == "" && params.Email == ""
+}
+
+// emailAddressChanged checks if the email address has changed, ensuring neither is empty
+func emailAddressChanged(oldEmail, newEmail string) bool {
+	return oldEmail != "" && newEmail != "" && oldEmail != newEmail
+}
+
+// phoneNumberChanged checks if the phone number has changed, ensuring neither is empty
+func phoneNumberChanged(oldPhone, newPhone string) bool {
+	return oldPhone != "" && newPhone != "" && oldPhone != newPhone
 }

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -79,6 +80,9 @@ func GetReferrer(r *http.Request, config *conf.GlobalConfiguration) string {
 	return config.SiteURL
 }
 
+var decimalIPAddressPattern = regexp.MustCompile("^[0-9]+$")
+var regularHostname = regexp.MustCompile("^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$")
+
 func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bool {
 	if redirectURL == "" {
 		return false
@@ -92,9 +96,30 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		return true
 	}
 
+	if rerr != nil {
+		// redirect URL is for some reason invalid
+		return false
+	}
+
+	scheme := strings.TrimSuffix(strings.ToLower(refurl.Scheme), ":")
+	isHTTP := scheme == "http" || scheme == "https"
+
+	if decimalIPAddressPattern.MatchString(refurl.Hostname()) {
+		// IP address in decimal form also not allowed in redirects!
+		return false
+	} else if ip := net.ParseIP(refurl.Hostname()); ip != nil {
+		return ip.IsLoopback()
+	} else if isHTTP && !regularHostname.MatchString(refurl.Hostname()) {
+		// hostname uses characters that are not typically used
+		return false
+	}
+
 	// For case when user came from mobile app or other permitted resource - redirect back
 	for _, pattern := range config.URIAllowListMap {
-		if pattern.Match(redirectURL) {
+		// only match without the fragment
+		matchAgainst, _, _ := strings.Cut(redirectURL, "#")
+
+		if pattern.Match(matchAgainst) {
 			return true
 		}
 	}

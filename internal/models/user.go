@@ -13,6 +13,7 @@ import (
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 	"golang.org/x/crypto/bcrypt"
@@ -468,7 +469,7 @@ func (u *User) ConfirmPhone(tx *storage.Connection) error {
 	now := time.Now()
 	u.PhoneConfirmedAt = &now
 	if err := tx.UpdateOnly(u, "confirmation_token", "phone_confirmed_at"); err != nil {
-		return nil
+		return err
 	}
 
 	return ClearAllOneTimeTokensForUser(tx, u.ID)
@@ -584,6 +585,18 @@ func (u *User) Recover(tx *storage.Connection) error {
 	return ClearAllOneTimeTokensForUser(tx, u.ID)
 }
 
+// HighestPossibleAAL returns the AAL level that this user can obtain. Derived
+// from the number of verified MFA factors associated with the user object.
+func (u *User) HighestPossibleAAL() AuthenticatorAssuranceLevel {
+	for _, factor := range u.Factors {
+		if factor.Status == FactorStateVerified.String() {
+			return AAL2
+		}
+	}
+
+	return AAL1
+}
+
 // CountOtherUsers counts how many other users exist besides the one provided
 func CountOtherUsers(tx *storage.Connection, id uuid.UUID) (int, error) {
 	userCount, err := tx.Q().Where("instance_id = ? and id != ?", uuid.Nil, id).Count(&User{})
@@ -622,7 +635,65 @@ func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 // the form SELECT ... FOR UPDATE SKIP LOCKED. This means that a FOR UPDATE
 // lock will only be acquired if there's no other lock. In case there is a
 // lock, a IsNotFound(err) error will be returned.
-func FindUserWithRefreshToken(tx *storage.Connection, token string, forUpdate bool) (*User, *RefreshToken, *Session, error) {
+//
+// Second value returned is either *models.RefreshToken or *crypto.RefreshToken.
+func FindUserWithRefreshToken(tx *storage.Connection, dbEncryption conf.DatabaseEncryptionConfiguration, token string, forUpdate bool) (*User, any, *Session, error) {
+	if len(token) < 12 {
+		// not a valid refresh token so don't bother looking it up in the database
+		return nil, nil, nil, SessionNotFoundError{}
+	}
+
+	if len(token) == 12 {
+		return findUserWithLegacyRefreshToken(tx, token, forUpdate)
+	}
+
+	return findUserWithRefreshToken(tx, dbEncryption, token, forUpdate)
+}
+
+func findUserWithRefreshToken(tx *storage.Connection, dbEncryption conf.DatabaseEncryptionConfiguration, token string, forUpdate bool) (*User, *crypto.RefreshToken, *Session, error) {
+	refreshToken, err := crypto.ParseRefreshToken(token)
+	if err != nil {
+		// refresh token is not valid
+		return nil, nil, nil, SessionNotFoundError{}
+	}
+
+	session, err := FindSessionByID(tx, refreshToken.SessionID, forUpdate)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if session.RefreshTokenHmacKey == nil || session.RefreshTokenCounter == nil {
+		// if the session is not set up to support these encoded refresh tokens it's as if it doesn't exist
+		// meaning someone is hand-crafting tokens for uuids that exist
+		return nil, nil, nil, SessionNotFoundError{}
+	}
+
+	key, shouldReEncrypt, err := session.GetRefreshTokenHmacKey(dbEncryption)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if !refreshToken.CheckSignature(key) {
+		// refresh token signature is not valid for this session
+		return nil, nil, nil, SessionNotFoundError{}
+	}
+
+	if shouldReEncrypt && forUpdate {
+		err := session.ReEncryptRefreshTokenHmacKey(tx, dbEncryption)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	user, err := FindUserByID(tx, session.UserID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return user, refreshToken, session, nil
+}
+
+func findUserWithLegacyRefreshToken(tx *storage.Connection, token string, forUpdate bool) (*User, any, *Session, error) {
 	refreshToken := &RefreshToken{}
 
 	if forUpdate {
@@ -704,9 +775,11 @@ func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Paginat
 	return users, err
 }
 
-// IsDuplicatedEmail returns whether a user exists with a matching email and audience.
+// IsDuplicatedEmail returns whether a user exists with a matching email and
+// audience importantly in the *default* identity linking domain (meaning SSO
+// accounts and similar are not considered).
 // If a currentUser is provided, we will need to filter out any identities that belong to the current user.
-func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *User) (*User, error) {
+func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *User, ownDomainProviders []string) (*User, error) {
 	var identities []Identity
 
 	if err := tx.Eager().Q().Where("email = ?", strings.ToLower(email)).All(&identities); err != nil {
@@ -720,7 +793,7 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 	userIDs := make(map[string]uuid.UUID)
 	for _, identity := range identities {
 		if _, ok := userIDs[identity.UserID.String()]; !ok {
-			if !identity.IsForSSOProvider() {
+			if GetAccountLinkingDomain(identity.Provider, ownDomainProviders) == "default" {
 				userIDs[identity.UserID.String()] = identity.UserID
 			}
 		}

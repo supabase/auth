@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	mail "github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/mailer/validateclient"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/fatih/structs"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
@@ -78,10 +80,10 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 					panic(err)
 				}
 			case mail.RecoveryVerification, mail.EmailChangeCurrentVerification, mail.EmailChangeNewVerification:
-				return notFoundError(ErrorCodeUserNotFound, "User with this email not found")
+				return apierrors.NewNotFoundError(apierrors.ErrorCodeUserNotFound, "User with this email not found")
 			}
 		} else {
-			return internalServerError("Database error finding user").WithInternalError(err)
+			return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 		}
 	}
 
@@ -91,8 +93,13 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
 
-	var signupUser *models.User
-	if params.Type == mail.SignupVerification && user == nil {
+	var (
+		createdUser bool
+		signupUser  *models.User
+		inviteUser  *models.User
+	)
+	switch {
+	case params.Type == mail.SignupVerification && user == nil:
 		signupParams := &SignupParams{
 			Email:    params.Email,
 			Password: params.Password,
@@ -109,13 +116,32 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+		if err := a.triggerBeforeUserCreated(r, db, signupUser); err != nil {
+			return err
+		}
+
+	case params.Type == mail.InviteVerification && user == nil:
+		signupParams := &SignupParams{
+			Email:    params.Email,
+			Data:     params.Data,
+			Provider: "email",
+			Aud:      aud,
+		}
+
+		inviteUser, err = signupParams.ToUserModel(false /* <- isSSOUser */)
+		if err != nil {
+			return err
+		}
+		if err := a.triggerBeforeUserCreated(r, db, inviteUser); err != nil {
+			return err
+		}
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
 		case mail.MagicLinkVerification, mail.RecoveryVerification:
-			if terr = models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
 			user.RecoveryToken = hashedToken
@@ -134,25 +160,11 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		case mail.InviteVerification:
 			if user != nil {
 				if user.IsConfirmed() {
-					return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
+					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 				}
 			} else {
-				signupParams := &SignupParams{
-					Email:    params.Email,
-					Data:     params.Data,
-					Provider: "email",
-					Aud:      aud,
-				}
-
-				// because params above sets no password, this
-				// method is not computationally hard so it can
-				// be used within a database transaction
-				user, terr = signupParams.ToUserModel(false /* <- isSSOUser */)
-				if terr != nil {
-					return terr
-				}
-
-				user, terr = a.signupNewUser(tx, user)
+				createdUser = true
+				user, terr = a.signupNewUser(tx, inviteUser)
 				if terr != nil {
 					return terr
 				}
@@ -165,7 +177,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				}
 				user.Identities = []models.Identity{*identity}
 			}
-			if terr = models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
+			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 				"user_id":    user.ID,
 				"user_email": user.Email,
 			}); terr != nil {
@@ -187,16 +199,17 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		case mail.SignupVerification:
 			if user != nil {
 				if user.IsConfirmed() {
-					return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
+					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 				}
 				if err := user.UpdateUserMetaData(tx, params.Data); err != nil {
-					return internalServerError("Database error updating user").WithInternalError(err)
+					return apierrors.NewInternalServerError("Database error updating user").WithInternalError(err)
 				}
 			} else {
 				// you should never use SignupParams with
 				// password here to generate a new user, use
 				// signupUser which is a model generated from
 				// SignupParams above
+				createdUser = true
 				user, terr = a.signupNewUser(tx, signupUser)
 				if terr != nil {
 					return terr
@@ -224,16 +237,16 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			}
 		case mail.EmailChangeCurrentVerification, mail.EmailChangeNewVerification:
 			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
-				return badRequestError(ErrorCodeValidationFailed, "Enable secure email change to generate link for current email")
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Enable secure email change to generate link for current email")
 			}
 			params.NewEmail, terr = a.validateEmail(params.NewEmail)
 			if terr != nil {
 				return terr
 			}
-			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user); terr != nil {
-				return internalServerError("Database error checking email").WithInternalError(terr)
+			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user, config.Experimental.ProvidersWithOwnLinkingDomain); terr != nil {
+				return apierrors.NewInternalServerError("Database error checking email").WithInternalError(terr)
 			} else if duplicateUser != nil {
-				return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
 			now := time.Now()
 			user.EmailChangeSentAt = &now
@@ -264,7 +277,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				}
 			}
 		default:
-			return badRequestError(ErrorCodeValidationFailed, "Invalid email action link type requested: %v", params.Type)
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid email action link type requested: %v", params.Type)
 		}
 
 		if terr != nil {
@@ -278,9 +291,14 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
+	}
+
+	if createdUser {
+		if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+			return err
+		}
 	}
 
 	resp := GenerateLinkResponse{
@@ -291,7 +309,6 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		VerificationType: params.Type,
 		RedirectTo:       referrer,
 	}
-
 	return sendJSON(w, http.StatusOK, resp)
 }
 
@@ -311,22 +328,26 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	if err = a.sendEmail(r, tx, u, mail.SignupVerification, otp, "", u.ConfirmationToken); err != nil {
+	if err = a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType:     mail.SignupVerification,
+		otp:                 otp,
+		tokenHashWithPrefix: u.ConfirmationToken,
+	}); err != nil {
 		u.ConfirmationToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
-			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
 		} else if herr, ok := err.(*HTTPError); ok {
 			return herr
 		}
-		return internalServerError("Error sending confirmation email").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error sending confirmation email").WithInternalError(err)
 	}
 	u.ConfirmationSentAt = &now
 	if err := tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at"); err != nil {
-		return internalServerError("Error sending confirmation email").WithInternalError(errors.Wrap(err, "Database error updating user for confirmation"))
+		return apierrors.NewInternalServerError("Error sending confirmation email").WithInternalError(errors.Wrap(err, "Database error updating user for confirmation"))
 	}
 
 	if err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken); err != nil {
-		return internalServerError("Error sending confirmation email").WithInternalError(errors.Wrap(err, "Database error creating confirmation token"))
+		return apierrors.NewInternalServerError("Error sending confirmation email").WithInternalError(errors.Wrap(err, "Database error creating confirmation token"))
 	}
 
 	return nil
@@ -341,25 +362,30 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 
 	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	if err = a.sendEmail(r, tx, u, mail.InviteVerification, otp, "", u.ConfirmationToken); err != nil {
+	err = a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType:     mail.InviteVerification,
+		otp:                 otp,
+		tokenHashWithPrefix: u.ConfirmationToken,
+	})
+	if err != nil {
 		u.ConfirmationToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
-			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
 		} else if herr, ok := err.(*HTTPError); ok {
 			return herr
 		}
-		return internalServerError("Error sending invite email").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error sending invite email").WithInternalError(err)
 	}
 	u.InvitedAt = &now
 	u.ConfirmationSentAt = &now
 	err = tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at", "invited_at")
 	if err != nil {
-		return internalServerError("Error inviting user").WithInternalError(errors.Wrap(err, "Database error updating user for invite"))
+		return apierrors.NewInternalServerError("Error inviting user").WithInternalError(errors.Wrap(err, "Database error updating user for invite"))
 	}
 
 	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken)
 	if err != nil {
-		return internalServerError("Error inviting user").WithInternalError(errors.Wrap(err, "Database error creating confirmation token for invite"))
+		return apierrors.NewInternalServerError("Error inviting user").WithInternalError(errors.Wrap(err, "Database error creating confirmation token for invite"))
 	}
 
 	return nil
@@ -379,23 +405,28 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	if err := a.sendEmail(r, tx, u, mail.RecoveryVerification, otp, "", u.RecoveryToken); err != nil {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType:     mail.RecoveryVerification,
+		otp:                 otp,
+		tokenHashWithPrefix: u.RecoveryToken,
+	})
+	if err != nil {
 		u.RecoveryToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
-			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
 		} else if herr, ok := err.(*HTTPError); ok {
 			return herr
 		}
-		return internalServerError("Error sending recovery email").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error sending recovery email").WithInternalError(err)
 	}
 	u.RecoverySentAt = &now
 
 	if err := tx.UpdateOnly(u, "recovery_token", "recovery_sent_at"); err != nil {
-		return internalServerError("Error sending recovery email").WithInternalError(errors.Wrap(err, "Database error updating user for recovery"))
+		return apierrors.NewInternalServerError("Error sending recovery email").WithInternalError(errors.Wrap(err, "Database error updating user for recovery"))
 	}
 
 	if err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken); err != nil {
-		return internalServerError("Error sending recovery email").WithInternalError(errors.Wrap(err, "Database error creating recovery token"))
+		return apierrors.NewInternalServerError("Error sending recovery email").WithInternalError(errors.Wrap(err, "Database error creating recovery token"))
 	}
 
 	return nil
@@ -416,22 +447,27 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
 
-	if err := a.sendEmail(r, tx, u, mail.ReauthenticationVerification, otp, "", u.ReauthenticationToken); err != nil {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType:     mail.ReauthenticationVerification,
+		otp:                 otp,
+		tokenHashWithPrefix: u.ReauthenticationToken,
+	})
+	if err != nil {
 		u.ReauthenticationToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
-			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
 		} else if herr, ok := err.(*HTTPError); ok {
 			return herr
 		}
-		return internalServerError("Error sending reauthentication email").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error sending reauthentication email").WithInternalError(err)
 	}
 	u.ReauthenticationSentAt = &now
 	if err := tx.UpdateOnly(u, "reauthentication_token", "reauthentication_sent_at"); err != nil {
-		return internalServerError("Error sending reauthentication email").WithInternalError(errors.Wrap(err, "Database error updating user for reauthentication"))
+		return apierrors.NewInternalServerError("Error sending reauthentication email").WithInternalError(errors.Wrap(err, "Database error updating user for reauthentication"))
 	}
 
 	if err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ReauthenticationToken, models.ReauthenticationToken); err != nil {
-		return internalServerError("Error sending reauthentication email").WithInternalError(errors.Wrap(err, "Database error creating reauthentication token"))
+		return apierrors.NewInternalServerError("Error sending reauthentication email").WithInternalError(errors.Wrap(err, "Database error creating reauthentication token"))
 	}
 
 	return nil
@@ -455,22 +491,26 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
-	if err = a.sendEmail(r, tx, u, mail.MagicLinkVerification, otp, "", u.RecoveryToken); err != nil {
+	if err = a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType:     mail.MagicLinkVerification,
+		otp:                 otp,
+		tokenHashWithPrefix: u.RecoveryToken,
+	}); err != nil {
 		u.RecoveryToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
-			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
 		} else if herr, ok := err.(*HTTPError); ok {
 			return herr
 		}
-		return internalServerError("Error sending magic link email").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error sending magic link email").WithInternalError(err)
 	}
 	u.RecoverySentAt = &now
 	if err := tx.UpdateOnly(u, "recovery_token", "recovery_sent_at"); err != nil {
-		return internalServerError("Error sending magic link email").WithInternalError(errors.Wrap(err, "Database error updating user for recovery"))
+		return apierrors.NewInternalServerError("Error sending magic link email").WithInternalError(errors.Wrap(err, "Database error updating user for recovery"))
 	}
 
 	if err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken); err != nil {
-		return internalServerError("Error sending magic link email").WithInternalError(errors.Wrap(err, "Database error creating recovery token"))
+		return apierrors.NewInternalServerError("Error sending magic link email").WithInternalError(errors.Wrap(err, "Database error creating recovery token"))
 	}
 
 	return nil
@@ -502,13 +542,19 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
 
-	if err := a.sendEmail(r, tx, u, mail.EmailChangeVerification, otpCurrent, otpNew, u.EmailChangeTokenNew); err != nil {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType:     mail.EmailChangeVerification,
+		otp:                 otpCurrent,
+		otpNew:              otpNew,
+		tokenHashWithPrefix: u.EmailChangeTokenNew,
+	})
+	if err != nil {
 		if errors.Is(err, EmailRateLimitExceeded) {
-			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
 		} else if herr, ok := err.(*HTTPError); ok {
 			return herr
 		}
-		return internalServerError("Error sending email change email").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(err)
 	}
 
 	u.EmailChangeSentAt = &now
@@ -520,19 +566,137 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 		"email_change_sent_at",
 		"email_change_confirm_status",
 	); err != nil {
-		return internalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error updating user for email change"))
+		return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error updating user for email change"))
 	}
 
 	if u.EmailChangeTokenCurrent != "" {
 		if err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent); err != nil {
-			return internalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error creating email change token current"))
+			return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error creating email change token current"))
 		}
 	}
 
 	if u.EmailChangeTokenNew != "" {
 		if err := models.CreateOneTimeToken(tx, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew); err != nil {
-			return internalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error creating email change token new"))
+			return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error creating email change token new"))
 		}
+	}
+
+	return nil
+}
+
+func (a *API) sendPasswordChangedNotification(r *http.Request, tx *storage.Connection, u *models.User) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.PasswordChangedNotification,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending password changed notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
+func (a *API) sendEmailChangedNotification(r *http.Request, tx *storage.Connection, u *models.User, oldEmail string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.EmailChangedNotification,
+		oldEmail:        oldEmail,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending email changed notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
+func (a *API) sendPhoneChangedNotification(r *http.Request, tx *storage.Connection, u *models.User, oldPhone string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.PhoneChangedNotification,
+		oldPhone:        oldPhone,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending phone changed notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
+func (a *API) sendIdentityLinkedNotification(r *http.Request, tx *storage.Connection, u *models.User, provider string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.IdentityLinkedNotification,
+		provider:        provider,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending identity linked notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
+func (a *API) sendIdentityUnlinkedNotification(r *http.Request, tx *storage.Connection, u *models.User, provider string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.IdentityUnlinkedNotification,
+		provider:        provider,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending identity unlinked notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
+func (a *API) sendMFAFactorEnrolledNotification(r *http.Request, tx *storage.Connection, u *models.User, factorType string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.MFAFactorEnrolledNotification,
+		factorType:      factorType,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending MFA factor enrolled notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
+func (a *API) sendMFAFactorUnenrolledNotification(r *http.Request, tx *storage.Connection, u *models.User, factorType string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.MFAFactorUnenrolledNotification,
+		factorType:      factorType,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending MFA factor unenrolled notification email").WithInternalError(err)
 	}
 
 	return nil
@@ -540,13 +704,13 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 
 func (a *API) validateEmail(email string) (string, error) {
 	if email == "" {
-		return "", badRequestError(ErrorCodeValidationFailed, "An email address is required")
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is required")
 	}
 	if len(email) > 255 {
-		return "", badRequestError(ErrorCodeValidationFailed, "An email address is too long")
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is too long")
 	}
 	if err := checkmail.ValidateFormat(email); err != nil {
-		return "", badRequestError(ErrorCodeValidationFailed, "Unable to validate email address: "+err.Error())
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: "+err.Error())
 	}
 
 	return strings.ToLower(email), nil
@@ -554,7 +718,7 @@ func (a *API) validateEmail(email string) (string, error) {
 
 func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration) error {
 	if sentAt != nil && sentAt.Add(frequency).After(time.Now()) {
-		return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, frequency))
+		return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, frequency))
 	}
 	return nil
 }
@@ -578,21 +742,33 @@ func (a *API) checkEmailAddressAuthorization(email string) bool {
 	return true
 }
 
-func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, emailActionType, otp, otpNew, tokenHashWithPrefix string) error {
+type sendEmailParams struct {
+	emailActionType     string
+	otp                 string
+	otpNew              string
+	tokenHashWithPrefix string
+	oldEmail            string
+	oldPhone            string
+	provider            string
+	factorType          string
+}
+
+func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, params sendEmailParams) error {
 	ctx := r.Context()
 	config := a.config
 	referrerURL := utilities.GetReferrer(r, config)
 	externalURL := getExternalHost(ctx)
+	otp := params.otp
 
-	if emailActionType != mail.EmailChangeVerification {
+	if params.emailActionType != mail.EmailChangeVerification {
 		if u.GetEmail() != "" && !a.checkEmailAddressAuthorization(u.GetEmail()) {
-			return badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.GetEmail())
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.GetEmail())
 		}
 	} else {
 		// first check that the user can update their address to the
 		// new one in u.EmailChange
 		if u.EmailChange != "" && !a.checkEmailAddressAuthorization(u.EmailChange) {
-			return badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.EmailChange)
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.EmailChange)
 		}
 
 		// if secure email change is enabled, check that the user
@@ -600,7 +776,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		// address authorization restriction was enabled) can even
 		// receive the confirmation message to the existing address
 		if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" && !a.checkEmailAddressAuthorization(u.GetEmail()) {
-			return badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.GetEmail())
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.GetEmail())
 		}
 	}
 
@@ -629,32 +805,69 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 
 	if config.Hook.SendEmail.Enabled {
 		// When secure email change is disabled, we place the token for the new email on emailData.Token
-		if emailActionType == mail.EmailChangeVerification && !config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-			otp = otpNew
+		if params.emailActionType == mail.EmailChangeVerification && !config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+
+			// BUG(cstockton): This introduced a bug which mismatched the token
+			// and hash fields, such that:
+			//
+			// 	EmailData.TokenHashNew = Hash(CurEmail, EmailData.Token)
+			// 	EmailData.TokenHash    = Hash(NewEmail, EmailData.TokenNew)
+			//
+			// Specifically with email changes we should look to fix this
+			// behavior in a BC way to maintain that:
+			//
+			//   Token      Always contains the Token for user.email
+			//   TokenHash  Always contains the Hash for user.email
+			//
+			//   Token      Always contains the Token for user.email_new
+			//   TokenHash  Always contains the Hash for user.email_new
+			//
+			otp = params.otpNew
 		}
 
 		emailData := mail.EmailData{
 			Token:           otp,
-			EmailActionType: emailActionType,
+			EmailActionType: params.emailActionType,
 			RedirectTo:      referrerURL,
 			SiteURL:         externalURL.String(),
-			TokenHash:       tokenHashWithPrefix,
+			TokenHash:       params.tokenHashWithPrefix,
 		}
-		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-			emailData.TokenNew = otpNew
-			emailData.TokenHashNew = u.EmailChangeTokenCurrent
+		if params.emailActionType == mail.EmailChangeVerification {
+			if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+				emailData.TokenNew = params.otpNew
+				emailData.TokenHashNew = u.EmailChangeTokenCurrent
+			} else if emailData.Token == "" && u.EmailChange != "" {
+
+				// BUG(cstockton): This matches the current behavior but is not
+				// intuitive and should be changed in a future release. See the
+				// comment above for more details.
+				emailData.Token = params.otpNew
+			}
 		}
-		input := hooks.SendEmailInput{
+
+		// Augment the email data for the email send hook with notification-specific fields
+		switch params.emailActionType {
+		case mail.EmailChangedNotification:
+			emailData.OldEmail = params.oldEmail
+		case mail.PhoneChangedNotification:
+			emailData.OldPhone = params.oldPhone
+		case mail.IdentityLinkedNotification, mail.IdentityUnlinkedNotification:
+			emailData.Provider = params.provider
+		case mail.MFAFactorEnrolledNotification, mail.MFAFactorUnenrolledNotification:
+			emailData.FactorType = params.factorType
+		}
+
+		input := v0hooks.SendEmailInput{
 			User:      u,
 			EmailData: emailData,
 		}
-		output := hooks.SendEmailOutput{}
-		return a.invokeHook(tx, r, &input, &output)
+		output := v0hooks.SendEmailOutput{}
+		return a.hooksMgr.InvokeHook(tx, r, &input, &output)
 	}
 
 	mr := a.Mailer()
 	var err error
-	switch emailActionType {
+	switch params.emailActionType {
 	case mail.SignupVerification:
 		err = mr.ConfirmationMail(r, u, otp, referrerURL, externalURL)
 	case mail.MagicLinkVerification:
@@ -666,17 +879,31 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	case mail.InviteVerification:
 		err = mr.InviteMail(r, u, otp, referrerURL, externalURL)
 	case mail.EmailChangeVerification:
-		err = mr.EmailChangeMail(r, u, otpNew, otp, referrerURL, externalURL)
+		err = mr.EmailChangeMail(r, u, params.otpNew, otp, referrerURL, externalURL)
+	case mail.PasswordChangedNotification:
+		err = mr.PasswordChangedNotificationMail(r, u)
+	case mail.EmailChangedNotification:
+		err = mr.EmailChangedNotificationMail(r, u, params.oldEmail)
+	case mail.PhoneChangedNotification:
+		err = mr.PhoneChangedNotificationMail(r, u, params.oldPhone)
+	case mail.IdentityLinkedNotification:
+		err = mr.IdentityLinkedNotificationMail(r, u, params.provider)
+	case mail.IdentityUnlinkedNotification:
+		err = mr.IdentityUnlinkedNotificationMail(r, u, params.provider)
+	case mail.MFAFactorEnrolledNotification:
+		err = mr.MFAFactorEnrolledNotificationMail(r, u, params.factorType)
+	case mail.MFAFactorUnenrolledNotification:
+		err = mr.MFAFactorUnenrolledNotificationMail(r, u, params.factorType)
 	default:
 		err = errors.New("invalid email action type")
 	}
 
 	switch {
-	case errors.Is(err, mail.ErrInvalidEmailAddress),
-		errors.Is(err, mail.ErrInvalidEmailFormat),
-		errors.Is(err, mail.ErrInvalidEmailDNS):
-		return badRequestError(
-			ErrorCodeEmailAddressInvalid,
+	case errors.Is(err, validateclient.ErrInvalidEmailAddress),
+		errors.Is(err, validateclient.ErrInvalidEmailFormat),
+		errors.Is(err, validateclient.ErrInvalidEmailDNS):
+		return apierrors.NewBadRequestError(
+			apierrors.ErrorCodeEmailAddressInvalid,
 			"Email address %q is invalid",
 			u.GetEmail())
 	default:

@@ -27,7 +27,7 @@ func (ts *ExternalTestSuite) TestSignupExternalFigma() {
 	ts.Equal(ts.Config.External.Figma.RedirectURI, q.Get("redirect_uri"))
 	ts.Equal(ts.Config.External.Figma.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
-	ts.Equal("files:read", q.Get("scope"))
+	ts.Equal("current_user:read", q.Get("scope"))
 
 	claims := ExternalProviderClaims{}
 	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
@@ -43,7 +43,7 @@ func (ts *ExternalTestSuite) TestSignupExternalFigma() {
 func FigmaTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, email string) *httptest.Server {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/oauth/token":
+		case "/v1/oauth/token":
 			*tokenCount++
 			ts.Equal(code, r.FormValue("code"))
 			ts.Equal("authorization_code", r.FormValue("grant_type"))

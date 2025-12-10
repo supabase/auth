@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -13,7 +15,34 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const IssuerApple = "https://appleid.apple.com"
+const DefaultAppleIssuer = "https://appleid.apple.com"
+const OtherAppleIssuer = "https://account.apple.com"
+
+func IsAppleIssuer(issuer string) bool {
+	return issuer == DefaultAppleIssuer || issuer == OtherAppleIssuer
+}
+
+func DetectAppleIDTokenIssuer(ctx context.Context, idToken string) (string, error) {
+	var payload struct {
+		Issuer string `json:"iss"`
+	}
+
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("apple: invalid ID token")
+	}
+
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("apple: invalid ID token %w", err)
+	}
+
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		return "", fmt.Errorf("apple: invalid ID token %w", err)
+	}
+
+	return payload.Issuer, nil
+}
 
 // AppleProvider stores the custom config for apple provider
 type AppleProvider struct {
@@ -68,7 +97,7 @@ func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration) 
 		logrus.Warn("Apple OAuth provider has URL config set which is ignored (check GOTRUE_EXTERNAL_APPLE_URL)")
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, IssuerApple)
+	oidcProvider, err := oidc.NewProvider(ctx, DefaultAppleIssuer)
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +118,17 @@ func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration) 
 }
 
 // GetOAuthToken returns the apple provider access token
-func (p AppleProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	opts := []oauth2.AuthCodeOption{
+func (p AppleProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	appleOpts := []oauth2.AuthCodeOption{
 		oauth2.SetAuthURLParam("client_id", p.ClientID),
 		oauth2.SetAuthURLParam("secret", p.ClientSecret),
 	}
-	return p.Exchange(context.Background(), code, opts...)
+	appleOpts = append(appleOpts, opts...)
+	return p.Exchange(ctx, code, appleOpts...)
+}
+
+func (p AppleProvider) RequiresPKCE() bool {
+	return false
 }
 
 func (p AppleProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {
@@ -119,7 +153,8 @@ func (p AppleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 	}
 
 	_, data, err := ParseIDToken(ctx, p.oidc, &oidc.Config{
-		ClientID: p.ClientID,
+		ClientID:        p.ClientID,
+		SkipIssuerCheck: true,
 	}, idToken.(string), ParseIDTokenOptions{
 		AccessToken: tok.AccessToken,
 	})

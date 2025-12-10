@@ -72,8 +72,12 @@ func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration,
 	}, nil
 }
 
-func (g googleProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g googleProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(ctx, code, opts...)
+}
+
+func (g googleProvider) RequiresPKCE() bool {
+	return false
 }
 
 const UserInfoEndpointGoogle = "https://www.googleapis.com/userinfo/v2/me"

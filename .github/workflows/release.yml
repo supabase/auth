@@ -6,12 +6,19 @@ on:
       - master
       - release/*
 
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+  id-token: write
+
 jobs:
   release_please:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+      id-token: write
     outputs:
       MAIN_RELEASE_VERSION: ${{ steps.versions.outputs.MAIN_RELEASE_VERSION }}
       RELEASE_VERSION: ${{ steps.versions.outputs.RELEASE_VERSION }}
@@ -76,7 +83,7 @@ jobs:
       - uses: actions/setup-go@v5
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
-          go-version: "^1.22.0" # The Go version to download (if necessary) and use.
+          go-version-file: go.mod
 
       - name: Build release artifacts
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
@@ -84,11 +91,56 @@ jobs:
           set -ex
 
           RELEASE_VERSION=$RELEASE_VERSION make deps
-          RELEASE_VERSION=$RELEASE_VERSION make all
+          RELEASE_VERSION=$RELEASE_VERSION make all build-strip
+
           ln -s auth gotrue
           tar -czvf auth-v$RELEASE_VERSION-x86.tar.gz auth gotrue migrations/
           mv auth-arm64 auth
           tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
+
+          mv auth-arm64-strip auth
+          tar -cf - auth gotrue migrations/ | xz -T0 -9e -C crc64 > auth-v$RELEASE_VERSION-arm64.tar.xz
+
+      - name: Generate checksums
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        run: |
+          set -ex
+          # Function to generate checksums for a specific hash type
+          generate_checksums() {
+            local hash_type=$1
+            local hash_cmd=$2
+            echo "### ${hash_type}" >> checksums.txt
+            for file in auth-v$RELEASE_VERSION*.tar.{gz,xz}; do
+              echo "\`$file\`:" >> checksums.txt
+              echo "\`\`\`" >> checksums.txt
+              $hash_cmd "$file" | awk '{print $1}' >> checksums.txt
+              echo "\`\`\`" >> checksums.txt
+              echo "" >> checksums.txt
+            done
+          }
+
+          # Generate the checksum file to be appended to the release notes later
+          echo "## Checksums" > checksums.txt
+          generate_checksums "SHA1" "sha1sum"
+          generate_checksums "SHA256" "sha256sum"
+
+      - name: GitHub OIDC Auth
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::${{ secrets.SHARED_SERVICES_AWS_ACCOUNT_ID }}:role/supabase-github-oidc-role
+          role-session-name: shared-services-jump
+
+      - name: Assume destination role
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::${{ secrets.SHARED_SERVICES_AWS_ACCOUNT_ID }}:role/supabase-auth-artifacts-role-7656c95
+          role-skip-session-tagging: true
+          role-session-name: upload-assets
+          role-chaining: true
 
       - name: Upload release artifacts
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
@@ -98,12 +150,15 @@ jobs:
           if [ "$RELEASE_CANDIDATE" == "true" ]
           then
             PR_NUMBER='${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }}'
+            CHECKSUM_CONTENT=$(cat checksums.txt)
+
+            RELEASE_NOTES=$(printf "This is a release candidate. See release-please PR #%s for context.\n\n%s\n" "$PR_NUMBER" "$CHECKSUM_CONTENT")
 
             GH_TOKEN='${{ github.token }}' gh release \
               create $RELEASE_NAME \
               --title "v$RELEASE_VERSION" \
               --prerelease \
-              -n "This is a release candidate. See release-please PR #$PR_NUMBER for context."
+              -n "$RELEASE_NOTES"
 
             GH_TOKEN='${{ github.token }}' gh pr comment "$PR_NUMBER" \
               -b "Release candidate [v$RELEASE_VERSION](https://github.com/supabase/gotrue/releases/tag/$RELEASE_NAME) published."
@@ -128,7 +183,16 @@ jobs:
               fi
           fi
 
-          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz
+          # Append checksums to existing release notes
+          EXISTING_NOTES=$(GH_TOKEN='${{ github.token }}' gh release view $RELEASE_NAME --json body -q .body)
+          CHECKSUM_CONTENT=$(cat checksums.txt)
+          FULL_NOTES=$(printf "%s\n\n%s\n" "$EXISTING_NOTES" "$CHECKSUM_CONTENT")
+          GH_TOKEN='${{ github.token }}' gh release edit $RELEASE_NAME -n "$FULL_NOTES"
+
+          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.xz
+
+          # Upload to Supabase internal bucket
+          aws s3 cp ./auth-v$RELEASE_VERSION-arm64.tar.xz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/
 
   publish:
     needs:

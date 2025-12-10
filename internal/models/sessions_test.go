@@ -1,9 +1,12 @@
 package models
 
 import (
+	"encoding/base64"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
@@ -79,6 +82,13 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 
 	session = ts.AddClaimAndReloadSession(session, TOTPSignIn)
 
+	identity, err := NewIdentity(u, "sso:95d4a792-4a2a-4523-ae63-bae0631de554", map[string]interface{}{
+		"sub": u.GetEmail(),
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
+	u.Identities = append(u.Identities, *identity)
+
 	session = ts.AddClaimAndReloadSession(session, SSOSAML)
 
 	aal, amr, err := session.CalculateAALAndAMR(u)
@@ -97,8 +107,76 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 
 	for _, claim := range amr {
 		if claim.Method == SSOSAML.String() {
-			require.NotNil(ts.T(), claim.Provider)
+			require.Equal(ts.T(), strings.TrimPrefix(identity.Provider, "sso:"), claim.Provider)
 		}
 	}
 	require.True(ts.T(), found)
+}
+
+func pointerDuration(value time.Duration) *time.Duration {
+	return &value
+}
+
+func TestCheckValidity(t *testing.T) {
+	start := time.Now()
+
+	examples := []struct {
+		name               string
+		session            *Session
+		highestPossibleAAL AuthenticatorAssuranceLevel
+		now                time.Time
+		config             SessionValidityConfig
+		expected           SessionValidityReason
+	}{
+		{
+			name:               "low aal session past creation time is invalid",
+			now:                start.Add(time.Second * 61),
+			highestPossibleAAL: AAL2,
+			session: &Session{
+				AAL:       AAL1.PointerString(),
+				CreatedAt: start,
+			},
+			config: SessionValidityConfig{
+				AllowLowAAL: pointerDuration(time.Second * 60),
+			},
+			expected: SessionLowAAL,
+		},
+		{
+			name:               "high aal session is valid past creation time",
+			now:                start.Add(time.Second * 61),
+			highestPossibleAAL: AAL2,
+			session: &Session{
+				AAL:       AAL2.PointerString(),
+				CreatedAt: start,
+			},
+			config: SessionValidityConfig{
+				AllowLowAAL: pointerDuration(time.Second * 60),
+			},
+			expected: SessionValid,
+		},
+	}
+
+	for _, example := range examples {
+		t.Run(example.name, func(t *testing.T) {
+			require.Equal(t, example.expected, example.session.CheckValidity(example.config, example.now, &example.now, example.highestPossibleAAL))
+		})
+	}
+}
+
+func TestSessionGetRefreshTokenHmacKey(t *testing.T) {
+	s, err := NewSession(uuid.Must(uuid.NewV4()), nil)
+	require.NoError(t, err)
+
+	hmacKey, shouldReEncrypt, err := s.GetRefreshTokenHmacKey(conf.DatabaseEncryptionConfiguration{})
+	require.NoError(t, err)
+	require.Nil(t, hmacKey)
+	require.False(t, shouldReEncrypt)
+
+	key := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
+	s.RefreshTokenHmacKey = &key
+
+	hmacKey, shouldReEncrypt, err = s.GetRefreshTokenHmacKey(conf.DatabaseEncryptionConfiguration{})
+	require.NoError(t, err)
+	require.Equal(t, make([]byte, 32), hmacKey)
+	require.False(t, shouldReEncrypt)
 }

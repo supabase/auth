@@ -16,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type AnonymousTestSuite struct {
@@ -25,9 +26,14 @@ type AnonymousTestSuite struct {
 }
 
 func TestAnonymous(t *testing.T) {
-	api, config, err := setupAPIForTest()
-	require.NoError(t, err)
+	cb := func(cfg *conf.GlobalConfiguration, _ *storage.Connection) {
+		if cfg != nil {
+			cfg.RateLimitAnonymousUsers = 5
+		}
+	}
 
+	api, config, err := setupAPIForTestWithCallback(cb)
+	require.NoError(t, err)
 	ts := &AnonymousTestSuite{
 		API:    api,
 		Config: config,

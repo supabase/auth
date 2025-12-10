@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -327,7 +328,7 @@ func (ts *MiddlewareTestSuite) TestRequireSAMLEnabled() {
 		{
 			desc:        "SAML not enabled",
 			isEnabled:   false,
-			expectedErr: notFoundError(ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled"),
+			expectedErr: apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled"),
 		},
 		{
 			desc:        "SAML enabled",
@@ -388,7 +389,7 @@ func (ts *MiddlewareTestSuite) TestTimeoutMiddleware() {
 
 	var data map[string]interface{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-	require.Equal(ts.T(), ErrorCodeRequestTimeout, data["error_code"])
+	require.Equal(ts.T(), apierrors.ErrorCodeRequestTimeout, data["error_code"])
 	require.Equal(ts.T(), float64(504), data["code"])
 	require.NotNil(ts.T(), data["msg"])
 }
@@ -412,6 +413,108 @@ func TestTimeoutResponseWriter(t *testing.T) {
 	redirectHandler.ServeHTTP(w2, req)
 
 	require.Equal(t, w1.Result(), w2.Result())
+}
+
+func (ts *MiddlewareTestSuite) TestPerformRateLimiting() {
+	ts.Config.RateLimitHeader = "X-Test-Perform-Rate-Limiting"
+
+	tests := []struct {
+		name         string
+		headerValues []string
+		expError     error
+	}{
+		{
+			name: "no value",
+			headerValues: []string{
+				"",
+				"",
+			},
+			expError: nil,
+		},
+		{
+			name: "single end user value",
+			headerValues: []string{
+				"192.168.1.100",
+				"192.168.1.100",
+			},
+			expError: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "same end user value, multiple proxies",
+			headerValues: []string{
+				"2600:cafe:beef::1,192.168.1.100",
+				"2600:cafe:beef::1,192.168.1.200",
+			},
+			expError: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "multiple end user values, single proxy",
+			headerValues: []string{
+				"2600:cafe:beef::1,192.168.1.100",
+				"3700:dead:abcd::2,192.168.1.100",
+			},
+			expError: nil,
+		},
+		{
+			name: "same end user value, multiple proxies, with whitespace",
+			headerValues: []string{
+				"2600:cafe:beef::1     ,192.168.1.100",
+				"2600:cafe:beef::1 ,     192.168.1.200",
+			},
+			expError: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "empty header, all whitespace",
+			headerValues: []string{
+				" ",
+			},
+			expError: nil,
+		},
+		{
+			name: "empty first key, no whitespace",
+			headerValues: []string{
+				",192.168.1.100",
+			},
+			expError: nil,
+		},
+		{
+			name: "empty first key, with whitespace",
+			headerValues: []string{
+				"     ,192.168.1.100",
+			},
+			expError: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		// Trigger a rate limiting error if we see the same end-user key twice in the same
+		// test case
+		lmt := tollbooth.NewLimiter(
+			1,
+			&limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			},
+		)
+
+		var obsError error
+
+		for _, h := range tt.headerValues {
+			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+			req.Header.Add(ts.Config.RateLimitHeader, h)
+			obsError = ts.API.performRateLimiting(lmt, req)
+		}
+
+		require.ErrorIs(ts.T(), obsError, tt.expError, "error for test '%s'", tt.name)
+	}
 }
 
 func (ts *MiddlewareTestSuite) TestLimitHandler() {

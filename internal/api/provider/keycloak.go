@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -16,10 +17,33 @@ type keycloakProvider struct {
 }
 
 type keycloakUser struct {
-	Name          string `json:"name"`
-	Sub           string `json:"sub"`
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
+	Name          string                 `json:"name"`
+	Sub           string                 `json:"sub"`
+	Email         string                 `json:"email"`
+	EmailVerified bool                   `json:"email_verified"`
+	RawClaims     map[string]interface{} `json:"-"`
+}
+
+func (u *keycloakUser) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &u.RawClaims); err != nil {
+		return err
+	}
+
+	// Extract known fields
+	if v, ok := u.RawClaims["name"].(string); ok {
+		u.Name = v
+	}
+	if v, ok := u.RawClaims["sub"].(string); ok {
+		u.Sub = v
+	}
+	if v, ok := u.RawClaims["email"].(string); ok {
+		u.Email = v
+	}
+	if v, ok := u.RawClaims["email_verified"].(bool); ok {
+		u.EmailVerified = v
+	}
+
+	return nil
 }
 
 // NewKeycloakProvider creates a Keycloak account provider.
@@ -61,8 +85,12 @@ func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	}, nil
 }
 
-func (g keycloakProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g keycloakProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(ctx, code, opts...)
+}
+
+func (g keycloakProvider) RequiresPKCE() bool {
+	return false
 }
 
 func (g keycloakProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -70,6 +98,17 @@ func (g keycloakProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 
 	if err := makeRequest(ctx, tok, g.Config, g.Host+"/protocol/openid-connect/userinfo", &u); err != nil {
 		return nil, err
+	}
+
+	customClaims := make(map[string]interface{})
+	standardClaims := map[string]bool{
+		"name": true, "sub": true, "email": true, "email_verified": true,
+	}
+
+	for k, v := range u.RawClaims {
+		if !standardClaims[k] {
+			customClaims[k] = v
+		}
 	}
 
 	data := &UserProvidedData{}
@@ -87,6 +126,7 @@ func (g keycloakProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 		Name:          u.Name,
 		Email:         u.Email,
 		EmailVerified: u.EmailVerified,
+		CustomClaims:  customClaims,
 
 		// To be deprecated
 		FullName:   u.Name,

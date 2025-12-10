@@ -7,12 +7,17 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/oauthserver"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/security"
@@ -56,26 +61,102 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 
 var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
+func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
+	limitHeader := a.config.RateLimitHeader
+
+	// If no rate limit header was set, ignore rate limiting
+	if limitHeader == "" {
+		return nil
+	}
+
+	valuesStr := req.Header.Get(limitHeader)
+
+	// If a rate limit header was set, but has no value, ignore rate limiting but warn with an error
+	if valuesStr == "" {
+		log := observability.GetLogEntry(req).Entry
+		log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
+
+		return nil
+	}
+
+	// According to RFC 7230 section 3.2.2, multiple headers with the same name are equivalent
+	// to a single header with that name where each value is separated by a comma and whitespace.
+	//
+	// Note that there is some ambiguity in RFC 7230 where section 3.2.4 states that
+	// header field values (which can contain commas) are processed independently of the header
+	// field name, and thus it is not always clear if a comma is a list delimiter or simply par
+	// of a single value.
+	//
+	// Given that this function is primarily for use with headers like X-Forwarded-For which
+	// vendors generally combine into comma-separated lists, we opt for the simpler approach
+	// here and split the header value by commas before taking the first value.
+	values := strings.SplitN(valuesStr, ",", 2)
+
+	// We will always get at least one value back, so this operation is safe
+	key := strings.TrimSpace(values[0])
+
+	// If the rate limit header has at least one value, but the first value is all whitespace, return a warning.
+	// This will happen if the header is something like "X-Foo-Bar: ,baz".
+	if key == "" {
+		log := observability.GetLogEntry(req).Entry
+		log.WithField("header", limitHeader).Warn("first rate limit header value is empty, rate limiting is not applied")
+
+		return nil
+	}
+
+	// Otherwise, apply rate limiting based on the first rate limit header value
+	if err := tollbooth.LimitByKeys(lmt, []string{key}); err != nil {
+		return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
+	}
+
+	return nil
+}
+
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
-		c := req.Context()
-
-		if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
-			key := req.Header.Get(limitHeader)
-
-			if key == "" {
-				log := observability.GetLogEntry(req).Entry
-				log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
-				return c, nil
-			} else {
-				err := tollbooth.LimitByKeys(lmt, []string{key})
-				if err != nil {
-					return c, tooManyRequestsError(ErrorCodeOverRequestRateLimit, "Request rate limit reached")
-				}
-			}
-		}
-		return c, nil
+		return req.Context(), a.performRateLimiting(lmt, req)
 	}
+}
+
+// requireOAuthClientAuth authenticates an OAuth client as middleware
+// Requires client_id to be present and validates client credentials
+func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+
+	clientID, clientSecret, err := oauthserver.ExtractClientCredentials(r)
+	if err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials: "+err.Error())
+	}
+
+	// If no client credentials provided, continue without client authentication
+	if clientID == "" {
+		return ctx, nil
+	}
+
+	// Parse client_id as UUID
+	clientUUID, err := uuid.FromString(clientID)
+	if err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client_id format")
+	}
+
+	// Validate client credentials
+	db := a.db.WithContext(ctx)
+	client, err := models.FindOAuthServerClientByID(db, clientUUID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials")
+		}
+		return nil, apierrors.NewInternalServerError("Error validating client credentials").WithInternalError(err)
+	}
+
+	// Validate authentication using centralized logic
+	if err := oauthserver.ValidateClientAuthentication(client, clientSecret); err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, err.Error())
+	}
+
+	// Add authenticated client to context
+	ctx = shared.WithOAuthServerClient(ctx, client)
+	return ctx, nil
 }
 
 func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) (context.Context, error) {
@@ -97,7 +178,7 @@ func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (co
 	config := a.config
 
 	if !config.External.Email.Enabled {
-		return nil, badRequestError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 	}
 
 	return ctx, nil
@@ -125,22 +206,38 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 
 	verificationResult, err := security.VerifyRequest(body, utilities.GetIPAddress(req), strings.TrimSpace(config.Security.Captcha.Secret), config.Security.Captcha.Provider)
 	if err != nil {
-		return nil, internalServerError("captcha verification process failed").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("captcha verification process failed").WithInternalError(err)
 	}
 
 	if !verificationResult.Success {
-		return nil, badRequestError(ErrorCodeCaptchaFailed, "captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeCaptchaFailed, "captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
 	}
 
 	return ctx, nil
 }
 
 func isIgnoreCaptchaRoute(req *http.Request) bool {
-	// captcha shouldn't be enabled on the following grant_types
-	// id_token, refresh_token, pkce
-	if req.URL.Path == "/token" && req.FormValue("grant_type") != "password" {
-		return true
+	if req.URL.Path != "/token" {
+		return false
 	}
+
+	switch req.FormValue("grant_type") {
+	case "pkce":
+		return true
+
+	case "refresh_token":
+		return true
+
+	case "id_token":
+		return true
+
+	case "password":
+		return false
+
+	case "web3":
+		return false
+	}
+
 	return false
 }
 
@@ -159,18 +256,12 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 		protocol := "https"
 
 		if xForwardedHost != "" {
-			for _, host := range config.Mailer.ExternalHosts {
-				if host == xForwardedHost {
-					hostname = host
-					break
-				}
+			if slices.Contains(config.Mailer.ExternalHosts, xForwardedHost) {
+				hostname = xForwardedHost
 			}
 		} else if reqHost != "" {
-			for _, host := range config.Mailer.ExternalHosts {
-				if host == reqHost {
-					hostname = host
-					break
-				}
+			if slices.Contains(config.Mailer.ExternalHosts, reqHost) {
+				hostname = reqHost
 			}
 		}
 
@@ -233,7 +324,7 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.SAML.Enabled {
-		return nil, notFoundError(ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled")
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled")
 	}
 	return ctx, nil
 }
@@ -241,7 +332,7 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.Security.ManualLinkingEnabled {
-		return nil, notFoundError(ErrorCodeManualLinkingDisabled, "Manual linking is disabled")
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeManualLinkingDisabled, "Manual linking is disabled")
 	}
 	return ctx, nil
 }
@@ -381,7 +472,7 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 				if err == context.DeadlineExceeded {
 					httpError := &HTTPError{
 						HTTPStatus: http.StatusGatewayTimeout,
-						ErrorCode:  ErrorCodeRequestTimeout,
+						ErrorCode:  apierrors.ErrorCodeRequestTimeout,
 						Message:    "Processing this request timed out, please retry after a moment.",
 					}
 

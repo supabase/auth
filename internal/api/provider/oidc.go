@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -55,17 +54,22 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 	switch token.Issuer {
 	case IssuerGoogle:
 		token, data, err = parseGoogleIDToken(token)
-	case IssuerApple:
-		token, data, err = parseAppleIDToken(token)
 	case IssuerLinkedin:
 		token, data, err = parseLinkedinIDToken(token)
 	case IssuerKakao:
 		token, data, err = parseKakaoIDToken(token)
 	case IssuerVercelMarketplace:
 		token, data, err = parseVercelMarketplaceIDToken(token)
+	case IssuerFacebook:
+		// Handle only Facebook Limited Login JWT, NOT Facebook Access Token
+		token, data, err = parseFacebookIDToken(token)
+	case IssuerSnapchat:
+		token, data, err = parseSnapchatIDToken(token)
 	default:
 		if IsAzureIssuer(token.Issuer) {
 			token, data, err = parseAzureIDToken(token)
+		} else if IsAppleIssuer(token.Issuer) {
+			token, data, err = parseAppleIDToken(token)
 		} else {
 			token, data, err = parseGenericIDToken(token)
 		}
@@ -121,6 +125,44 @@ func parseGoogleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, 
 	return token, &data, nil
 }
 
+// FacebookIDTokenClaims represents the claims in a Facebook Limited Login ID token
+type FacebookIDTokenClaims struct {
+	jwt.RegisteredClaims
+	Email   string `json:"email"`
+	Name    string `json:"name"`
+	Picture string `json:"picture"`
+	Nonce   string `json:"nonce,omitempty"`
+}
+
+func parseFacebookIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
+	var claims FacebookIDTokenClaims
+	if err := token.Claims(&claims); err != nil {
+		return nil, nil, err
+	}
+
+	var data UserProvidedData
+
+	if claims.Email != "" {
+		data.Emails = append(data.Emails, Email{
+			Email:    claims.Email,
+			Verified: true, // Facebook Limited Login emails are always verified
+			Primary:  true,
+		})
+	}
+
+	data.Metadata = &Claims{
+		Issuer:        token.Issuer,
+		Subject:       token.Subject,
+		Name:          claims.Name,
+		Picture:       claims.Picture,
+		ProviderId:    token.Subject,
+		Email:         claims.Email,
+		EmailVerified: claims.Email != "",
+	}
+
+	return token, &data, nil
+}
+
 type AppleIDTokenClaims struct {
 	jwt.RegisteredClaims
 
@@ -128,6 +170,8 @@ type AppleIDTokenClaims struct {
 
 	AuthTime       *float64        `json:"auth_time"`
 	IsPrivateEmail *IsPrivateEmail `json:"is_private_email"`
+
+	TransferSub string `json:"transfer_sub"`
 }
 
 func parseAppleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
@@ -157,6 +201,10 @@ func parseAppleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 
 	if claims.AuthTime != nil {
 		data.Metadata.CustomClaims["auth_time"] = *claims.AuthTime
+	}
+
+	if claims.TransferSub != "" {
+		data.Metadata.CustomClaims["transfer_sub"] = claims.TransferSub
 	}
 
 	if len(data.Metadata.CustomClaims) < 1 {
@@ -356,6 +404,7 @@ func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 type VercelMarketplaceIDTokenClaims struct {
 	jwt.RegisteredClaims
 
+	GlobalUserID  string `json:"global_user_id"`
 	UserEmail     string `json:"user_email"`
 	UserName      string `json:"user_name"`
 	UserAvatarUrl string `json:"user_avatar_url"`
@@ -376,10 +425,16 @@ func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserPro
 		Primary:  true,
 	})
 
+	subject := token.Subject
+
+	if claims.GlobalUserID != "" {
+		subject = "global_user_id:" + claims.GlobalUserID
+	}
+
 	data.Metadata = &Claims{
 		Issuer:     token.Issuer,
-		Subject:    token.Subject,
-		ProviderId: token.Subject,
+		Subject:    subject,
+		ProviderId: subject,
 		Name:       claims.UserName,
 		Picture:    claims.UserAvatarUrl,
 	}
@@ -400,10 +455,6 @@ func parseGenericIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData,
 			Verified: data.Metadata.EmailVerified,
 			Primary:  true,
 		})
-	}
-
-	if len(data.Emails) <= 0 {
-		return nil, nil, fmt.Errorf("provider: Generic OIDC ID token from issuer %q must contain an email address", token.Issuer)
 	}
 
 	return token, &data, nil

@@ -1,5 +1,282 @@
 # Changelog
 
+## [2.184.0](https://github.com/supabase/auth/compare/v2.183.0...v2.184.0) (2025-12-08)
+
+
+### Features
+
+* increment refresh token counter by 2 for mfa verify ([#2284](https://github.com/supabase/auth/issues/2284)) ([2a38668](https://github.com/supabase/auth/commit/2a3866854fe7cb58a6cb84e7a82ce5d07bb920ee))
+* load template cache at startup for fault tolerance ([#2261](https://github.com/supabase/auth/issues/2261)) ([511c3a4](https://github.com/supabase/auth/commit/511c3a4e12819d313840cd5342ae6a76d4708cfc))
+* **oauth:** add support for X/Twitter v2 provider ([#2275](https://github.com/supabase/auth/issues/2275)) ([7f36eb0](https://github.com/supabase/auth/commit/7f36eb053286038d01ba1650dd48a15508550ce0))
+
+## [2.183.0](https://github.com/supabase/auth/compare/v2.182.1...v2.183.0) (2025-11-20)
+
+
+### Features
+
+* async, concurrent index creation for users table ([#2239](https://github.com/supabase/auth/issues/2239)) ([a1146bf](https://github.com/supabase/auth/commit/a1146bf7eecb35e237350dda7ae62328cbb5acfe))
+* **indexworker:** use `auth_trgm` extension if available ([#2263](https://github.com/supabase/auth/issues/2263)) ([05daa43](https://github.com/supabase/auth/commit/05daa437131bd220e01a0e33df75f4b9afa72bb6))
+* **oauthserver:** add OpenID Connect support ([#2250](https://github.com/supabase/auth/issues/2250)) ([162788f](https://github.com/supabase/auth/commit/162788ff960c060318324f11f673c09c0da41d5e))
+* **oauthserver:** update oauth grant list & authorization details response structure ([#2247](https://github.com/supabase/auth/issues/2247)) ([137ea92](https://github.com/supabase/auth/commit/137ea92c00a0c1a7654fb8bcf0c1b5313901349f))
+* **oauthserver:** use `NewOAuthServerAuthorizationParams` & configurable ttl for authorization ([#2254](https://github.com/supabase/auth/issues/2254)) ([61632f8](https://github.com/supabase/auth/commit/61632f8c0401b6c816ea7427d351ec623ce5258f))
+
+
+### Bug Fixes
+
+* **indexworker:** detect which schema `pg_trgm` exists in ([#2260](https://github.com/supabase/auth/issues/2260)) ([4be12b3](https://github.com/supabase/auth/commit/4be12b3e7c0a30b1e289ab81348548f72ab32ba5))
+* look for refresh token on mfa verification only in v1 ([#2249](https://github.com/supabase/auth/issues/2249)) ([2906b24](https://github.com/supabase/auth/commit/2906b2424d0aa804031e66cf92f008289b8a9c77))
+* mfa verify now works with refresh token algorithm v2 ([#2246](https://github.com/supabase/auth/issues/2246)) ([4e8275f](https://github.com/supabase/auth/commit/4e8275f915c4d84186d17b41c86a9277055a55e4))
+* **social-auth:** default to current_user:read for Figma provider ([#2195](https://github.com/supabase/auth/issues/2195)) ([f409d11](https://github.com/supabase/auth/commit/f409d118ebb958c12f2395c0bf4fb9590ab6c0af))
+
+## [2.182.1](https://github.com/supabase/auth/compare/v2.182.0...v2.182.1) (2025-11-05)
+
+
+### Bug Fixes
+
+* japanese dot example fix ([#2243](https://github.com/supabase/auth/issues/2243)) ([3a5f4b2](https://github.com/supabase/auth/commit/3a5f4b211a0f50bd1957f5a41467fc5aa6a01ca6))
+
+## [2.182.0](https://github.com/supabase/auth/compare/v2.181.0...v2.182.0) (2025-11-05)
+
+
+### Features
+
+* **oauthserver:** add authorization list and revoke endpoints ([#2232](https://github.com/supabase/auth/issues/2232)) ([cc640b2](https://github.com/supabase/auth/commit/cc640b277989d57b39f3805cd9433ef4fe16bf83))
+
+
+### Bug Fixes
+
+* hostname can be empty with redirect urls ([#2241](https://github.com/supabase/auth/issues/2241)) ([f5a4cba](https://github.com/supabase/auth/commit/f5a4cbac73de28cc4b04c5c9725b70517cb131d3))
+
+## [2.181.0](https://github.com/supabase/auth/compare/v2.180.0...v2.181.0) (2025-10-31)
+
+
+### Features
+
+* add `.well-known/openid-configuration` ([#2197](https://github.com/supabase/auth/issues/2197)) ([9a8d0df](https://github.com/supabase/auth/commit/9a8d0df63bb5089e1705f9d970669bfc97ed345e))
+* add `auth_migration` annotation for the migrations ([#2234](https://github.com/supabase/auth/issues/2234)) ([b276d0b](https://github.com/supabase/auth/commit/b276d0bcf4d1ee08fce8c2f7146423e9aaf34dfb))
+* add advisor to notify you when to double the max connection pool ([#2167](https://github.com/supabase/auth/issues/2167)) ([a72f5d9](https://github.com/supabase/auth/commit/a72f5d95795ac070e248007c0c38196f47ea5046))
+* add after-user-created hook ([#2169](https://github.com/supabase/auth/issues/2169)) ([bd80df8](https://github.com/supabase/auth/commit/bd80df8a888a7de023557a97b65b21419d3029e7))
+* add support for account changes notifications in email send hook ([#2192](https://github.com/supabase/auth/issues/2192)) ([6b382ae](https://github.com/supabase/auth/commit/6b382ae3a96bbe052395bdfa30fb49f717e5ad68))
+* email address changed notification ([#2181](https://github.com/supabase/auth/issues/2181)) ([047f851](https://github.com/supabase/auth/commit/047f85136c9223ca99cb0169ba82343088fbbfd8))
+* identity linked/unlinked notifications ([#2185](https://github.com/supabase/auth/issues/2185)) ([7d46936](https://github.com/supabase/auth/commit/7d46936e145479be1e508b52549c7fca3c59fc2f))
+* introduce v2 refresh token algorithm ([#2216](https://github.com/supabase/auth/issues/2216)) ([dea5b8e](https://github.com/supabase/auth/commit/dea5b8e5353ea240c658b030325432ce512f18a8))
+* MFA factor enrollment notifications ([#2183](https://github.com/supabase/auth/issues/2183)) ([53db712](https://github.com/supabase/auth/commit/53db712f0c3ffae6d61ea3ddcff5e8d7a33639b9))
+* notify users when their phone number has changed ([#2184](https://github.com/supabase/auth/issues/2184)) ([21f3070](https://github.com/supabase/auth/commit/21f30702a62d722bce32972d4b2fcef1da6e2177))
+* **oauthserver:** add OAuth client admin update endpoint ([#2231](https://github.com/supabase/auth/issues/2231)) ([6296a5a](https://github.com/supabase/auth/commit/6296a5a226b3c60bcd9d20786750a808af9cd529))
+* properly handle redirect url fragments and unusual hostnames ([#2200](https://github.com/supabase/auth/issues/2200)) ([aa0ac5b](https://github.com/supabase/auth/commit/aa0ac5b9a8af26d4b779e48ec4da2ab06a6dc15e))
+* store latest challenge/attestation data ([#2179](https://github.com/supabase/auth/issues/2179)) ([01ebce1](https://github.com/supabase/auth/commit/01ebce1bf01b563105d653ff168a16e72c12d481))
+* support percentage based db limits with reload support ([#2177](https://github.com/supabase/auth/issues/2177)) ([1731466](https://github.com/supabase/auth/commit/1731466903539569ec5b308db4e39eb33c653b94))
+* webauthn support schema changes, update openapi.yaml ([#2163](https://github.com/supabase/auth/issues/2163)) ([68cb8d2](https://github.com/supabase/auth/commit/68cb8d2ba3ded878c68d7cb76465bfaaac58436a))
+
+
+### Bug Fixes
+
+* gosec incorrectly warns about accessing signature[64] ([#2222](https://github.com/supabase/auth/issues/2222)) ([bca6626](https://github.com/supabase/auth/commit/bca66268dc4f81821c194a26dcf76209d1c696de))
+* **openapi:** add missing OAuth client registration fields ([#2227](https://github.com/supabase/auth/issues/2227)) ([cf39a8a](https://github.com/supabase/auth/commit/cf39a8ae2cc386f2672f0ecbb8d84dd77f04e56f))
+
+## [2.180.0](https://github.com/supabase/auth/compare/v2.179.0...v2.180.0) (2025-09-23)
+
+
+### Features
+
+* add OAuth client type ([#2152](https://github.com/supabase/auth/issues/2152)) ([b118f1f](https://github.com/supabase/auth/commit/b118f1f00c3c846095c25c34092e38aeebfdf2db))
+* add phone to sms webhook payload ([#2160](https://github.com/supabase/auth/issues/2160)) ([d475ac1](https://github.com/supabase/auth/commit/d475ac1f20a0814f59d4bc1370801f915a9ba4d4))
+* background template reloading p1 - baseline decomposition ([#2148](https://github.com/supabase/auth/issues/2148)) ([746c937](https://github.com/supabase/auth/commit/746c937f7c57ba256d942df334ab9ee354509587))
+* config reloading with fsnotify, poller fallback, and signals ([#2161](https://github.com/supabase/auth/issues/2161)) ([c77d512](https://github.com/supabase/auth/commit/c77d51203fc52c1c9a9f7dc56ca1c076e018fc54))
+* enhance issuer URL validation in OAuth server metadata ([#2164](https://github.com/supabase/auth/issues/2164)) ([a9424d2](https://github.com/supabase/auth/commit/a9424d25909e074db395b620dc9999724bf4a03c))
+* implement OAuth2 authorization endpoint ([#2107](https://github.com/supabase/auth/issues/2107)) ([5318552](https://github.com/supabase/auth/commit/53185526b07cb2c27f6a81782a6c24610e39d6fe))
+* **oauth2:** add `/oauth/token` endpoint ([#2159](https://github.com/supabase/auth/issues/2159)) ([a89a0b0](https://github.com/supabase/auth/commit/a89a0b054e87fee4e193aab4fff7677b56775386))
+* **oauth2:** add admin endpoint to regenerate OAuth client secrets ([#2170](https://github.com/supabase/auth/issues/2170)) ([0bd1c28](https://github.com/supabase/auth/commit/0bd1c285aaf3bbb3f3d6e2e131aabfe5cabf0fa5))
+* **oauth2:** return redirect_uri on GET authorization ([#2175](https://github.com/supabase/auth/issues/2175)) ([b0a0c3e](https://github.com/supabase/auth/commit/b0a0c3e48c8c8686d4cc3f82abd2ed326c297614))
+* **oauth2:** use `id` field as the public client_id ([#2154](https://github.com/supabase/auth/issues/2154)) ([86b7de4](https://github.com/supabase/auth/commit/86b7de45c9432ea6ee9bd7c7e9cfe96e038fe2bc))
+* **openapi:** add OAuth 2.1 server endpoints and clarify OAuth modes ([#2165](https://github.com/supabase/auth/issues/2165)) ([1f804a2](https://github.com/supabase/auth/commit/1f804a2795012a1a165ff07afdb9dd98ad8ff291))
+* password changed email notification ([#2176](https://github.com/supabase/auth/issues/2176)) ([fe0fd04](https://github.com/supabase/auth/commit/fe0fd04c9f5558d0165a94c7c080fb15c036d08f))
+* support `transfer_sub` in apple id tokens ([#2162](https://github.com/supabase/auth/issues/2162)) ([8a71006](https://github.com/supabase/auth/commit/8a71006486027c0850a58ec6e94f62a1607d1d48))
+
+
+### Bug Fixes
+
+* ensure request context exists in API db operations ([#2171](https://github.com/supabase/auth/issues/2171)) ([060a992](https://github.com/supabase/auth/commit/060a99278d8e3ec4a78ca61b95a9acf0e7052948))
+* **makefile:** remove invalid @ symbol from shell commands ([#2168](https://github.com/supabase/auth/issues/2168)) ([e6afe45](https://github.com/supabase/auth/commit/e6afe4529859e1ee92ed5c259e04c9fe56de22cf))
+* **oauth2:** switch to Origin header for request validation ([#2174](https://github.com/supabase/auth/issues/2174)) ([42bc9ab](https://github.com/supabase/auth/commit/42bc9ab7db24ce1902fef21ba5e90a2128617669))
+
+## [2.179.0](https://github.com/supabase/auth/compare/v2.178.0...v2.179.0) (2025-08-28)
+
+
+### Features
+
+* add oauth2 client support ([#2098](https://github.com/supabase/auth/issues/2098)) ([8fae015](https://github.com/supabase/auth/commit/8fae01581d122bba95a3742dc212284f9a21dc4d))
+* experimental own linking domains per provider ([#2119](https://github.com/supabase/auth/issues/2119)) ([747bf3b](https://github.com/supabase/auth/commit/747bf3b15fd9e371c9330e75fe2e5de8b89ce14d))
+* fetch email from snapchat oauth provider if available for consistency ([#2110](https://github.com/supabase/auth/issues/2110)) ([7507822](https://github.com/supabase/auth/commit/750782246e736093131ba2eb1015fc73083d99ab))
+* implement link identity with oidc / native sign in ([#2108](https://github.com/supabase/auth/issues/2108)) ([5f0ec87](https://github.com/supabase/auth/commit/5f0ec8709231c57b57aa06160e18bc9e52ec9002))
+* implements email-less accounts with oauth ([#2105](https://github.com/supabase/auth/issues/2105)) ([9a61dae](https://github.com/supabase/auth/commit/9a61dae788311a086ce8e72b52c21e031857adf7))
+* introduce request-scoped background tasks & async mail sending ([#2126](https://github.com/supabase/auth/issues/2126)) ([2c8ea61](https://github.com/supabase/auth/commit/2c8ea6113ae7381106ed7c67d7a45f7ef87195c7))
+* refactor mailer client wiring and add validation wrapper ([#2130](https://github.com/supabase/auth/issues/2130)) ([68c40a6](https://github.com/supabase/auth/commit/68c40a6a494029d8d704b14abbe85171a7dc8d12))
+* support multiple `aud` for the external providers ([#2117](https://github.com/supabase/auth/issues/2117)) ([ca5792e](https://github.com/supabase/auth/commit/ca5792e41a48f20a395646015c28ce272355bf63))
+* use `slices.Contains` instead of for loops ([#2111](https://github.com/supabase/auth/issues/2111)) ([9f22682](https://github.com/supabase/auth/commit/9f2268263118713d3390ce4617ccf21bc2c031eb))
+
+
+### Bug Fixes
+
+* add `id-token` permission to ci ([#2143](https://github.com/supabase/auth/issues/2143)) ([79209c0](https://github.com/supabase/auth/commit/79209c0e35afa82ec8822a343108d6a690e14229))
+* add missing param ([#2125](https://github.com/supabase/auth/issues/2125)) ([c0b75f6](https://github.com/supabase/auth/commit/c0b75f66229410e6e5fbc7cd1ae9066cec54c5d7))
+* change s3 artifact upload role ([#2145](https://github.com/supabase/auth/issues/2145)) ([767e371](https://github.com/supabase/auth/commit/767e37131aa01bf6cb27dbc62b2928e7cc701893))
+* remove requirement of empty content-type on 204 ([#2128](https://github.com/supabase/auth/issues/2128)) ([ecc97e0](https://github.com/supabase/auth/commit/ecc97e0fac7cb1bd736ef6db435a0a5fb224e954))
+* run release-please again ([#2144](https://github.com/supabase/auth/issues/2144)) ([2560f14](https://github.com/supabase/auth/commit/2560f14ef6ee35f84b7c592290647e0d1c8a3932))
+* stripped binary now includes version ([#2147](https://github.com/supabase/auth/issues/2147)) ([609f169](https://github.com/supabase/auth/commit/609f169f505a1f5750fbbf5e9d477cfb4d879eff))
+* update copyright year in LICENSE ([#2142](https://github.com/supabase/auth/issues/2142)) ([67fe0b0](https://github.com/supabase/auth/commit/67fe0b0230b147048dc2b9f546df72af5b3bc362))
+
+## [2.178.0](https://github.com/supabase/auth/compare/v2.177.0...v2.178.0) (2025-08-05)
+
+
+### Features
+
+* add sign in with ethereum ([#2069](https://github.com/supabase/auth/issues/2069)) ([079b242](https://github.com/supabase/auth/commit/079b2427b8ed312880b60e89cc79b716fe9ae73d))
+* add support for managing SSO providers by resource_id ([#2081](https://github.com/supabase/auth/issues/2081)) ([5ca4489](https://github.com/supabase/auth/commit/5ca44893964d3b12a24ea26302b23f4976f768a0))
+* log all audit events separately to prevent missing events ([#2086](https://github.com/supabase/auth/issues/2086)) ([3b666f5](https://github.com/supabase/auth/commit/3b666f51f56db778848730d74ac140f02b0cb522))
+* skip nonce check for Facebook Limited Login auth ([#2082](https://github.com/supabase/auth/issues/2082)) ([f1b15ff](https://github.com/supabase/auth/commit/f1b15ffdb9b1f1af873a147fdb5d039382becb2e))
+* support ledger solana offchain message signing ([#2093](https://github.com/supabase/auth/issues/2093)) ([4c94443](https://github.com/supabase/auth/commit/4c944431558aaca3c945c472dc5a27077f6dfa75))
+
+## [2.177.0](https://github.com/supabase/auth/compare/v2.176.1...v2.177.0) (2025-07-05)
+
+
+### Features
+
+* add option to disable writing to `audit_log_entries` ([#2073](https://github.com/supabase/auth/issues/2073)) ([80758dd](https://github.com/supabase/auth/commit/80758dd880b82e9b96d7185d9d0a0850b8c6f19d))
+* add snapchat provider ([#2071](https://github.com/supabase/auth/issues/2071)) ([fca8ea4](https://github.com/supabase/auth/commit/fca8ea4a701eafb587438a159e19f5488c82a178))
+* enhance login analytics ([#2078](https://github.com/supabase/auth/issues/2078)) ([1aed4a2](https://github.com/supabase/auth/commit/1aed4a27fdc54d9c4d01f17d49dcaadb25400f18))
+* fallback to jwt secret if alg is `HS256` and the `kid` is not recognized ([#2072](https://github.com/supabase/auth/issues/2072)) ([8fa99bd](https://github.com/supabase/auth/commit/8fa99bd6cab91c0bf093fdcdb912054113ea66ba))
+* ignore `aud` claim from admin jwt (`service_role` never had one) ([#2070](https://github.com/supabase/auth/issues/2070)) ([57eddcb](https://github.com/supabase/auth/commit/57eddcb45ce97004c26f6d65351447d7dc654162))
+
+
+### Bug Fixes
+
+* add missing provider info to signedup audit logs ([#2061](https://github.com/supabase/auth/issues/2061)) ([c6e0cbe](https://github.com/supabase/auth/commit/c6e0cbefe5b609ac3362c23d0f7cb9d9bb04abc9))
+* **auditlog:** keep writing to logs even postgres is disabled ([#2076](https://github.com/supabase/auth/issues/2076)) ([b89bc32](https://github.com/supabase/auth/commit/b89bc32de5adc9d458e7f95ad9b08a99604c70d8))
+* do not log fatal when http server successfully closes ([#2065](https://github.com/supabase/auth/issues/2065)) ([1f7de6c](https://github.com/supabase/auth/commit/1f7de6c65f31ef0bbb80899369989b13ab5a517f))
+* invites should send another email when user exists ([#2058](https://github.com/supabase/auth/issues/2058)) ([96469bd](https://github.com/supabase/auth/commit/96469bd01b9c37f938aabdb0434a054a111cf963))
+* use `appleid.apple.com` as default issuer ([#2068](https://github.com/supabase/auth/issues/2068)) ([963a781](https://github.com/supabase/auth/commit/963a781ee525ef893ec545583e7d385c02995518))
+* use `split_words` config option for `AuditLog` ([#2075](https://github.com/supabase/auth/issues/2075)) ([7ecb234](https://github.com/supabase/auth/commit/7ecb234c3d66459c92ba16fd69ed7eb933c4b8a7))
+
+## [2.176.1](https://github.com/supabase/auth/compare/v2.176.0...v2.176.1) (2025-06-11)
+
+
+### Bug Fixes
+
+* new `odic.Provider` for apple with insecure issuer url context ([#2055](https://github.com/supabase/auth/issues/2055)) ([23d69f1](https://github.com/supabase/auth/commit/23d69f1c450b4a24a262cb25112e68408857a3b2))
+* skip apple oidc issuer check ([#2053](https://github.com/supabase/auth/issues/2053)) ([1c6f18e](https://github.com/supabase/auth/commit/1c6f18e6e573ae1da6875f51d8613992ced057a2))
+
+## [2.176.0](https://github.com/supabase/auth/compare/v2.175.0...v2.176.0) (2025-06-11)
+
+
+### Features
+
+* Add custom claims from Keycloak user token ([#1917](https://github.com/supabase/auth/issues/1917)) ([1365aaa](https://github.com/supabase/auth/commit/1365aaa45569fc9e7c3497e744e0e80cf237d617))
+
+
+### Bug Fixes
+
+* accept ID tokens from all `account.apple.com` and `appleid.apple.com` ([#2050](https://github.com/supabase/auth/issues/2050)) ([82aa167](https://github.com/supabase/auth/commit/82aa167cae01658b5319914f3412d78876955106))
+
+## [2.175.0](https://github.com/supabase/auth/compare/v2.174.0...v2.175.0) (2025-06-03)
+
+
+### Features
+
+* hooks round 5 (Option 2) - add before-user-created hook ([#2034](https://github.com/supabase/auth/issues/2034)) ([b53f6b0](https://github.com/supabase/auth/commit/b53f6b0d0e056bf3e84884847ab4608ffc9efd61))
+
+
+### Bug Fixes
+
+* email-sendhook - bug in email change verification ([#2044](https://github.com/supabase/auth/issues/2044)) ([be20654](https://github.com/supabase/auth/commit/be20654ec3af21b93a8d7482a5673b5c8c60ac8a))
+
+## [2.174.0](https://github.com/supabase/auth/compare/v2.173.0...v2.174.0) (2025-05-23)
+
+
+### Features
+
+* hooks round 2 - remove indirection and simplify error handling ([#2025](https://github.com/supabase/auth/issues/2025)) ([26e23f0](https://github.com/supabase/auth/commit/26e23f05acd1e1a959c3e04764a569ea0364d947))
+* hooks round 4 - update tests to use require package ([#2030](https://github.com/supabase/auth/issues/2030)) ([aaf93df](https://github.com/supabase/auth/commit/aaf93df50ebfb489c6335e2c1b846dc5cee18767))
+
+
+### Bug Fixes
+
+* amr claim should contain provider_id for sso method ([#2033](https://github.com/supabase/auth/issues/2033)) ([33741e1](https://github.com/supabase/auth/commit/33741e18d2e0adb691e650355337924f9ccfd91f))
+
+## [2.173.0](https://github.com/supabase/auth/compare/v2.172.1...v2.173.0) (2025-05-17)
+
+
+### Features
+
+* add support packages for end-to-end testing ([#2021](https://github.com/supabase/auth/issues/2021)) ([269ddfe](https://github.com/supabase/auth/commit/269ddfe18718ae74535f7227eb75f67667275140))
+
+
+### Bug Fixes
+
+* add `supafast` tarball for upgrading auth via supabase-admin-api ([#2009](https://github.com/supabase/auth/issues/2009)) ([9b55785](https://github.com/supabase/auth/commit/9b557855a3ab80ee93ab95159055a444bff53f01))
+* allow HTTP with localhost in solana ([#2027](https://github.com/supabase/auth/issues/2027)) ([3ee02f0](https://github.com/supabase/auth/commit/3ee02f085df206dcd3e6fa79f2d583148ebc52b8))
+* fix `supafast` tarball generation ([#2011](https://github.com/supabase/auth/issues/2011)) ([88bb2c0](https://github.com/supabase/auth/commit/88bb2c0638863f94f9f0d7f4ca88ba04929dfd55))
+
+## [2.172.1](https://github.com/supabase/auth/compare/v2.172.0...v2.172.1) (2025-05-05)
+
+
+### Bug Fixes
+
+* use redirect URL as-is for mobile apps ([#2007](https://github.com/supabase/auth/issues/2007)) ([b36cdcd](https://github.com/supabase/auth/commit/b36cdcdb90b8f0a96aba9572e2643c0dee3bdd9c))
+
+## [2.172.0](https://github.com/supabase/auth/compare/v2.171.0...v2.172.0) (2025-05-04)
+
+
+### Features
+
+* fix large group claim handling in azure id tokens ([#1995](https://github.com/supabase/auth/issues/1995)) ([2f323fe](https://github.com/supabase/auth/commit/2f323fe3ce2c1d24343d822ac093f28fdda3a4a9))
+* use `global_user_id` over `sub` for `vercel_marketplace` issuer ([#1990](https://github.com/supabase/auth/issues/1990)) ([f94f97e](https://github.com/supabase/auth/commit/f94f97e8d3e530d730d9352a14b477fd33548df2))
+
+
+### Bug Fixes
+
+* azure overage claims start with single `_` not two ([#1999](https://github.com/supabase/auth/issues/1999)) ([29f3440](https://github.com/supabase/auth/commit/29f3440d6376fac22568284d5b417836bf335a74))
+* remove azure claim overage code. ([#2005](https://github.com/supabase/auth/issues/2005)) ([63dce14](https://github.com/supabase/auth/commit/63dce14488f92d9e0e67028cd0ae6e002ebf532a))
+* resolving azure overage claim should include `api-version=1.6` query parameter ([#2000](https://github.com/supabase/auth/issues/2000)) ([44890d0](https://github.com/supabase/auth/commit/44890d0a6df903e765bcde509231a78f61890bec))
+* upgrade godotenv to v1.5.1 to fix multiline file loading ([#1997](https://github.com/supabase/auth/issues/1997)) ([f2af4b2](https://github.com/supabase/auth/commit/f2af4b250dc7d351ee8d0ede3a814439cac43fee))
+
+## [2.171.0](https://github.com/supabase/auth/compare/v2.170.0...v2.171.0) (2025-04-14)
+
+
+### Features
+
+* add sign in with solana (EIP-4361) support ([#1918](https://github.com/supabase/auth/issues/1918)) ([d121546](https://github.com/supabase/auth/commit/d1215464d4c81bb6e2e210df81ba0263d90ffb64))
+* allow invalid config directories ([#1969](https://github.com/supabase/auth/issues/1969)) ([6b842f6](https://github.com/supabase/auth/commit/6b842f6b304bba5f886c6bf8b5675d914f881a2d))
+* allow limiting lifespan of low-aal sessions ([#1942](https://github.com/supabase/auth/issues/1942)) ([d7a9ca6](https://github.com/supabase/auth/commit/d7a9ca62a7a09edd864f0b968c1882f5e464e662))
+* Block specific outgoing mail servers ([#1971](https://github.com/supabase/auth/issues/1971)) ([091aef9](https://github.com/supabase/auth/commit/091aef945a764ee8d3b80ae8c5ed5d88dd582d03))
+* refactor hooks out of api package ([#1976](https://github.com/supabase/auth/issues/1976)) ([c5904c0](https://github.com/supabase/auth/commit/c5904c05d9dce4366e6527aa40e439a3c8c460bb))
+* separate web3 rate limits from other `/token?grant_type=...` ([#1985](https://github.com/supabase/auth/issues/1985)) ([8b23382](https://github.com/supabase/auth/commit/8b233820e41fedd18338eb37345ecbb0beb350ce))
+
+
+### Bug Fixes
+
+* explicit permisions on actions ([#1978](https://github.com/supabase/auth/issues/1978)) ([06e9ead](https://github.com/supabase/auth/commit/06e9ead3e09e77631597a953a535cb93dd006c7f))
+* propagate error when when confirming phone ([#1939](https://github.com/supabase/auth/issues/1939)) ([e882b42](https://github.com/supabase/auth/commit/e882b42f3929ab2e587a41ba6593edaf237e5535))
+* redirects must not be to ip addresses ([#1984](https://github.com/supabase/auth/issues/1984)) ([347e23a](https://github.com/supabase/auth/commit/347e23a98c2ee362620d2711d12a76d7bc266a8f))
+* sanitize redirect URL (remove fragment, query) before pattern matching ([#1974](https://github.com/supabase/auth/issues/1974)) ([ccf20d7](https://github.com/supabase/auth/commit/ccf20d724f31871b71292e0ea867c48e2cdfdbcb))
+
+## [2.170.0](https://github.com/supabase/auth/compare/v2.169.0...v2.170.0) (2025-03-06)
+
+
+### Features
+
+* improvements to config reloader, 100% coverage ([#1933](https://github.com/supabase/auth/issues/1933)) ([21c2256](https://github.com/supabase/auth/commit/21c2256806ab4950e9bfc0af0472a64f7d9112a7))
+* increase test coverage in conf package to 100% ([#1937](https://github.com/supabase/auth/issues/1937)) ([bc57c1c](https://github.com/supabase/auth/commit/bc57c1c25769905b29bfc9e89bf3d6b65b1030ea))
+
+
+### Bug Fixes
+
+* enable SO_REUSEPORT in listener config ([#1936](https://github.com/supabase/auth/issues/1936)) ([a474b80](https://github.com/supabase/auth/commit/a474b80cc1075eb32a7e72a05b0cdb561e61770b))
+* ignore not found error to check for pkce prefix later ([#1929](https://github.com/supabase/auth/issues/1929)) ([fbbebcc](https://github.com/supabase/auth/commit/fbbebccd5da21ea22323e6f8f853df9168c4c41e))
+* log version & migration count ([#1934](https://github.com/supabase/auth/issues/1934)) ([8078cdc](https://github.com/supabase/auth/commit/8078cdc6f275c97d84c0ba20963327af900b84d0))
+* update figma token endpoint ([#1952](https://github.com/supabase/auth/issues/1952)) ([18fbbb5](https://github.com/supabase/auth/commit/18fbbb53de04c024b6de829e390145a8452d7ab2))
+* use sys/unix instead of syscall ([#1953](https://github.com/supabase/auth/issues/1953)) ([4a6d9bc](https://github.com/supabase/auth/commit/4a6d9bcade28db3c7a6c2c610600665190c9a925))
+
 ## [2.169.0](https://github.com/supabase/auth/compare/v2.168.0...v2.169.0) (2025-01-27)
 
 

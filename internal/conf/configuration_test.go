@@ -60,6 +60,17 @@ func TestGlobal(t *testing.T) {
 	}
 
 	{
+		gc, err := LoadGlobal("")
+		require.NoError(t, err)
+		assert.Equal(t, false, gc.Mailer.EmailBackgroundSending)
+
+		os.Setenv("GOTRUE_MAILER_EMAIL_BACKGROUND_SENDING", "true")
+		gc, err = LoadGlobal("")
+		require.NoError(t, err)
+		assert.Equal(t, true, gc.Mailer.EmailBackgroundSending)
+	}
+
+	{
 		hdrs := gc.Mailer.GetEmailValidationServiceHeaders()
 		assert.Equal(t, 1, len(hdrs["apikey"]))
 		assert.Equal(t, "test", hdrs["apikey"][0])
@@ -179,6 +190,36 @@ func TestGlobal(t *testing.T) {
 	{
 		os.Setenv("API_EXTERNAL_URL", "")
 		cfg := new(GlobalConfiguration)
+		cfg.Hook = HookConfiguration{
+			BeforeUserCreated: ExtensibilityPointConfiguration{
+				Enabled: true,
+				URI:     "\n",
+			},
+		}
+
+		err := populateGlobal(cfg)
+		require.Error(t, err)
+		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
+	}
+
+	{
+		os.Setenv("API_EXTERNAL_URL", "")
+		cfg := new(GlobalConfiguration)
+		cfg.Hook = HookConfiguration{
+			AfterUserCreated: ExtensibilityPointConfiguration{
+				Enabled: true,
+				URI:     "\n",
+			},
+		}
+
+		err := populateGlobal(cfg)
+		require.Error(t, err)
+		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
+	}
+
+	{
+		os.Setenv("API_EXTERNAL_URL", "")
+		cfg := new(GlobalConfiguration)
 		cfg.SAML = SAMLConfiguration{
 			Enabled: true,
 		}
@@ -220,6 +261,30 @@ func TestGlobal(t *testing.T) {
 
 		err := populateGlobal(cfg)
 		require.NoError(t, err)
+	}
+
+	// ConnPercentage
+	{
+		tests := []struct {
+			from int
+			exp  int
+		}{
+			{-2, 0},
+			{-1, 0},
+			{0, 0},
+			{1, 1},
+			{25, 25},
+			{99, 99},
+			{100, 100},
+			{101, 100},
+			{102, 100},
+		}
+		for _, test := range tests {
+			cfg := &DBConfiguration{ConnPercentage: test.from}
+			err := cfg.Validate()
+			require.NoError(t, err)
+			require.Equal(t, test.exp, cfg.ConnPercentage)
+		}
 	}
 }
 
@@ -491,6 +556,22 @@ func TestValidate(t *testing.T) {
 				` be positive when set, was -1`,
 		},
 		{
+			val: &SessionsConfiguration{InactivityTimeout: toPtr(time.Duration(-1))},
+			err: `conf: session inactivity timeout duration must` +
+				` be positive when set, was -1ns`,
+		},
+		{
+			val: &SessionsConfiguration{AllowLowAAL: nil},
+		},
+		{
+			val: &SessionsConfiguration{AllowLowAAL: new(time.Duration)},
+			err: `conf: session allow low AAL duration must be positive when set, was 0`,
+		},
+		{
+			val: &SessionsConfiguration{AllowLowAAL: toPtr(time.Duration(-1))},
+			err: `conf: session allow low AAL duration must be positive when set, was -1`,
+		},
+		{
 			val: &SessionsConfiguration{Timebox: toPtr(time.Duration(1))},
 		},
 
@@ -520,6 +601,17 @@ func TestValidate(t *testing.T) {
 			val: &MailerConfiguration{EmailValidationServiceHeaders: "invalid"},
 			err: `conf: mailer validation headers not a map[string][]string format:` +
 				` invalid character 'i' looking for beginning of value`,
+		},
+		{
+			val: &MailerConfiguration{EmailValidationBlockedMX: "invalid"},
+			err: `conf: email_validation_blocked_mx`,
+		},
+		{
+			val: &MailerConfiguration{EmailValidationBlockedMX: `["foo.com"]`},
+			check: func(t *testing.T, v any) {
+				got := (v.(*MailerConfiguration)).GetEmailValidationBlockedMXRecords()
+				require.True(t, got["foo.com"])
+			},
 		},
 
 		{

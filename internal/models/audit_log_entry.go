@@ -6,11 +6,15 @@ import (
 	"net/http"
 	"time"
 
+	"maps"
+
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 type AuditAction string
@@ -90,7 +94,7 @@ func (AuditLogEntry) TableName() string {
 	return tableName
 }
 
-func NewAuditLogEntry(r *http.Request, tx *storage.Connection, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
+func NewAuditLogEntry(config conf.AuditLogConfiguration, r *http.Request, tx *storage.Connection, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
 	id := uuid.Must(uuid.NewV4())
 
 	username := actor.GetEmail()
@@ -106,22 +110,58 @@ func NewAuditLogEntry(r *http.Request, tx *storage.Connection, actor *User, acti
 		"action":         action,
 		"log_type":       ActionLogTypeMap[action],
 	}
-	l := AuditLogEntry{
-		ID:        id,
-		Payload:   JSONMap(payload),
-		IPAddress: ipAddress,
+
+	if name, ok := actor.UserMetaData["full_name"]; ok {
+		payload["actor_name"] = name
+	}
+
+	if traits != nil {
+		payload["traits"] = traits
 	}
 
 	observability.LogEntrySetFields(r, logrus.Fields{
 		"auth_event": logrus.Fields(payload),
 	})
 
-	if name, ok := actor.UserMetaData["full_name"]; ok {
-		l.Payload["actor_name"] = name
+	// AUDIT LOGGING FIX: Log each audit event immediately as a separate log entry
+	//
+	// BUG: The observability.LogEntrySetFields() above adds to request context, causing
+	// multiple audit events in the same request to overwrite each other. For example,
+	// refresh token requests call NewAuditLogEntry() twice (token_refreshed, then
+	// token_revoked) but only the last event (token_revoked) was logged.
+	//
+	// SOLUTION: Create immediate separate log entries with "auth_audit_event" key.
+	// This ensures all audit events are captured without overwriting.
+	//
+	// TRANSITION: We keep the existing "auth_event" for backward compatibility during
+	// the transition period. This fix may impact metrics that count audit events,
+	// as previously missing events (like token_refreshed) will now appear in logs.
+	// Eventually, we should remove the observability.LogEntrySetFields() call above
+	// once new logging is proven stable.
+	auditLogPayload := make(map[string]interface{})
+	maps.Copy(auditLogPayload, payload)
+	auditLogPayload["audit_log_id"] = id
+	auditLogPayload["ip_address"] = ipAddress
+	auditLogPayload["created_at"] = time.Now().UTC()
+
+	if requestID := utilities.GetRequestID(r.Context()); requestID != "" {
+		auditLogPayload["request_id"] = requestID
+	}
+	if userAgent := r.Header.Get("User-Agent"); userAgent != "" {
+		auditLogPayload["user_agent"] = userAgent
+	}
+	logrus.WithFields(logrus.Fields{
+		"auth_audit_event": auditLogPayload,
+	}).Info("audit_event")
+
+	if config.DisablePostgres {
+		return nil
 	}
 
-	if traits != nil {
-		l.Payload["traits"] = traits
+	l := AuditLogEntry{
+		ID:        id,
+		Payload:   JSONMap(payload),
+		IPAddress: ipAddress,
 	}
 
 	if err := tx.Create(&l); err != nil {

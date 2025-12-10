@@ -17,7 +17,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -94,7 +96,7 @@ func (ts *TokenTestSuite) TestSessionTimebox() {
 	}
 
 	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
-	assert.Equal(ts.T(), ErrorCodeSessionExpired, firstResult.ErrorCode)
+	assert.Equal(ts.T(), apierrors.ErrorCodeSessionExpired, firstResult.ErrorCode)
 	assert.Equal(ts.T(), "Invalid Refresh Token: Session Expired", firstResult.Message)
 }
 
@@ -129,7 +131,7 @@ func (ts *TokenTestSuite) TestSessionInactivityTimeout() {
 	}
 
 	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
-	assert.Equal(ts.T(), ErrorCodeSessionExpired, firstResult.ErrorCode)
+	assert.Equal(ts.T(), apierrors.ErrorCodeSessionExpired, firstResult.ErrorCode)
 	assert.Equal(ts.T(), "Invalid Refresh Token: Session Expired (Inactivity)", firstResult.Message)
 }
 
@@ -218,13 +220,13 @@ func (ts *TokenTestSuite) TestSingleSessionPerUserNoTags() {
 	}
 
 	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
-	assert.Equal(ts.T(), ErrorCodeSessionExpired, firstResult.ErrorCode)
+	assert.Equal(ts.T(), apierrors.ErrorCodeSessionExpired, firstResult.ErrorCode)
 	assert.Equal(ts.T(), "Invalid Refresh Token: Session Expired (Revoked by Newer Login)", firstResult.Message)
 }
 
 func (ts *TokenTestSuite) TestRateLimitTokenRefresh() {
 	var buffer bytes.Buffer
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/token", &buffer)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("My-Custom-Header", "1.2.3.4")
 
@@ -245,7 +247,38 @@ func (ts *TokenTestSuite) TestRateLimitTokenRefresh() {
 	assert.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
 
 	// It doesn't rate limit a new value for the limited header
-	req = httptest.NewRequest(http.MethodPost, "http://localhost/token", &buffer)
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("My-Custom-Header", "5.6.7.8")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
+func (ts *TokenTestSuite) TestRateLimitWeb3() {
+	var buffer bytes.Buffer
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=web3", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("My-Custom-Header", "1.2.3.4")
+
+	// It rate limits after 30 requests
+	for i := 0; i < 30; i++ {
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+	}
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
+
+	// It ignores X-Forwarded-For by default
+	req.Header.Set("X-Forwarded-For", "1.1.1.1")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
+
+	// It doesn't rate limit a new value for the limited header
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=web3", &buffer)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("My-Custom-Header", "5.6.7.8")
 	w = httptest.NewRecorder()
@@ -403,8 +436,10 @@ func (ts *TokenTestSuite) TestRefreshTokenReuseRevocation() {
 
 	// ensure that the 4 refresh tokens are setup correctly
 	for i, refreshToken := range refreshTokens {
-		_, token, _, err := models.FindUserWithRefreshToken(ts.API.db, refreshToken, false)
+		_, anyToken, _, err := models.FindUserWithRefreshToken(ts.API.db, ts.Config.Security.DBEncryption, refreshToken, false)
 		require.NoError(ts.T(), err)
+
+		token := anyToken.(*models.RefreshToken)
 
 		if i == len(refreshTokens)-1 {
 			require.False(ts.T(), token.Revoked)
@@ -433,14 +468,15 @@ func (ts *TokenTestSuite) TestRefreshTokenReuseRevocation() {
 	}
 
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&response))
-	require.Equal(ts.T(), ErrorCodeRefreshTokenAlreadyUsed, response.ErrorCode)
+	require.Equal(ts.T(), apierrors.ErrorCodeRefreshTokenAlreadyUsed, response.ErrorCode)
 	require.Equal(ts.T(), "Invalid Refresh Token: Already Used", response.Message)
 
 	// ensure that the refresh tokens are marked as revoked in the database
 	for _, refreshToken := range refreshTokens {
-		_, token, _, err := models.FindUserWithRefreshToken(ts.API.db, refreshToken, false)
+		_, anyToken, _, err := models.FindUserWithRefreshToken(ts.API.db, ts.Config.Security.DBEncryption, refreshToken, false)
 		require.NoError(ts.T(), err)
 
+		token := anyToken.(*models.RefreshToken)
 		require.True(ts.T(), token.Revoked)
 	}
 
@@ -466,7 +502,7 @@ func (ts *TokenTestSuite) TestRefreshTokenReuseRevocation() {
 		}
 
 		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&response))
-		require.Equal(ts.T(), ErrorCodeRefreshTokenAlreadyUsed, response.ErrorCode, "For refresh token %d", i)
+		require.Equal(ts.T(), apierrors.ErrorCodeRefreshTokenAlreadyUsed, response.ErrorCode, "For refresh token %d", i)
 		require.Equal(ts.T(), "Invalid Refresh Token: Already Used", response.Message, "For refresh token %d", i)
 	}
 }
@@ -854,4 +890,27 @@ $$;`
 			ts.Config.Hook.CustomAccessToken.Enabled = false
 		})
 	}
+}
+
+func TestRefreshTokenGrantParamsValidate(t *testing.T) {
+	examples := []string{
+		"",
+		"01234567890",
+		"AAAAAAAAAAAA",
+		"------------",
+		"0000000000000",
+	}
+
+	p := &RefreshTokenGrantParams{}
+
+	for _, example := range examples {
+		p.RefreshToken = example
+		require.Error(t, p.Validate())
+	}
+
+	p.RefreshToken = "0123456abcde"
+	require.NoError(t, p.Validate())
+
+	p.RefreshToken = (&crypto.RefreshToken{}).Encode(make([]byte, 32))
+	require.NoError(t, p.Validate())
 }

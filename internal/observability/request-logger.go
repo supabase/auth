@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -55,6 +56,10 @@ func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 		"referer":     referrer,
 	}
 
+	if r.URL.Path == "/token" {
+		logFields["grant_type"] = r.FormValue("grant_type")
+	}
+
 	if reqID := utilities.GetRequestID(r.Context()); reqID != "" {
 		logFields["request_id"] = reqID
 	}
@@ -66,6 +71,11 @@ func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 // logEntry implements the chiMiddleware.LogEntry interface
 type logEntry struct {
 	Entry *logrus.Entry
+}
+
+// NewLogEntry returns a new chimiddleware.LogEntry from a *logrus.Entry.
+func NewLogEntry(le *logrus.Entry) chimiddleware.LogEntry {
+	return &logEntry{le}
 }
 
 func (e *logEntry) Write(status, bytes int, header http.Header, elapsed time.Duration, extra interface{}) {
@@ -99,6 +109,21 @@ func GetLogEntry(r *http.Request) *logEntry {
 		return &logEntry{Entry: logrus.NewEntry(logrus.StandardLogger())}
 	}
 	return l
+}
+
+func GetLogEntryFromContext(ctx context.Context) *logEntry {
+	l, _ := ctx.Value(chimiddleware.LogEntryCtxKey).(*logEntry)
+	if l == nil {
+		return &logEntry{Entry: logrus.NewEntry(logrus.StandardLogger())}
+	}
+	return l
+}
+
+func SetLogEntryWithContext(
+	ctx context.Context,
+	entry chimiddleware.LogEntry,
+) context.Context {
+	return context.WithValue(ctx, chimiddleware.LogEntryCtxKey, entry)
 }
 
 func LogEntrySetField(r *http.Request, key string, value interface{}) {

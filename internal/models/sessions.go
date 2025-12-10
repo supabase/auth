@@ -2,7 +2,9 @@ package models
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -10,6 +12,8 @@ import (
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -34,27 +38,41 @@ func (aal AuthenticatorAssuranceLevel) String() string {
 	}
 }
 
+func (aal AuthenticatorAssuranceLevel) PointerString() *string {
+	value := aal.String()
+
+	return &value
+}
+
+// CompareAAL returns 0 if both AAL levels are equal, > 0 if A is a higher level than B or < 0 if A is a lower level than B.
+func CompareAAL(a, b AuthenticatorAssuranceLevel) int {
+	return strings.Compare(a.String(), b.String())
+}
+
+func ParseAAL(value *string) AuthenticatorAssuranceLevel {
+	if value == nil {
+		return AAL1
+	}
+
+	switch *value {
+	case AAL1.String():
+		return AAL1
+
+	case AAL2.String():
+		return AAL2
+
+	case AAL3.String():
+		return AAL3
+	}
+
+	return AAL1
+}
+
 // AMREntry represents a method that a user has logged in together with the corresponding time
 type AMREntry struct {
 	Method    string `json:"method"`
 	Timestamp int64  `json:"timestamp"`
 	Provider  string `json:"provider,omitempty"`
-}
-
-type sortAMREntries struct {
-	Array []AMREntry
-}
-
-func (s sortAMREntries) Len() int {
-	return len(s.Array)
-}
-
-func (s sortAMREntries) Less(i, j int) bool {
-	return s.Array[i].Timestamp < s.Array[j].Timestamp
-}
-
-func (s sortAMREntries) Swap(i, j int) {
-	s.Array[j], s.Array[i] = s.Array[i], s.Array[j]
 }
 
 type Session struct {
@@ -74,12 +92,44 @@ type Session struct {
 	UserAgent   *string    `json:"user_agent,omitempty" db:"user_agent"`
 	IP          *string    `json:"ip,omitempty" db:"ip"`
 
-	Tag *string `json:"tag" db:"tag"`
+	Tag           *string    `json:"tag" db:"tag"`
+	OAuthClientID *uuid.UUID `json:"oauth_client_id" db:"oauth_client_id"`
+	Scopes        *string    `json:"scopes,omitempty" db:"scopes"` // OAuth scopes granted for this session
+
+	RefreshTokenHmacKey *string `json:"-" db:"refresh_token_hmac_key"`
+	RefreshTokenCounter *int64  `json:"-" db:"refresh_token_counter"`
 }
 
 func (Session) TableName() string {
 	tableName := "sessions"
 	return tableName
+}
+
+func (s *Session) GetRefreshTokenHmacKey(dbEncryption conf.DatabaseEncryptionConfiguration) ([]byte, bool, error) {
+	if s.RefreshTokenHmacKey == nil {
+		return nil, false, nil
+	}
+
+	if es := crypto.ParseEncryptedString(*s.RefreshTokenHmacKey); es != nil {
+		bytes, err := es.Decrypt(s.ID.String(), dbEncryption.DecryptionKeys)
+		if err != nil {
+			return nil, false, err
+		}
+
+		hmacKey, err := base64.RawURLEncoding.DecodeString(string(bytes))
+		if err != nil {
+			return nil, false, err
+		}
+
+		return hmacKey, dbEncryption.Encrypt && es.ShouldReEncrypt(dbEncryption.EncryptionKeyID), nil
+	}
+
+	hmacKey, err := base64.RawURLEncoding.DecodeString(*s.RefreshTokenHmacKey)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return hmacKey, dbEncryption.Encrypt, nil
 }
 
 func (s *Session) LastRefreshedAt(refreshTokenTime *time.Time) time.Time {
@@ -110,6 +160,27 @@ func (s *Session) UpdateOnlyRefreshInfo(tx *storage.Connection) error {
 	return tx.UpdateOnly(s, "refreshed_at", "user_agent", "ip")
 }
 
+func (s *Session) UpdateOnlyRefreshToken(tx *storage.Connection) error {
+	return tx.UpdateOnly(s, "refresh_token_counter")
+}
+
+func (s *Session) ReEncryptRefreshTokenHmacKey(tx *storage.Connection, dbEncryption conf.DatabaseEncryptionConfiguration) error {
+	key, _, err := s.GetRefreshTokenHmacKey(dbEncryption)
+	if err != nil {
+		return err
+	}
+
+	es, err := crypto.NewEncryptedString(s.ID.String(), []byte(base64.RawURLEncoding.EncodeToString(key)), dbEncryption.EncryptionKeyID, dbEncryption.EncryptionKey)
+	if err != nil {
+		return err
+	}
+
+	encryptedValue := es.String()
+	s.RefreshTokenHmacKey = &encryptedValue
+
+	return tx.UpdateOnly(s, "refresh_token_hmac_key")
+}
+
 type SessionValidityReason = int
 
 const (
@@ -117,19 +188,30 @@ const (
 	SessionPastNotAfter                       = iota
 	SessionPastTimebox                        = iota
 	SessionTimedOut                           = iota
+	SessionLowAAL                             = iota
 )
 
-func (s *Session) CheckValidity(now time.Time, refreshTokenTime *time.Time, timebox, inactivityTimeout *time.Duration) SessionValidityReason {
+type SessionValidityConfig struct {
+	Timebox           *time.Duration
+	InactivityTimeout *time.Duration
+	AllowLowAAL       *time.Duration
+}
+
+func (s *Session) CheckValidity(config SessionValidityConfig, now time.Time, refreshTokenTime *time.Time, userHighestPossibleAAL AuthenticatorAssuranceLevel) SessionValidityReason {
 	if s.NotAfter != nil && now.After(*s.NotAfter) {
 		return SessionPastNotAfter
 	}
 
-	if timebox != nil && *timebox != 0 && now.After(s.CreatedAt.Add(*timebox)) {
+	if config.Timebox != nil && *config.Timebox != 0 && now.After(s.CreatedAt.Add(*config.Timebox)) {
 		return SessionPastTimebox
 	}
 
-	if inactivityTimeout != nil && *inactivityTimeout != 0 && now.After(s.LastRefreshedAt(refreshTokenTime).Add(*inactivityTimeout)) {
+	if config.InactivityTimeout != nil && *config.InactivityTimeout != 0 && now.After(s.LastRefreshedAt(refreshTokenTime).Add(*config.InactivityTimeout)) {
 		return SessionTimedOut
+	}
+
+	if config.AllowLowAAL != nil && *config.AllowLowAAL != 0 && CompareAAL(ParseAAL(s.AAL), userHighestPossibleAAL) < 0 && now.After(s.CreatedAt.Add(*config.AllowLowAAL)) {
+		return SessionLowAAL
 	}
 
 	return SessionValid
@@ -149,10 +231,8 @@ func (s *Session) DetermineTag(tags []string) string {
 		return tags[0]
 	}
 
-	for _, t := range tags {
-		if t == tag {
-			return tag
-		}
+	if slices.Contains(tags, tag) {
+		return tag
 	}
 
 	return tags[0]
@@ -161,11 +241,9 @@ func (s *Session) DetermineTag(tags []string) string {
 func NewSession(userID uuid.UUID, factorID *uuid.UUID) (*Session, error) {
 	id := uuid.Must(uuid.NewV4())
 
-	defaultAAL := AAL1.String()
-
 	session := &Session{
 		ID:       id,
-		AAL:      &defaultAAL,
+		AAL:      AAL1.PointerString(),
 		UserID:   userID,
 		FactorID: factorID,
 	}
@@ -276,6 +354,11 @@ func LogoutAllExceptMe(tx *storage.Connection, sessionId uuid.UUID, userID uuid.
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id != ? AND user_id = ?", sessionId, userID).Exec()
 }
 
+// RevokeOAuthSessions deletes all sessions associated with a specific OAuth client for a user
+func RevokeOAuthSessions(tx *storage.Connection, userID uuid.UUID, oauthClientID uuid.UUID) error {
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND oauth_client_id = ?", userID, oauthClientID).Exec()
+}
+
 func (s *Session) UpdateAALAndAssociatedFactor(tx *storage.Connection, aal AuthenticatorAssuranceLevel, factorID *uuid.UUID) error {
 	s.FactorID = factorID
 	aalAsString := aal.String()
@@ -289,40 +372,26 @@ func (s *Session) CalculateAALAndAMR(user *User) (aal AuthenticatorAssuranceLeve
 		if claim.IsAAL2Claim() {
 			aal = AAL2
 		}
-		amr = append(amr, AMREntry{Method: claim.GetAuthenticationMethod(), Timestamp: claim.UpdatedAt.Unix()})
+		entry := AMREntry{Method: claim.GetAuthenticationMethod(), Timestamp: claim.UpdatedAt.Unix()}
+		if entry.Method == SSOSAML.String() {
+			// SSO users should only have one identity since they are excluded from account linking
+			// These checks act as a safeguard in the event future changes break this assumption.
+			identities := user.Identities
+			if len(identities) == 1 {
+				identity := identities[0]
+				if identity.IsForSSOProvider() {
+					entry.Provider = strings.TrimPrefix(identity.Provider, "sso:")
+				}
+			}
+		}
+		amr = append(amr, entry)
+
 	}
 
 	// makes sure that the AMR claims are always ordered most-recent first
-
-	// sort in ascending order
-	sort.Sort(sortAMREntries{
-		Array: amr,
+	sort.Slice(amr, func(i, j int) bool {
+		return amr[i].Timestamp > amr[j].Timestamp
 	})
-
-	// now reverse for descending order
-	_ = sort.Reverse(sortAMREntries{
-		Array: amr,
-	})
-
-	lastIndex := len(amr) - 1
-
-	if lastIndex > -1 && amr[lastIndex].Method == SSOSAML.String() {
-		// initial AMR claim is from sso/saml, we need to add information
-		// about the provider that was used for the authentication
-		identities := user.Identities
-
-		if len(identities) == 1 {
-			identity := identities[0]
-
-			if identity.IsForSSOProvider() {
-				amr[lastIndex].Provider = strings.TrimPrefix(identity.Provider, "sso:")
-			}
-		}
-
-		// otherwise we can't identify that this user account has only
-		// one SSO identity, so we are not encoding the provider at
-		// this time
-	}
 
 	return aal, amr, nil
 }
@@ -353,4 +422,17 @@ func (s *Session) FindCurrentlyActiveRefreshToken(tx *storage.Connection) (*Refr
 	}
 
 	return &activeRefreshToken, nil
+}
+
+// GetScopeList returns the scopes as a slice
+func (s *Session) GetScopeList() []string {
+	if s.Scopes == nil {
+		return []string{}
+	}
+	return ParseScopeString(*s.Scopes)
+}
+
+// HasScope checks if the session has a specific scope
+func (s *Session) HasScope(scope string) bool {
+	return HasScope(s.GetScopeList(), scope)
 }
