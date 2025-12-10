@@ -299,7 +299,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if banDuration != nil {
-			if terr := user.Ban(tx, *banDuration); terr != nil {
+			if terr := user.Ban(tx, *banDuration, nil); terr != nil {
 				return terr
 			}
 		}
@@ -493,7 +493,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if banDuration != nil {
-			if terr := user.Ban(tx, *banDuration); terr != nil {
+			if terr := user.Ban(tx, *banDuration, nil); terr != nil {
 				return terr
 			}
 		}
