@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.185.0](https://github.com/supabase/auth/compare/v2.184.0...v2.185.0) (2025-12-11)
+
+
+### Features
+
+* Treat rate limit header value as comma-separated list ([#2282](https://github.com/supabase/auth/issues/2282)) ([5f2e279](https://github.com/supabase/auth/commit/5f2e2792560d57dd14fbf3e69c133a7ec8518c4d))
+
+
+### Bug Fixes
+
+* check each type independently ([#2290](https://github.com/supabase/auth/issues/2290)) ([d9de0af](https://github.com/supabase/auth/commit/d9de0af3a173ae3e9ab0219c07652675f8be1761))
+* fix the wrong error return value ([#1950](https://github.com/supabase/auth/issues/1950)) ([e2dfb5d](https://github.com/supabase/auth/commit/e2dfb5d4222e5edc569b54d057db9ed4375a19d8))
+
 ## [2.184.0](https://github.com/supabase/auth/compare/v2.183.0...v2.184.0) (2025-12-08)
 
 
