@@ -9,17 +9,19 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/utilities"
 )
 
 // validateRedirectURIList validates a list of redirect URIs
-func validateRedirectURIList(redirectURIs []string, required bool) error {
+func (s *Server) validateRedirectURIList(redirectURIs []string, required bool) error {
 	if required && len(redirectURIs) == 0 {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "redirect_uris is required")
 	}
@@ -33,7 +35,7 @@ func validateRedirectURIList(redirectURIs []string, required bool) error {
 	}
 
 	for _, uri := range redirectURIs {
-		if err := validateRedirectURI(uri); err != nil {
+		if err := s.validateRedirectURI(uri); err != nil {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid redirect_uri '%s': %v", uri, err)
 		}
 	}
@@ -117,9 +119,9 @@ type OAuthServerClientRegisterParams struct {
 }
 
 // validate validates the OAuth client registration parameters
-func (p *OAuthServerClientRegisterParams) validate() error {
+func (p *OAuthServerClientRegisterParams) validate(s *Server) error {
 	// Validate redirect URIs (required for registration)
-	if err := validateRedirectURIList(p.RedirectURIs, true); err != nil {
+	if err := s.validateRedirectURIList(p.RedirectURIs, true); err != nil {
 		return err
 	}
 
@@ -170,8 +172,8 @@ func (p *OAuthServerClientRegisterParams) validate() error {
 	return nil
 }
 
-// validateRedirectURI validates OAuth 2.1 redirect URIs
-func validateRedirectURI(uri string) error {
+// validateRedirectURI validates OAuth 2.1 redirect URIs with enhanced security checks
+func (s *Server) validateRedirectURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("redirect URI cannot be empty")
 	}
@@ -181,20 +183,9 @@ func validateRedirectURI(uri string) error {
 		return fmt.Errorf("invalid URL format")
 	}
 
-	// Must have scheme and host
-	if parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return fmt.Errorf("must have scheme and host")
-	}
-
-	// Check scheme requirements
-	if parsedURL.Scheme == "http" {
-		// HTTP only allowed for localhost
-		host := parsedURL.Hostname()
-		if host != "localhost" && host != "127.0.0.1" {
-			return fmt.Errorf("HTTP scheme only allowed for localhost")
-		}
-	} else if parsedURL.Scheme != "https" {
-		return fmt.Errorf("scheme must be HTTPS or HTTP (localhost only)")
+	// Must have scheme
+	if parsedURL.Scheme == "" {
+		return fmt.Errorf("must have scheme")
 	}
 
 	// Must not have fragment
@@ -202,7 +193,72 @@ func validateRedirectURI(uri string) error {
 		return fmt.Errorf("fragment not allowed in redirect URI")
 	}
 
+	// Block dangerous schemes that could be used for attacks
+	scheme := strings.ToLower(parsedURL.Scheme)
+	dangerousSchemes := []string{"javascript", "data", "file", "vbscript", "about"}
+	for _, dangerous := range dangerousSchemes {
+		if scheme == dangerous {
+			return fmt.Errorf("scheme '%s' is not allowed for security reasons", scheme)
+		}
+	}
+
+	// For OAuth client registration, we need stricter validation than general redirects
+	// All redirect URIs must explicitly match the allow list (no hostname-matching shortcuts)
+	
+	// Special validation for HTTP scheme
+	if scheme == "http" {
+		// HTTP only allowed for localhost
+		host := parsedURL.Hostname()
+		if host != "localhost" && host != "127.0.0.1" && !strings.HasPrefix(host, "127.") {
+			return fmt.Errorf("HTTP scheme only allowed for localhost")
+		}
+	}
+
+	// For OAuth Dynamic Client Registration, require strict allow-list matching
+	// This prevents exploitation of hostname-matching shortcuts that could allow
+	// arbitrary paths on the auth server (e.g., https://auth.example.com/arbitrary/path)
+	if !isURIExplicitlyAllowed(s.config, uri) {
+		return fmt.Errorf("redirect URI not allowed by configuration")
+	}
+
 	return nil
+}
+
+// isURIExplicitlyAllowed checks if a URI is explicitly allowed in the configuration
+// This provides strict validation for OAuth client registration by requiring exact
+// pattern matches from the allow list, without hostname-matching shortcuts.
+// This prevents attackers from registering arbitrary paths on the auth server.
+func isURIExplicitlyAllowed(config *conf.GlobalConfiguration, uri string) bool {
+	if uri == "" {
+		return false
+	}
+
+	parsedURL, err := url.Parse(uri)
+	if err != nil {
+		return false
+	}
+
+	scheme := strings.ToLower(parsedURL.Scheme)
+	
+	// Check against allow list patterns
+	// Only match patterns that start with the same scheme to prevent cross-scheme exploitation
+	for pattern, glob := range config.URIAllowListMap {
+		patternURL, err := url.Parse(pattern)
+		if err != nil {
+			continue
+		}
+		
+		patternScheme := strings.ToLower(patternURL.Scheme)
+		if patternScheme == scheme {
+			// Match without fragment
+			matchAgainst, _, _ := strings.Cut(uri, "#")
+			if glob.Match(matchAgainst) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // generateClientSecret generates a secure random client secret
@@ -235,7 +291,7 @@ func ValidateClientSecret(providedSecret, storedHash string) bool {
 // registerOAuthServerClient creates a new OAuth server client with generated credentials
 func (s *Server) registerOAuthServerClient(ctx context.Context, params *OAuthServerClientRegisterParams) (*models.OAuthServerClient, string, error) {
 	// Validate all parameters
-	if err := params.validate(); err != nil {
+	if err := params.validate(s); err != nil {
 		return nil, "", err
 	}
 
@@ -362,10 +418,10 @@ func (p *OAuthServerClientUpdateParams) isEmpty() bool {
 }
 
 // validate validates the OAuth client update parameters
-func (p *OAuthServerClientUpdateParams) validate() error {
+func (p *OAuthServerClientUpdateParams) validate(s *Server) error {
 	// Validate redirect URIs if provided
 	if p.RedirectURIs != nil {
-		if err := validateRedirectURIList(*p.RedirectURIs, false); err != nil {
+		if err := s.validateRedirectURIList(*p.RedirectURIs, false); err != nil {
 			return err
 		}
 	}
@@ -404,7 +460,7 @@ func (p *OAuthServerClientUpdateParams) validate() error {
 // updateOAuthServerClient updates an existing OAuth client
 func (s *Server) updateOAuthServerClient(ctx context.Context, clientID uuid.UUID, params *OAuthServerClientUpdateParams) (*models.OAuthServerClient, error) {
 	// Validate all parameters
-	if err := params.validate(); err != nil {
+	if err := params.validate(s); err != nil {
 		return nil, err
 	}
 
