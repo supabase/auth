@@ -205,10 +205,15 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	r.Route("/scim/v2", func(r *router) {
 		r.Use(api.requireSCIMAuthentication)
 
+		// SCIM-specific NotFound handler for proper error format
+		r.NotFound(api.scimNotFound)
+
 		// Service Provider Configuration
 		r.Get("/ServiceProviderConfig", api.scimServiceProviderConfig)
 		r.Get("/ResourceTypes", api.scimResourceTypes)
+		r.Get("/ResourceTypes/{resource_type_id}", api.scimResourceTypeByID)
 		r.Get("/Schemas", api.scimSchemas)
+		r.Get("/Schemas/{schema_id}", api.scimSchemaByID)
 
 		// User endpoints
 		r.Route("/Users", func(r *router) {

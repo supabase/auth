@@ -120,3 +120,69 @@ func (e *HTTPError) WithInternalMessage(fmtString string, args ...any) *HTTPErro
 	e.InternalMessage = fmt.Sprintf(fmtString, args...)
 	return e
 }
+
+// SCIMHTTPError is an error with SCIM-specific format per RFC 7644 Section 3.12
+type SCIMHTTPError struct {
+	HTTPStatus      int    `json:"-"`
+	Schemas         []string `json:"schemas"`
+	Status          string   `json:"status"`
+	Detail          string   `json:"detail,omitempty"`
+	ScimType        string   `json:"scimType,omitempty"`
+	InternalError   error    `json:"-"`
+	InternalMessage string   `json:"-"`
+}
+
+const SCIMSchemaError = "urn:ietf:params:scim:api:messages:2.0:Error"
+
+func NewSCIMHTTPError(httpStatus int, detail string, scimType string) *SCIMHTTPError {
+	return &SCIMHTTPError{
+		HTTPStatus: httpStatus,
+		Schemas:    []string{SCIMSchemaError},
+		Status:     fmt.Sprintf("%d", httpStatus),
+		Detail:     detail,
+		ScimType:   scimType,
+	}
+}
+
+func NewSCIMBadRequestError(detail string, scimType string) *SCIMHTTPError {
+	return NewSCIMHTTPError(http.StatusBadRequest, detail, scimType)
+}
+
+func NewSCIMNotFoundError(detail string) *SCIMHTTPError {
+	return NewSCIMHTTPError(http.StatusNotFound, detail, "")
+}
+
+func NewSCIMUnauthorizedError(detail string) *SCIMHTTPError {
+	return NewSCIMHTTPError(http.StatusUnauthorized, detail, "")
+}
+
+func NewSCIMConflictError(detail string, scimType string) *SCIMHTTPError {
+	return NewSCIMHTTPError(http.StatusConflict, detail, scimType)
+}
+
+func (e *SCIMHTTPError) Error() string {
+	if e.InternalMessage != "" {
+		return e.InternalMessage
+	}
+	return fmt.Sprintf("%d: %s", e.HTTPStatus, e.Detail)
+}
+
+// Cause returns the root cause error
+func (e *SCIMHTTPError) Cause() error {
+	if e.InternalError != nil {
+		return e.InternalError
+	}
+	return e
+}
+
+// WithInternalError adds internal error information to the error
+func (e *SCIMHTTPError) WithInternalError(err error) *SCIMHTTPError {
+	e.InternalError = err
+	return e
+}
+
+// WithInternalMessage adds internal message information to the error
+func (e *SCIMHTTPError) WithInternalMessage(fmtString string, args ...any) *SCIMHTTPError {
+	e.InternalMessage = fmt.Sprintf(fmtString, args...)
+	return e
+}

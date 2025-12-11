@@ -54,6 +54,10 @@ func (r *router) UseBypass(fn func(next http.Handler) http.Handler) {
 	r.chi.Use(fn)
 }
 
+func (r *router) NotFound(fn apiHandler) {
+	r.chi.NotFound(handler(fn))
+}
+
 func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.chi.ServeHTTP(w, req)
 }
