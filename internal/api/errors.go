@@ -188,6 +188,13 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 		}
 
+	case *apierrors.SCIMHTTPError:
+		log.WithError(e.Cause()).Info(e.Error())
+		w.Header().Set("Content-Type", "application/scim+json")
+		if jsonErr := sendJSON(w, e.HTTPStatus, e); jsonErr != nil && jsonErr != context.DeadlineExceeded {
+			log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
+		}
+
 	case ErrorCause:
 		HandleResponseError(e.Cause(), w, r)
 
