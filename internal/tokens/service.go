@@ -2,6 +2,7 @@ package tokens
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	mathRand "math/rand"
 	"net/http"
@@ -26,6 +27,47 @@ import (
 
 const retryLoopDuration = 5.0
 
+// AMRClaim supports unmarshalling AMR as either strings or AMREntry objects.
+type AMRClaim []models.AMREntry
+
+// UnmarshalJSON accepts either an array of strings or AMREntry objects.
+func (a *AMRClaim) UnmarshalJSON(data []byte) error {
+	// Handle null explicitly - null cannot be unmarshaled into a slice
+	if len(data) > 0 {
+		trimmed := strings.TrimSpace(string(data))
+		if trimmed == "null" {
+			*a = AMRClaim{}
+			return nil
+		}
+	}
+
+	var rawItems []json.RawMessage
+	if err := json.Unmarshal(data, &rawItems); err != nil {
+		return err
+	}
+
+	entries := make([]models.AMREntry, 0, len(rawItems))
+	for _, item := range rawItems {
+		var method string
+		if err := json.Unmarshal(item, &method); err == nil {
+			entries = append(entries, models.AMREntry{
+				Method:    method,
+				Timestamp: time.Now().Unix(),
+			})
+			continue
+		}
+
+		var entry models.AMREntry
+		if err := json.Unmarshal(item, &entry); err != nil {
+			return err
+		}
+		entries = append(entries, entry)
+	}
+
+	*a = entries
+	return nil
+}
+
 // AccessTokenClaims is a struct thats used for JWT claims
 type AccessTokenClaims struct {
 	jwt.RegisteredClaims
@@ -35,7 +77,7 @@ type AccessTokenClaims struct {
 	UserMetaData                  map[string]interface{} `json:"user_metadata"`
 	Role                          string                 `json:"role"`
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
-	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
+	AuthenticationMethodReference AMRClaim               `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
 	IsAnonymous                   bool                   `json:"is_anonymous"`
 	ClientID                      string                 `json:"client_id,omitempty"`
