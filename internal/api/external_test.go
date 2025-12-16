@@ -202,6 +202,8 @@ func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount in
 	ts.NotEmpty(v.Get("refresh_token"))
 	ts.NotEmpty(v.Get("expires_in"))
 	ts.Equal("bearer", v.Get("token_type"))
+	// Verify Supabase Auth identifier is present
+	ts.Contains(v, "sb", "Fragment should contain Supabase Auth identifier 'sb'")
 
 	ts.Equal(1, tokenCount)
 	if userCount > -1 {
@@ -243,6 +245,8 @@ func assertAuthorizationFailure(ts *ExternalTestSuite, u *url.URL, errorDescript
 	ts.Empty(v.Get("refresh_token"))
 	ts.Empty(v.Get("expires_in"))
 	ts.Empty(v.Get("token_type"))
+	// Verify Supabase Auth identifier is present even in error responses
+	ts.Contains(v, "sb", "Fragment should contain Supabase Auth identifier 'sb' even in errors")
 
 	// ensure user is nil
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
