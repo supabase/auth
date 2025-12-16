@@ -716,6 +716,8 @@ func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, 
 		if q.Get("error_code") != "" {
 			hq.Set("error_code", q.Get("error_code"))
 		}
+		// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
+		hq.Set("sb", "")
 		u.Fragment = hq.Encode()
 		http.Redirect(w, r, u.String(), http.StatusFound)
 	}
