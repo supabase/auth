@@ -254,14 +254,31 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 		shouldError bool
 		errorMsg    string
 	}{
+		// Valid HTTPS URIs
 		{
 			name:        "Valid HTTPS URI",
 			uri:         "https://example.com/callback",
 			shouldError: false,
 		},
 		{
+			name:        "Valid HTTPS URI with port",
+			uri:         "https://example.com:8443/callback",
+			shouldError: false,
+		},
+		{
+			name:        "Valid HTTPS URI with query params",
+			uri:         "https://example.com/callback?foo=bar",
+			shouldError: false,
+		},
+		// Valid HTTP localhost URIs
+		{
 			name:        "Valid localhost HTTP URI",
 			uri:         "http://localhost:3000/callback",
+			shouldError: false,
+		},
+		{
+			name:        "Valid localhost HTTP URI without port",
+			uri:         "http://localhost/callback",
 			shouldError: false,
 		},
 		{
@@ -270,20 +287,42 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			shouldError: false,
 		},
 		{
+			name:        "Valid IPv6 localhost HTTP URI",
+			uri:         "http://[::1]:8080/callback",
+			shouldError: false,
+		},
+		// Valid custom URI schemes (native apps)
+		{
+			name:        "Valid custom scheme - myapp",
+			uri:         "myapp://callback",
+			shouldError: false,
+		},
+		{
+			name:        "Valid custom scheme - com.example.app",
+			uri:         "com.example.app://oauth/callback",
+			shouldError: false,
+		},
+		{
+			name:        "Valid custom scheme with port and path",
+			uri:         "myapp://localhost:8080/callback",
+			shouldError: false,
+		},
+		// Invalid cases
+		{
 			name:        "Invalid empty URI",
 			uri:         "",
 			shouldError: true,
 			errorMsg:    "redirect URI cannot be empty",
 		},
 		{
-			name:        "Invalid scheme",
-			uri:         "ftp://example.com/callback",
-			shouldError: true,
-			errorMsg:    "scheme must be HTTPS or HTTP (localhost only)",
-		},
-		{
 			name:        "Invalid HTTP non-localhost",
 			uri:         "http://example.com/callback",
+			shouldError: true,
+			errorMsg:    "HTTP scheme only allowed for localhost",
+		},
+		{
+			name:        "Invalid HTTP with IP address (not loopback)",
+			uri:         "http://192.168.1.1/callback",
 			shouldError: true,
 			errorMsg:    "HTTP scheme only allowed for localhost",
 		},
@@ -294,7 +333,25 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			errorMsg:    "fragment not allowed in redirect URI",
 		},
 		{
-			name:        "Invalid URI format",
+			name:        "Invalid custom scheme with fragment",
+			uri:         "myapp://callback#fragment",
+			shouldError: true,
+			errorMsg:    "fragment not allowed in redirect URI",
+		},
+		{
+			name:        "Invalid URI format - no scheme",
+			uri:         "example.com/callback",
+			shouldError: true,
+			errorMsg:    "must have scheme and host",
+		},
+		{
+			name:        "Invalid URI format - no host",
+			uri:         "https:///callback",
+			shouldError: true,
+			errorMsg:    "must have scheme and host",
+		},
+		{
+			name:        "Invalid URI format - completely invalid",
 			uri:         "not-a-uri",
 			shouldError: true,
 			errorMsg:    "must have scheme and host",
