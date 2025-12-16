@@ -248,15 +248,29 @@ func (s *Server) registerOAuthServerClient(ctx context.Context, params *OAuthSer
 	// Determine client type using centralized logic
 	clientType := DetermineClientType(params.ClientType, params.TokenEndpointAuthMethod)
 
+	// Determine token_endpoint_auth_method
+	// If explicitly provided, use it; otherwise set default based on client type
+	// Per RFC 7591: "If unspecified or omitted, the default is 'client_secret_basic'"
+	// For public clients, the default is 'none' since they don't have a client secret
+	tokenEndpointAuthMethod := params.TokenEndpointAuthMethod
+	if tokenEndpointAuthMethod == "" {
+		if clientType == models.OAuthServerClientTypePublic {
+			tokenEndpointAuthMethod = models.TokenEndpointAuthMethodNone
+		} else {
+			tokenEndpointAuthMethod = models.TokenEndpointAuthMethodClientSecretBasic
+		}
+	}
+
 	db := s.db.WithContext(ctx)
 
 	client := &models.OAuthServerClient{
-		ID:               uuid.Must(uuid.NewV4()),
-		RegistrationType: params.RegistrationType,
-		ClientType:       clientType,
-		ClientName:       utilities.StringPtr(params.ClientName),
-		ClientURI:        utilities.StringPtr(params.ClientURI),
-		LogoURI:          utilities.StringPtr(params.LogoURI),
+		ID:                      uuid.Must(uuid.NewV4()),
+		RegistrationType:        params.RegistrationType,
+		ClientType:              clientType,
+		TokenEndpointAuthMethod: tokenEndpointAuthMethod,
+		ClientName:              utilities.StringPtr(params.ClientName),
+		ClientURI:               utilities.StringPtr(params.ClientURI),
+		LogoURI:                 utilities.StringPtr(params.LogoURI),
 	}
 
 	client.SetRedirectURIs(params.RedirectURIs)
