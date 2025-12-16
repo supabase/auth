@@ -356,6 +356,49 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			shouldError: true,
 			errorMsg:    "must have scheme and host",
 		},
+		// Dangerous URI schemes
+		{
+			name:        "Invalid dangerous scheme - javascript",
+			uri:         "javascript://example.com/alert(1)",
+			shouldError: true,
+			errorMsg:    "scheme 'javascript' is not allowed for security reasons",
+		},
+		{
+			name:        "Invalid dangerous scheme - data",
+			uri:         "data://text/html,<script>alert(1)</script>",
+			shouldError: true,
+			errorMsg:    "scheme 'data' is not allowed for security reasons",
+		},
+		{
+			name:        "Invalid dangerous scheme - file",
+			uri:         "file://localhost/etc/passwd",
+			shouldError: true,
+			errorMsg:    "scheme 'file' is not allowed for security reasons",
+		},
+		{
+			name:        "Invalid dangerous scheme - vbscript",
+			uri:         "vbscript://example.com/malicious",
+			shouldError: true,
+			errorMsg:    "scheme 'vbscript' is not allowed for security reasons",
+		},
+		{
+			name:        "Invalid dangerous scheme - about",
+			uri:         "about://blank",
+			shouldError: true,
+			errorMsg:    "scheme 'about' is not allowed for security reasons",
+		},
+		{
+			name:        "Invalid dangerous scheme - blob",
+			uri:         "blob://example.com/something",
+			shouldError: true,
+			errorMsg:    "scheme 'blob' is not allowed for security reasons",
+		},
+		{
+			name:        "Invalid dangerous scheme - case insensitive JAVASCRIPT",
+			uri:         "JAVASCRIPT://example.com/alert(1)",
+			shouldError: true,
+			errorMsg:    "is not allowed for security reasons",
+		},
 	}
 
 	for _, tc := range testCases {

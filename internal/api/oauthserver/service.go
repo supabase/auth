@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -191,6 +192,14 @@ func validateRedirectURI(uri string) error {
 	// Must have scheme and host
 	if parsedURL.Scheme == "" || parsedURL.Host == "" {
 		return fmt.Errorf("must have scheme and host")
+	}
+
+	// Block dangerous URI schemes that can lead to XSS or token leakage
+	dangerousSchemes := []string{"javascript", "data", "file", "vbscript", "about", "blob"}
+	for _, dangerous := range dangerousSchemes {
+		if strings.EqualFold(parsedURL.Scheme, dangerous) {
+			return fmt.Errorf("scheme '%s' is not allowed for security reasons", parsedURL.Scheme)
+		}
 	}
 
 	// Only restrict HTTP (not HTTPS or custom schemes)
