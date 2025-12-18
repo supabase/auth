@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,7 +33,7 @@ type OAuthServerClient struct {
 	ClientSecretHash        string    `json:"-" db:"client_secret_hash"`
 	RegistrationType        string    `json:"registration_type" db:"registration_type"`
 	ClientType              string    `json:"client_type" db:"client_type"`
-	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method" db:"token_endpoint_auth_method"`
+	TokenEndpointAuthMethod string    `json:"token_endpoint_auth_method" db:"token_endpoint_auth_method"`
 
 	RedirectURIs string     `json:"-" db:"redirect_uris"`
 	GrantTypes   string     `json:"grant_types" db:"grant_types"`
@@ -85,14 +86,7 @@ func (c *OAuthServerClient) Validate() error {
 
 	// Validate token_endpoint_auth_method
 	validMethods := []string{TokenEndpointAuthMethodNone, TokenEndpointAuthMethodClientSecretBasic, TokenEndpointAuthMethodClientSecretPost}
-	isValid := false
-	for _, m := range validMethods {
-		if c.TokenEndpointAuthMethod == m {
-			isValid = true
-			break
-		}
-	}
-	if !isValid {
+	if !slices.Contains(validMethods, c.TokenEndpointAuthMethod) {
 		return fmt.Errorf("token_endpoint_auth_method must be one of: %s, %s, %s",
 			TokenEndpointAuthMethodNone, TokenEndpointAuthMethodClientSecretBasic, TokenEndpointAuthMethodClientSecretPost)
 	}
