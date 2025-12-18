@@ -152,8 +152,9 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	r := newRouter()
 	r.UseBypass(observability.AddRequestID(globalConfig))
 	r.UseBypass(logger)
-	r.UseBypass(xffmw.Handler)
 	r.UseBypass(recoverer)
+	r.UseBypass(sbForwardedForMiddleware(&globalConfig.Security))
+	r.UseBypass(xffmw.Handler)
 
 	if globalConfig.API.MaxRequestDuration > 0 {
 		r.UseBypass(timeoutMiddleware(globalConfig.API.MaxRequestDuration))
