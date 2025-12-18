@@ -731,6 +731,8 @@ type SecurityConfiguration struct {
 	RefreshTokenAllowReuse                bool                 `json:"refresh_token_allow_reuse" split_words:"true"`
 	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
+	SbForwardedForEnabled                 bool                 `json:"forwarded_ip_header_enabled" split_words:"true" default:"false"`
+	ForwardedIPHeader                     string               `json:"forwarded_ip_header" split_words:"true" default:"false"`
 
 	DBEncryption DatabaseEncryptionConfiguration `json:"database_encryption" split_words:"true"`
 }

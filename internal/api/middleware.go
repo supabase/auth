@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -18,8 +19,10 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/oauthserver"
 	"github.com/supabase/auth/internal/api/shared"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/sbff"
 	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/utilities"
 
@@ -61,7 +64,7 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 
 var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
-func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
+func (a *API) performRateLimitingWithHeader(lmt *limiter.Limiter, req *http.Request) error {
 	limitHeader := a.config.RateLimitHeader
 
 	// If no rate limit header was set, ignore rate limiting
@@ -110,6 +113,18 @@ func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error
 	}
 
 	return nil
+}
+
+func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
+	if sbffAddr, ok := sbff.GetSBForwardedForAddress(req); ok {
+		if err := tollbooth.LimitByKeys(lmt, []string{sbffAddr}); err != nil {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
+		}
+
+		return nil
+	}
+
+	return a.performRateLimitingWithHeader(lmt, req)
 }
 
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
@@ -489,4 +504,35 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 			}
 		})
 	}
+}
+
+// SBForwardedForMiddleware returns a middleware function that parses the Sb-Forwarded-For header
+// and adds the leftmost header value to the request context if GOTRUE_SECURITY_SB_FORWARDED_FOR_ENABLED
+// is true and the value is a valid IP address.
+func sbForwardedForMiddleware(cfg *conf.SecurityConfiguration) func(http.Handler) http.Handler {
+	out := func(next http.Handler) http.Handler {
+		handlerFunc := func(rw http.ResponseWriter, r *http.Request) {
+			if !cfg.SbForwardedForEnabled {
+				next.ServeHTTP(rw, r)
+				return
+			}
+
+			reqWithSBFF, err := sbff.ParseSBForwardedForAddress(r)
+
+			switch {
+			case err == nil:
+				next.ServeHTTP(rw, reqWithSBFF)
+			case errors.Is(err, sbff.ErrHeaderNotFound):
+				next.ServeHTTP(rw, r)
+			default:
+				log := observability.GetLogEntry(r).Entry
+				log.WithField("header", sbff.HeaderNameSBFF).WithField("error", err.Error()).Warn("error processing Sb-Forwarded-For")
+				next.ServeHTTP(rw, r)
+			}
+		}
+
+		return http.HandlerFunc(handlerFunc)
+	}
+
+	return out
 }
