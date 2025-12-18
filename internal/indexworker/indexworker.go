@@ -33,24 +33,21 @@ const (
 // Returns an error either from index creation failure (partial or complete) or if the advisory lock
 // could not be acquired.
 func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *logrus.Entry) error {
+	u, err := url.Parse(config.DB.URL)
+	if err != nil {
+		le.WithError(err).Fatal("Error parsing db connection url")
+	}
+
 	if config.DB.Driver == "" && config.DB.URL != "" {
-		u, err := url.Parse(config.DB.URL)
-		if err != nil {
-			le.Fatalf("Error parsing db connection url: %+v", err)
-		}
 		config.DB.Driver = u.Scheme
 	}
 
-	u, _ := url.Parse(config.DB.URL)
-	processedUrl := config.DB.URL
-	if len(u.Query()) != 0 {
-		processedUrl = fmt.Sprintf("%s&application_name=auth_index_worker", processedUrl)
-	} else {
-		processedUrl = fmt.Sprintf("%s?application_name=auth_index_worker", processedUrl)
-	}
+	q := u.Query()
+	q.Add("application_name", "auth_indexworker")
+	u.RawQuery = q.Encode()
 	deets := &pop.ConnectionDetails{
 		Dialect: config.DB.Driver,
-		URL:     processedUrl,
+		URL:     u.String(),
 	}
 	deets.Options = map[string]string{
 		"Namespace": config.DB.Namespace,
