@@ -170,6 +170,31 @@ func (p *OAuthServerClientRegisterParams) validate() error {
 	return nil
 }
 
+// allowedCustomSchemeHosts defines allowed scheme+host combinations for native app OAuth flows
+// cursor://anysphere.cursor-mcp is used by Cursor IDE for MCP (Model Context Protocol) integrations
+var allowedCustomSchemeHosts = map[string][]string{
+	"cursor": {"anysphere.cursor-mcp"},
+}
+
+// isAllowedCustomSchemeHost checks if the scheme+host combination is allowed
+func isAllowedCustomSchemeHost(scheme, host string) bool {
+	allowedHosts, schemeAllowed := allowedCustomSchemeHosts[scheme]
+	if !schemeAllowed {
+		return false
+	}
+	for _, allowed := range allowedHosts {
+		if host == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// isAllowedHTTPHost checks if the host is allowed to use HTTP
+func isAllowedHTTPHost(host string) bool {
+	return host == "localhost" || host == "127.0.0.1"
+}
+
 // validateRedirectURI validates OAuth 2.1 redirect URIs
 func validateRedirectURI(uri string) error {
 	if uri == "" {
@@ -181,25 +206,39 @@ func validateRedirectURI(uri string) error {
 		return fmt.Errorf("invalid URL format")
 	}
 
-	// Must have scheme and host
-	if parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return fmt.Errorf("must have scheme and host")
+	// Must have scheme
+	if parsedURL.Scheme == "" {
+		return fmt.Errorf("must have scheme")
 	}
 
-	// Check scheme requirements
-	if parsedURL.Scheme == "http" {
-		// HTTP only allowed for localhost
-		host := parsedURL.Hostname()
-		if host != "localhost" && host != "127.0.0.1" {
-			return fmt.Errorf("HTTP scheme only allowed for localhost")
-		}
-	} else if parsedURL.Scheme != "https" {
-		return fmt.Errorf("scheme must be HTTPS or HTTP (localhost only)")
+	// Must have host
+	if parsedURL.Host == "" {
+		return fmt.Errorf("must have scheme and host")
 	}
 
 	// Must not have fragment
 	if parsedURL.Fragment != "" {
 		return fmt.Errorf("fragment not allowed in redirect URI")
+	}
+
+	host := parsedURL.Hostname()
+
+	// Check for allowed custom scheme+host combinations (e.g., cursor://anysphere.cursor-mcp)
+	if _, isCustomScheme := allowedCustomSchemeHosts[parsedURL.Scheme]; isCustomScheme {
+		if isAllowedCustomSchemeHost(parsedURL.Scheme, host) {
+			return nil
+		}
+		return fmt.Errorf("scheme must be HTTPS or HTTP (localhost only)")
+	}
+
+	// Check scheme requirements for standard schemes
+	if parsedURL.Scheme == "http" {
+		// HTTP only allowed for localhost
+		if !isAllowedHTTPHost(host) {
+			return fmt.Errorf("HTTP scheme only allowed for localhost")
+		}
+	} else if parsedURL.Scheme != "https" {
+		return fmt.Errorf("scheme must be HTTPS or HTTP (localhost only)")
 	}
 
 	return nil

@@ -269,6 +269,41 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			uri:         "http://127.0.0.1:8080/callback",
 			shouldError: false,
 		},
+		// Cursor MCP support test cases
+		{
+			name:        "Valid cursor://anysphere.cursor-mcp",
+			uri:         "cursor://anysphere.cursor-mcp",
+			shouldError: false,
+		},
+		{
+			name:        "Valid cursor://anysphere.cursor-mcp with path",
+			uri:         "cursor://anysphere.cursor-mcp/callback",
+			shouldError: false,
+		},
+		{
+			name:        "Valid cursor://anysphere.cursor-mcp with path and query",
+			uri:         "cursor://anysphere.cursor-mcp/auth/callback?state=abc",
+			shouldError: false,
+		},
+		{
+			name:        "Invalid cursor:// with wrong host",
+			uri:         "cursor://other.example.com/callback",
+			shouldError: true,
+			errorMsg:    "scheme must be HTTPS or HTTP (localhost only)",
+		},
+		{
+			name:        "Invalid cursor:// without host",
+			uri:         "cursor:///callback",
+			shouldError: true,
+			errorMsg:    "must have scheme and host",
+		},
+		{
+			name:        "Invalid cursor://anysphere.cursor-mcp with fragment",
+			uri:         "cursor://anysphere.cursor-mcp/callback#fragment",
+			shouldError: true,
+			errorMsg:    "fragment not allowed in redirect URI",
+		},
+		// Standard test cases
 		{
 			name:        "Invalid empty URI",
 			uri:         "",
@@ -297,7 +332,7 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			name:        "Invalid URI format",
 			uri:         "not-a-uri",
 			shouldError: true,
-			errorMsg:    "must have scheme and host",
+			errorMsg:    "must have scheme",
 		},
 	}
 
