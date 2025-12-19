@@ -6,11 +6,13 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/supabase/auth/internal/conf"
 )
 
 var (
-	ctxKeySBFF     = &struct{}{}
-	HeaderNameSBFF = "sb-forwarded-for"
+	ctxKeySBFF = &struct{}{}
+	headerName = "sb-forwarded-for"
 
 	ErrHeaderNotFound = errors.New("Sb-Forwarded-For header not found")
 	ErrHeaderInvalid  = errors.New("invalid Sb-Forwarded-For header value")
@@ -28,10 +30,10 @@ func parseSBFFHeader(headerVal string) (string, error) {
 	return "", ErrHeaderInvalid
 }
 
-// GetSBForwardedForAddress returns the value of the IP address in Sb-Forwarded-For as defined by
+// GetIPAddress returns the value of the IP address in Sb-Forwarded-For as defined by
 // SBForwardedForMiddleware. If no value is present in the request context, this function will
 // return ("", false).
-func GetSBForwardedForAddress(r *http.Request) (addr string, found bool) {
+func GetIPAddress(r *http.Request) (addr string, found bool) {
 	value := r.Context().Value(ctxKeySBFF)
 
 	if value == nil {
@@ -43,20 +45,18 @@ func GetSBForwardedForAddress(r *http.Request) (addr string, found bool) {
 	return ipAddr, ok
 }
 
-// SetSBForwardedForAddress parses the Sb-Forwarded-For header and adds the leftmost value to the
+// WithIPAddress parses the Sb-Forwarded-For header and adds the leftmost value to the
 // request context if it is a valid IP address, then returns a new request with modified context.
 // If the leftmost value is not a valid IP address or the header is not set, this function returns
 // an error.
-func ParseSBForwardedForAddress(r *http.Request) (*http.Request, error) {
+func WithIPAddress(r *http.Request) (*http.Request, error) {
 	ctx := r.Context()
-	headerVal := r.Header.Get(HeaderNameSBFF)
-
+	headerVal := r.Header.Get(headerName)
 	if headerVal == "" {
 		return nil, ErrHeaderNotFound
 	}
 
 	parsedIPAddr, err := parseSBFFHeader(headerVal)
-
 	if err != nil {
 		return nil, err
 	}
@@ -65,4 +65,34 @@ func ParseSBForwardedForAddress(r *http.Request) (*http.Request, error) {
 	out := r.WithContext(newCtx)
 
 	return out, nil
+}
+
+// Middleware returns a middleware function that parses the Sb-Forwarded-For header
+// and adds the leftmost header value to the request context if GOTRUE_SECURITY_SB_FORWARDED_FOR_ENABLED
+// is true and the value is a valid IP address.
+func Middleware(cfg *conf.SecurityConfiguration, errCallback func(*http.Request, error)) func(http.Handler) http.Handler {
+	out := func(next http.Handler) http.Handler {
+		handlerFunc := func(rw http.ResponseWriter, r *http.Request) {
+			if !cfg.SbForwardedForEnabled {
+				next.ServeHTTP(rw, r)
+				return
+			}
+
+			reqWithSBFF, err := WithIPAddress(r)
+
+			switch {
+			case err == nil:
+				next.ServeHTTP(rw, reqWithSBFF)
+			case errors.Is(err, ErrHeaderNotFound):
+				next.ServeHTTP(rw, r)
+			default:
+				errCallback(r, err)
+				next.ServeHTTP(rw, r)
+			}
+		}
+
+		return http.HandlerFunc(handlerFunc)
+	}
+
+	return out
 }

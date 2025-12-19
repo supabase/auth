@@ -46,7 +46,7 @@ func getIPAddressWithXFF(r *http.Request) string {
 
 // GetIPAddress returns the real IP address of the HTTP request.
 func GetIPAddress(r *http.Request) string {
-	if sbffAddr, ok := sbff.GetSBForwardedForAddress(r); ok {
+	if sbffAddr, ok := sbff.GetIPAddress(r); ok {
 		return sbffAddr
 	}
 
