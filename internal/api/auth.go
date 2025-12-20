@@ -38,6 +38,9 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 func (a *API) requireNotAnonymous(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	claims := getClaims(ctx)
+	if claims == nil {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "Invalid token: missing claims")
+	}
 	if claims.IsAnonymous {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "Anonymous user not allowed to perform these actions")
 	}
