@@ -51,7 +51,6 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 		if s == nil {
 			logrus.Infof("user has an empty session_id claim: %s", u.ID)
 		} else {
-			//exhaustive:ignore Default case is handled below.
 			switch scope {
 			case LogoutLocal:
 				return models.LogoutSession(tx, s.ID)
