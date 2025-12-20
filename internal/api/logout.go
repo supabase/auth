@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
@@ -37,7 +36,7 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 			scope = LogoutOthers
 
 		default:
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Unsupported logout scope %q", r.URL.Query().Get("scope")))
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unsupported logout scope %q", r.URL.Query().Get("scope"))
 		}
 	}
 

@@ -125,7 +125,7 @@ func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (co
 
 	clientID, clientSecret, err := oauthserver.ExtractClientCredentials(r)
 	if err != nil {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials: "+err.Error())
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials: %s", err.Error())
 	}
 
 	// If no client credentials provided, continue without client authentication
@@ -151,7 +151,7 @@ func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (co
 
 	// Validate authentication using centralized logic
 	if err := oauthserver.ValidateClientAuthentication(client, clientSecret); err != nil {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, err.Error())
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "%s", err.Error())
 	}
 
 	// Add authenticated client to context
