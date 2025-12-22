@@ -49,11 +49,11 @@ func GetIPAddress(r *http.Request) (addr string, found bool) {
 	return ipAddr, ok
 }
 
-// WithIPAddress parses the Sb-Forwarded-For header and adds the leftmost value to the
+// withIPAddress parses the Sb-Forwarded-For header and adds the leftmost value to the
 // request context if it is a valid IP address, then returns a new request with modified context.
 // If the leftmost value is not a valid IP address or the header is not set, this function returns
 // an error.
-func WithIPAddress(r *http.Request) (*http.Request, error) {
+func withIPAddress(r *http.Request) (*http.Request, error) {
 	ctx := r.Context()
 	headerVal := r.Header.Get(HeaderName)
 	if headerVal == "" {
@@ -82,7 +82,7 @@ func Middleware(cfg *conf.SecurityConfiguration, errCallback func(*http.Request,
 				return
 			}
 
-			reqWithSBFF, err := WithIPAddress(r)
+			reqWithSBFF, err := withIPAddress(r)
 
 			switch {
 			case err == nil:

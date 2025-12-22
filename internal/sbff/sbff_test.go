@@ -94,7 +94,7 @@ func TestWithIPAddress(t *testing.T) {
 				r.Header.Set(HeaderName, tc.headerVal)
 			}
 
-			obsReq, obsErr := WithIPAddress(r)
+			obsReq, obsErr := withIPAddress(r)
 
 			if tc.expErr == nil {
 				require.NotNil(t, obsReq)
