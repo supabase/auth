@@ -23,9 +23,7 @@ var (
 
 func parseSBFFHeader(headerVal string) (string, error) {
 	values := strings.SplitN(headerVal, ",", 2)
-
 	key := strings.TrimSpace(values[0])
-
 	if ipAddr := net.ParseIP(key); ipAddr != nil {
 		return ipAddr.String(), nil
 	}
@@ -38,7 +36,6 @@ func parseSBFFHeader(headerVal string) (string, error) {
 // return ("", false).
 func GetIPAddress(r *http.Request) (addr string, found bool) {
 	value := r.Context().Value(ctxKeySBFF)
-
 	if value == nil {
 		return "", false
 	}
@@ -54,7 +51,6 @@ func GetIPAddress(r *http.Request) (addr string, found bool) {
 // If the leftmost value is not a valid IP address or the header is not set, this function returns
 // an error.
 func withIPAddress(r *http.Request) (*http.Request, error) {
-	ctx := r.Context()
 	headerVal := r.Header.Get(HeaderName)
 	if headerVal == "" {
 		return nil, ErrHeaderNotFound
@@ -65,6 +61,7 @@ func withIPAddress(r *http.Request) (*http.Request, error) {
 		return nil, err
 	}
 
+	ctx := r.Context()
 	newCtx := context.WithValue(ctx, ctxKeySBFF, parsedIPAddr)
 	out := r.WithContext(newCtx)
 
@@ -83,7 +80,6 @@ func Middleware(cfg *conf.SecurityConfiguration, errCallback func(*http.Request,
 			}
 
 			reqWithSBFF, err := withIPAddress(r)
-
 			switch {
 			case err == nil:
 				next.ServeHTTP(rw, reqWithSBFF)
