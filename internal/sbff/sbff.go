@@ -40,6 +40,7 @@ func GetIPAddress(r *http.Request) (addr string, found bool) {
 		return "", false
 	}
 
+	// TODO[jnschaeffer]: Should we panic here?
 	ipAddr, ok := value.(string)
 
 	return ipAddr, ok
