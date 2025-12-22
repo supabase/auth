@@ -91,7 +91,7 @@ func TestWithIPAddress(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "http://localhost/", nil)
 
 			if tc.headerVal != "" {
-				r.Header.Set(headerName, tc.headerVal)
+				r.Header.Set(HeaderName, tc.headerVal)
 			}
 
 			obsReq, obsErr := WithIPAddress(r)
@@ -223,7 +223,7 @@ func TestMiddleware(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "http://localhost/", nil)
 
 			if tc.headerVal != "" {
-				r.Header.Set(headerName, tc.headerVal)
+				r.Header.Set(HeaderName, tc.headerVal)
 			}
 
 			var cfg conf.SecurityConfiguration

@@ -10,9 +10,12 @@ import (
 	"github.com/supabase/auth/internal/conf"
 )
 
+// HeaderName is the Sb-Forwarded-For header name. It is all lowercase here as HTTP header names
+// are not case-sensitive.
+const HeaderName = "sb-forwarded-for"
+
 var (
 	ctxKeySBFF = &struct{}{}
-	headerName = "sb-forwarded-for"
 
 	ErrHeaderNotFound = errors.New("Sb-Forwarded-For header not found")
 	ErrHeaderInvalid  = errors.New("invalid Sb-Forwarded-For header value")
@@ -52,7 +55,7 @@ func GetIPAddress(r *http.Request) (addr string, found bool) {
 // an error.
 func WithIPAddress(r *http.Request) (*http.Request, error) {
 	ctx := r.Context()
-	headerVal := r.Header.Get(headerName)
+	headerVal := r.Header.Get(HeaderName)
 	if headerVal == "" {
 		return nil, ErrHeaderNotFound
 	}
