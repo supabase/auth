@@ -35,15 +35,11 @@ func parseSBFFHeader(headerVal string) (string, error) {
 // SBForwardedForMiddleware. If no value is present in the request context, this function will
 // return ("", false).
 func GetIPAddress(r *http.Request) (addr string, found bool) {
-	value := r.Context().Value(ctxKeySBFF)
-	if value == nil {
-		return "", false
+	if ipAddr, ok := r.Context().Value(ctxKeySBFF).(string); ok && ipAddr != "" {
+		return ipAddr, true
 	}
 
-	// TODO[jnschaeffer]: Should we panic here?
-	ipAddr, ok := value.(string)
-
-	return ipAddr, ok
+	return "", false
 }
 
 // withIPAddress parses the Sb-Forwarded-For header and adds the leftmost value to the
