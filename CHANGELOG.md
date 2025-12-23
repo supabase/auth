@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.185.0](https://github.com/supabase/auth/compare/v2.184.0...v2.185.0) (2025-12-23)
+
+
+### Features
+
+* Add Sb-Forwarded-For header and IP-based rate limiting ([#2295](https://github.com/supabase/auth/issues/2295)) ([e8f679b](https://github.com/supabase/auth/commit/e8f679b9e8fcd8cb543ed43cd9cd6a73bbbf4fa7))
+* allow amr claim to be array of strings or objects ([#2274](https://github.com/supabase/auth/issues/2274)) ([607da43](https://github.com/supabase/auth/commit/607da43b697b0af1de0da5f966f5b63ff033fefb))
+* Treat rate limit header value as comma-separated list ([#2282](https://github.com/supabase/auth/issues/2282)) ([5f2e279](https://github.com/supabase/auth/commit/5f2e2792560d57dd14fbf3e69c133a7ec8518c4d))
+
+
+### Bug Fixes
+
+* check each type independently ([#2290](https://github.com/supabase/auth/issues/2290)) ([d9de0af](https://github.com/supabase/auth/commit/d9de0af3a173ae3e9ab0219c07652675f8be1761))
+* fix the wrong error return value ([#1950](https://github.com/supabase/auth/issues/1950)) ([e2dfb5d](https://github.com/supabase/auth/commit/e2dfb5d4222e5edc569b54d057db9ed4375a19d8))
+* **indexworker:** remove pg_trgm extension ([#2301](https://github.com/supabase/auth/issues/2301)) ([c553b10](https://github.com/supabase/auth/commit/c553b10e5f3b7a8c430b20babe0e7c96178b1c91))
+* tighten email validation rules ([#2304](https://github.com/supabase/auth/issues/2304)) ([33bb372](https://github.com/supabase/auth/commit/33bb37203ae54c7ddecb6373122fae4b4fd38682))
+
 ## [2.184.0](https://github.com/supabase/auth/compare/v2.183.0...v2.184.0) (2025-12-08)
 
 
