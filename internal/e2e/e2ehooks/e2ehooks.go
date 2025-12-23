@@ -76,7 +76,6 @@ func NewHook(name v0hooks.Name) *Hook {
 		name: name,
 	}
 
-	//exhaustive:ignore
 	switch name {
 	case v0hooks.CustomizeAccessToken:
 		// This hooks returns the exact claims given.
@@ -188,7 +187,6 @@ func NewHookRecorder() *HookRecorder {
 	}
 
 	o.mux.HandleFunc("POST /hooks/{hook}", func(w http.ResponseWriter, r *http.Request) {
-		//exhaustive:ignore
 		switch v0hooks.Name(r.PathValue("hook")) {
 		case v0hooks.BeforeUserCreated:
 			o.BeforeUserCreated.ServeHTTP(w, r)

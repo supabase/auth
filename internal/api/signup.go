@@ -168,7 +168,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			msg = "Sign up with this provider not possible"
 		}
 
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, msg)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "%s", msg)
 	}
 
 	if err != nil && !models.IsNotFoundError(err) {
