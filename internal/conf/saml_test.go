@@ -95,17 +95,6 @@ func TestSAMLConfiguration(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	// 	t.Run("PopulateFieldInvalidCreateCertificate", func(t *testing.T) {
-	// 		c := &SAMLConfiguration{
-	// 			Enabled:    true,
-	// 			PrivateKey: base64.StdEncoding.EncodeToString([]byte("INVALID")),
-	// 		}
-	//
-	// 		tmpl := &x509.Certificate{}
-	// 		err := c.createCertificate(tmpl)
-	// 		require.Error(t, err)
-	// 	})
-
 	t.Run("PopulateFieldInvalidCreateCertificate", func(t *testing.T) {
 		c := &SAMLConfiguration{
 			Enabled:    true,
