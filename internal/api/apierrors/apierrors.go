@@ -160,6 +160,14 @@ func NewSCIMConflictError(detail string, scimType string) *SCIMHTTPError {
 	return NewSCIMHTTPError(http.StatusConflict, detail, scimType)
 }
 
+func NewSCIMForbiddenError(detail string) *SCIMHTTPError {
+	return NewSCIMHTTPError(http.StatusForbidden, detail, "")
+}
+
+func NewSCIMInternalServerError(detail string) *SCIMHTTPError {
+	return NewSCIMHTTPError(http.StatusInternalServerError, detail, "")
+}
+
 func (e *SCIMHTTPError) Error() string {
 	if e.InternalMessage != "" {
 		return e.InternalMessage
