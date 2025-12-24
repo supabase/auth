@@ -40,6 +40,7 @@ require (
 	github.com/consensys/gnark-crypto v0.18.1 // indirect
 	github.com/crate-crypto/go-eth-kzg v1.4.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
+	github.com/di-wu/parser v0.2.2 // indirect
 	github.com/ethereum/c-kzg-4844/v2 v2.1.5 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
@@ -96,6 +97,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/lestrrat-go/jwx/v2 v2.1.0
 	github.com/oapi-codegen/runtime v1.1.1
+	github.com/scim2/filter-parser/v2 v2.2.0
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20240303152453-e0e82adf1721
 	github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869
 	github.com/xeipuuv/gojsonschema v1.2.0
