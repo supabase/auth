@@ -3,7 +3,7 @@
 create table if not exists {{ index .Options "Namespace" }}.scim_groups (
     id uuid not null,
     sso_provider_id uuid not null,
-    external_id text not null,
+    external_id text null,
     display_name text not null,
     created_at timestamptz null,
     updated_at timestamptz null,
@@ -11,13 +11,18 @@ create table if not exists {{ index .Options "Namespace" }}.scim_groups (
     constraint scim_groups_pkey primary key (id),
     constraint scim_groups_sso_provider_fkey foreign key (sso_provider_id)
         references {{ index .Options "Namespace" }}.sso_providers (id) on delete cascade,
-    constraint "external_id not empty" check (char_length(external_id) > 0),
+    constraint "external_id not empty if set" check (external_id is null or char_length(external_id) > 0),
     constraint "display_name not empty" check (char_length(display_name) > 0)
 );
 
--- Unique index Scoped to SSO provider
+-- Unique index scoped to SSO provider (only for non-null external_id)
 create unique index if not exists scim_groups_sso_provider_external_id_idx
-    on {{ index .Options "Namespace" }}.scim_groups (sso_provider_id, external_id);
+    on {{ index .Options "Namespace" }}.scim_groups (sso_provider_id, external_id)
+    where external_id is not null;
+
+-- Unique index for displayName per SSO provider (case-insensitive, required by Azure AD)
+create unique index if not exists scim_groups_sso_provider_display_name_idx
+    on {{ index .Options "Namespace" }}.scim_groups (sso_provider_id, lower(display_name));
 
 -- Index for listing groups by SSO provider
 create index if not exists scim_groups_sso_provider_id_idx
