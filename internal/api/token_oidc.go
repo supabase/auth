@@ -98,6 +98,12 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		issuer = provider.IssuerKakao
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Kakao.ClientID...)
 
+	case p.Provider == "line" || p.Issuer == provider.IssuerLine:
+		cfg = &config.External.Line
+		providerType = "line"
+		issuer = provider.IssuerLine
+		acceptableClientIDs = append(acceptableClientIDs, config.External.Line.ClientID...)
+
 	case p.Provider == "vercel_marketplace" || p.Issuer == provider.IssuerVercelMarketplace:
 		cfg = &config.External.VercelMarketplace
 		providerType = "vercel_marketplace"
