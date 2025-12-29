@@ -127,7 +127,7 @@ func (s *Server) AdminOAuthServerClientRegister(w http.ResponseWriter, r *http.R
 
 	client, plaintextSecret, err := s.registerOAuthServerClient(ctx, &params)
 	if err != nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "%s", err.Error())
 	}
 
 	response := oauthServerClientToResponse(client)
@@ -156,7 +156,7 @@ func (s *Server) OAuthServerClientDynamicRegister(w http.ResponseWriter, r *http
 
 	client, plaintextSecret, err := s.registerOAuthServerClient(ctx, &params)
 	if err != nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "%s", err.Error())
 	}
 
 	response := oauthServerClientToResponse(client)
