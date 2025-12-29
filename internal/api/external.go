@@ -441,10 +441,19 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 
 			if !config.Mailer.AllowUnverifiedEmailSignIns {
 				if emailConfirmationSent {
-					return 0, nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
+					err := apierrors.NewUnprocessableEntityError(
+						apierrors.ErrorCodeProviderEmailNeedsVerification,
+						"Unverified email with %v. A confirmation email has been sent to your %v email",
+						providerType, providerType,
+					)
+					return 0, nil, storage.NewCommitWithError(err)
 				}
 
-				return 0, nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)))
+				err := apierrors.NewUnprocessableEntityError(
+					apierrors.ErrorCodeProviderEmailNeedsVerification,
+					"Unverified email with %v. Verify the email with %v in order to sign in",
+					providerType, providerType)
+				return 0, nil, storage.NewCommitWithError(err)
 			}
 		}
 	} else {

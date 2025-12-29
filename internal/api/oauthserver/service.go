@@ -164,7 +164,7 @@ func (p *OAuthServerClientRegisterParams) validate() error {
 
 	// Validate consistency between client_type and token_endpoint_auth_method
 	if err := ValidateClientTypeConsistency(p.ClientType, p.TokenEndpointAuthMethod); err != nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "%s", err.Error())
 	}
 
 	return nil

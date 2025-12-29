@@ -20,6 +20,7 @@ import (
 	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/sbff"
 	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/utilities"
 
@@ -61,7 +62,7 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 
 var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
-func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
+func (a *API) performRateLimitingWithHeader(lmt *limiter.Limiter, req *http.Request) error {
 	limitHeader := a.config.RateLimitHeader
 
 	// If no rate limit header was set, ignore rate limiting
@@ -112,6 +113,18 @@ func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error
 	return nil
 }
 
+func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
+	if sbffAddr, ok := sbff.GetIPAddress(req); ok {
+		if err := tollbooth.LimitByKeys(lmt, []string{sbffAddr}); err != nil {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
+		}
+
+		return nil
+	}
+
+	return a.performRateLimitingWithHeader(lmt, req)
+}
+
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		return req.Context(), a.performRateLimiting(lmt, req)
@@ -125,7 +138,7 @@ func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (co
 
 	clientID, clientSecret, err := oauthserver.ExtractClientCredentials(r)
 	if err != nil {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials: "+err.Error())
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials: %s", err.Error())
 	}
 
 	// If no client credentials provided, continue without client authentication
@@ -151,7 +164,7 @@ func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (co
 
 	// Validate authentication using centralized logic
 	if err := oauthserver.ValidateClientAuthentication(client, clientSecret); err != nil {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, err.Error())
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "%s", err.Error())
 	}
 
 	// Add authenticated client to context

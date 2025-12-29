@@ -888,6 +888,12 @@ Enforce reauthentication on password update.
 
 Use this to enable/disable anonymous sign-ins.
 
+### IP address forwarding
+
+`GOTRUE_SECURITY_SB_FORWARDED_FOR_ENABLED` - `bool`
+
+Enable IP address forwarding using the `Sb-Forwarded-For` HTTP request header. When enabled, Auth will parse the first value of this header as an IP address and use it for IP address tracking and rate limiting. Make sure this header is fully trusted before enabling this feature by only passing it from trustworthy clients or proxies.
+
 ## Endpoints
 
 Auth exposes the following endpoints:

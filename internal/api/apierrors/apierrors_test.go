@@ -144,7 +144,7 @@ func TestHTTPErrors(t *testing.T) {
 			ErrorCodeBadJSON,
 			"Unable to parse JSON: %v",
 			errors.New("bad syntax"),
-		).WithInternalError(sentinel).WithInternalMessage(sentinel.Error())
+		).WithInternalError(sentinel).WithInternalMessage("%s", sentinel.Error())
 
 		require.Equal(t, err.Error(), sentinel.Error())
 		require.Equal(t, err.Cause(), sentinel)
@@ -171,7 +171,7 @@ func TestOAuthErrors(t *testing.T) {
 		err := NewOAuthError(
 			"oauth error",
 			"oauth desc",
-		).WithInternalError(sentinel).WithInternalMessage(sentinel.Error())
+		).WithInternalError(sentinel).WithInternalMessage("%s", sentinel.Error())
 
 		require.Error(t, err)
 		require.Equal(t, err.Error(), sentinel.Error())
