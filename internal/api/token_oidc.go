@@ -140,7 +140,8 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		oidcCtx = oidc.InsecureIssuerURLContext(ctx, issuer)
 	}
 
-	oidcProvider, err := oidc.NewProvider(oidcCtx, issuer)
+	// Use cached OIDC provider to avoid redundant HTTP calls to discovery endpoint
+	oidcProvider, err := provider.GetDefaultOIDCProviderCache().Get(oidcCtx, issuer)
 	if err != nil {
 		return nil, false, "", nil, cfg.EmailOptional, err
 	}

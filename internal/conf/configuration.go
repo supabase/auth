@@ -446,6 +446,9 @@ type ProviderConfiguration struct {
 	AllowedIdTokenIssuers   []string                       `json:"allowed_id_token_issuers" split_words:"true"`
 	FlowStateExpiryDuration time.Duration                  `json:"flow_state_expiry_duration" split_words:"true"`
 
+	// OIDC provider cache configuration
+	OIDCProviderCacheTTL time.Duration `json:"oidc_provider_cache_ttl" split_words:"true" default:"1h"`
+
 	Web3Solana   SolanaConfiguration   `json:"web3_solana" split_words:"true"`
 	Web3Ethereum EthereumConfiguration `json:"web3_ethereum" split_words:"true"`
 }

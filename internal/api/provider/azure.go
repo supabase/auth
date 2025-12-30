@@ -145,7 +145,9 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 			return nil, fmt.Errorf("azure: ID token issuer %q does not match expected issuer %q", issuer, g.ExpectedIssuer)
 		}
 
-		provider, err := oidc.NewProvider(ctx, issuer)
+		// Use cached OIDC provider to avoid redundant HTTP calls to discovery endpoint
+		// Azure has multi-tenant support, so each tenant gets its own cache entry
+		provider, err := defaultOIDCProviderCache.Get(ctx, issuer)
 		if err != nil {
 			return nil, err
 		}
