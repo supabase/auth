@@ -123,9 +123,7 @@ func (c *OIDCProviderCache) Invalidate(issuer string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if _, exists := c.entries[issuer]; exists {
-		delete(c.entries, issuer)
-	}
+	delete(c.entries, issuer)
 }
 
 // Clear removes all entries from the cache
