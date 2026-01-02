@@ -263,15 +263,19 @@ func (s *Server) registerOAuthServerClient(ctx context.Context, params *OAuthSer
 	// Determine client type using centralized logic
 	clientType := DetermineClientType(params.ClientType, params.TokenEndpointAuthMethod)
 
+	// Determine token endpoint auth method based on explicit value or client type
+	tokenEndpointAuthMethod := DetermineTokenEndpointAuthMethod(params.TokenEndpointAuthMethod, clientType)
+
 	db := s.db.WithContext(ctx)
 
 	client := &models.OAuthServerClient{
-		ID:               uuid.Must(uuid.NewV4()),
-		RegistrationType: params.RegistrationType,
-		ClientType:       clientType,
-		ClientName:       utilities.StringPtr(params.ClientName),
-		ClientURI:        utilities.StringPtr(params.ClientURI),
-		LogoURI:          utilities.StringPtr(params.LogoURI),
+		ID:                      uuid.Must(uuid.NewV4()),
+		RegistrationType:        params.RegistrationType,
+		ClientType:              clientType,
+		TokenEndpointAuthMethod: tokenEndpointAuthMethod,
+		ClientName:              utilities.StringPtr(params.ClientName),
+		ClientURI:               utilities.StringPtr(params.ClientURI),
+		LogoURI:                 utilities.StringPtr(params.LogoURI),
 	}
 
 	client.SetRedirectURIs(params.RedirectURIs)

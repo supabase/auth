@@ -395,6 +395,67 @@ func TestGetAllValidAuthMethods(t *testing.T) {
 	}
 }
 
+func TestDetermineTokenEndpointAuthMethod(t *testing.T) {
+	tests := []struct {
+		name               string
+		explicitAuthMethod string
+		clientType         string
+		expected           string
+	}{
+		{
+			name:               "explicit none overrides client type",
+			explicitAuthMethod: models.TokenEndpointAuthMethodNone,
+			clientType:         models.OAuthServerClientTypeConfidential,
+			expected:           models.TokenEndpointAuthMethodNone,
+		},
+		{
+			name:               "explicit basic overrides client type",
+			explicitAuthMethod: models.TokenEndpointAuthMethodClientSecretBasic,
+			clientType:         models.OAuthServerClientTypePublic,
+			expected:           models.TokenEndpointAuthMethodClientSecretBasic,
+		},
+		{
+			name:               "explicit post overrides client type",
+			explicitAuthMethod: models.TokenEndpointAuthMethodClientSecretPost,
+			clientType:         models.OAuthServerClientTypePublic,
+			expected:           models.TokenEndpointAuthMethodClientSecretPost,
+		},
+		{
+			name:               "default none for public client",
+			explicitAuthMethod: "",
+			clientType:         models.OAuthServerClientTypePublic,
+			expected:           models.TokenEndpointAuthMethodNone,
+		},
+		{
+			name:               "default basic for confidential client",
+			explicitAuthMethod: "",
+			clientType:         models.OAuthServerClientTypeConfidential,
+			expected:           models.TokenEndpointAuthMethodClientSecretBasic,
+		},
+		{
+			name:               "default basic for empty client type",
+			explicitAuthMethod: "",
+			clientType:         "",
+			expected:           models.TokenEndpointAuthMethodClientSecretBasic,
+		},
+		{
+			name:               "default basic for unknown client type",
+			explicitAuthMethod: "",
+			clientType:         "unknown_type",
+			expected:           models.TokenEndpointAuthMethodClientSecretBasic,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DetermineTokenEndpointAuthMethod(tt.explicitAuthMethod, tt.clientType)
+			if result != tt.expected {
+				t.Errorf("DetermineTokenEndpointAuthMethod() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 // Helper function to check if a string contains a substring
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || (len(s) > len(substr) &&

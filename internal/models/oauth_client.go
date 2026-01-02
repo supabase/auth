@@ -33,14 +33,15 @@ type OAuthServerClient struct {
 	RegistrationType string    `json:"registration_type" db:"registration_type"`
 	ClientType       string    `json:"client_type" db:"client_type"`
 
-	RedirectURIs string     `json:"-" db:"redirect_uris"`
-	GrantTypes   string     `json:"grant_types" db:"grant_types"`
-	ClientName   *string    `json:"client_name,omitempty" db:"client_name"`
-	ClientURI    *string    `json:"client_uri,omitempty" db:"client_uri"`
-	LogoURI      *string    `json:"logo_uri,omitempty" db:"logo_uri"`
-	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
-	DeletedAt    *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+	RedirectURIs            string     `json:"-" db:"redirect_uris"`
+	GrantTypes              string     `json:"grant_types" db:"grant_types"`
+	TokenEndpointAuthMethod string     `json:"token_endpoint_auth_method" db:"token_endpoint_auth_method"`
+	ClientName              *string    `json:"client_name,omitempty" db:"client_name"`
+	ClientURI               *string    `json:"client_uri,omitempty" db:"client_uri"`
+	LogoURI                 *string    `json:"logo_uri,omitempty" db:"logo_uri"`
+	CreatedAt               time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt               time.Time  `json:"updated_at" db:"updated_at"`
+	DeletedAt               *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 }
 
 // TableName returns the table name for the OAuthServerClient model

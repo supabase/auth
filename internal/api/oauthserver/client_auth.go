@@ -108,3 +108,24 @@ func GetAllValidAuthMethods() []string {
 		models.TokenEndpointAuthMethodClientSecretPost,
 	}
 }
+
+// DetermineTokenEndpointAuthMethod determines the final token endpoint auth method using:
+// 1. Explicit token_endpoint_auth_method if provided
+// 2. Default based on client type (none for public, client_secret_basic for confidential)
+func DetermineTokenEndpointAuthMethod(explicitAuthMethod, clientType string) string {
+	// Priority 1: Explicit token_endpoint_auth_method
+	if explicitAuthMethod != "" {
+		return explicitAuthMethod
+	}
+
+	// Priority 2: Default based on client type
+	switch clientType {
+	case models.OAuthServerClientTypePublic:
+		return models.TokenEndpointAuthMethodNone
+	case models.OAuthServerClientTypeConfidential:
+		return models.TokenEndpointAuthMethodClientSecretBasic
+	default:
+		// Default to client_secret_basic for unknown/empty client type
+		return models.TokenEndpointAuthMethodClientSecretBasic
+	}
+}
