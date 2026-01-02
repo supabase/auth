@@ -49,13 +49,14 @@ func (ts *OAuthServerClientTestSuite) TestOAuthServerClientValidation() {
 	testClientName := "Test Client"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	validClient := &OAuthServerClient{
-		ID:               uuid.Must(uuid.NewV4()),
-		ClientName:       &testClientName,
-		RegistrationType: "dynamic",
-		ClientType:       OAuthServerClientTypeConfidential,
-		ClientSecretHash: testSecretHash,
-		RedirectURIs:     "https://example.com/callback",
-		GrantTypes:       "authorization_code,refresh_token",
+		ID:                      uuid.Must(uuid.NewV4()),
+		ClientName:              &testClientName,
+		RegistrationType:        "dynamic",
+		ClientType:              OAuthServerClientTypeConfidential,
+		ClientSecretHash:        testSecretHash,
+		RedirectURIs:            "https://example.com/callback",
+		GrantTypes:              "authorization_code,refresh_token",
+		TokenEndpointAuthMethod: TokenEndpointAuthMethodClientSecretBasic,
 	}
 
 	// Test valid client
@@ -147,13 +148,14 @@ func (ts *OAuthServerClientTestSuite) TestCreateOAuthServerClient() {
 	testAppName := "Test Application"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
-		ID:               uuid.Must(uuid.NewV4()),
-		ClientName:       &testAppName,
-		GrantTypes:       "authorization_code,refresh_token",
-		RegistrationType: "dynamic",
-		ClientType:       OAuthServerClientTypeConfidential,
-		ClientSecretHash: testSecretHash,
-		RedirectURIs:     "https://example.com/callback",
+		ID:                      uuid.Must(uuid.NewV4()),
+		ClientName:              &testAppName,
+		GrantTypes:              "authorization_code,refresh_token",
+		RegistrationType:        "dynamic",
+		ClientType:              OAuthServerClientTypeConfidential,
+		ClientSecretHash:        testSecretHash,
+		RedirectURIs:            "https://example.com/callback",
+		TokenEndpointAuthMethod: TokenEndpointAuthMethodClientSecretBasic,
 	}
 
 	err := CreateOAuthServerClient(ts.db, client)
@@ -181,13 +183,14 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByID() {
 	testName := "Find By ID Test"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
-		ID:               uuid.Must(uuid.NewV4()),
-		ClientName:       &testName,
-		GrantTypes:       "authorization_code,refresh_token",
-		RegistrationType: "dynamic",
-		ClientType:       OAuthServerClientTypeConfidential,
-		ClientSecretHash: testSecretHash,
-		RedirectURIs:     "https://example.com/callback",
+		ID:                      uuid.Must(uuid.NewV4()),
+		ClientName:              &testName,
+		GrantTypes:              "authorization_code,refresh_token",
+		RegistrationType:        "dynamic",
+		ClientType:              OAuthServerClientTypeConfidential,
+		ClientSecretHash:        testSecretHash,
+		RedirectURIs:            "https://example.com/callback",
+		TokenEndpointAuthMethod: TokenEndpointAuthMethodClientSecretBasic,
 	}
 
 	err := CreateOAuthServerClient(ts.db, client)
@@ -210,13 +213,14 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByClientID() {
 	testName := "Find By Client ID Test"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
-		ID:               uuid.Must(uuid.NewV4()),
-		ClientName:       &testName,
-		GrantTypes:       "authorization_code,refresh_token",
-		RegistrationType: "manual",
-		ClientType:       OAuthServerClientTypeConfidential,
-		ClientSecretHash: testSecretHash,
-		RedirectURIs:     "https://example.com/callback",
+		ID:                      uuid.Must(uuid.NewV4()),
+		ClientName:              &testName,
+		GrantTypes:              "authorization_code,refresh_token",
+		RegistrationType:        "manual",
+		ClientType:              OAuthServerClientTypeConfidential,
+		ClientSecretHash:        testSecretHash,
+		RedirectURIs:            "https://example.com/callback",
+		TokenEndpointAuthMethod: TokenEndpointAuthMethodClientSecretBasic,
 	}
 
 	err := CreateOAuthServerClient(ts.db, client)
@@ -239,13 +243,14 @@ func (ts *OAuthServerClientTestSuite) TestUpdateOAuthServerClient() {
 	originalName := "Original Name"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
-		ID:               uuid.Must(uuid.NewV4()),
-		ClientName:       &originalName,
-		GrantTypes:       "authorization_code,refresh_token",
-		RegistrationType: "dynamic",
-		ClientType:       OAuthServerClientTypeConfidential,
-		ClientSecretHash: testSecretHash,
-		RedirectURIs:     "https://example.com/callback",
+		ID:                      uuid.Must(uuid.NewV4()),
+		ClientName:              &originalName,
+		GrantTypes:              "authorization_code,refresh_token",
+		RegistrationType:        "dynamic",
+		ClientType:              OAuthServerClientTypeConfidential,
+		ClientSecretHash:        testSecretHash,
+		RedirectURIs:            "https://example.com/callback",
+		TokenEndpointAuthMethod: TokenEndpointAuthMethodClientSecretBasic,
 	}
 
 	err := CreateOAuthServerClient(ts.db, client)
@@ -293,13 +298,14 @@ func (ts *OAuthServerClientTestSuite) TestSoftDelete() {
 	testName := "Soft Delete Test"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
-		ID:               uuid.Must(uuid.NewV4()),
-		ClientName:       &testName,
-		GrantTypes:       "authorization_code,refresh_token",
-		RegistrationType: "dynamic",
-		ClientType:       OAuthServerClientTypeConfidential,
-		ClientSecretHash: testSecretHash,
-		RedirectURIs:     "https://example.com/callback",
+		ID:                      uuid.Must(uuid.NewV4()),
+		ClientName:              &testName,
+		GrantTypes:              "authorization_code,refresh_token",
+		RegistrationType:        "dynamic",
+		ClientType:              OAuthServerClientTypeConfidential,
+		ClientSecretHash:        testSecretHash,
+		RedirectURIs:            "https://example.com/callback",
+		TokenEndpointAuthMethod: TokenEndpointAuthMethodClientSecretBasic,
 	}
 
 	err := CreateOAuthServerClient(ts.db, client)
