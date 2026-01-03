@@ -29,7 +29,7 @@ type PasswordGrantParams struct {
 
 // PKCEGrantParams are the parameters the PKCEGrant method accepts
 type PKCEGrantParams struct {
-	AuthCode     string `json:"auth_code"`
+	Code         string `json:"code"`
 	CodeVerifier string `json:"code_verifier"`
 }
 
@@ -226,11 +226,11 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 
-	if params.AuthCode == "" || params.CodeVerifier == "" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid request: both auth code and code verifier should be non-empty")
+	if params.Code == "" || params.CodeVerifier == "" {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid request: both code and code_verifier should be non-empty")
 	}
 
-	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
+	flowState, err := models.FindFlowStateByAuthCode(db, params.Code)
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || flowState.UserID == nil {
 		return apierrors.NewNotFoundError(apierrors.ErrorCodeFlowStateNotFound, "invalid flow state, no valid flow state found")
