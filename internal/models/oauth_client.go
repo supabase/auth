@@ -84,6 +84,17 @@ func (c *OAuthServerClient) Validate() error {
 		return fmt.Errorf("client_secret is not allowed for public clients, use PKCE instead")
 	}
 
+	// Apply default token_endpoint_auth_method per RFC 7591:
+	// "If unspecified or omitted, the default is 'client_secret_basic'"
+	// For public clients, the default is 'none' since they don't have a client secret
+	if c.TokenEndpointAuthMethod == "" {
+		if c.ClientType == OAuthServerClientTypePublic {
+			c.TokenEndpointAuthMethod = TokenEndpointAuthMethodNone
+		} else {
+			c.TokenEndpointAuthMethod = TokenEndpointAuthMethodClientSecretBasic
+		}
+	}
+
 	// Validate token_endpoint_auth_method
 	validMethods := []string{TokenEndpointAuthMethodNone, TokenEndpointAuthMethodClientSecretBasic, TokenEndpointAuthMethodClientSecretPost}
 	if !slices.Contains(validMethods, c.TokenEndpointAuthMethod) {
