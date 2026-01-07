@@ -620,7 +620,7 @@ func FindUserByEmailAndAudience(tx *storage.Connection, email, aud string) (*Use
 	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = false", uuid.Nil, strings.ToLower(email), aud)
 }
 func FindUserByEmail(tx *storage.Connection, email string) (*User, error) {
-	return findUser(tx, "LOWER(email) = ?", strings.ToLower(email))
+	return findUser(tx, "instance_id = ? and LOWER(email) = ?", uuid.Nil, strings.ToLower(email))
 }
 
 // FindUserByPhoneAndAudience finds a user with the matching email and audience.
