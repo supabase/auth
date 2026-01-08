@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -170,7 +171,14 @@ func (p *OAuthServerClientRegisterParams) validate() error {
 	return nil
 }
 
-// validateRedirectURI validates OAuth 2.1 redirect URIs
+// validateRedirectURI validates OAuth 2.1 redirect URIs as specific in
+//
+// * https://tools.ietf.org/html/rfc6749#section-3.1.2
+//   - The redirection endpoint URI MUST be an absolute URI as defined by [RFC3986] Section 4.3.
+//   - The endpoint URI MUST NOT include a fragment component.
+//   - https://tools.ietf.org/html/rfc3986#section-4.3
+//     absolute-URI  = scheme ":" hier-part [ "?" query ]
+//   - https://tools.ietf.org/html/rfc6819#section-5.1.1
 func validateRedirectURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("redirect URI cannot be empty")
@@ -186,16 +194,23 @@ func validateRedirectURI(uri string) error {
 		return fmt.Errorf("must have scheme and host")
 	}
 
-	// Check scheme requirements
+	// Block dangerous URI schemes that can lead to XSS or token leakage
+	dangerousSchemes := []string{"javascript", "data", "file", "vbscript", "about", "blob"}
+	for _, dangerous := range dangerousSchemes {
+		if strings.EqualFold(parsedURL.Scheme, dangerous) {
+			return fmt.Errorf("scheme '%s' is not allowed for security reasons", parsedURL.Scheme)
+		}
+	}
+
+	// Only restrict HTTP (not HTTPS or custom schemes)
+	// HTTP is only allowed for localhost/loopback addresses
 	if parsedURL.Scheme == "http" {
-		// HTTP only allowed for localhost
 		host := parsedURL.Hostname()
-		if host != "localhost" && host != "127.0.0.1" {
+		if host != "localhost" && host != "127.0.0.1" && host != "::1" {
 			return fmt.Errorf("HTTP scheme only allowed for localhost")
 		}
-	} else if parsedURL.Scheme != "https" {
-		return fmt.Errorf("scheme must be HTTPS or HTTP (localhost only)")
 	}
+	// All other schemes (https, custom schemes like myapp://* etc.) are allowed
 
 	// Must not have fragment
 	if parsedURL.Fragment != "" {
