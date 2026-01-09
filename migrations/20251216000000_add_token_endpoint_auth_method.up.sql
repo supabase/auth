@@ -6,6 +6,7 @@ alter table {{ index .Options "Namespace" }}.oauth_clients
     add column if not exists token_endpoint_auth_method text check (token_endpoint_auth_method in ('client_secret_basic', 'client_secret_post', 'none'));
 
 -- Set default values for existing clients based on their client_type
+/* auth_migration: 20251216000000 */
 update {{ index .Options "Namespace" }}.oauth_clients
     set token_endpoint_auth_method = case
         when client_type = 'public' then 'none'
@@ -14,5 +15,6 @@ update {{ index .Options "Namespace" }}.oauth_clients
     where token_endpoint_auth_method is null;
 
 -- Now make the column not null
+/* auth_migration: 20251216000000 */
 alter table {{ index .Options "Namespace" }}.oauth_clients
     alter column token_endpoint_auth_method set not null;
