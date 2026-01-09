@@ -52,6 +52,10 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 			} else {
 				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
 			}
+		} else {
+			if !provider.IsAppleIssuer(issuer) {
+				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Provided issuer is not an Apple ID token issuer")
+			}
 		}
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Apple.ClientID...)
 
