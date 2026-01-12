@@ -170,7 +170,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 					return err
 				}
 			}
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "%s", output.Message)
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, output.Message)
 		}
 	}
 	if !isValidPassword {
@@ -246,7 +246,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 	if err := flowState.VerifyPKCE(params.CodeVerifier); err != nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeBadCodeVerifier, "%s", err.Error())
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeBadCodeVerifier, err.Error())
 	}
 
 	var token *AccessTokenResponse
