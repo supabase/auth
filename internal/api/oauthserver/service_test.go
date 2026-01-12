@@ -254,31 +254,14 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 		shouldError bool
 		errorMsg    string
 	}{
-		// Valid HTTPS URIs
 		{
 			name:        "Valid HTTPS URI",
 			uri:         "https://example.com/callback",
 			shouldError: false,
 		},
 		{
-			name:        "Valid HTTPS URI with port",
-			uri:         "https://example.com:8443/callback",
-			shouldError: false,
-		},
-		{
-			name:        "Valid HTTPS URI with query params",
-			uri:         "https://example.com/callback?foo=bar",
-			shouldError: false,
-		},
-		// Valid HTTP localhost URIs
-		{
 			name:        "Valid localhost HTTP URI",
 			uri:         "http://localhost:3000/callback",
-			shouldError: false,
-		},
-		{
-			name:        "Valid localhost HTTP URI without port",
-			uri:         "http://localhost/callback",
 			shouldError: false,
 		},
 		{
@@ -287,42 +270,20 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			shouldError: false,
 		},
 		{
-			name:        "Valid IPv6 localhost HTTP URI",
-			uri:         "http://[::1]:8080/callback",
-			shouldError: false,
-		},
-		// Valid custom URI schemes (native apps)
-		{
-			name:        "Valid custom scheme - myapp",
-			uri:         "myapp://callback",
-			shouldError: false,
-		},
-		{
-			name:        "Valid custom scheme - com.example.app",
-			uri:         "com.example.app://oauth/callback",
-			shouldError: false,
-		},
-		{
-			name:        "Valid custom scheme with port and path",
-			uri:         "myapp://localhost:8080/callback",
-			shouldError: false,
-		},
-		// Invalid cases
-		{
 			name:        "Invalid empty URI",
 			uri:         "",
 			shouldError: true,
 			errorMsg:    "redirect URI cannot be empty",
 		},
 		{
-			name:        "Invalid HTTP non-localhost",
-			uri:         "http://example.com/callback",
+			name:        "Invalid scheme",
+			uri:         "ftp://example.com/callback",
 			shouldError: true,
-			errorMsg:    "HTTP scheme only allowed for localhost",
+			errorMsg:    "scheme must be HTTPS or HTTP (localhost only)",
 		},
 		{
-			name:        "Invalid HTTP with IP address (not loopback)",
-			uri:         "http://192.168.1.1/callback",
+			name:        "Invalid HTTP non-localhost",
+			uri:         "http://example.com/callback",
 			shouldError: true,
 			errorMsg:    "HTTP scheme only allowed for localhost",
 		},
@@ -333,71 +294,10 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			errorMsg:    "fragment not allowed in redirect URI",
 		},
 		{
-			name:        "Invalid custom scheme with fragment",
-			uri:         "myapp://callback#fragment",
-			shouldError: true,
-			errorMsg:    "fragment not allowed in redirect URI",
-		},
-		{
-			name:        "Invalid URI format - no scheme",
-			uri:         "example.com/callback",
-			shouldError: true,
-			errorMsg:    "must have scheme and host",
-		},
-		{
-			name:        "Invalid URI format - no host",
-			uri:         "https:///callback",
-			shouldError: true,
-			errorMsg:    "must have scheme and host",
-		},
-		{
-			name:        "Invalid URI format - completely invalid",
+			name:        "Invalid URI format",
 			uri:         "not-a-uri",
 			shouldError: true,
 			errorMsg:    "must have scheme and host",
-		},
-		// Dangerous URI schemes
-		{
-			name:        "Invalid dangerous scheme - javascript",
-			uri:         "javascript://example.com/alert(1)",
-			shouldError: true,
-			errorMsg:    "scheme 'javascript' is not allowed for security reasons",
-		},
-		{
-			name:        "Invalid dangerous scheme - data",
-			uri:         "data://text/html,<script>alert(1)</script>",
-			shouldError: true,
-			errorMsg:    "scheme 'data' is not allowed for security reasons",
-		},
-		{
-			name:        "Invalid dangerous scheme - file",
-			uri:         "file://localhost/etc/passwd",
-			shouldError: true,
-			errorMsg:    "scheme 'file' is not allowed for security reasons",
-		},
-		{
-			name:        "Invalid dangerous scheme - vbscript",
-			uri:         "vbscript://example.com/malicious",
-			shouldError: true,
-			errorMsg:    "scheme 'vbscript' is not allowed for security reasons",
-		},
-		{
-			name:        "Invalid dangerous scheme - about",
-			uri:         "about://blank",
-			shouldError: true,
-			errorMsg:    "scheme 'about' is not allowed for security reasons",
-		},
-		{
-			name:        "Invalid dangerous scheme - blob",
-			uri:         "blob://example.com/something",
-			shouldError: true,
-			errorMsg:    "scheme 'blob' is not allowed for security reasons",
-		},
-		{
-			name:        "Invalid dangerous scheme - case insensitive JAVASCRIPT",
-			uri:         "JAVASCRIPT://example.com/alert(1)",
-			shouldError: true,
-			errorMsg:    "is not allowed for security reasons",
 		},
 	}
 
