@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -36,23 +37,29 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 	var providerType string
 	var acceptableClientIDs []string
 
+	if p.Issuer != "" {
+		log.WithField("issuer", p.Issuer).WithField("provider", p.Provider).Info("Issuer provided in request.")
+	}
+
 	switch true {
 	case p.Provider == "apple" || provider.IsAppleIssuer(p.Issuer):
 		cfg = &config.External.Apple
 		providerType = "apple"
-		issuer = p.Issuer
-		if issuer == "" {
-			detectedIssuer, err := provider.DetectAppleIDTokenIssuer(ctx, p.IdToken)
-			if err != nil {
-				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Apple provider").WithInternalError(err)
-			}
 
-			if provider.IsAppleIssuer(detectedIssuer) {
-				issuer = detectedIssuer
-			} else {
-				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
-			}
+		detectedIssuer, err := provider.DetectAppleIDTokenIssuer(ctx, p.IdToken)
+		if err != nil {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Apple provider").WithInternalError(err)
 		}
+
+		if !provider.IsAppleIssuer(detectedIssuer) {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
+		}
+
+		if p.Issuer != "" && p.Issuer != detectedIssuer {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Provided issuer does not match ID token issuer")
+		}
+
+		issuer = detectedIssuer
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Apple.ClientID...)
 
 		if config.External.IosBundleId != "" {
@@ -66,14 +73,20 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Google.ClientID...)
 
 	case p.Provider == "azure" || provider.IsAzureIssuer(p.Issuer):
-		issuer = p.Issuer
-		if issuer == "" || !provider.IsAzureIssuer(issuer) {
-			detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
-			if err != nil {
-				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
-			}
-			issuer = detectedIssuer
+		detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
+		if err != nil {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
 		}
+
+		if !strings.HasPrefix(detectedIssuer, "https://login.microsoftonline.com/") && !strings.HasPrefix(detectedIssuer, "https://sts.windows.net/") {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Azure ID token issuer")
+		}
+
+		if p.Issuer != "" && p.Issuer != detectedIssuer {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Provided issuer does not match ID token issuer")
+		}
+
+		issuer = detectedIssuer
 		cfg = &config.External.Azure
 		providerType = "azure"
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Azure.ClientID...)
