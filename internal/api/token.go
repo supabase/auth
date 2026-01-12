@@ -273,7 +273,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 			token.ProviderRefreshToken = flowState.ProviderRefreshToken
 		}
 		if terr = tx.Destroy(flowState); terr != nil {
-			return terr
+			return err
 		}
 		return nil
 	})
