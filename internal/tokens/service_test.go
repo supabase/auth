@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -1022,70 +1021,4 @@ func (ts *IDTokenTestSuite) TestIDTokenWithMultipleScopes() {
 	// Should NOT have phone claims
 	phoneNumber, hasPhone := claims["phone_number"]
 	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
-}
-
-func TestAMRClaimUnmarshal(t *testing.T) {
-	t.Run("mixed string and object formats", func(t *testing.T) {
-		var claim AMRClaim
-		before := time.Now().Unix()
-
-		err := json.Unmarshal([]byte(`["password", {"method":"totp","timestamp":123,"provider":"webauthn"}]`), &claim)
-		require.NoError(t, err)
-		require.Len(t, claim, 2)
-
-		require.Equal(t, "password", claim[0].Method)
-		require.GreaterOrEqual(t, claim[0].Timestamp, before)
-		require.LessOrEqual(t, claim[0].Timestamp, time.Now().Unix())
-		require.Empty(t, claim[0].Provider, "string format should not have provider")
-
-		require.Equal(t, "totp", claim[1].Method)
-		require.Equal(t, int64(123), claim[1].Timestamp)
-		require.Equal(t, "webauthn", claim[1].Provider, "provider should be preserved from object format")
-	})
-
-	t.Run("object with provider", func(t *testing.T) {
-		var claim AMRClaim
-		err := json.Unmarshal([]byte(`[{"method":"sso","timestamp":456,"provider":"saml"}]`), &claim)
-		require.NoError(t, err)
-		require.Len(t, claim, 1)
-		require.Equal(t, "sso", claim[0].Method)
-		require.Equal(t, int64(456), claim[0].Timestamp)
-		require.Equal(t, "saml", claim[0].Provider, "provider should be preserved")
-	})
-
-	t.Run("object without provider", func(t *testing.T) {
-		var claim AMRClaim
-		err := json.Unmarshal([]byte(`[{"method":"password","timestamp":789}]`), &claim)
-		require.NoError(t, err)
-		require.Len(t, claim, 1)
-		require.Equal(t, "password", claim[0].Method)
-		require.Equal(t, int64(789), claim[0].Timestamp)
-		require.Empty(t, claim[0].Provider, "provider should be empty when not provided")
-	})
-
-	t.Run("all strings", func(t *testing.T) {
-		var claim AMRClaim
-		before := time.Now().Unix()
-		err := json.Unmarshal([]byte(`["password", "totp"]`), &claim)
-		require.NoError(t, err)
-		require.Len(t, claim, 2)
-		require.Equal(t, "password", claim[0].Method)
-		require.Equal(t, "totp", claim[1].Method)
-		require.GreaterOrEqual(t, claim[0].Timestamp, before)
-		require.Empty(t, claim[0].Provider)
-		require.Empty(t, claim[1].Provider)
-	})
-
-	t.Run("all objects", func(t *testing.T) {
-		var claim AMRClaim
-		err := json.Unmarshal([]byte(`[{"method":"password","timestamp":100},{"method":"totp","timestamp":200,"provider":"webauthn"}]`), &claim)
-		require.NoError(t, err)
-		require.Len(t, claim, 2)
-		require.Equal(t, "password", claim[0].Method)
-		require.Equal(t, int64(100), claim[0].Timestamp)
-		require.Empty(t, claim[0].Provider)
-		require.Equal(t, "totp", claim[1].Method)
-		require.Equal(t, int64(200), claim[1].Timestamp)
-		require.Equal(t, "webauthn", claim[1].Provider, "provider should be preserved")
-	})
 }

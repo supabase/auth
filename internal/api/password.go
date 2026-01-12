@@ -29,11 +29,7 @@ func (a *API) checkPasswordStrength(ctx context.Context, password string) error 
 	config := a.config
 
 	if len(password) > MaxPasswordLength {
-		return apierrors.NewBadRequestError(
-			apierrors.ErrorCodeValidationFailed,
-			"Password cannot be longer than %v characters",
-			MaxPasswordLength,
-		)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Password cannot be longer than %v characters", MaxPasswordLength))
 	}
 
 	var messages, reasons []string

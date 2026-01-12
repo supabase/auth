@@ -19,7 +19,6 @@ import (
 	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/sbff"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/utilities"
@@ -153,17 +152,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	r := newRouter()
 	r.UseBypass(observability.AddRequestID(globalConfig))
 	r.UseBypass(logger)
-	r.UseBypass(recoverer)
-	r.UseBypass(
-		sbff.Middleware(
-			&globalConfig.Security,
-			func(r *http.Request, err error) {
-				log := observability.GetLogEntry(r).Entry
-				log.WithField("error", err.Error()).Warn("error processing Sb-Forwarded-For")
-			},
-		),
-	)
 	r.UseBypass(xffmw.Handler)
+	r.UseBypass(recoverer)
 
 	if globalConfig.API.MaxRequestDuration > 0 {
 		r.UseBypass(timeoutMiddleware(globalConfig.API.MaxRequestDuration))

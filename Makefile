@@ -1,5 +1,5 @@
 .PHONY: all build deps image migrate test vet sec format unused
-.PHONY: check-gosec check-oapi-codegen check-staticcheck
+.PHONY: check-exhaustive check-gosec check-oapi-codegen check-staticcheck
 CHECK_FILES?=./...
 
 ifdef RELEASE_VERSION
@@ -66,12 +66,17 @@ unused: | check-staticcheck # Look for unused code
 	@echo "Code used only in _test.go (do move it in those files):"
 	staticcheck -checks U1000 -tests=false $(CHECK_FILES)
 
-static: | check-staticcheck
+static: | check-staticcheck check-exhaustive
 	staticcheck ./...
+	exhaustive ./...
 
 check-staticcheck:
 	@command -v staticcheck >/dev/null 2>&1 \
 		|| go install honnef.co/go/tools/cmd/staticcheck@latest
+
+check-exhaustive:
+	@command -v exhaustive >/dev/null 2>&1 \
+		|| go install github.com/nishanths/exhaustive/cmd/exhaustive@latest
 
 generate: | check-oapi-codegen
 	go generate ./...

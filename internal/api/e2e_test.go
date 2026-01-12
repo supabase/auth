@@ -124,31 +124,23 @@ func runVerifyAfterUserCreatedHook(
 	return latest
 }
 
-func getEmailAccessToken(
+func getAccessToken(
 	ctx context.Context,
 	t *testing.T,
 	inst *e2ehooks.Instance,
 	email, pass string,
 ) *api.AccessTokenResponse {
-	return getAccessToken(ctx, t, inst, &api.PasswordGrantParams{
+	req := &api.PasswordGrantParams{
 		Email:    email,
 		Password: pass,
-	})
-}
+	}
 
-func getAccessToken(
-	ctx context.Context,
-	t *testing.T,
-	inst *e2ehooks.Instance,
-	req *api.PasswordGrantParams,
-) *api.AccessTokenResponse {
 	res := new(api.AccessTokenResponse)
 	err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/token?grant_type=password", req, res)
 	require.NoError(t, err)
 	return res
 }
-
-func signupAndConfirmEmail(
+func signupAndConfirm(
 	ctx context.Context,
 	t *testing.T,
 	inst *e2ehooks.Instance,
@@ -257,180 +249,21 @@ func TestE2EHooks(t *testing.T) {
 		})
 
 		t.Run("SignupPhone", func(t *testing.T) {
-			defer inst.HookRecorder.AfterUserCreated.ClearCalls()
 			defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
-			defer inst.HookRecorder.SendSMS.ClearCalls()
 
-			var currentUser *models.User
-			{
-				phone := genPhone()
-				req := &api.SignupParams{
-					Phone:    phone,
-					Password: defaultPassword,
-				}
-				signupUser := new(models.User)
-				{
-					err := e2eapi.Do(
-						ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, signupUser)
-					require.NoError(t, err)
-					require.Equal(t, phone, signupUser.Phone.String())
-				}
-
-				// load the hook call
-				calls := inst.HookRecorder.SendSMS.GetCalls()
-				require.Equal(t, 1, len(calls))
-				call := calls[0]
-
-				hookReq := &v0hooks.SendSMSInput{}
-				err = call.Unmarshal(hookReq)
-				require.NoError(t, err)
-
-				latestUser, err := models.FindUserByID(inst.Conn, signupUser.ID)
-				require.NoError(t, err)
-				require.NotNil(t, latestUser)
-
-				otp := hookReq.SMS.OTP
-				otpHash := crypto.GenerateTokenHash(
-					signupUser.GetPhone(), hookReq.SMS.OTP)
-
-				ott, err := models.FindOneTimeToken(
-					inst.Conn,
-					otpHash,
-					models.ConfirmationToken)
-				require.NoError(t, err)
-				require.Equal(t, signupUser.ID.String(), ott.UserID.String())
-				require.Equal(t, signupUser.Phone.String(), ott.RelatesTo)
-
-				{
-					req := &api.VerifyParams{
-						Type:  "sms",
-						Token: otp,
-						Phone: phone,
-					}
-					res := new(models.User)
-
-					body := new(bytes.Buffer)
-					err = json.NewEncoder(body).Encode(req)
-					require.NoError(t, err)
-
-					httpReq, err := http.NewRequestWithContext(
-						ctx, "POST", "/verify", body)
-					require.NoError(t, err)
-
-					httpRes, err := inst.Do(httpReq)
-					require.NoError(t, err)
-					require.Equal(t, 200, httpRes.StatusCode)
-
-					err = json.NewDecoder(httpRes.Body).Decode(res)
-					require.NoError(t, err)
-				}
-
-				{
-					// setup phone change
-					latestUser, err = models.FindUserByID(inst.Conn, signupUser.ID)
-					require.NoError(t, err)
-					require.NotNil(t, latestUser)
-					currentUser = latestUser
-				}
+			phone := genPhone()
+			req := &api.SignupParams{
+				Phone:    phone,
+				Password: defaultPassword,
 			}
+			res := new(models.User)
+			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
+			require.NoError(t, err)
+			require.Equal(t, phone, res.Phone.String())
 
-			t.Run("PhoneChange", func(t *testing.T) {
-				inst.HookRecorder.BeforeUserCreated.ClearCalls()
-				inst.HookRecorder.SendSMS.ClearCalls()
+			runVerifyBeforeUserCreatedHook(t, inst, res)
+			runVerifyAfterUserCreatedHook(t, inst, res)
 
-				currentAccessToken := getAccessToken(ctx, t, inst,
-					&api.PasswordGrantParams{
-						Phone:    string(currentUser.Phone),
-						Password: defaultPassword,
-					})
-
-				curPhone := currentUser.Phone.String()
-				newPhone := genPhone()
-				{
-					req := &api.UserUpdateParams{
-						Phone: newPhone,
-					}
-					res := new(models.User)
-
-					body := new(bytes.Buffer)
-					err = json.NewEncoder(body).Encode(req)
-					require.NoError(t, err)
-
-					httpReq, err := http.NewRequestWithContext(
-						ctx, "PUT", "/user", body)
-					require.NoError(t, err)
-
-					httpRes, err := inst.DoAuth(httpReq, currentAccessToken.Token)
-					require.NoError(t, err)
-					require.Equal(t, 200, httpRes.StatusCode)
-
-					err = json.NewDecoder(httpRes.Body).Decode(res)
-					require.NoError(t, err)
-
-					currentUser = res
-				}
-
-				var otp string
-				{
-					require.Equal(t, curPhone, currentUser.Phone.String())
-					require.Equal(t, newPhone, currentUser.PhoneChange)
-
-					calls := inst.HookRecorder.SendSMS.GetCalls()
-					require.Equal(t, 1, len(calls))
-					call := calls[0]
-
-					hookReq := &v0hooks.SendSMSInput{}
-					err = call.Unmarshal(hookReq)
-					require.NoError(t, err)
-
-					require.Equal(t, currentUser.ID, hookReq.User.ID)
-					require.Equal(t, currentUser.Aud, hookReq.User.Aud)
-					require.Equal(t, currentUser.Phone, hookReq.User.Phone)
-					require.Equal(t, currentUser.AppMetaData, hookReq.User.AppMetaData)
-
-					otp = hookReq.SMS.OTP
-					otpHash := crypto.GenerateTokenHash(
-						currentUser.PhoneChange, hookReq.SMS.OTP)
-
-					ott, err := models.FindOneTimeToken(
-						inst.Conn,
-						otpHash,
-						models.PhoneChangeToken)
-					require.NoError(t, err)
-					require.Equal(t, currentUser.ID.String(), ott.UserID.String())
-					require.Equal(t, currentUser.PhoneChange, ott.RelatesTo)
-
-					latestUser, err := models.FindUserByID(inst.Conn, currentUser.ID)
-					require.NoError(t, err)
-					require.NotNil(t, latestUser)
-
-					currentUser = latestUser
-				}
-
-				{
-					req := &api.VerifyParams{
-						Type:  "phone_change",
-						Token: otp,
-						Phone: currentUser.PhoneChange,
-					}
-					res := new(models.User)
-
-					body := new(bytes.Buffer)
-					err = json.NewEncoder(body).Encode(req)
-					require.NoError(t, err)
-
-					httpReq, err := http.NewRequestWithContext(
-						ctx, "POST", "/verify", body)
-					require.NoError(t, err)
-
-					httpRes, err := inst.Do(httpReq)
-					require.NoError(t, err)
-					require.Equal(t, 200, httpRes.StatusCode)
-
-					err = json.NewDecoder(httpRes.Body).Decode(res)
-					require.NoError(t, err)
-				}
-			})
 		})
 
 		t.Run("SignupAnonymously", func(t *testing.T) {
@@ -589,7 +422,7 @@ func TestE2EHooks(t *testing.T) {
 					mfaUser = runVerifyBeforeUserCreatedHook(t, inst, mfaUser)
 					runVerifyAfterUserCreatedHook(t, inst, mfaUser)
 					require.NotNil(t, mfaUser)
-					mfaUserAccessToken = getEmailAccessToken(
+					mfaUserAccessToken = getAccessToken(
 						ctx, t, inst, string(mfaUser.Email), defaultPassword)
 
 					phone := genPhone()
@@ -971,90 +804,6 @@ func TestE2EHooks(t *testing.T) {
 				}
 			})
 		}
-
-		t.Run("AMRStringArrayUnmarshalling", func(t *testing.T) {
-			defer inst.HookRecorder.CustomizeAccessToken.ClearCalls()
-
-			// Setup hook that returns amr as array of strings
-			var claimsIn M
-			hr := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Add("content-type", "application/json")
-				w.WriteHeader(http.StatusOK)
-
-				err := json.NewDecoder(r.Body).Decode(&claimsIn)
-				require.NoError(t, err)
-
-				// Modify amr to be array of strings instead of objects
-				claimsOut := copyMap(t, claimsIn)
-				claimsOut["claims"].(M)["amr"] = []string{"password", "totp"}
-
-				err = json.NewEncoder(w).Encode(claimsOut)
-				require.NoError(t, err)
-			})
-
-			inst.HookRecorder.CustomizeAccessToken.ClearCalls()
-			inst.HookRecorder.CustomizeAccessToken.SetHandler(hr)
-
-			// Get token with modified amr
-			req := &api.PasswordGrantParams{
-				Email:    string(currentUser.Email),
-				Password: defaultPassword,
-			}
-
-			res := new(api.AccessTokenResponse)
-			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/token?grant_type=password", req, res)
-			require.NoError(t, err)
-			require.True(t, len(res.Token) > 0)
-
-			// Verify hook was called
-			{
-				calls := inst.HookRecorder.CustomizeAccessToken.GetCalls()
-				require.Equal(t, 1, len(calls))
-			}
-
-			// Parse token to verify it can be unmarshalled
-			p := jwt.NewParser(jwt.WithValidMethods(globalCfg.JWT.ValidMethods))
-			token, err := p.ParseWithClaims(
-				res.Token,
-				&api.AccessTokenClaims{},
-				func(token *jwt.Token) (any, error) {
-					if kid, ok := token.Header["kid"]; ok {
-						if kidStr, ok := kid.(string); ok {
-							return conf.FindPublicKeyByKid(kidStr, &globalCfg.JWT)
-						}
-					}
-					if alg, ok := token.Header["alg"]; ok {
-						if alg == jwt.SigningMethodHS256.Name {
-							return []byte(globalCfg.JWT.Secret), nil
-						}
-					}
-					return nil, fmt.Errorf("missing kid")
-				})
-			require.NoError(t, err, "Token should parse successfully even with string array amr")
-
-			fmt.Println("token hereee", res.Token)
-			// Verify claims were unmarshalled correctly
-			claims, ok := token.Claims.(*api.AccessTokenClaims)
-			require.True(t, ok, "Claims should be AccessTokenClaims type")
-			require.NotNil(t, claims.AuthenticationMethodReference, "AMR should not be nil")
-			require.Len(t, claims.AuthenticationMethodReference, 2, "AMR should have 2 entries")
-			require.Equal(t, "password", claims.AuthenticationMethodReference[0].Method)
-			require.Equal(t, "totp", claims.AuthenticationMethodReference[1].Method)
-
-			// Call /user endpoint with the token to verify it works end-to-end
-			httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, "/user", nil)
-			require.NoError(t, err)
-
-			httpRes, err := inst.DoAuth(httpReq, res.Token)
-			require.NoError(t, err, "Should be able to call /user endpoint with token containing string array amr")
-			require.Equal(t, http.StatusOK, httpRes.StatusCode, "/user endpoint should return 200 OK")
-
-			// Verify we got user data back
-			var userData models.User
-			err = json.NewDecoder(httpRes.Body).Decode(&userData)
-			require.NoError(t, err, "Should be able to decode user response")
-			require.Equal(t, currentUser.ID, userData.ID, "Should get the correct user")
-		})
 	})
 
 	t.Run("SendEmail", func(t *testing.T) {
@@ -1064,7 +813,7 @@ func TestE2EHooks(t *testing.T) {
 			require.NoError(t, err)
 			defer inst.Close()
 
-			signupAndConfirmEmail(ctx, t, inst)
+			signupAndConfirm(ctx, t, inst)
 		})
 
 		t.Run("SecureEmailChange=Enabled", func(t *testing.T) {
@@ -1080,11 +829,11 @@ func TestE2EHooks(t *testing.T) {
 				// test requires this flag
 				require.True(t, inst.Config.Mailer.SecureEmailChangeEnabled)
 
-				signupUser := signupAndConfirmEmail(ctx, t, inst)
+				signupUser := signupAndConfirm(ctx, t, inst)
 				currentUser := signupUser
 
 				// get access token
-				currentAccessToken := getEmailAccessToken(
+				currentAccessToken := getAccessToken(
 					ctx, t, inst, string(currentUser.Email), defaultPassword)
 
 				// update email
@@ -1296,11 +1045,11 @@ func TestE2EHooks(t *testing.T) {
 				// test requires this flag
 				require.False(t, inst.Config.Mailer.SecureEmailChangeEnabled)
 
-				signupUser := signupAndConfirmEmail(ctx, t, inst)
+				signupUser := signupAndConfirm(ctx, t, inst)
 				currentUser := signupUser
 
 				// get access token
-				currentAccessToken := getEmailAccessToken(
+				currentAccessToken := getAccessToken(
 					ctx, t, inst, string(currentUser.Email), defaultPassword)
 
 				// update email

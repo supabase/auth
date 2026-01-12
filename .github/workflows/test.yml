@@ -49,10 +49,13 @@ jobs:
       - name: Run static check
         run: |
           set -x
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          go install github.com/nishanths/exhaustive/cmd/exhaustive@latest
           make static
       - name: Check gosec
         run: |
           set -x
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
           make sec
       - name: Init Database
         run: psql -f hack/init_postgres.sql postgresql://postgres:root@localhost:5432/postgres

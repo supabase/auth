@@ -390,7 +390,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 
 	if err != nil {
 		if errors.Is(err, bcrypt.ErrPasswordTooLong) {
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "%s", err.Error())
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
 		}
 		return apierrors.NewInternalServerError("Error creating user").WithInternalError(err)
 	}
