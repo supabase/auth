@@ -112,6 +112,18 @@ func countStatusCodesSafely(w *interceptingResponseWriter, r *http.Request, coun
 	)
 }
 
+func addMetricAttributes(r *http.Request) []attribute.KeyValue {
+	ctx := r.Context()
+	routeContext := chi.RouteContext(ctx)
+	routePattern := semconv.HTTPRouteKey.String(routeContext.RoutePattern())
+
+	out := []attribute.KeyValue{
+		routePattern,
+	}
+
+	return out
+}
+
 // RequestTracing returns an HTTP handler that traces all HTTP requests coming
 // in. Supports Chi routers, so this should be one of the first middlewares on
 // the router.
@@ -148,7 +160,11 @@ func RequestTracing() func(http.Handler) http.Handler {
 			}
 		}
 
-		otelHandler := otelhttp.NewHandler(http.HandlerFunc(fn), "api")
+		otelHandler := otelhttp.NewHandler(
+			http.HandlerFunc(fn),
+			"api",
+			otelhttp.WithMetricAttributesFn(addMetricAttributes),
+		)
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// there is a vulnerability with otelhttp where
