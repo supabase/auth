@@ -13,6 +13,17 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+func getChiRoutePattern(r *http.Request) string {
+	ctx := r.Context()
+
+	routeContext := chi.RouteContext(ctx)
+	if routeContext == nil {
+		return "noroute"
+	}
+
+	return routeContext.RoutePattern()
+}
+
 // traceChiRoutesSafely attempts to extract the Chi RouteContext. If the
 // request does not have a RouteContext it will recover from the panic and
 // attempt to figure out the route from the URL's path.
@@ -26,9 +37,9 @@ func traceChiRoutesSafely(r *http.Request) {
 		}
 	}()
 
-	routeContext := chi.RouteContext(r.Context())
+	routePattern := getChiRoutePattern(r)
 	span := trace.SpanFromContext(r.Context())
-	span.SetAttributes(semconv.HTTPRouteKey.String(routeContext.RoutePattern()))
+	span.SetAttributes(semconv.HTTPRouteKey.String(routePattern))
 }
 
 // traceChiRouteURLParamsSafely attempts to extract the Chi RouteContext
@@ -87,38 +98,26 @@ func countStatusCodesSafely(w *interceptingResponseWriter, r *http.Request, coun
 		return
 	}
 
-	defer func() {
-		if rec := recover(); rec != nil {
-			logrus.WithField("error", rec).Error("unable to count status codes safely, metrics may be off")
-			counter.Add(
-				r.Context(),
-				1,
-				metric.WithAttributes(
-					attribute.Bool("noroute", true),
-					attribute.Int("code", w.statusCode)),
-			)
-		}
-	}()
-
 	ctx := r.Context()
 
-	routeContext := chi.RouteContext(ctx)
-	routePattern := semconv.HTTPRouteKey.String(routeContext.RoutePattern())
+	routePattern := getChiRoutePattern(r)
 
 	counter.Add(
 		ctx,
 		1,
-		metric.WithAttributes(attribute.Int("code", w.statusCode), routePattern),
+		metric.WithAttributes(
+			attribute.Int("code", w.statusCode),
+			semconv.HTTPRouteKey.String(routePattern),
+		),
 	)
 }
 
 func addMetricAttributes(r *http.Request) []attribute.KeyValue {
-	ctx := r.Context()
-	routeContext := chi.RouteContext(ctx)
-	routePattern := semconv.HTTPRouteKey.String(routeContext.RoutePattern())
+	routePattern := getChiRoutePattern(r)
+	routePatternAttr := semconv.HTTPRouteKey.String(routePattern)
 
 	out := []attribute.KeyValue{
-		routePattern,
+		routePatternAttr,
 	}
 
 	return out
