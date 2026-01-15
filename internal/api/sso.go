@@ -82,16 +82,20 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
 		return err
 	}
-	flowType := getFlowFromChallenge(params.CodeChallenge)
-	var flowStateID *uuid.UUID
-	flowStateID = nil
-	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(db, models.SSOSAML.String(), models.SSOSAML, codeChallengeMethod, codeChallenge, nil)
-		if err != nil {
-			return err
-		}
-		flowStateID = &flowState.ID
+
+	// Always create flow state for all SSO flows
+	flowParams := models.FlowStateParams{
+		ProviderType:         models.SSOSAML.String(),
+		AuthenticationMethod: models.SSOSAML,
+		CodeChallenge:        codeChallenge,
+		CodeChallengeMethod:  codeChallengeMethod,
+		Referrer:             params.RedirectTo,
 	}
+	flowState := models.NewFlowState(flowParams)
+	if err := db.Create(flowState); err != nil {
+		return apierrors.NewInternalServerError("Error creating flow state").WithInternalError(err)
+	}
+	flowStateID := &flowState.ID
 
 	entityDescriptor, err := ssoProvider.SAMLProvider.EntityDescriptor()
 	if err != nil {
