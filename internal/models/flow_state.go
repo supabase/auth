@@ -101,7 +101,8 @@ func (FlowState) TableName() string {
 // NewFlowState creates a flow state for both PKCE and implicit flows.
 // PKCE fields (AuthCode, CodeChallenge, CodeChallengeMethod) are only set
 // if CodeChallenge is provided in params.
-func NewFlowState(params FlowStateParams) *FlowState {
+// Returns an error if CodeChallenge is provided but CodeChallengeMethod is invalid.
+func NewFlowState(params FlowStateParams) (*FlowState, error) {
 	id := uuid.Must(uuid.NewV4())
 
 	flowState := &FlowState{
@@ -116,7 +117,10 @@ func NewFlowState(params FlowStateParams) *FlowState {
 
 	// Set PKCE fields only if code_challenge is provided
 	if params.CodeChallenge != "" {
-		codeChallengeMethod, _ := ParseCodeChallengeMethod(params.CodeChallengeMethod)
+		codeChallengeMethod, err := ParseCodeChallengeMethod(params.CodeChallengeMethod)
+		if err != nil {
+			return nil, err
+		}
 		authCode := uuid.Must(uuid.NewV4()).String()
 		ccMethod := codeChallengeMethod.String()
 		flowState.AuthCode = &authCode
@@ -132,7 +136,7 @@ func NewFlowState(params FlowStateParams) *FlowState {
 		flowState.Referrer = &params.Referrer
 	}
 
-	return flowState
+	return flowState, nil
 }
 
 // IsPKCE returns true if this flow state represents a PKCE flow

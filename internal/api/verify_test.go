@@ -759,13 +759,14 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
 			codeChallenge := "codechallengecodechallengcodechallengcodechallengcodechallenge"
-			flowState := models.NewFlowState(models.FlowStateParams{
+			flowState, err := models.NewFlowState(models.FlowStateParams{
 				ProviderType:         c.authenticationMethod.String(),
 				AuthenticationMethod: c.authenticationMethod,
 				CodeChallenge:        codeChallenge,
 				CodeChallengeMethod:  "s256",
 				UserID:               &u.ID,
 			})
+			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Create(flowState))
 
 			requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", c.payload.Type, c.payload.Token)

@@ -91,7 +91,10 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		CodeChallengeMethod:  codeChallengeMethod,
 		Referrer:             params.RedirectTo,
 	}
-	flowState := models.NewFlowState(flowParams)
+	flowState, err := models.NewFlowState(flowParams)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid code_challenge_method").WithInternalError(err)
+	}
 	if err := db.Create(flowState); err != nil {
 		return apierrors.NewInternalServerError("Error creating flow state").WithInternalError(err)
 	}

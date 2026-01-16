@@ -87,19 +87,17 @@ func getFlowFromChallenge(codeChallenge string) models.FlowType {
 	}
 }
 
-func generateFlowState(tx *storage.Connection, providerType string, authenticationMethod models.AuthenticationMethod, codeChallengeMethodParam string, codeChallenge string, userID *uuid.UUID) (*models.FlowState, error) {
-	codeChallengeMethod, err := models.ParseCodeChallengeMethod(codeChallengeMethodParam)
-	if err != nil {
-		return nil, err
-	}
-
-	flowState := models.NewFlowState(models.FlowStateParams{
+func generateFlowState(tx *storage.Connection, providerType string, authenticationMethod models.AuthenticationMethod, codeChallengeMethod string, codeChallenge string, userID *uuid.UUID) (*models.FlowState, error) {
+	flowState, err := models.NewFlowState(models.FlowStateParams{
 		ProviderType:         providerType,
 		AuthenticationMethod: authenticationMethod,
 		CodeChallenge:        codeChallenge,
-		CodeChallengeMethod:  codeChallengeMethod.String(),
+		CodeChallengeMethod:  codeChallengeMethod,
 		UserID:               userID,
 	})
+	if err != nil {
+		return nil, err
+	}
 	if err := tx.Create(flowState); err != nil {
 		return nil, err
 	}

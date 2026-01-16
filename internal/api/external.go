@@ -126,7 +126,10 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	// Always create flow state for all flows (both PKCE and implicit)
 	// The flow state ID is used as the state parameter instead of JWT
-	flowState := models.NewFlowState(flowParams)
+	flowState, err := models.NewFlowState(flowParams)
+	if err != nil {
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid code_challenge_method").WithInternalError(err)
+	}
 	if err := db.Create(flowState); err != nil {
 		return "", apierrors.NewInternalServerError("Error creating flow state").WithInternalError(err)
 	}
