@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"time"
 
-	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
@@ -26,15 +25,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKakao() {
 	ts.Equal(ts.Config.External.Kakao.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 
-	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	ts.Require().NoError(err)
-
-	ts.Equal("kakao", claims.Provider)
-	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
+	assertValidOAuthState(ts, q.Get("state"), "kakao")
 }
 
 func KakaoTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, emails string) *httptest.Server {
