@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,7 +16,6 @@ const (
 	SCIMSchemaGroup        = "urn:ietf:params:scim:schemas:core:2.0:Group"
 	SCIMSchemaListResponse = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
 	SCIMSchemaPatchOp      = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
-	SCIMSchemaError        = "urn:ietf:params:scim:api:messages:2.0:Error"
 )
 
 // Must be var (not const) because it's passed by pointer to user.Ban()
@@ -132,20 +130,4 @@ type SCIMListResponse struct {
 	StartIndex   int           `json:"startIndex"`
 	ItemsPerPage int           `json:"itemsPerPage"`
 	Resources    []interface{} `json:"Resources"`
-}
-
-type SCIMErrorResponse struct {
-	Schemas  []string `json:"schemas"`
-	Status   string   `json:"status"`
-	Detail   string   `json:"detail,omitempty"`
-	ScimType string   `json:"scimType,omitempty"`
-}
-
-func NewSCIMError(status int, detail string, scimType string) *SCIMErrorResponse {
-	return &SCIMErrorResponse{
-		Schemas:  []string{SCIMSchemaError},
-		Status:   strconv.Itoa(status),
-		Detail:   detail,
-		ScimType: scimType,
-	}
 }
