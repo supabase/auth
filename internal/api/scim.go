@@ -139,7 +139,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 
 	email, err := a.validateEmail(email)
 	if err != nil {
-		return err
+		return apierrors.NewSCIMBadRequestError("Invalid email address", "invalidValue")
 	}
 
 	providerType := "sso:" + provider.ID.String()
@@ -451,12 +451,18 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 				return apierrors.NewSCIMBadRequestError("active must be a boolean", "invalidValue")
 			}
 			if active {
-				return user.Ban(tx, 0, nil)
+				if err := user.Ban(tx, 0, nil); err != nil {
+					return apierrors.NewInternalServerError("Error unbanning user").WithInternalError(err)
+				}
+				return nil
 			}
 			if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
-				return err
+				return apierrors.NewInternalServerError("Error banning user").WithInternalError(err)
 			}
-			return models.Logout(tx, user.ID)
+			if err := models.Logout(tx, user.ID); err != nil {
+				return apierrors.NewInternalServerError("Error invalidating sessions").WithInternalError(err)
+			}
+			return nil
 		case "username":
 			userName, ok := op.Value.(string)
 			if !ok {
@@ -557,12 +563,17 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 
 				if active, ok := valueMap["active"].(bool); ok {
 					if active {
-						return user.Ban(tx, 0, nil)
+						if err := user.Ban(tx, 0, nil); err != nil {
+							return apierrors.NewInternalServerError("Error unbanning user").WithInternalError(err)
+						}
+					} else {
+						if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
+							return apierrors.NewInternalServerError("Error banning user").WithInternalError(err)
+						}
+						if err := models.Logout(tx, user.ID); err != nil {
+							return apierrors.NewInternalServerError("Error invalidating sessions").WithInternalError(err)
+						}
 					}
-					if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
-						return err
-					}
-					return models.Logout(tx, user.ID)
 				}
 			}
 		}
@@ -611,7 +622,10 @@ func (a *API) scimDeleteUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
-		return models.Logout(tx, user.ID)
+		if err := models.Logout(tx, user.ID); err != nil {
+			return apierrors.NewInternalServerError("Error invalidating sessions").WithInternalError(err)
+		}
+		return nil
 	})
 
 	if terr != nil {
@@ -1233,7 +1247,7 @@ func (a *API) scimSchemaByID(w http.ResponseWriter, r *http.Request) error {
 }
 
 func sendSCIMError(w http.ResponseWriter, status int, detail string, scimType string) error {
-	return sendSCIMJSON(w, status, NewSCIMError(status, detail, scimType))
+	return sendSCIMJSON(w, status, apierrors.NewSCIMHTTPError(status, detail, scimType))
 }
 
 func (a *API) scimNotFound(w http.ResponseWriter, r *http.Request) error {
