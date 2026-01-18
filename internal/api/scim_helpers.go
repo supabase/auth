@@ -47,13 +47,7 @@ func (a *API) parseSCIMBody(r *http.Request, v interface{}) error {
 }
 
 func userBelongsToProvider(user *models.User, providerID uuid.UUID) bool {
-	providerType := "sso:" + providerID.String()
-	for _, identity := range user.Identities {
-		if identity.Provider == providerType {
-			return true
-		}
-	}
-	return false
+	return models.UserBelongsToSSOProvider(user, providerID)
 }
 
 func (a *API) userToSCIMResponse(user *models.User) *SCIMUserResponse {
