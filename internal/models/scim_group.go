@@ -135,7 +135,7 @@ func (g *SCIMGroup) AddMember(tx *storage.Connection, userID uuid.UUID) error {
 		return err
 	}
 
-	if !userBelongsToSSOProvider(user, g.SSOProviderID) {
+	if !UserBelongsToSSOProvider(user, g.SSOProviderID) {
 		return UserNotInSSOProviderError{}
 	}
 
@@ -145,7 +145,8 @@ func (g *SCIMGroup) AddMember(tx *storage.Connection, userID uuid.UUID) error {
 	).Exec()
 }
 
-func userBelongsToSSOProvider(user *User, ssoProviderID uuid.UUID) bool {
+// UserBelongsToSSOProvider checks if a user has an identity linked to the specified SSO provider.
+func UserBelongsToSSOProvider(user *User, ssoProviderID uuid.UUID) bool {
 	providerType := "sso:" + ssoProviderID.String()
 	for _, identity := range user.Identities {
 		if identity.Provider == providerType {
