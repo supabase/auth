@@ -59,7 +59,7 @@ func (a *API) scimListUsers(w http.ResponseWriter, r *http.Request) error {
 
 	providerType := "sso:" + provider.ID.String()
 
-	users, totalResults, err := models.FindUsersByProviderWithFilter(db, providerType, toModelFilterClause(filterClause), startIndex, count)
+	users, totalResults, err := models.FindUsersByProviderWithFilter(db, providerType, filterClause, startIndex, count)
 	if err != nil {
 		return apierrors.NewInternalServerError("Error fetching users").WithInternalError(err)
 	}
@@ -636,7 +636,7 @@ func (a *API) scimListGroups(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	groups, totalResults, err := models.FindSCIMGroupsBySSOProviderWithFilter(db, provider.ID, toModelFilterClause(filterClause), startIndex, count)
+	groups, totalResults, err := models.FindSCIMGroupsBySSOProviderWithFilter(db, provider.ID, filterClause, startIndex, count)
 	if err != nil {
 		return apierrors.NewInternalServerError("Error fetching groups").WithInternalError(err)
 	}
