@@ -168,7 +168,7 @@ func (g *SCIMGroup) AddMember(tx *storage.Connection, userID uuid.UUID) error {
 	}
 
 	if !userBelongsToSSOProvider(user, g.SSOProviderID) {
-		return errors.New("user does not belong to this SSO provider")
+		return UserNotInSSOProviderError{}
 	}
 
 	return tx.RawQuery(
@@ -222,7 +222,7 @@ func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 				continue
 			}
 			// Skip users that don't belong to this provider silently
-			if err.Error() == "user does not belong to this SSO provider" {
+			if _, ok := err.(UserNotInSSOProviderError); ok {
 				continue
 			}
 			return errors.Wrap(err, "error adding SCIM group member")
