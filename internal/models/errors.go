@@ -135,6 +135,13 @@ func (e SCIMGroupNotFoundError) Is(target error) bool {
 	return target == errNotFound
 }
 
+// UserNotInSSOProviderError represents when a user does not belong to an SSO provider.
+type UserNotInSSOProviderError struct{}
+
+func (e UserNotInSSOProviderError) Error() string {
+	return "User does not belong to this SSO provider"
+}
+
 // FlowStateNotFoundError represents an error when an FlowState can't be
 // found.
 type FlowStateNotFoundError struct{}
