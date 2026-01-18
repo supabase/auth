@@ -71,38 +71,6 @@ func FindSCIMGroupByExternalID(tx *storage.Connection, ssoProviderID uuid.UUID, 
 	return &group, nil
 }
 
-func CountSCIMGroupsBySSOProvider(tx *storage.Connection, ssoProviderID uuid.UUID) (int, error) {
-	count, err := tx.Q().Where("sso_provider_id = ?", ssoProviderID).Count(&SCIMGroup{})
-	if err != nil {
-		return 0, errors.Wrap(err, "error counting SCIM groups by SSO provider")
-	}
-	return count, nil
-}
-
-// startIndex is 1-indexed per SCIM spec. count is the max number of results to return.
-func FindSCIMGroupsBySSOProvider(tx *storage.Connection, ssoProviderID uuid.UUID, startIndex, count int) ([]*SCIMGroup, error) {
-	groups := []*SCIMGroup{}
-
-	offset := startIndex - 1
-	if offset < 0 {
-		offset = 0
-	}
-
-	query := `
-		SELECT * FROM scim_groups
-		WHERE sso_provider_id = ?
-		ORDER BY created_at ASC
-		LIMIT ? OFFSET ?
-	`
-	if err := tx.RawQuery(query, ssoProviderID, count, offset).All(&groups); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return []*SCIMGroup{}, nil
-		}
-		return nil, errors.Wrap(err, "error finding SCIM groups by SSO provider")
-	}
-	return groups, nil
-}
-
 // SCIMFilterClause represents a parsed SCIM filter as SQL WHERE clause
 type SCIMFilterClause struct {
 	Where string
