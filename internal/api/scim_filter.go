@@ -9,11 +9,6 @@ import (
 	"github.com/supabase/auth/internal/models"
 )
 
-type SCIMFilterResult struct {
-	Where string
-	Args  []interface{}
-}
-
 var SCIMUserFilterAttrs = map[string]string{
 	"username":     "COALESCE(i.identity_data->>'user_name', u.email)",
 	"externalid":   "i.provider_id",
@@ -26,9 +21,9 @@ var SCIMGroupFilterAttrs = map[string]string{
 	"externalid":  "external_id",
 }
 
-func ParseSCIMFilterToSQL(filterStr string, allowedAttrs map[string]string) (*SCIMFilterResult, error) {
+func ParseSCIMFilterToSQL(filterStr string, allowedAttrs map[string]string) (*models.SCIMFilterClause, error) {
 	if filterStr == "" {
-		return &SCIMFilterResult{Where: "1=1", Args: nil}, nil
+		return &models.SCIMFilterClause{Where: "1=1", Args: nil}, nil
 	}
 
 	expr, err := filter.ParseFilter([]byte(filterStr))
@@ -40,7 +35,7 @@ func ParseSCIMFilterToSQL(filterStr string, allowedAttrs map[string]string) (*SC
 	return exprToSQL(expr, allowedAttrs)
 }
 
-func exprToSQL(expr filter.Expression, allowedAttrs map[string]string) (*SCIMFilterResult, error) {
+func exprToSQL(expr filter.Expression, allowedAttrs map[string]string) (*models.SCIMFilterClause, error) {
 	switch e := expr.(type) {
 	case *filter.AttributeExpression:
 		return attrExprToSQL(*e, allowedAttrs)
@@ -56,7 +51,7 @@ func exprToSQL(expr filter.Expression, allowedAttrs map[string]string) (*SCIMFil
 	}
 }
 
-func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string) (*SCIMFilterResult, error) {
+func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string) (*models.SCIMFilterClause, error) {
 	attrName := strings.ToLower(e.AttributePath.AttributeName)
 	if e.AttributePath.SubAttribute != nil {
 		attrName = attrName + "." + strings.ToLower(*e.AttributePath.SubAttribute)
@@ -70,13 +65,13 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 
 	switch e.Operator {
 	case filter.EQ:
-		return &SCIMFilterResult{
+		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) = LOWER(?)", dbColumn),
 			Args:  []interface{}{fmt.Sprintf("%v", e.CompareValue)},
 		}, nil
 
 	case filter.NE:
-		return &SCIMFilterResult{
+		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) != LOWER(?)", dbColumn),
 			Args:  []interface{}{fmt.Sprintf("%v", e.CompareValue)},
 		}, nil
@@ -86,7 +81,7 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 		if !ok {
 			return nil, apierrors.NewSCIMBadRequestError("'co' operator requires a string value", "invalidValue")
 		}
-		return &SCIMFilterResult{
+		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?)", dbColumn),
 			Args:  []interface{}{"%" + escapeLikePattern(val) + "%"},
 		}, nil
@@ -96,7 +91,7 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 		if !ok {
 			return nil, apierrors.NewSCIMBadRequestError("'sw' operator requires a string value", "invalidValue")
 		}
-		return &SCIMFilterResult{
+		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?)", dbColumn),
 			Args:  []interface{}{escapeLikePattern(val) + "%"},
 		}, nil
@@ -106,37 +101,37 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 		if !ok {
 			return nil, apierrors.NewSCIMBadRequestError("'ew' operator requires a string value", "invalidValue")
 		}
-		return &SCIMFilterResult{
+		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?)", dbColumn),
 			Args:  []interface{}{"%" + escapeLikePattern(val)},
 		}, nil
 
 	case filter.PR:
-		return &SCIMFilterResult{
+		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("(%s IS NOT NULL AND CAST(%s AS TEXT) != '')", dbColumn, dbColumn),
 			Args:  nil,
 		}, nil
 
 	case filter.GT:
-		return &SCIMFilterResult{
+		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("%s > ?", dbColumn),
 			Args:  []interface{}{e.CompareValue},
 		}, nil
 
 	case filter.GE:
-		return &SCIMFilterResult{
+		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("%s >= ?", dbColumn),
 			Args:  []interface{}{e.CompareValue},
 		}, nil
 
 	case filter.LT:
-		return &SCIMFilterResult{
+		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("%s < ?", dbColumn),
 			Args:  []interface{}{e.CompareValue},
 		}, nil
 
 	case filter.LE:
-		return &SCIMFilterResult{
+		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("%s <= ?", dbColumn),
 			Args:  []interface{}{e.CompareValue},
 		}, nil
@@ -147,7 +142,7 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 	}
 }
 
-func logicalExprToSQL(e filter.LogicalExpression, allowedAttrs map[string]string) (*SCIMFilterResult, error) {
+func logicalExprToSQL(e filter.LogicalExpression, allowedAttrs map[string]string) (*models.SCIMFilterClause, error) {
 	left, err := exprToSQL(e.Left, allowedAttrs)
 	if err != nil {
 		return nil, err
@@ -163,19 +158,19 @@ func logicalExprToSQL(e filter.LogicalExpression, allowedAttrs map[string]string
 		op = "OR"
 	}
 
-	return &SCIMFilterResult{
+	return &models.SCIMFilterClause{
 		Where: fmt.Sprintf("(%s %s %s)", left.Where, op, right.Where),
 		Args:  append(left.Args, right.Args...),
 	}, nil
 }
 
-func notExprToSQL(e filter.NotExpression, allowedAttrs map[string]string) (*SCIMFilterResult, error) {
+func notExprToSQL(e filter.NotExpression, allowedAttrs map[string]string) (*models.SCIMFilterClause, error) {
 	operand, err := exprToSQL(e.Expression, allowedAttrs)
 	if err != nil {
 		return nil, err
 	}
 
-	return &SCIMFilterResult{
+	return &models.SCIMFilterClause{
 		Where: fmt.Sprintf("NOT (%s)", operand.Where),
 		Args:  operand.Args,
 	}, nil
@@ -183,7 +178,7 @@ func notExprToSQL(e filter.NotExpression, allowedAttrs map[string]string) (*SCIM
 
 // valuePathToSQL handles bracket notation (e.g., emails[value eq "x"]).
 // Only emails[value ...] is supported since Supabase Auth stores one email per user.
-func valuePathToSQL(e filter.ValuePath, allowedAttrs map[string]string) (*SCIMFilterResult, error) {
+func valuePathToSQL(e filter.ValuePath, allowedAttrs map[string]string) (*models.SCIMFilterClause, error) {
 	attrName := strings.ToLower(e.AttributePath.AttributeName)
 
 	switch attrName {
@@ -211,14 +206,4 @@ func escapeLikePattern(s string) string {
 	s = strings.ReplaceAll(s, "%", "\\%")
 	s = strings.ReplaceAll(s, "_", "\\_")
 	return s
-}
-
-func toModelFilterClause(f *SCIMFilterResult) *models.SCIMFilterClause {
-	if f == nil {
-		return nil
-	}
-	return &models.SCIMFilterClause{
-		Where: f.Where,
-		Args:  f.Args,
-	}
 }
