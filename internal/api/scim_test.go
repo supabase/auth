@@ -776,3 +776,311 @@ func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameCaseInsensitive() {
 	require.NotEmpty(ts.T(), meta["lastModified"])
 	require.Contains(ts.T(), meta["location"], "/scim/v2/Users/"+created.ID)
 }
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserUpdateUserName() {
+	user := ts.createSCIMUserWithExternalID("nasir@bins.com", "nedra@konopelski.name", "a275970d-3319-4a8c-a86f-dc8af2627c70")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "value": map[string]interface{}{"userName": "pearline@donnelly.us"}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaUser, result.Schemas[0])
+	require.Equal(ts.T(), user.ID, result.ID)
+	require.Equal(ts.T(), "a275970d-3319-4a8c-a86f-dc8af2627c70", result.ExternalID)
+	require.Equal(ts.T(), "pearline@donnelly.us", result.UserName)
+	require.True(ts.T(), result.Active)
+	require.Equal(ts.T(), "User", result.Meta.ResourceType)
+	require.NotNil(ts.T(), result.Meta.Created)
+	require.NotNil(ts.T(), result.Meta.LastModified)
+	require.Contains(ts.T(), result.Meta.Location, "/scim/v2/Users/"+result.ID)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserDisable() {
+	user := ts.createSCIMUserWithExternalID("giovani@marvinwhite.biz", "maxie_botsford@vonrussel.ca", "c2a92a74-436a-4444-bced-a311a4648d66")
+
+	require.True(ts.T(), user.Active)
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "active", "value": false},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaUser, result.Schemas[0])
+	require.Equal(ts.T(), user.ID, result.ID)
+	require.Equal(ts.T(), "c2a92a74-436a-4444-bced-a311a4648d66", result.ExternalID)
+	require.Equal(ts.T(), "giovani@marvinwhite.biz", result.UserName)
+	require.False(ts.T(), result.Active)
+	require.Equal(ts.T(), "User", result.Meta.ResourceType)
+	require.NotNil(ts.T(), result.Meta.Created)
+	require.NotNil(ts.T(), result.Meta.LastModified)
+	require.Contains(ts.T(), result.Meta.Location, "/scim/v2/Users/"+result.ID)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/"+user.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.False(ts.T(), getResult.Active)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserReplaceEmailPrimaryEqTrue() {
+	user := ts.createSCIMUserWithExternalID("pascale_morissette@pollich.co.uk", "nathanael_lubowitz@boganterry.co.uk", "5dd3dba4-0349-473c-b0bd-eef47b227587")
+
+	require.Len(ts.T(), user.Emails, 1)
+	require.Equal(ts.T(), "nathanael_lubowitz@boganterry.co.uk", user.Emails[0].Value)
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "emails[primary eq true].value", "value": "kaylie_dietrich@ward.co.uk"},
+			{"op": "replace", "value": map[string]interface{}{
+				"name.formatted":  "Delphine",
+				"name.familyName": "Vita",
+				"name.givenName":  "Joanie",
+				"active":          true,
+				"externalId":      "1be8b986-70fe-40b5-8f63-c33dbbad29d3",
+			}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaUser, result.Schemas[0])
+	require.Equal(ts.T(), user.ID, result.ID)
+	require.Equal(ts.T(), "1be8b986-70fe-40b5-8f63-c33dbbad29d3", result.ExternalID)
+	require.Equal(ts.T(), "pascale_morissette@pollich.co.uk", result.UserName)
+	require.NotNil(ts.T(), result.Name)
+	require.Equal(ts.T(), "Delphine", result.Name.Formatted)
+	require.Equal(ts.T(), "Vita", result.Name.FamilyName)
+	require.Equal(ts.T(), "Joanie", result.Name.GivenName)
+	require.True(ts.T(), result.Active)
+
+	require.Len(ts.T(), result.Emails, 1)
+	require.Equal(ts.T(), "kaylie_dietrich@ward.co.uk", result.Emails[0].Value)
+	require.True(ts.T(), bool(result.Emails[0].Primary))
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/"+user.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.Len(ts.T(), getResult.Emails, 1)
+	require.Equal(ts.T(), "kaylie_dietrich@ward.co.uk", getResult.Emails[0].Value, "Email update was not persisted - reproduces Azure SCIM test 21 failure")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserMultipleOperationsSameAttribute() {
+	user := ts.createSCIMUserWithExternalID("casandra_dare@keebler.co.uk", "raul_doyle@dach.co.uk", "48a46062-d787-474a-b60c-1a1c3c70e055")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "remove", "path": "externalId"},
+			{"op": "add", "value": map[string]interface{}{"externalId": "717d6020-1ca0-4e2b-ab59-158e10422645"}},
+			{"op": "replace", "value": map[string]interface{}{"externalId": "5f3db8ed-c327-4a10-bd0f-a0e93028e5d2"}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaUser, result.Schemas[0])
+	require.Equal(ts.T(), user.ID, result.ID)
+	require.Equal(ts.T(), "5f3db8ed-c327-4a10-bd0f-a0e93028e5d2", result.ExternalID)
+	require.Equal(ts.T(), "casandra_dare@keebler.co.uk", result.UserName)
+	require.True(ts.T(), result.Active)
+	require.Equal(ts.T(), "User", result.Meta.ResourceType)
+	require.NotNil(ts.T(), result.Meta.Created)
+	require.NotNil(ts.T(), result.Meta.LastModified)
+	require.Contains(ts.T(), result.Meta.Location, "/scim/v2/Users/"+result.ID)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserNotFound() {
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "active", "value": false},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/00000000-0000-0000-0000-000000000000", body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserReEnableUser() {
+	user := ts.createSCIMUserWithExternalID("disabled_user@test.com", "disabled_user@test.com", "disable-reenable-test")
+
+	disableBody := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "active", "value": false},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, disableBody)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var disabledResult SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&disabledResult))
+	require.False(ts.T(), disabledResult.Active)
+
+	enableBody := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "active", "value": true},
+		},
+	}
+
+	req = ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, enableBody)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var enabledResult SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enabledResult))
+	require.True(ts.T(), enabledResult.Active)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/"+user.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.True(ts.T(), getResult.Active)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserUpdateUserNameWithPath() {
+	user := ts.createSCIMUserWithExternalID("original_username@test.com", "original_username@test.com", "username-path-test")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "userName", "value": "new_username@test.com"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), "new_username@test.com", result.UserName)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/"+user.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.Equal(ts.T(), "new_username@test.com", getResult.UserName)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserInvalidActiveType() {
+	user := ts.createSCIMUser("invalid_active_test@test.com", "invalid_active_test@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "active", "value": "not_a_boolean"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidValue")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserInvalidUserNameType() {
+	user := ts.createSCIMUser("invalid_username_test@test.com", "invalid_username_test@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "userName", "value": 12345},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidValue")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserUnsupportedOp() {
+	user := ts.createSCIMUser("unsupported_op_test@test.com", "unsupported_op_test@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "copy", "path": "userName", "value": "new@test.com"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidSyntax")
+}
