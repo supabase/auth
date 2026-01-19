@@ -1678,3 +1678,319 @@ func (ts *SCIMTestSuite) TestSCIMPatchGroupRemoveAllMembers() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
 	require.Empty(ts.T(), getResult.Members)
 }
+
+func (ts *SCIMTestSuite) TestSCIMAuthMissingAuthorizationHeader() {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
+	req.Header.Set("Content-Type", "application/scim+json")
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusUnauthorized, w.Code)
+
+	var errorResp map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
+
+	schemas, ok := errorResp["schemas"].([]interface{})
+	require.True(ts.T(), ok, "SCIM error should have schemas field")
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), "urn:ietf:params:scim:api:messages:2.0:Error", schemas[0])
+
+	detail, ok := errorResp["detail"].(string)
+	require.True(ts.T(), ok, "SCIM error should have detail field")
+	require.NotEmpty(ts.T(), detail)
+
+	status, ok := errorResp["status"].(string)
+	require.True(ts.T(), ok, "SCIM error should have status field as string per RFC 7644")
+	require.Equal(ts.T(), "401", status)
+}
+
+func (ts *SCIMTestSuite) TestSCIMAuthInvalidBearerToken() {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
+	req.Header.Set("Authorization", "Bearer completely-invalid-token-xyz")
+	req.Header.Set("Content-Type", "application/scim+json")
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusUnauthorized, w.Code)
+
+	var errorResp map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
+
+	schemas, ok := errorResp["schemas"].([]interface{})
+	require.True(ts.T(), ok, "SCIM error should have schemas field")
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), "urn:ietf:params:scim:api:messages:2.0:Error", schemas[0])
+
+	detail, ok := errorResp["detail"].(string)
+	require.True(ts.T(), ok, "SCIM error should have detail field")
+	require.NotEmpty(ts.T(), detail)
+
+	status, ok := errorResp["status"].(string)
+	require.True(ts.T(), ok, "SCIM error should have status field as string per RFC 7644")
+	require.Equal(ts.T(), "401", status)
+}
+
+func (ts *SCIMTestSuite) TestSCIMAuthMalformedAuthorizationHeader() {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
+	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
+	req.Header.Set("Content-Type", "application/scim+json")
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusUnauthorized, w.Code)
+
+	var errorResp map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
+
+	schemas, ok := errorResp["schemas"].([]interface{})
+	require.True(ts.T(), ok, "SCIM error should have schemas field")
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), "urn:ietf:params:scim:api:messages:2.0:Error", schemas[0])
+
+	status, ok := errorResp["status"].(string)
+	require.True(ts.T(), ok, "SCIM error should have status field")
+	require.Equal(ts.T(), "401", status)
+}
+
+func (ts *SCIMTestSuite) TestSCIMAuthEmptyBearerToken() {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
+	req.Header.Set("Authorization", "Bearer ")
+	req.Header.Set("Content-Type", "application/scim+json")
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusUnauthorized, w.Code)
+
+	var errorResp map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
+
+	schemas, ok := errorResp["schemas"].([]interface{})
+	require.True(ts.T(), ok, "SCIM error should have schemas field")
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), "urn:ietf:params:scim:api:messages:2.0:Error", schemas[0])
+
+	status, ok := errorResp["status"].(string)
+	require.True(ts.T(), ok, "SCIM error should have status field")
+	require.Equal(ts.T(), "401", status)
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorInvalidFilterSyntax() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=invalid+++syntax", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidFilter")
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorInvalidFilterUnclosedQuote() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22unclosed", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidFilter")
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorInvalidFilterUnsupportedAttribute() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=unsupportedAttr+eq+%22value%22", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidFilter")
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorInvalidFilterGroupUnsupportedAttribute() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups?filter=invalidAttr+eq+%22value%22", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidFilter")
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorInvalidPatchOperationCopy() {
+	user := ts.createSCIMUser("patch_copy_op@test.com", "patch_copy_op@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "copy", "from": "userName", "path": "externalId"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidSyntax")
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorInvalidPatchOperationMove() {
+	user := ts.createSCIMUser("patch_move_op@test.com", "patch_move_op@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "move", "from": "userName", "path": "externalId"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidSyntax")
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorInvalidPatchMissingOperations() {
+	user := ts.createSCIMUser("patch_missing_ops@test.com", "patch_missing_ops@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorInvalidJSON() {
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/scim/v2/Users", bytes.NewBuffer([]byte("{invalid json")))
+	req.Header.Set("Authorization", "Bearer "+ts.SCIMToken)
+	req.Header.Set("Content-Type", "application/scim+json")
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidSyntax")
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorResponseFormatUsers() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/00000000-0000-0000-0000-000000000000", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusNotFound, w.Code)
+
+	var errorResp map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
+
+	schemas, ok := errorResp["schemas"].([]interface{})
+	require.True(ts.T(), ok, "SCIM error must have schemas field per RFC 7644")
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), "urn:ietf:params:scim:api:messages:2.0:Error", schemas[0])
+
+	detail, ok := errorResp["detail"].(string)
+	require.True(ts.T(), ok, "SCIM error must have detail field per RFC 7644")
+	require.NotEmpty(ts.T(), detail)
+
+	status, ok := errorResp["status"].(string)
+	require.True(ts.T(), ok, "SCIM error status must be a string per RFC 7644")
+	require.Equal(ts.T(), "404", status)
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorResponseFormatGroups() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/00000000-0000-0000-0000-000000000000", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusNotFound, w.Code)
+
+	var errorResp map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
+
+	schemas, ok := errorResp["schemas"].([]interface{})
+	require.True(ts.T(), ok, "SCIM error must have schemas field per RFC 7644")
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), "urn:ietf:params:scim:api:messages:2.0:Error", schemas[0])
+
+	detail, ok := errorResp["detail"].(string)
+	require.True(ts.T(), ok, "SCIM error must have detail field per RFC 7644")
+	require.NotEmpty(ts.T(), detail)
+
+	status, ok := errorResp["status"].(string)
+	require.True(ts.T(), ok, "SCIM error status must be a string per RFC 7644")
+	require.Equal(ts.T(), "404", status)
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorSchemaValidationMissingRequiredField() {
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaUser},
+		"emails": []map[string]interface{}{
+			{"value": "test@example.com", "primary": true},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Users", body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+
+	var errorResp map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
+
+	schemas, ok := errorResp["schemas"].([]interface{})
+	require.True(ts.T(), ok, "SCIM error should have schemas field")
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), "urn:ietf:params:scim:api:messages:2.0:Error", schemas[0])
+
+	detail, ok := errorResp["detail"].(string)
+	require.True(ts.T(), ok, "SCIM error should have detail field")
+	require.Contains(ts.T(), detail, "userName")
+
+	status, ok := errorResp["status"].(string)
+	require.True(ts.T(), ok, "SCIM error should have status field")
+	require.Equal(ts.T(), "400", status)
+
+	scimType, ok := errorResp["scimType"].(string)
+	require.True(ts.T(), ok, "SCIM error should have scimType field")
+	require.Equal(ts.T(), "invalidSyntax", scimType)
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorGroupSchemaValidationMissingDisplayName() {
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaGroup},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Groups", body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+
+	var errorResp map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
+
+	schemas, ok := errorResp["schemas"].([]interface{})
+	require.True(ts.T(), ok, "SCIM error should have schemas field")
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), "urn:ietf:params:scim:api:messages:2.0:Error", schemas[0])
+
+	detail, ok := errorResp["detail"].(string)
+	require.True(ts.T(), ok, "SCIM error should have detail field")
+	require.Contains(ts.T(), detail, "displayName")
+
+	status, ok := errorResp["status"].(string)
+	require.True(ts.T(), ok, "SCIM error should have status field")
+	require.Equal(ts.T(), "400", status)
+
+	scimType, ok := errorResp["scimType"].(string)
+	require.True(ts.T(), ok, "SCIM error should have scimType field")
+	require.Equal(ts.T(), "invalidSyntax", scimType)
+}
