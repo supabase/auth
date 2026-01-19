@@ -1193,3 +1193,131 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserUnsupportedOp() {
 	ts.API.handler.ServeHTTP(w, req)
 	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidSyntax")
 }
+
+func (ts *SCIMTestSuite) TestSCIMFilterGroupByDisplayNameExisting() {
+	created := ts.createSCIMGroupWithExternalID("YWWBHTHEMMLR", "94631638-0b6c-4b97-a369-aba35a454041")
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups?filter=displayName+eq+%22YWWBHTHEMMLR%22", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaListResponse, result.Schemas[0])
+	require.Equal(ts.T(), 1, result.TotalResults)
+	require.Equal(ts.T(), 1, result.StartIndex)
+	require.Equal(ts.T(), 1, result.ItemsPerPage)
+	require.Len(ts.T(), result.Resources, 1)
+
+	resource := result.Resources[0].(map[string]interface{})
+	require.Equal(ts.T(), created.ID, resource["id"])
+	require.Equal(ts.T(), "YWWBHTHEMMLR", resource["displayName"])
+	require.Equal(ts.T(), "94631638-0b6c-4b97-a369-aba35a454041", resource["externalId"])
+
+	schemas := resource["schemas"].([]interface{})
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaGroup, schemas[0])
+
+	meta := resource["meta"].(map[string]interface{})
+	require.Equal(ts.T(), "Group", meta["resourceType"])
+	require.NotEmpty(ts.T(), meta["created"])
+	require.NotEmpty(ts.T(), meta["lastModified"])
+	require.Contains(ts.T(), meta["location"], "/scim/v2/Groups/"+created.ID)
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterGroupByDisplayNameExcludingMembers() {
+	created := ts.createSCIMGroupWithExternalID("YWWBHTHEMMLR", "94631638-0b6c-4b97-a369-aba35a454041")
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups?excludedAttributes=members&filter=displayName+eq+%22YWWBHTHEMMLR%22", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaListResponse, result.Schemas[0])
+	require.Equal(ts.T(), 1, result.TotalResults)
+	require.Equal(ts.T(), 1, result.StartIndex)
+	require.Equal(ts.T(), 1, result.ItemsPerPage)
+	require.Len(ts.T(), result.Resources, 1)
+
+	resource := result.Resources[0].(map[string]interface{})
+	require.Equal(ts.T(), created.ID, resource["id"])
+	require.Equal(ts.T(), "YWWBHTHEMMLR", resource["displayName"])
+	require.Equal(ts.T(), "94631638-0b6c-4b97-a369-aba35a454041", resource["externalId"])
+
+	_, hasMembers := resource["members"]
+	require.False(ts.T(), hasMembers, "Response should exclude members attribute")
+
+	schemas := resource["schemas"].([]interface{})
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaGroup, schemas[0])
+
+	meta := resource["meta"].(map[string]interface{})
+	require.Equal(ts.T(), "Group", meta["resourceType"])
+	require.NotEmpty(ts.T(), meta["created"])
+	require.NotEmpty(ts.T(), meta["lastModified"])
+	require.Contains(ts.T(), meta["location"], "/scim/v2/Groups/"+created.ID)
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterGroupByDisplayNameNonExistent() {
+	ts.createSCIMGroup("SomeExistingGroup")
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups?filter=displayName+eq+%22nonexistente997dccbd8b7_EOKNVHIYLTCZ%22", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaListResponse, result.Schemas[0])
+	require.Equal(ts.T(), 0, result.TotalResults)
+	require.Equal(ts.T(), 1, result.StartIndex)
+	require.Equal(ts.T(), 0, result.ItemsPerPage)
+	require.Len(ts.T(), result.Resources, 0)
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterGroupByDisplayNameCaseInsensitive() {
+	created := ts.createSCIMGroupWithExternalID("YWWBHTHEMMLR", "94631638-0b6c-4b97-a369-aba35a454041")
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups?filter=displayName+eq+%22ywwbhthemmlr%22", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaListResponse, result.Schemas[0])
+	require.Equal(ts.T(), 1, result.TotalResults)
+	require.Equal(ts.T(), 1, result.StartIndex)
+	require.Equal(ts.T(), 1, result.ItemsPerPage)
+	require.Len(ts.T(), result.Resources, 1)
+
+	resource := result.Resources[0].(map[string]interface{})
+	require.Equal(ts.T(), created.ID, resource["id"])
+	require.Equal(ts.T(), "YWWBHTHEMMLR", resource["displayName"])
+	require.Equal(ts.T(), "94631638-0b6c-4b97-a369-aba35a454041", resource["externalId"])
+
+	schemas := resource["schemas"].([]interface{})
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaGroup, schemas[0])
+
+	meta := resource["meta"].(map[string]interface{})
+	require.Equal(ts.T(), "Group", meta["resourceType"])
+	require.NotEmpty(ts.T(), meta["created"])
+	require.NotEmpty(ts.T(), meta["lastModified"])
+	require.Contains(ts.T(), meta["location"], "/scim/v2/Groups/"+created.ID)
+}
