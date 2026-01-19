@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -1088,4 +1089,40 @@ func TestAMRClaimUnmarshal(t *testing.T) {
 		require.Equal(t, int64(200), claim[1].Timestamp)
 		require.Equal(t, "webauthn", claim[1].Provider, "provider should be preserved")
 	})
+}
+
+// TestAsRedirectURL tests that AsRedirectURL includes the Supabase Auth identifier
+func TestAsRedirectURL(t *testing.T) {
+	response := &AccessTokenResponse{
+		Token:        "test_access_token",
+		TokenType:    "bearer",
+		ExpiresIn:    3600,
+		ExpiresAt:    1234567890,
+		RefreshToken: "test_refresh_token",
+	}
+
+	extraParams := url.Values{}
+	extraParams.Set("provider_token", "provider_access_token")
+
+	redirectURL := response.AsRedirectURL("https://example.com/callback", extraParams)
+
+	// Parse the URL
+	u, err := url.Parse(redirectURL)
+	require.NoError(t, err)
+
+	// Parse the fragment
+	fragment, err := url.ParseQuery(u.Fragment)
+	require.NoError(t, err)
+
+	// Verify all expected parameters are present
+	require.Equal(t, "test_access_token", fragment.Get("access_token"))
+	require.Equal(t, "bearer", fragment.Get("token_type"))
+	require.Equal(t, "3600", fragment.Get("expires_in"))
+	require.Equal(t, "1234567890", fragment.Get("expires_at"))
+	require.Equal(t, "test_refresh_token", fragment.Get("refresh_token"))
+	require.Equal(t, "provider_access_token", fragment.Get("provider_token"))
+
+	// Verify Supabase Auth identifier is present
+	require.Contains(t, fragment, "sb", "Fragment should contain Supabase Auth identifier 'sb'")
+	require.Equal(t, "", fragment.Get("sb"), "Supabase Auth identifier should have empty value")
 }

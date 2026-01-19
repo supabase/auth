@@ -145,6 +145,8 @@ func (r *AccessTokenResponse) AsRedirectURL(redirectURL string, extraParams url.
 	extraParams.Set("expires_in", strconv.Itoa(r.ExpiresIn))
 	extraParams.Set("expires_at", strconv.FormatInt(r.ExpiresAt, 10))
 	extraParams.Set("refresh_token", r.RefreshToken)
+	// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
+	extraParams.Set("sb", "")
 
 	return redirectURL + "#" + extraParams.Encode()
 }
