@@ -685,3 +685,94 @@ func (ts *SCIMTestSuite) TestSCIMDeleteUserTwice() {
 	ts.API.handler.ServeHTTP(w, req)
 	ts.assertSCIMError(w, http.StatusNotFound)
 }
+
+func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameExisting() {
+	created := ts.createSCIMUserWithExternalID("kenny.sporer@gislason.com", "aliyah@grady.name", "34aee196-7651-4817-a6d8-8a70336466cb")
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22kenny.sporer%40gislason.com%22", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaListResponse, result.Schemas[0])
+	require.Equal(ts.T(), 1, result.TotalResults)
+	require.Equal(ts.T(), 1, result.StartIndex)
+	require.Equal(ts.T(), 1, result.ItemsPerPage)
+	require.Len(ts.T(), result.Resources, 1)
+
+	resource := result.Resources[0].(map[string]interface{})
+	require.Equal(ts.T(), created.ID, resource["id"])
+	require.Equal(ts.T(), "kenny.sporer@gislason.com", resource["userName"])
+	require.Equal(ts.T(), "34aee196-7651-4817-a6d8-8a70336466cb", resource["externalId"])
+	require.Equal(ts.T(), true, resource["active"])
+
+	schemas := resource["schemas"].([]interface{})
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaUser, schemas[0])
+
+	meta := resource["meta"].(map[string]interface{})
+	require.Equal(ts.T(), "User", meta["resourceType"])
+	require.NotEmpty(ts.T(), meta["created"])
+	require.NotEmpty(ts.T(), meta["lastModified"])
+	require.Contains(ts.T(), meta["location"], "/scim/v2/Users/"+created.ID)
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameNonExistent() {
+	ts.createSCIMUser("someuser@example.com", "someuser@example.com")
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22nonexistent%40example.com%22", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaListResponse, result.Schemas[0])
+	require.Equal(ts.T(), 0, result.TotalResults)
+	require.Equal(ts.T(), 1, result.StartIndex)
+	require.Equal(ts.T(), 0, result.ItemsPerPage)
+	require.Len(ts.T(), result.Resources, 0)
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameCaseInsensitive() {
+	created := ts.createSCIMUserWithExternalID("kenny.sporer@gislason.com", "aliyah@grady.name", "case-test-ext-id")
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22KENNY.SPORER%40GISLASON.COM%22", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaListResponse, result.Schemas[0])
+	require.Equal(ts.T(), 1, result.TotalResults)
+	require.Equal(ts.T(), 1, result.StartIndex)
+	require.Equal(ts.T(), 1, result.ItemsPerPage)
+	require.Len(ts.T(), result.Resources, 1)
+
+	resource := result.Resources[0].(map[string]interface{})
+	require.Equal(ts.T(), created.ID, resource["id"])
+	require.Equal(ts.T(), "kenny.sporer@gislason.com", resource["userName"])
+	require.Equal(ts.T(), true, resource["active"])
+
+	schemas := resource["schemas"].([]interface{})
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaUser, schemas[0])
+
+	meta := resource["meta"].(map[string]interface{})
+	require.Equal(ts.T(), "User", meta["resourceType"])
+	require.NotEmpty(ts.T(), meta["created"])
+	require.NotEmpty(ts.T(), meta["lastModified"])
+	require.Contains(ts.T(), meta["location"], "/scim/v2/Users/"+created.ID)
+}
