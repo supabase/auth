@@ -2,7 +2,6 @@ package indexworker
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gobuffalo/pop/v6"
-	pkgerrors "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
 )
@@ -35,24 +33,21 @@ const (
 // Returns an error either from index creation failure (partial or complete) or if the advisory lock
 // could not be acquired.
 func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *logrus.Entry) error {
+	u, err := url.Parse(config.DB.URL)
+	if err != nil {
+		le.WithError(err).Fatal("Error parsing db connection url")
+	}
+
 	if config.DB.Driver == "" && config.DB.URL != "" {
-		u, err := url.Parse(config.DB.URL)
-		if err != nil {
-			le.Fatalf("Error parsing db connection url: %+v", err)
-		}
 		config.DB.Driver = u.Scheme
 	}
 
-	u, _ := url.Parse(config.DB.URL)
-	processedUrl := config.DB.URL
-	if len(u.Query()) != 0 {
-		processedUrl = fmt.Sprintf("%s&application_name=auth_index_worker", processedUrl)
-	} else {
-		processedUrl = fmt.Sprintf("%s?application_name=auth_index_worker", processedUrl)
-	}
+	q := u.Query()
+	q.Add("application_name", "auth_indexworker")
+	u.RawQuery = q.Encode()
 	deets := &pop.ConnectionDetails{
 		Dialect: config.DB.Driver,
-		URL:     processedUrl,
+		URL:     u.String(),
 	}
 	deets.Options = map[string]string{
 		"Namespace": config.DB.Namespace,
@@ -109,28 +104,7 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 		}
 	}()
 
-	// Ensure either auth_trgm or pg_trgm extension is installed
-	extName, err := ensureTrgmExtension(db, config.DB.Namespace, le)
-	if err != nil {
-		le.WithFields(logrus.Fields{
-			"outcome": OutcomeFailure,
-			"code":    "trgm_extension_unavailable",
-		}).WithError(err).Error("Failed to ensure trgm extension is available")
-		return err
-	}
-
-	// Look up which schema the trgm extension is installed in
-	trgmSchema, err := getTrgmExtensionSchema(db, extName)
-	if err != nil {
-		le.WithFields(logrus.Fields{
-			"outcome":   OutcomeFailure,
-			"code":      "extension_schema_not_found",
-			"extension": extName,
-		}).WithError(err).Error("Failed to find extension schema")
-		return ErrExtensionNotFound
-	}
-
-	indexes := getUsersIndexes(config.DB.Namespace, trgmSchema)
+	indexes := getUsersIndexes(config.DB.Namespace)
 	indexNames := make([]string, len(indexes))
 	for i, idx := range indexes {
 		indexNames[i] = idx.name
@@ -240,135 +214,8 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 	return nil
 }
 
-// getTrgmExtensionSchema looks up which schema the specified trgm extension is installed in
-func getTrgmExtensionSchema(db *pop.Connection, extName string) (string, error) {
-	var schema string
-	query := `
-		SELECT extnamespace::regnamespace::text AS schema_name
-		FROM pg_extension
-		WHERE extname = $1
-		LIMIT 1
-	`
-
-	if err := db.RawQuery(query, extName).First(&schema); err != nil {
-		return "", fmt.Errorf("failed to find %s extension schema: %w", extName, err)
-	}
-
-	return schema, nil
-}
-
-// extensionStatus represents the status of an extension from pg_available_extensions
-type extensionStatus struct {
-	Available bool
-	Installed bool
-}
-
-// getExtensionStatus checks if an extension is available and/or installed
-func getExtensionStatus(db *pop.Connection, extName string) (extensionStatus, error) {
-	var result struct {
-		Name             *string `db:"name"`
-		InstalledVersion *string `db:"installed_version"`
-	}
-
-	query := `
-		SELECT name, installed_version
-		FROM pg_available_extensions
-		WHERE name = $1
-	`
-
-	if err := db.RawQuery(query, extName).First(&result); err != nil {
-		// If no rows returned, extension is not available
-		if pkgerrors.Cause(err) == sql.ErrNoRows {
-			return extensionStatus{Available: false, Installed: false}, nil
-		}
-		return extensionStatus{}, fmt.Errorf("failed to check extension status for %s: %w", extName, err)
-	}
-
-	return extensionStatus{
-		Available: result.Name != nil,
-		Installed: result.InstalledVersion != nil,
-	}, nil
-}
-
-// installExtension installs the specified extension in the provided schema
-func installExtension(db *pop.Connection, extName string, schema string) error {
-	query := fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s SCHEMA %s", extName, schema)
-	if err := db.RawQuery(query).Exec(); err != nil {
-		return fmt.Errorf("failed to install extension %s in schema %s: %w", extName, schema, err)
-	}
-	return nil
-}
-
-// ensureTrgmExtension ensures that either auth_trgm or pg_trgm extension is installed
-// It prefers auth_trgm if available, otherwise falls back to pg_trgm
-// Returns the name of the installed extension
-func ensureTrgmExtension(db *pop.Connection, authSchema string, le *logrus.Entry) (string, error) {
-	authTrgmStatus, err := getExtensionStatus(db, "auth_trgm")
-	if err != nil {
-		return "", fmt.Errorf("failed to check auth_trgm extension status: %w", err)
-	}
-
-	if authTrgmStatus.Available {
-		if !authTrgmStatus.Installed {
-			le.Debug("auth_trgm extension is available but not installed, installing")
-
-			if err := installExtension(db, "auth_trgm", authSchema); err != nil {
-				le.WithFields(logrus.Fields{
-					"outcome":   OutcomeFailure,
-					"code":      "extension_install_failed",
-					"extension": "auth_trgm",
-				}).WithError(err).Error("Failed to install auth_trgm extension")
-
-				return "", fmt.Errorf("auth_trgm extension is available but failed to install: %w", err)
-			}
-
-			le.WithFields(logrus.Fields{
-				"code":      "extension_installed",
-				"extension": "auth_trgm",
-			}).Info("Successfully installed auth_trgm extension")
-		} else {
-			le.Debug("auth_trgm extension is already installed")
-		}
-
-		return "auth_trgm", nil
-	}
-
-	le.Debug("auth_trgm extension is not available, checking pg_trgm")
-
-	pgTrgmStatus, err := getExtensionStatus(db, "pg_trgm")
-	if err != nil {
-		return "", fmt.Errorf("failed to check pg_trgm extension status: %w", err)
-	}
-
-	if !pgTrgmStatus.Available {
-		return "", fmt.Errorf("neither auth_trgm nor pg_trgm extensions are available")
-	}
-
-	if !pgTrgmStatus.Installed {
-		le.Debug("pg_trgm extension is available but not installed, installing")
-
-		if err := installExtension(db, "pg_trgm", "pg_catalog"); err != nil {
-			le.WithFields(logrus.Fields{
-				"code":      "extension_install_failed",
-				"extension": "pg_trgm",
-			}).WithError(err).Error("Failed to install pg_trgm extension")
-
-			return "", fmt.Errorf("pg_trgm extension is available but failed to install: %w", err)
-		}
-
-		le.WithFields(logrus.Fields{
-			"code":      "extension_installed",
-			"extension": "pg_trgm",
-		}).Info("Successfully installed pg_trgm extension")
-	} else {
-		le.Debug("pg_trgm extension is already installed")
-	}
-
-	return "pg_trgm", nil
-}
-
 // getUsersIndexes returns the list of indexes to create on the users table
-func getUsersIndexes(namespace, trgmSchema string) []struct {
+func getUsersIndexes(namespace string) []struct {
 	name  string
 	query string
 } {
@@ -378,16 +225,11 @@ func getUsersIndexes(namespace, trgmSchema string) []struct {
 		name  string
 		query string
 	}{
-		// for exact-match queries, sorting, and LIKE '%term%' (trigram) searches on email
+		// for exact-match queries, sorting, and prefix searches on email (e.g., email LIKE 'term%')
 		{
 			name: "idx_users_email",
 			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email
 				ON %q.users USING btree (email);`, namespace),
-		},
-		{
-			name: "idx_users_email_trgm",
-			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email_trgm
-				ON %q.users USING gin (email %s.gin_trgm_ops);`, namespace, trgmSchema),
 		},
 		// for range queries and sorting on created_at and last_sign_in_at
 		{
@@ -400,12 +242,12 @@ func getUsersIndexes(namespace, trgmSchema string) []struct {
 			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_last_sign_in_at_desc
 				ON %q.users (last_sign_in_at DESC);`, namespace),
 		},
-		// trigram indexes on name field in raw_user_meta_data JSONB - enables fast LIKE '%term%' searches
+		// for exact-match, sorting, and prefix searches on raw_user_meta_data->>'name'
 		{
-			name: "idx_users_name_trgm",
-			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_name_trgm
-				ON %q.users USING gin ((raw_user_meta_data->>'name') %s.gin_trgm_ops)
-				WHERE raw_user_meta_data->>'name' IS NOT NULL;`, namespace, trgmSchema),
+			name: "idx_users_name",
+			query: fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_name
+				ON %q.users USING btree ((raw_user_meta_data->>'name'))
+				WHERE (raw_user_meta_data->>'name') IS NOT NULL;`, namespace),
 		},
 	}
 }
