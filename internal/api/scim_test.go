@@ -1051,6 +1051,115 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserInvalidActiveType() {
 	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidValue")
 }
 
+func (ts *SCIMTestSuite) TestSCIMCreateGroupAzure() {
+	body := map[string]interface{}{
+		"schemas":     []string{SCIMSchemaGroup},
+		"displayName": "QGKWKSWJWHXE",
+		"externalId":  "7dae2322-0f90-42d2-97a1-b8268d2993d3",
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Groups", body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusCreated, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaGroup, result.Schemas[0])
+	require.NotEmpty(ts.T(), result.ID)
+	require.Equal(ts.T(), "7dae2322-0f90-42d2-97a1-b8268d2993d3", result.ExternalID)
+	require.Equal(ts.T(), "QGKWKSWJWHXE", result.DisplayName)
+	require.Equal(ts.T(), "Group", result.Meta.ResourceType)
+	require.NotNil(ts.T(), result.Meta.Created)
+	require.NotNil(ts.T(), result.Meta.LastModified)
+	require.Contains(ts.T(), result.Meta.Location, "/scim/v2/Groups/"+result.ID)
+}
+
+func (ts *SCIMTestSuite) TestSCIMCreateGroupDuplicateExternalID() {
+	body := map[string]interface{}{
+		"schemas":     []string{SCIMSchemaGroup},
+		"displayName": "SMVGZDBVFFRO",
+		"externalId":  "e164812e-d012-4cc3-85dc-9ceb13765d62",
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Groups", body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusCreated, w.Code)
+
+	body["displayName"] = "DIFFERENT_NAME"
+	req = ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Groups", body)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusConflict, "uniqueness")
+}
+
+func (ts *SCIMTestSuite) TestSCIMDeleteGroupReturns204() {
+	group := ts.createSCIMGroupWithExternalID("TESTGROUP", "delete-test-ext-id")
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Groups/"+group.ID, nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+	require.Empty(ts.T(), w.Body.String())
+}
+
+func (ts *SCIMTestSuite) TestSCIMDeleteNonExistentGroup() {
+	nonExistentID := "a0f1d64e-cf53-45cf-8b4b-ea0d7b9ada90"
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Groups/"+nonExistentID, nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMDeleteGroupTwice() {
+	group := ts.createSCIMGroupWithExternalID("YLKGXWFUUUOH", "69565956-96c5-4951-910d-951bba6d2533")
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Groups/"+group.ID, nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	req = ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Groups/"+group.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMGetGroupByIdExcludingMembers() {
+	group := ts.createSCIMGroupWithExternalID("YWWBHTHEMMLR", "94631638-0b6c-4b97-a369-aba35a454041")
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID+"?excludedAttributes=members", nil)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaGroup, result.Schemas[0])
+	require.Equal(ts.T(), group.ID, result.ID)
+	require.Equal(ts.T(), "94631638-0b6c-4b97-a369-aba35a454041", result.ExternalID)
+	require.Equal(ts.T(), "YWWBHTHEMMLR", result.DisplayName)
+	require.Equal(ts.T(), "Group", result.Meta.ResourceType)
+	require.NotNil(ts.T(), result.Meta.Created)
+	require.NotNil(ts.T(), result.Meta.LastModified)
+	require.Contains(ts.T(), result.Meta.Location, "/scim/v2/Groups/"+result.ID)
+}
+
 func (ts *SCIMTestSuite) TestSCIMPatchUserInvalidUserNameType() {
 	user := ts.createSCIMUser("invalid_username_test@test.com", "invalid_username_test@test.com")
 
