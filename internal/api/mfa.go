@@ -173,7 +173,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Phone number required to enroll Phone factor")
 	}
 
-	phone, err := validatePhone(params.Phone)
+	phone, err := validatePhone(params.Phone, config)
 	if err != nil {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
 	}

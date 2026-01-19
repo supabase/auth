@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
@@ -24,10 +25,13 @@ const (
 	phoneReauthenticationOtp = "reauthentication"
 )
 
-func validatePhone(phone string) (string, error) {
+func validatePhone(phone string, config *conf.GlobalConfiguration) (string, error) {
 	phone = formatPhoneNumber(phone)
 	if isValid := validateE164Format(phone); !isValid {
 		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
+	}
+	if config.Sms.IsBlacklisted(phone) {
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Phone number is blacklisted")
 	}
 	return phone, nil
 }

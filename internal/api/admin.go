@@ -158,7 +158,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Phone != "" {
-		params.Phone, err = validatePhone(params.Phone)
+		params.Phone, err = validatePhone(params.Phone, config)
 		if err != nil {
 			return err
 		}
@@ -357,7 +357,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Phone != "" {
-		params.Phone, err = validatePhone(params.Phone)
+		params.Phone, err = validatePhone(params.Phone, config)
 		if err != nil {
 			return err
 		}
@@ -624,7 +624,7 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 		}
 
 		if params.Phone != "" && factor.IsPhoneFactor() {
-			phone, err := validatePhone(params.Phone)
+			phone, err := validatePhone(params.Phone, config)
 			if err != nil {
 				return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
 			}

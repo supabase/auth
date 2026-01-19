@@ -39,7 +39,7 @@ func (a *API) validateUserUpdateParams(ctx context.Context, p *UserUpdateParams)
 	}
 
 	if p.Phone != "" {
-		if p.Phone, err = validatePhone(p.Phone); err != nil {
+		if p.Phone, err = validatePhone(p.Phone, config); err != nil {
 			return err
 		}
 		if p.Channel == "" {

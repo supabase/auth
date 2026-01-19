@@ -66,7 +66,7 @@ func (p *VerifyParams) Validate(r *http.Request, a *API) error {
 		}
 		if p.Token != "" {
 			if isPhoneOtpVerification(p) {
-				p.Phone, err = validatePhone(p.Phone)
+				p.Phone, err = validatePhone(p.Phone, a.config)
 				if err != nil {
 					return err
 				}

@@ -50,7 +50,7 @@ func (p *ResendConfirmationParams) Validate(a *API) error {
 		if !config.External.Phone.Enabled {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
 		}
-		p.Phone, err = validatePhone(p.Phone)
+		p.Phone, err = validatePhone(p.Phone, config)
 		if err != nil {
 			return err
 		}

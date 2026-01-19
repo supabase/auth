@@ -67,6 +67,16 @@ func (ts *PhoneTestSuite) TestValidateE164Format() {
 	assert.Equal(ts.T(), false, isValid)
 }
 
+func (ts *PhoneTestSuite) TestValidatePhoneBlacklist() {
+	ts.Config.Sms.Blacklist = []string{"1234567890"}
+	_, err := validatePhone("1234567890", ts.Config)
+	require.Error(ts.T(), err)
+	require.Contains(ts.T(), err.Error(), "Phone number is blacklisted")
+
+	_, err = validatePhone("9876543210", ts.Config)
+	require.NoError(ts.T(), err)
+}
+
 func (ts *PhoneTestSuite) TestFormatPhoneNumber() {
 	actual := formatPhoneNumber("+1 23456789 ")
 	assert.Equal(ts.T(), "123456789", actual)

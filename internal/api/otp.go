@@ -49,7 +49,7 @@ func (p *OtpParams) Validate() error {
 
 func (p *SmsParams) Validate(config *conf.GlobalConfiguration) error {
 	var err error
-	p.Phone, err = validatePhone(p.Phone)
+	p.Phone, err = validatePhone(p.Phone, config)
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error)
 			}
 			_, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 		} else if params.Phone != "" {
-			params.Phone, err = validatePhone(params.Phone)
+			params.Phone, err = validatePhone(params.Phone, a.config)
 			if err != nil {
 				return false, err
 			}

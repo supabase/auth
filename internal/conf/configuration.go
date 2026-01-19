@@ -605,6 +605,7 @@ type SmsProviderConfiguration struct {
 	TestOTP           map[string]string  `json:"test_otp" split_words:"true"`
 	TestOTPValidUntil Time               `json:"test_otp_valid_until" split_words:"true"`
 	SMSTemplate       *template.Template `json:"-"`
+	Blacklist         []string           `json:"blacklist" split_words:"true"`
 
 	Twilio       TwilioProviderConfiguration       `json:"twilio"`
 	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify" split_words:"true"`
@@ -620,6 +621,15 @@ func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (stri
 	}
 
 	return "", false
+}
+
+func (c *SmsProviderConfiguration) IsBlacklisted(phone string) bool {
+	for _, blacklisted := range c.Blacklist {
+		if blacklisted == phone {
+			return true
+		}
+	}
+	return false
 }
 
 type TwilioProviderConfiguration struct {
