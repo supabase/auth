@@ -62,7 +62,7 @@ const (
 	ErrorCodeSSOProviderNotFound               ErrorCode = "sso_provider_not_found"
 	ErrorCodeSSOProviderDisabled               ErrorCode = "sso_provider_disabled"
 	ErrorCodeSCIMDisabled                      ErrorCode = "scim_disabled"
-	ErrorCodeSCIMTokenInvalid                  ErrorCode = "scim_token_invalid"
+	ErrorCodeSCIMTokenInvalid                  ErrorCode = "scim_token_invalid" //#nosec G101 -- Not a secret value.
 	ErrorCodeSCIMUserNotFound                  ErrorCode = "scim_user_not_found"
 	ErrorCodeSCIMUserAlreadyExists             ErrorCode = "scim_user_already_exists"
 	ErrorCodeSCIMGroupNotFound                 ErrorCode = "scim_group_not_found"
