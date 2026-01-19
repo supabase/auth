@@ -15,6 +15,45 @@ import (
 	"github.com/supabase/auth/internal/models"
 )
 
+type scimTestUser struct {
+	UserName   string
+	Email      string
+	GivenName  string
+	FamilyName string
+	Formatted  string
+	ExternalID string
+}
+
+type scimTestGroup struct {
+	DisplayName string
+	ExternalID  string
+}
+
+var (
+	testUser1  = scimTestUser{UserName: "user1@acme.com", Email: "user1@acme.com"}
+	testUser2  = scimTestUser{UserName: "user2@acme.com", Email: "user2@acme.com", GivenName: "Test", FamilyName: "User", Formatted: "Test User"}
+	testUser3  = scimTestUser{UserName: "user3@acme.com", Email: "user3@acme.com", ExternalID: "ext-001"}
+	testUser4  = scimTestUser{UserName: "user4@acme.com", Email: "user4@acme.com"}
+	testUser5  = scimTestUser{UserName: "user5@acme.com", Email: "user5@acme.com"}
+	testUser6  = scimTestUser{UserName: "user6@example.com", Email: "user6@example.com"}
+	testUser7  = scimTestUser{UserName: "user7@example.com", Email: "user7@example.com"}
+	testUser8  = scimTestUser{UserName: "user8@example.com", Email: "user8@example.com"}
+	testUser9  = scimTestUser{UserName: "user9@acme.com", Email: "user9@acme.com", GivenName: "Jane", FamilyName: "Doe", Formatted: "Jane Doe", ExternalID: "ext-002"}
+	testUser10 = scimTestUser{UserName: "user10@acme.com", Email: "user10@acme.com", GivenName: "John", FamilyName: "Smith", Formatted: "John Smith", ExternalID: "ext-003"}
+	testUser11 = scimTestUser{UserName: "user11@acme.com", Email: "user11@acme.com", ExternalID: "ext-004"}
+	testUser12 = scimTestUser{UserName: "user12@acme.com", Email: "user12@acme.com", ExternalID: "ext-005"}
+	testUser13 = scimTestUser{UserName: "user13@example.com", Email: "user13@example.com", ExternalID: "ext-006"}
+	testUser14 = scimTestUser{UserName: "user14@acme.com", Email: "user14@acme.com", ExternalID: "ext-007"}
+	testUser15 = scimTestUser{UserName: "user15@acme.com", Email: "user15@acme.com", ExternalID: "ext-008"}
+	testUser16 = scimTestUser{UserName: "user16@example.com", Email: "user16@example.com", ExternalID: "ext-009"}
+
+	testGroup1 = scimTestGroup{DisplayName: "Engineering", ExternalID: "grp-001"}
+	testGroup2 = scimTestGroup{DisplayName: "Sales", ExternalID: "grp-002"}
+	testGroup3 = scimTestGroup{DisplayName: "Marketing", ExternalID: "grp-003"}
+	testGroup4 = scimTestGroup{DisplayName: "Platform", ExternalID: "grp-004"}
+	testGroup5 = scimTestGroup{DisplayName: "Support", ExternalID: "grp-005"}
+)
+
 type SCIMTestSuite struct {
 	suite.Suite
 	API         *API
@@ -276,20 +315,20 @@ func (ts *SCIMTestSuite) TestSCIMEmptyGroupList() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMCreateUser() {
-	user := ts.createSCIMUser("testuser", "testuser@example.com")
+	user := ts.createSCIMUser(testUser1.UserName, testUser1.Email)
 
 	require.NotEmpty(ts.T(), user.ID)
-	require.Equal(ts.T(), "testuser", user.UserName)
+	require.Equal(ts.T(), testUser1.UserName, user.UserName)
 	require.True(ts.T(), user.Active)
 	require.Len(ts.T(), user.Emails, 1)
-	require.Equal(ts.T(), "testuser@example.com", user.Emails[0].Value)
+	require.Equal(ts.T(), testUser1.Email, user.Emails[0].Value)
 }
 
 func (ts *SCIMTestSuite) TestSCIMCreateGroup() {
-	group := ts.createSCIMGroup("Test Group")
+	group := ts.createSCIMGroup(testGroup1.DisplayName)
 
 	require.NotEmpty(ts.T(), group.ID)
-	require.Equal(ts.T(), "Test Group", group.DisplayName)
+	require.Equal(ts.T(), testGroup1.DisplayName, group.DisplayName)
 }
 
 func (ts *SCIMTestSuite) TestSCIMServiceProviderConfig() {
@@ -361,26 +400,26 @@ func (ts *SCIMTestSuite) TestSCIMGetGroupNotFound() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMCreateUserWithName() {
-	user := ts.createSCIMUserWithName("jdoe", "john.doe@example.com", "John", "Doe")
+	user := ts.createSCIMUserWithName(testUser2.UserName, testUser2.Email, testUser2.GivenName, testUser2.FamilyName)
 
 	require.NotEmpty(ts.T(), user.ID)
-	require.Equal(ts.T(), "jdoe", user.UserName)
+	require.Equal(ts.T(), testUser2.UserName, user.UserName)
 	require.NotNil(ts.T(), user.Name)
-	require.Equal(ts.T(), "John", user.Name.GivenName)
-	require.Equal(ts.T(), "Doe", user.Name.FamilyName)
-	require.Equal(ts.T(), "John Doe", user.Name.Formatted)
+	require.Equal(ts.T(), testUser2.GivenName, user.Name.GivenName)
+	require.Equal(ts.T(), testUser2.FamilyName, user.Name.FamilyName)
+	require.Equal(ts.T(), testUser2.Formatted, user.Name.Formatted)
 }
 
 func (ts *SCIMTestSuite) TestSCIMCreateUserWithExternalID() {
-	user := ts.createSCIMUserWithExternalID("extuser", "ext@example.com", "ext-12345")
+	user := ts.createSCIMUserWithExternalID(testUser3.UserName, testUser3.Email, testUser3.ExternalID)
 
 	require.NotEmpty(ts.T(), user.ID)
-	require.Equal(ts.T(), "extuser", user.UserName)
-	require.Equal(ts.T(), "ext-12345", user.ExternalID)
+	require.Equal(ts.T(), testUser3.UserName, user.UserName)
+	require.Equal(ts.T(), testUser3.ExternalID, user.ExternalID)
 }
 
 func (ts *SCIMTestSuite) TestSCIMGetUser() {
-	created := ts.createSCIMUser("getuser", "getuser@example.com")
+	created := ts.createSCIMUser(testUser4.UserName, testUser4.Email)
 
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/"+created.ID, nil)
 	w := httptest.NewRecorder()
@@ -392,11 +431,11 @@ func (ts *SCIMTestSuite) TestSCIMGetUser() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
 
 	require.Equal(ts.T(), created.ID, result.ID)
-	require.Equal(ts.T(), "getuser", result.UserName)
+	require.Equal(ts.T(), testUser4.UserName, result.UserName)
 }
 
 func (ts *SCIMTestSuite) TestSCIMGetGroup() {
-	created := ts.createSCIMGroup("Get Group")
+	created := ts.createSCIMGroup(testGroup2.DisplayName)
 
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+created.ID, nil)
 	w := httptest.NewRecorder()
@@ -408,13 +447,13 @@ func (ts *SCIMTestSuite) TestSCIMGetGroup() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
 
 	require.Equal(ts.T(), created.ID, result.ID)
-	require.Equal(ts.T(), "Get Group", result.DisplayName)
+	require.Equal(ts.T(), testGroup2.DisplayName, result.DisplayName)
 }
 
 func (ts *SCIMTestSuite) TestSCIMListUsersWithData() {
-	ts.createSCIMUser("user1", "user1@example.com")
-	ts.createSCIMUser("user2", "user2@example.com")
-	ts.createSCIMUser("user3", "user3@example.com")
+	ts.createSCIMUser(testUser1.UserName, testUser1.Email)
+	ts.createSCIMUser(testUser2.UserName, testUser2.Email)
+	ts.createSCIMUser(testUser3.UserName, testUser3.Email)
 
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users", nil)
 	w := httptest.NewRecorder()
@@ -426,8 +465,8 @@ func (ts *SCIMTestSuite) TestSCIMListUsersWithData() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMListGroupsWithData() {
-	ts.createSCIMGroup("Group 1")
-	ts.createSCIMGroup("Group 2")
+	ts.createSCIMGroup(testGroup1.DisplayName)
+	ts.createSCIMGroup(testGroup3.DisplayName)
 
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups", nil)
 	w := httptest.NewRecorder()
@@ -439,7 +478,7 @@ func (ts *SCIMTestSuite) TestSCIMListGroupsWithData() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMDeleteUser() {
-	user := ts.createSCIMUser("deleteuser", "deleteuser@example.com")
+	user := ts.createSCIMUser(testUser5.UserName, testUser5.Email)
 
 	require.True(ts.T(), user.Active)
 
@@ -467,7 +506,7 @@ func (ts *SCIMTestSuite) TestSCIMDeleteUser() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMDeleteGroup() {
-	group := ts.createSCIMGroup("Delete Group")
+	group := ts.createSCIMGroup(testGroup4.DisplayName)
 
 	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Groups/"+group.ID, nil)
 	w := httptest.NewRecorder()
@@ -483,13 +522,13 @@ func (ts *SCIMTestSuite) TestSCIMDeleteGroup() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMCreateGroupWithMembers() {
-	user1 := ts.createSCIMUser("member1", "member1@example.com")
-	user2 := ts.createSCIMUser("member2", "member2@example.com")
+	user1 := ts.createSCIMUser(testUser6.UserName, testUser6.Email)
+	user2 := ts.createSCIMUser(testUser7.UserName, testUser7.Email)
 
-	group := ts.createSCIMGroupWithMembers("Team Group", []string{user1.ID, user2.ID})
+	group := ts.createSCIMGroupWithMembers(testGroup5.DisplayName, []string{user1.ID, user2.ID})
 
 	require.NotEmpty(ts.T(), group.ID)
-	require.Equal(ts.T(), "Team Group", group.DisplayName)
+	require.Equal(ts.T(), testGroup5.DisplayName, group.DisplayName)
 	require.Len(ts.T(), group.Members, 2)
 }
 
@@ -531,7 +570,7 @@ func (ts *SCIMTestSuite) TestSCIMCreateGroupMissingDisplayName() {
 
 func (ts *SCIMTestSuite) TestSCIMUserPagination() {
 	for i := 0; i < 5; i++ {
-		ts.createSCIMUser(fmt.Sprintf("pageuser%d", i), fmt.Sprintf("pageuser%d@example.com", i))
+		ts.createSCIMUser(fmt.Sprintf("pageuser%d@acme.com", i), fmt.Sprintf("pageuser%d@acme.com", i))
 	}
 
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?startIndex=1&count=2", nil)
@@ -576,15 +615,15 @@ func (ts *SCIMTestSuite) assertSCIMErrorWithType(w *httptest.ResponseRecorder, e
 func (ts *SCIMTestSuite) TestSCIMCreateUserAzure() {
 	body := map[string]interface{}{
 		"schemas":    []string{SCIMSchemaUser},
-		"userName":   "maiya@anderson.com",
-		"externalId": "543b2f37-3363-4d69-8af7-5fc5dc1fc3f8",
+		"userName":   testUser9.UserName,
+		"externalId": testUser9.ExternalID,
 		"name": map[string]interface{}{
-			"formatted":  "Kenya",
-			"familyName": "Lurline",
-			"givenName":  "Ernestina",
+			"formatted":  testUser9.Formatted,
+			"familyName": testUser9.FamilyName,
+			"givenName":  testUser9.GivenName,
 		},
 		"emails": []map[string]interface{}{
-			{"primary": true, "value": "kira_koelpin@thiel.ca"},
+			{"primary": true, "value": testUser9.Email},
 		},
 		"active": true,
 	}
@@ -602,14 +641,14 @@ func (ts *SCIMTestSuite) TestSCIMCreateUserAzure() {
 	require.Len(ts.T(), result.Schemas, 1)
 	require.Equal(ts.T(), SCIMSchemaUser, result.Schemas[0])
 	require.NotEmpty(ts.T(), result.ID)
-	require.Equal(ts.T(), "543b2f37-3363-4d69-8af7-5fc5dc1fc3f8", result.ExternalID)
-	require.Equal(ts.T(), "maiya@anderson.com", result.UserName)
+	require.Equal(ts.T(), testUser9.ExternalID, result.ExternalID)
+	require.Equal(ts.T(), testUser9.UserName, result.UserName)
 	require.NotNil(ts.T(), result.Name)
-	require.Equal(ts.T(), "Kenya", result.Name.Formatted)
-	require.Equal(ts.T(), "Lurline", result.Name.FamilyName)
-	require.Equal(ts.T(), "Ernestina", result.Name.GivenName)
+	require.Equal(ts.T(), testUser9.Formatted, result.Name.Formatted)
+	require.Equal(ts.T(), testUser9.FamilyName, result.Name.FamilyName)
+	require.Equal(ts.T(), testUser9.GivenName, result.Name.GivenName)
 	require.Len(ts.T(), result.Emails, 1)
-	require.Equal(ts.T(), "kira_koelpin@thiel.ca", result.Emails[0].Value)
+	require.Equal(ts.T(), testUser9.Email, result.Emails[0].Value)
 	require.True(ts.T(), bool(result.Emails[0].Primary))
 	require.True(ts.T(), result.Active)
 	require.Equal(ts.T(), "User", result.Meta.ResourceType)
@@ -621,15 +660,15 @@ func (ts *SCIMTestSuite) TestSCIMCreateUserAzure() {
 func (ts *SCIMTestSuite) TestSCIMCreateUserDuplicateExternalID() {
 	body := map[string]interface{}{
 		"schemas":    []string{SCIMSchemaUser},
-		"userName":   "elian_huel@cole.com",
-		"externalId": "22a77d53-9a54-4c3e-bac7-f0cc9f2be272",
+		"userName":   testUser10.UserName,
+		"externalId": testUser10.ExternalID,
 		"name": map[string]interface{}{
-			"formatted":  "Teresa",
-			"familyName": "Lilly",
-			"givenName":  "Eino",
+			"formatted":  testUser10.Formatted,
+			"familyName": testUser10.FamilyName,
+			"givenName":  testUser10.GivenName,
 		},
 		"emails": []map[string]interface{}{
-			{"primary": true, "value": "arno.lynch@crooks.ca"},
+			{"primary": true, "value": testUser10.Email},
 		},
 		"active": true,
 	}
@@ -648,7 +687,7 @@ func (ts *SCIMTestSuite) TestSCIMCreateUserDuplicateExternalID() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMDeleteUserReturns204() {
-	user := ts.createSCIMUserWithExternalID("amalia@moore.us", "cade@gulgowski.us", "c51b4421-0bd6-428c-b92e-aab658faeb46")
+	user := ts.createSCIMUserWithExternalID(testUser11.UserName, testUser11.Email, testUser11.ExternalID)
 
 	require.True(ts.T(), user.Active)
 
@@ -671,7 +710,7 @@ func (ts *SCIMTestSuite) TestSCIMDeleteNonExistentUser() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMDeleteUserTwice() {
-	user := ts.createSCIMUserWithExternalID("trudie@jacobs.uk", "oswaldo@marquardt.com", "2423c4dc-e525-4c51-8fa9-a63bce38136f")
+	user := ts.createSCIMUserWithExternalID(testUser12.UserName, testUser12.Email, testUser12.ExternalID)
 
 	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+user.ID, nil)
 	w := httptest.NewRecorder()
@@ -687,9 +726,9 @@ func (ts *SCIMTestSuite) TestSCIMDeleteUserTwice() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameExisting() {
-	created := ts.createSCIMUserWithExternalID("kenny.sporer@gislason.com", "aliyah@grady.name", "34aee196-7651-4817-a6d8-8a70336466cb")
+	created := ts.createSCIMUserWithExternalID(testUser13.UserName, testUser13.Email, testUser13.ExternalID)
 
-	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22kenny.sporer%40gislason.com%22", nil)
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22user13%40example.com%22", nil)
 	w := httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
@@ -707,8 +746,8 @@ func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameExisting() {
 
 	resource := result.Resources[0].(map[string]interface{})
 	require.Equal(ts.T(), created.ID, resource["id"])
-	require.Equal(ts.T(), "kenny.sporer@gislason.com", resource["userName"])
-	require.Equal(ts.T(), "34aee196-7651-4817-a6d8-8a70336466cb", resource["externalId"])
+	require.Equal(ts.T(), testUser13.UserName, resource["userName"])
+	require.Equal(ts.T(), testUser13.ExternalID, resource["externalId"])
 	require.Equal(ts.T(), true, resource["active"])
 
 	schemas := resource["schemas"].([]interface{})
@@ -723,7 +762,7 @@ func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameExisting() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameNonExistent() {
-	ts.createSCIMUser("someuser@example.com", "someuser@example.com")
+	ts.createSCIMUser(testUser8.UserName, testUser8.Email)
 
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22nonexistent%40example.com%22", nil)
 	w := httptest.NewRecorder()
@@ -743,9 +782,9 @@ func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameNonExistent() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameCaseInsensitive() {
-	created := ts.createSCIMUserWithExternalID("kenny.sporer@gislason.com", "aliyah@grady.name", "case-test-ext-id")
+	created := ts.createSCIMUserWithExternalID(testUser14.UserName, testUser14.Email, testUser14.ExternalID)
 
-	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22KENNY.SPORER%40GISLASON.COM%22", nil)
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22USER14%40ACME.COM%22", nil)
 	w := httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
@@ -763,7 +802,7 @@ func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameCaseInsensitive() {
 
 	resource := result.Resources[0].(map[string]interface{})
 	require.Equal(ts.T(), created.ID, resource["id"])
-	require.Equal(ts.T(), "kenny.sporer@gislason.com", resource["userName"])
+	require.Equal(ts.T(), testUser14.UserName, resource["userName"])
 	require.Equal(ts.T(), true, resource["active"])
 
 	schemas := resource["schemas"].([]interface{})
@@ -778,12 +817,13 @@ func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameCaseInsensitive() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMPatchUserUpdateUserName() {
-	user := ts.createSCIMUserWithExternalID("nasir@bins.com", "nedra@konopelski.name", "a275970d-3319-4a8c-a86f-dc8af2627c70")
+	user := ts.createSCIMUserWithExternalID(testUser15.UserName, testUser15.Email, testUser15.ExternalID)
+	newUserName := "sam.updated@acme.com"
 
 	body := map[string]interface{}{
 		"schemas": []string{SCIMSchemaPatchOp},
 		"Operations": []map[string]interface{}{
-			{"op": "replace", "value": map[string]interface{}{"userName": "pearline@donnelly.us"}},
+			{"op": "replace", "value": map[string]interface{}{"userName": newUserName}},
 		},
 	}
 
@@ -799,8 +839,8 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserUpdateUserName() {
 	require.Len(ts.T(), result.Schemas, 1)
 	require.Equal(ts.T(), SCIMSchemaUser, result.Schemas[0])
 	require.Equal(ts.T(), user.ID, result.ID)
-	require.Equal(ts.T(), "a275970d-3319-4a8c-a86f-dc8af2627c70", result.ExternalID)
-	require.Equal(ts.T(), "pearline@donnelly.us", result.UserName)
+	require.Equal(ts.T(), testUser15.ExternalID, result.ExternalID)
+	require.Equal(ts.T(), newUserName, result.UserName)
 	require.True(ts.T(), result.Active)
 	require.Equal(ts.T(), "User", result.Meta.ResourceType)
 	require.NotNil(ts.T(), result.Meta.Created)
@@ -809,7 +849,7 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserUpdateUserName() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMPatchUserDisable() {
-	user := ts.createSCIMUserWithExternalID("giovani@marvinwhite.biz", "maxie_botsford@vonrussel.ca", "c2a92a74-436a-4444-bced-a311a4648d66")
+	user := ts.createSCIMUserWithExternalID(testUser16.UserName, testUser16.Email, testUser16.ExternalID)
 
 	require.True(ts.T(), user.Active)
 
@@ -832,8 +872,8 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserDisable() {
 	require.Len(ts.T(), result.Schemas, 1)
 	require.Equal(ts.T(), SCIMSchemaUser, result.Schemas[0])
 	require.Equal(ts.T(), user.ID, result.ID)
-	require.Equal(ts.T(), "c2a92a74-436a-4444-bced-a311a4648d66", result.ExternalID)
-	require.Equal(ts.T(), "giovani@marvinwhite.biz", result.UserName)
+	require.Equal(ts.T(), testUser16.ExternalID, result.ExternalID)
+	require.Equal(ts.T(), testUser16.UserName, result.UserName)
 	require.False(ts.T(), result.Active)
 	require.Equal(ts.T(), "User", result.Meta.ResourceType)
 	require.NotNil(ts.T(), result.Meta.Created)
@@ -852,21 +892,24 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserDisable() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMPatchUserReplaceEmailPrimaryEqTrue() {
-	user := ts.createSCIMUserWithExternalID("pascale_morissette@pollich.co.uk", "nathanael_lubowitz@boganterry.co.uk", "5dd3dba4-0349-473c-b0bd-eef47b227587")
+	origUserName := "patchemail@acme.com"
+	origEmail := "patchemail@acme.com"
+	newEmail := "updated.email@acme.com"
+	user := ts.createSCIMUserWithExternalID(origUserName, origEmail, "ext-patch-email-001")
 
 	require.Len(ts.T(), user.Emails, 1)
-	require.Equal(ts.T(), "nathanael_lubowitz@boganterry.co.uk", user.Emails[0].Value)
+	require.Equal(ts.T(), origEmail, user.Emails[0].Value)
 
 	body := map[string]interface{}{
 		"schemas": []string{SCIMSchemaPatchOp},
 		"Operations": []map[string]interface{}{
-			{"op": "replace", "path": "emails[primary eq true].value", "value": "kaylie_dietrich@ward.co.uk"},
+			{"op": "replace", "path": "emails[primary eq true].value", "value": newEmail},
 			{"op": "replace", "value": map[string]interface{}{
-				"name.formatted":  "Delphine",
-				"name.familyName": "Vita",
-				"name.givenName":  "Joanie",
+				"name.formatted":  "Updated Name",
+				"name.familyName": "Name",
+				"name.givenName":  "Updated",
 				"active":          true,
-				"externalId":      "1be8b986-70fe-40b5-8f63-c33dbbad29d3",
+				"externalId":      "ext-patch-email-002",
 			}},
 		},
 	}
@@ -883,16 +926,16 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserReplaceEmailPrimaryEqTrue() {
 	require.Len(ts.T(), result.Schemas, 1)
 	require.Equal(ts.T(), SCIMSchemaUser, result.Schemas[0])
 	require.Equal(ts.T(), user.ID, result.ID)
-	require.Equal(ts.T(), "1be8b986-70fe-40b5-8f63-c33dbbad29d3", result.ExternalID)
-	require.Equal(ts.T(), "pascale_morissette@pollich.co.uk", result.UserName)
+	require.Equal(ts.T(), "ext-patch-email-002", result.ExternalID)
+	require.Equal(ts.T(), origUserName, result.UserName)
 	require.NotNil(ts.T(), result.Name)
-	require.Equal(ts.T(), "Delphine", result.Name.Formatted)
-	require.Equal(ts.T(), "Vita", result.Name.FamilyName)
-	require.Equal(ts.T(), "Joanie", result.Name.GivenName)
+	require.Equal(ts.T(), "Updated Name", result.Name.Formatted)
+	require.Equal(ts.T(), "Name", result.Name.FamilyName)
+	require.Equal(ts.T(), "Updated", result.Name.GivenName)
 	require.True(ts.T(), result.Active)
 
 	require.Len(ts.T(), result.Emails, 1)
-	require.Equal(ts.T(), "kaylie_dietrich@ward.co.uk", result.Emails[0].Value)
+	require.Equal(ts.T(), newEmail, result.Emails[0].Value)
 	require.True(ts.T(), bool(result.Emails[0].Primary))
 
 	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/"+user.ID, nil)
@@ -904,18 +947,19 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserReplaceEmailPrimaryEqTrue() {
 	var getResult SCIMUserResponse
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
 	require.Len(ts.T(), getResult.Emails, 1)
-	require.Equal(ts.T(), "kaylie_dietrich@ward.co.uk", getResult.Emails[0].Value, "Email update was not persisted - reproduces Azure SCIM test 21 failure")
+	require.Equal(ts.T(), newEmail, getResult.Emails[0].Value)
 }
 
 func (ts *SCIMTestSuite) TestSCIMPatchUserMultipleOperationsSameAttribute() {
-	user := ts.createSCIMUserWithExternalID("casandra_dare@keebler.co.uk", "raul_doyle@dach.co.uk", "48a46062-d787-474a-b60c-1a1c3c70e055")
+	userName := "multiop@acme.com"
+	user := ts.createSCIMUserWithExternalID(userName, userName, "ext-multi-001")
 
 	body := map[string]interface{}{
 		"schemas": []string{SCIMSchemaPatchOp},
 		"Operations": []map[string]interface{}{
 			{"op": "remove", "path": "externalId"},
-			{"op": "add", "value": map[string]interface{}{"externalId": "717d6020-1ca0-4e2b-ab59-158e10422645"}},
-			{"op": "replace", "value": map[string]interface{}{"externalId": "5f3db8ed-c327-4a10-bd0f-a0e93028e5d2"}},
+			{"op": "add", "value": map[string]interface{}{"externalId": "ext-multi-002"}},
+			{"op": "replace", "value": map[string]interface{}{"externalId": "ext-multi-003"}},
 		},
 	}
 
@@ -931,8 +975,8 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserMultipleOperationsSameAttribute() {
 	require.Len(ts.T(), result.Schemas, 1)
 	require.Equal(ts.T(), SCIMSchemaUser, result.Schemas[0])
 	require.Equal(ts.T(), user.ID, result.ID)
-	require.Equal(ts.T(), "5f3db8ed-c327-4a10-bd0f-a0e93028e5d2", result.ExternalID)
-	require.Equal(ts.T(), "casandra_dare@keebler.co.uk", result.UserName)
+	require.Equal(ts.T(), "ext-multi-003", result.ExternalID)
+	require.Equal(ts.T(), userName, result.UserName)
 	require.True(ts.T(), result.Active)
 	require.Equal(ts.T(), "User", result.Meta.ResourceType)
 	require.NotNil(ts.T(), result.Meta.Created)
@@ -1403,8 +1447,11 @@ func (ts *SCIMTestSuite) TestSCIMPatchGroupUpdateDisplayName() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMPatchGroupAddMember() {
-	group := ts.createSCIMGroupWithExternalID("BWWXXWZXZGGB", "7a48952d-6dbe-4192-8c63-fd575f132232")
-	user := ts.createSCIMUserWithExternalID("member_buck@schmidt.uk", "ethel_hilpert@gislasonsmitham.biz", "d00a6559-b7e9-41cd-8a7f-e2d52abfff6b")
+	groupName := "AddMemberGroup"
+	groupExtID := "grp-add-001"
+	memberEmail := "member1@acme.com"
+	group := ts.createSCIMGroupWithExternalID(groupName, groupExtID)
+	user := ts.createSCIMUserWithExternalID(memberEmail, memberEmail, "usr-member-001")
 
 	body := map[string]interface{}{
 		"schemas": []string{SCIMSchemaPatchOp},
@@ -1427,12 +1474,12 @@ func (ts *SCIMTestSuite) TestSCIMPatchGroupAddMember() {
 	require.Len(ts.T(), result.Schemas, 1)
 	require.Equal(ts.T(), SCIMSchemaGroup, result.Schemas[0])
 	require.Equal(ts.T(), group.ID, result.ID)
-	require.Equal(ts.T(), "7a48952d-6dbe-4192-8c63-fd575f132232", result.ExternalID)
-	require.Equal(ts.T(), "BWWXXWZXZGGB", result.DisplayName)
+	require.Equal(ts.T(), groupExtID, result.ExternalID)
+	require.Equal(ts.T(), groupName, result.DisplayName)
 	require.Len(ts.T(), result.Members, 1)
 	require.Equal(ts.T(), user.ID, result.Members[0].Value)
 	require.Contains(ts.T(), result.Members[0].Ref, "/scim/v2/Users/"+user.ID)
-	require.Equal(ts.T(), "ethel_hilpert@gislasonsmitham.biz", result.Members[0].Display)
+	require.Equal(ts.T(), memberEmail, result.Members[0].Display)
 	require.Equal(ts.T(), "Group", result.Meta.ResourceType)
 	require.NotNil(ts.T(), result.Meta.Created)
 	require.NotNil(ts.T(), result.Meta.LastModified)
@@ -1451,9 +1498,13 @@ func (ts *SCIMTestSuite) TestSCIMPatchGroupAddMember() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMPatchGroupRemoveMember() {
-	group := ts.createSCIMGroupWithExternalID("FGNIPTSHXSMO", "22b56196-c623-4f6d-bc7a-de32fe17071e")
-	user1 := ts.createSCIMUserWithExternalID("member_twila@reichel.com", "julien_skiles@glover.us", "052a04f6-8fc6-4819-8252-e191e738055d")
-	user2 := ts.createSCIMUserWithExternalID("member_alfred.ledner@wisoky.biz", "donavon@rempel.name", "c632bcd1-a637-4d4b-84fc-c9ced4f168c8")
+	groupName := "RemoveMemberGroup"
+	groupExtID := "grp-remove-001"
+	member1Email := "member2@acme.com"
+	member2Email := "member3@acme.com"
+	group := ts.createSCIMGroupWithExternalID(groupName, groupExtID)
+	user1 := ts.createSCIMUserWithExternalID(member1Email, member1Email, "usr-member-002")
+	user2 := ts.createSCIMUserWithExternalID(member2Email, member2Email, "usr-member-003")
 
 	addMembersBody := map[string]interface{}{
 		"schemas": []string{SCIMSchemaPatchOp},
@@ -1494,12 +1545,12 @@ func (ts *SCIMTestSuite) TestSCIMPatchGroupRemoveMember() {
 	require.Len(ts.T(), result.Schemas, 1)
 	require.Equal(ts.T(), SCIMSchemaGroup, result.Schemas[0])
 	require.Equal(ts.T(), group.ID, result.ID)
-	require.Equal(ts.T(), "22b56196-c623-4f6d-bc7a-de32fe17071e", result.ExternalID)
-	require.Equal(ts.T(), "FGNIPTSHXSMO", result.DisplayName)
+	require.Equal(ts.T(), groupExtID, result.ExternalID)
+	require.Equal(ts.T(), groupName, result.DisplayName)
 	require.Len(ts.T(), result.Members, 1)
 	require.Equal(ts.T(), user2.ID, result.Members[0].Value)
 	require.Contains(ts.T(), result.Members[0].Ref, "/scim/v2/Users/"+user2.ID)
-	require.Equal(ts.T(), "donavon@rempel.name", result.Members[0].Display)
+	require.Equal(ts.T(), member2Email, result.Members[0].Display)
 	require.Equal(ts.T(), "Group", result.Meta.ResourceType)
 	require.NotNil(ts.T(), result.Meta.Created)
 	require.NotNil(ts.T(), result.Meta.LastModified)
@@ -1518,8 +1569,11 @@ func (ts *SCIMTestSuite) TestSCIMPatchGroupRemoveMember() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMPatchGroupMultipleOperationsAddThenRemoveMember() {
-	group := ts.createSCIMGroupWithExternalID("BXQHAOAUIVTX", "631e641e-0227-4570-bba7-bfdfce9715d3")
-	user := ts.createSCIMUserWithExternalID("member_cassie_steuber@larkin.name", "vincent@keeblerhamill.uk", "e27b5ca9-73ca-4ee0-9105-b4115a270637")
+	groupName := "MultiOpGroup"
+	groupExtID := "grp-multiop-001"
+	memberEmail := "member4@acme.com"
+	group := ts.createSCIMGroupWithExternalID(groupName, groupExtID)
+	user := ts.createSCIMUserWithExternalID(memberEmail, memberEmail, "usr-member-004")
 
 	body := map[string]interface{}{
 		"schemas": []string{SCIMSchemaPatchOp},
@@ -1543,8 +1597,8 @@ func (ts *SCIMTestSuite) TestSCIMPatchGroupMultipleOperationsAddThenRemoveMember
 	require.Len(ts.T(), result.Schemas, 1)
 	require.Equal(ts.T(), SCIMSchemaGroup, result.Schemas[0])
 	require.Equal(ts.T(), group.ID, result.ID)
-	require.Equal(ts.T(), "631e641e-0227-4570-bba7-bfdfce9715d3", result.ExternalID)
-	require.Equal(ts.T(), "BXQHAOAUIVTX", result.DisplayName)
+	require.Equal(ts.T(), groupExtID, result.ExternalID)
+	require.Equal(ts.T(), groupName, result.DisplayName)
 	require.Empty(ts.T(), result.Members)
 	require.Equal(ts.T(), "Group", result.Meta.ResourceType)
 	require.NotNil(ts.T(), result.Meta.Created)
