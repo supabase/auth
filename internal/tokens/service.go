@@ -2,6 +2,7 @@ package tokens
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	mathRand "math/rand"
 	"net/http"
@@ -26,6 +27,47 @@ import (
 
 const retryLoopDuration = 5.0
 
+// AMRClaim supports unmarshalling AMR as either strings or AMREntry objects.
+type AMRClaim []models.AMREntry
+
+// UnmarshalJSON accepts either an array of strings or AMREntry objects.
+func (a *AMRClaim) UnmarshalJSON(data []byte) error {
+	// Handle null explicitly - null cannot be unmarshaled into a slice
+	if len(data) > 0 {
+		trimmed := strings.TrimSpace(string(data))
+		if trimmed == "null" {
+			*a = AMRClaim{}
+			return nil
+		}
+	}
+
+	var rawItems []json.RawMessage
+	if err := json.Unmarshal(data, &rawItems); err != nil {
+		return err
+	}
+
+	entries := make([]models.AMREntry, 0, len(rawItems))
+	for _, item := range rawItems {
+		var method string
+		if err := json.Unmarshal(item, &method); err == nil {
+			entries = append(entries, models.AMREntry{
+				Method:    method,
+				Timestamp: time.Now().Unix(),
+			})
+			continue
+		}
+
+		var entry models.AMREntry
+		if err := json.Unmarshal(item, &entry); err != nil {
+			return err
+		}
+		entries = append(entries, entry)
+	}
+
+	*a = entries
+	return nil
+}
+
 // AccessTokenClaims is a struct thats used for JWT claims
 type AccessTokenClaims struct {
 	jwt.RegisteredClaims
@@ -35,7 +77,7 @@ type AccessTokenClaims struct {
 	UserMetaData                  map[string]interface{} `json:"user_metadata"`
 	Role                          string                 `json:"role"`
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
-	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
+	AuthenticationMethodReference AMRClaim               `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
 	IsAnonymous                   bool                   `json:"is_anonymous"`
 	ClientID                      string                 `json:"client_id,omitempty"`
@@ -164,7 +206,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 			if models.IsNotFoundError(err) {
 				return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeRefreshTokenNotFound, "Invalid Refresh Token: Refresh Token Not Found")
 			}
-			return nil, apierrors.NewInternalServerError(err.Error())
+			return nil, apierrors.NewInternalServerError("%s", err.Error())
 		}
 
 		responseHeaders.Set("sb-auth-user-id", user.ID.String())
@@ -241,7 +283,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 					retry = true
 					return terr
 				}
-				return apierrors.NewInternalServerError(terr.Error())
+				return apierrors.NewInternalServerError("%s", terr.Error())
 			}
 
 			// Validate OAuth client consistency between session and current request
@@ -275,7 +317,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 					retry = true
 					return terr
 				} else if terr != nil {
-					return apierrors.NewInternalServerError(terr.Error())
+					return apierrors.NewInternalServerError("%s", terr.Error())
 				}
 
 				sessionTag := session.DetermineTag(config.Sessions.Tags)
@@ -325,7 +367,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 				if token.Revoked {
 					activeRefreshToken, terr := session.FindCurrentlyActiveRefreshToken(tx)
 					if terr != nil && !models.IsNotFoundError(terr) {
-						return apierrors.NewInternalServerError(terr.Error())
+						return apierrors.NewInternalServerError("%s", terr.Error())
 					}
 
 					if activeRefreshToken != nil && activeRefreshToken.Parent.String() == token.Token {
@@ -349,7 +391,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 							if config.Security.RefreshTokenRotationEnabled {
 								// Revoke all tokens in token family
 								if err := models.RevokeTokenFamily(tx, token); err != nil {
-									return apierrors.NewInternalServerError(err.Error())
+									return apierrors.NewInternalServerError("%s", err.Error())
 								}
 							}
 
@@ -951,7 +993,10 @@ const MinimumViableTokenSchema = `{
     "amr": {
       "type": "array",
       "items": {
-        "type": "object"
+        "anyOf": [
+          {"type": "string"},
+          {"type": "object"}
+        ]
       }
     },
     "session_id": {

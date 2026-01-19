@@ -56,10 +56,49 @@ var invalidHostMap = map[string]bool{
 
 	// Hundreds of typos per day for this.
 	"gamil.com": true,
+	"gamai.com": true,
 
 	// These are not email providers, but people often use them.
 	"anonymous.com": true,
 	"email.com":     true,
+}
+
+// We skip checking hosts for some of the biggest well known public email
+// providers, generated via:
+//
+//	test -f "gmass.html" \
+//	  || wget -O "gmass.html" https://www.gmass.co/domains
+//	cat "gmass.html" \
+//	  | pup 'div#status-details a json{}' \
+//	  | jq -r 'map([(.text | split(" "))[1], .children[0].text])
+//	      | map("`" + .[0] + ".` : true, // " + .[1]) | join("\n")' \
+//	  | sed 's| emails sent||g' \
+//	  | head -20
+//
+// Note:
+// This only affects the validateHost code, if we have an exact match we don't
+// bother to make a dns request.
+var hostAllowList = map[string]bool{
+	`gmail.com.`:     true, // 563,185,814
+	`yahoo.com.`:     true, // 107,413,999
+	`hotmail.com.`:   true, // 98,895,904
+	`aol.com.`:       true, // 31,839,178
+	`outlook.com.`:   true, // 11,826,511
+	`comcast.net.`:   true, // 9,663,112
+	`icloud.com.`:    true, // 9,274,437
+	`msn.com.`:       true, // 7,101,124
+	`hotmail.co.uk.`: true, // 5,456,609
+	`sbcglobal.net.`: true, // 5,167,305
+	`live.com.`:      true, // 5,140,589
+	`yahoo.co.in.`:   true, // 4,091,798
+	`me.com.`:        true, // 3,920,969
+	`att.net.`:       true, // 3,688,388
+	`mail.ru.`:       true, // 3,583,276
+	`bellsouth.net.`: true, // 3,455,683
+	`rediffmail.com`: true, // 3,400,300
+	`cox.net.`:       true, // 3,254,227
+	`yahoo.co.uk.`:   true, // 3,218,049
+	`verizon.net.`:   true, // 3,046,288
 }
 
 const (
@@ -222,6 +261,12 @@ func (ev *emailValidator) validateStatic(email string) (string, error) {
 		return "", ErrInvalidEmailFormat
 	}
 
+	// The mail package supports RFC 5322 addresses which are not valid for
+	// signup users (e.g. Chris Stockton <chris.stockton@host...>).
+	if ea.Address != email {
+		return "", ErrInvalidEmailFormat
+	}
+
 	i := strings.LastIndex(ea.Address, "@")
 	if i == -1 {
 		return "", ErrInvalidEmailFormat
@@ -291,13 +336,16 @@ func (ev *emailValidator) validateService(ctx context.Context, email string) err
 		return nil
 	}
 
+	// 32 bytes is plenty for the payload: {"valid": true|false}
 	dec := json.NewDecoder(io.LimitReader(res.Body, 1<<5))
 	if err := dec.Decode(&resObject); err != nil {
 		return nil
 	}
 
-	// If the object did not contain a valid key we consider the check as
-	// failed. We _must_ get a valid JSON response with a "valid" field.
+	// If the resObject contained no "valid" key we ignore the service and
+	// return a nil error. If the Valid key is present AND set to true we
+	// will return a nil error, otherwise the valid key was present & false
+	// so we fall through to ErrInvalidEmailAddress.
 	if resObject.Valid == nil || *resObject.Valid {
 		return nil
 	}
@@ -320,7 +368,29 @@ func (ev *emailValidator) validateProviders(name, host string) error {
 	return nil
 }
 
+// NOTE(cstockton): We could consider using[1] in the future for an additional
+// data point.
+//
+// [1] https://pkg.go.dev/golang.org/x/net/publicsuffix
 func (ev *emailValidator) validateHost(ctx context.Context, host string) error {
+
+	// As far as I know there is no such thing as valid single label hosts for
+	// email. This will block anything like: email@a, email@mycompanygltd and
+	// so on.
+	if !strings.Contains(host, ".") {
+		return ErrInvalidEmailDNS
+	}
+
+	// Require a FQDN to remove possible implict search behavior.
+	if !strings.HasSuffix(host, ".") {
+		host = host + "."
+	}
+
+	// If the host is in the allow list skip mx check all together.
+	if hostAllowList[host] {
+		return nil
+	}
+
 	mxs, err := validateEmailResolver.LookupMX(ctx, host)
 	if !isHostNotFound(err) {
 		return ev.validateMXRecords(mxs, nil)
