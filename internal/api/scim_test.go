@@ -1321,3 +1321,360 @@ func (ts *SCIMTestSuite) TestSCIMFilterGroupByDisplayNameCaseInsensitive() {
 	require.NotEmpty(ts.T(), meta["lastModified"])
 	require.Contains(ts.T(), meta["location"], "/scim/v2/Groups/"+created.ID)
 }
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupReplaceExternalID() {
+	group := ts.createSCIMGroupWithExternalID("SFSNYLFDSMIG", "643a3bd4-43e1-481a-9ea6-bd82d65bbd04")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "value": map[string]interface{}{"externalId": "3d413e4f-7404-45e9-86b9-478c9b6a894a"}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaGroup, result.Schemas[0])
+	require.Equal(ts.T(), group.ID, result.ID)
+	require.Equal(ts.T(), "3d413e4f-7404-45e9-86b9-478c9b6a894a", result.ExternalID)
+	require.Equal(ts.T(), "SFSNYLFDSMIG", result.DisplayName)
+	require.Equal(ts.T(), "Group", result.Meta.ResourceType)
+	require.NotNil(ts.T(), result.Meta.Created)
+	require.NotNil(ts.T(), result.Meta.LastModified)
+	require.Contains(ts.T(), result.Meta.Location, "/scim/v2/Groups/"+result.ID)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.Equal(ts.T(), "3d413e4f-7404-45e9-86b9-478c9b6a894a", getResult.ExternalID)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupUpdateDisplayName() {
+	group := ts.createSCIMGroupWithExternalID("NUOSLUZYECIZ", "fa01b7f2-ab68-4f97-a211-11f5732d0e15")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "value": map[string]interface{}{"displayName": "YJCESZMOUKCA"}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaGroup, result.Schemas[0])
+	require.Equal(ts.T(), group.ID, result.ID)
+	require.Equal(ts.T(), "fa01b7f2-ab68-4f97-a211-11f5732d0e15", result.ExternalID)
+	require.Equal(ts.T(), "YJCESZMOUKCA", result.DisplayName)
+	require.Equal(ts.T(), "Group", result.Meta.ResourceType)
+	require.NotNil(ts.T(), result.Meta.Created)
+	require.NotNil(ts.T(), result.Meta.LastModified)
+	require.Contains(ts.T(), result.Meta.Location, "/scim/v2/Groups/"+result.ID)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.Equal(ts.T(), "YJCESZMOUKCA", getResult.DisplayName)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupAddMember() {
+	group := ts.createSCIMGroupWithExternalID("BWWXXWZXZGGB", "7a48952d-6dbe-4192-8c63-fd575f132232")
+	user := ts.createSCIMUserWithExternalID("member_buck@schmidt.uk", "ethel_hilpert@gislasonsmitham.biz", "d00a6559-b7e9-41cd-8a7f-e2d52abfff6b")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "members", "value": []map[string]interface{}{
+				{"value": user.ID},
+			}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaGroup, result.Schemas[0])
+	require.Equal(ts.T(), group.ID, result.ID)
+	require.Equal(ts.T(), "7a48952d-6dbe-4192-8c63-fd575f132232", result.ExternalID)
+	require.Equal(ts.T(), "BWWXXWZXZGGB", result.DisplayName)
+	require.Len(ts.T(), result.Members, 1)
+	require.Equal(ts.T(), user.ID, result.Members[0].Value)
+	require.Contains(ts.T(), result.Members[0].Ref, "/scim/v2/Users/"+user.ID)
+	require.Equal(ts.T(), "ethel_hilpert@gislasonsmitham.biz", result.Members[0].Display)
+	require.Equal(ts.T(), "Group", result.Meta.ResourceType)
+	require.NotNil(ts.T(), result.Meta.Created)
+	require.NotNil(ts.T(), result.Meta.LastModified)
+	require.Contains(ts.T(), result.Meta.Location, "/scim/v2/Groups/"+result.ID)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.Len(ts.T(), getResult.Members, 1)
+	require.Equal(ts.T(), user.ID, getResult.Members[0].Value)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupRemoveMember() {
+	group := ts.createSCIMGroupWithExternalID("FGNIPTSHXSMO", "22b56196-c623-4f6d-bc7a-de32fe17071e")
+	user1 := ts.createSCIMUserWithExternalID("member_twila@reichel.com", "julien_skiles@glover.us", "052a04f6-8fc6-4819-8252-e191e738055d")
+	user2 := ts.createSCIMUserWithExternalID("member_alfred.ledner@wisoky.biz", "donavon@rempel.name", "c632bcd1-a637-4d4b-84fc-c9ced4f168c8")
+
+	addMembersBody := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "members", "value": []map[string]interface{}{
+				{"value": user1.ID},
+				{"value": user2.ID},
+			}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, addMembersBody)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var addResult SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&addResult))
+	require.Len(ts.T(), addResult.Members, 2)
+
+	removeMemberBody := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "remove", "path": fmt.Sprintf("members[value eq \"%s\"]", user1.ID)},
+		},
+	}
+
+	req = ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, removeMemberBody)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaGroup, result.Schemas[0])
+	require.Equal(ts.T(), group.ID, result.ID)
+	require.Equal(ts.T(), "22b56196-c623-4f6d-bc7a-de32fe17071e", result.ExternalID)
+	require.Equal(ts.T(), "FGNIPTSHXSMO", result.DisplayName)
+	require.Len(ts.T(), result.Members, 1)
+	require.Equal(ts.T(), user2.ID, result.Members[0].Value)
+	require.Contains(ts.T(), result.Members[0].Ref, "/scim/v2/Users/"+user2.ID)
+	require.Equal(ts.T(), "donavon@rempel.name", result.Members[0].Display)
+	require.Equal(ts.T(), "Group", result.Meta.ResourceType)
+	require.NotNil(ts.T(), result.Meta.Created)
+	require.NotNil(ts.T(), result.Meta.LastModified)
+	require.Contains(ts.T(), result.Meta.Location, "/scim/v2/Groups/"+result.ID)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.Len(ts.T(), getResult.Members, 1)
+	require.Equal(ts.T(), user2.ID, getResult.Members[0].Value)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupMultipleOperationsAddThenRemoveMember() {
+	group := ts.createSCIMGroupWithExternalID("BXQHAOAUIVTX", "631e641e-0227-4570-bba7-bfdfce9715d3")
+	user := ts.createSCIMUserWithExternalID("member_cassie_steuber@larkin.name", "vincent@keeblerhamill.uk", "e27b5ca9-73ca-4ee0-9105-b4115a270637")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "add", "path": "members", "value": []map[string]interface{}{
+				{"value": user.ID},
+			}},
+			{"op": "remove", "path": fmt.Sprintf("members[value eq \"%s\"]", user.ID)},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+
+	require.Len(ts.T(), result.Schemas, 1)
+	require.Equal(ts.T(), SCIMSchemaGroup, result.Schemas[0])
+	require.Equal(ts.T(), group.ID, result.ID)
+	require.Equal(ts.T(), "631e641e-0227-4570-bba7-bfdfce9715d3", result.ExternalID)
+	require.Equal(ts.T(), "BXQHAOAUIVTX", result.DisplayName)
+	require.Empty(ts.T(), result.Members)
+	require.Equal(ts.T(), "Group", result.Meta.ResourceType)
+	require.NotNil(ts.T(), result.Meta.Created)
+	require.NotNil(ts.T(), result.Meta.LastModified)
+	require.Contains(ts.T(), result.Meta.Location, "/scim/v2/Groups/"+result.ID)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.Empty(ts.T(), getResult.Members)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupNotFound() {
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "value": map[string]interface{}{"displayName": "NewName"}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/00000000-0000-0000-0000-000000000000", body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupUpdateDisplayNameWithPath() {
+	group := ts.createSCIMGroupWithExternalID("ORIGINALNAME", "path-test-ext-id")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "displayName", "value": "NEWDISPLAYNAME"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), "NEWDISPLAYNAME", result.DisplayName)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.Equal(ts.T(), "NEWDISPLAYNAME", getResult.DisplayName)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupAddMemberWithAddOp() {
+	group := ts.createSCIMGroup("AddOpTestGroup")
+	user := ts.createSCIMUser("addop_member@test.com", "addop_member@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "add", "path": "members", "value": []map[string]interface{}{
+				{"value": user.ID},
+			}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Len(ts.T(), result.Members, 1)
+	require.Equal(ts.T(), user.ID, result.Members[0].Value)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.Len(ts.T(), getResult.Members, 1)
+	require.Equal(ts.T(), user.ID, getResult.Members[0].Value)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupRemoveAllMembers() {
+	user1 := ts.createSCIMUser("remove_all_member1@test.com", "remove_all_member1@test.com")
+	user2 := ts.createSCIMUser("remove_all_member2@test.com", "remove_all_member2@test.com")
+	group := ts.createSCIMGroupWithMembers("RemoveAllMembersGroup", []string{user1.ID, user2.ID})
+
+	require.Len(ts.T(), group.Members, 2)
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "members", "value": []map[string]interface{}{}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Empty(ts.T(), result.Members)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID, nil)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var getResult SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getResult))
+	require.Empty(ts.T(), getResult.Members)
+}
