@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-
-	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 const (
@@ -30,15 +28,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithConnection() {
 	ts.Equal("", q.Get("scope"))
 	ts.Equal(connection, q.Get("connection"))
 
-	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	ts.Require().NoError(err)
-
-	ts.Equal("workos", claims.Provider)
-	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
+	assertValidOAuthState(ts, q.Get("state"), "workos")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithOrganization() {
@@ -56,15 +46,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithOrganization() {
 	ts.Equal("", q.Get("scope"))
 	ts.Equal(organization, q.Get("organization"))
 
-	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	ts.Require().NoError(err)
-
-	ts.Equal("workos", claims.Provider)
-	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
+	assertValidOAuthState(ts, q.Get("state"), "workos")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithProvider() {
@@ -82,15 +64,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithProvider() {
 	ts.Equal("", q.Get("scope"))
 	ts.Equal(provider, q.Get("provider"))
 
-	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	ts.Require().NoError(err)
-
-	ts.Equal("workos", claims.Provider)
-	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
+	assertValidOAuthState(ts, q.Get("state"), "workos")
 }
 
 func WorkosTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, user string) *httptest.Server {

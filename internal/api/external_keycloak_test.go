@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-
-	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 const (
@@ -27,15 +25,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloak() {
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("profile email", q.Get("scope"))
 
-	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	ts.Require().NoError(err)
-
-	ts.Equal("keycloak", claims.Provider)
-	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
+	assertValidOAuthState(ts, q.Get("state"), "keycloak")
 }
 
 func KeycloakTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, user string) *httptest.Server {

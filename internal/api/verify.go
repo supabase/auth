@@ -507,6 +507,8 @@ func (a *API) prepErrorRedirectURL(err *HTTPError, r *http.Request, rurl string,
 		u.RawQuery = q.Encode()
 	}
 	// Left as hash fragment to comply with spec.
+	// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
+	hq.Set("sb", "")
 	u.Fragment = hq.Encode()
 	return u.String(), nil
 }
@@ -523,6 +525,8 @@ func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowT
 		q.Set("message", message)
 	}
 	u.RawQuery = q.Encode()
+	// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
+	hq.Set("sb", "")
 	u.Fragment = hq.Encode()
 	return u.String(), nil
 }

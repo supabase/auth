@@ -759,7 +759,14 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
 			codeChallenge := "codechallengecodechallengcodechallengcodechallengcodechallenge"
-			flowState := models.NewFlowState(c.authenticationMethod.String(), codeChallenge, models.SHA256, c.authenticationMethod, &u.ID)
+			flowState, err := models.NewFlowState(models.FlowStateParams{
+				ProviderType:         c.authenticationMethod.String(),
+				AuthenticationMethod: c.authenticationMethod,
+				CodeChallenge:        codeChallenge,
+				CodeChallengeMethod:  "s256",
+				UserID:               &u.ID,
+			})
+			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Create(flowState))
 
 			requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", c.payload.Type, c.payload.Token)
@@ -1148,28 +1155,28 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 			message:  singleConfirmationAccepted,
 			rurl:     "https://example.com/?first=another&second=other",
 			flowType: models.PKCEFlow,
-			expected: fmt.Sprintf("https://example.com/?first=another&message=%s&second=other#message=%s", escapedMessage, escapedMessage),
+			expected: fmt.Sprintf("https://example.com/?first=another&message=%s&second=other#message=%s&sb=", escapedMessage, escapedMessage),
 		},
 		{
 			desc:     "(PKCE): Query params in redirect url are overriden",
 			message:  singleConfirmationAccepted,
 			rurl:     "https://example.com/?message=Valid+redirect+URL",
 			flowType: models.PKCEFlow,
-			expected: fmt.Sprintf("https://example.com/?message=%s#message=%s", escapedMessage, escapedMessage),
+			expected: fmt.Sprintf("https://example.com/?message=%s#message=%s&sb=", escapedMessage, escapedMessage),
 		},
 		{
 			desc:     "(Implicit): plain redirect url",
 			message:  singleConfirmationAccepted,
 			rurl:     "https://example.com/",
 			flowType: models.ImplicitFlow,
-			expected: fmt.Sprintf("https://example.com/#message=%s", escapedMessage),
+			expected: fmt.Sprintf("https://example.com/#message=%s&sb=", escapedMessage),
 		},
 		{
 			desc:     "(Implicit): query params retained",
 			message:  singleConfirmationAccepted,
 			rurl:     "https://example.com/?first=another",
 			flowType: models.ImplicitFlow,
-			expected: fmt.Sprintf("https://example.com/?first=another#message=%s", escapedMessage),
+			expected: fmt.Sprintf("https://example.com/?first=another#message=%s&sb=", escapedMessage),
 		},
 	}
 	for _, c := range cases {
@@ -1197,28 +1204,28 @@ func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
 			message:  "Valid redirect URL",
 			rurl:     "https://example.com/",
 			flowType: models.PKCEFlow,
-			expected: fmt.Sprintf("https://example.com/?%s#%s", redirectError, redirectError),
+			expected: fmt.Sprintf("https://example.com/?%s#%s&sb=", redirectError, redirectError),
 		},
 		{
 			desc:     "(PKCE): Error with conflicting query params in redirect url",
 			message:  DefaultError,
 			rurl:     "https://example.com/?error=Error+to+be+overriden",
 			flowType: models.PKCEFlow,
-			expected: fmt.Sprintf("https://example.com/?%s#%s", redirectError, redirectError),
+			expected: fmt.Sprintf("https://example.com/?%s#%s&sb=", redirectError, redirectError),
 		},
 		{
 			desc:     "(Implicit): plain redirect url",
 			message:  DefaultError,
 			rurl:     "https://example.com/",
 			flowType: models.ImplicitFlow,
-			expected: fmt.Sprintf("https://example.com/#%s", redirectError),
+			expected: fmt.Sprintf("https://example.com/#%s&sb=", redirectError),
 		},
 		{
 			desc:     "(Implicit): query params preserved",
 			message:  DefaultError,
 			rurl:     "https://example.com/?test=param",
 			flowType: models.ImplicitFlow,
-			expected: fmt.Sprintf("https://example.com/?test=param#%s", redirectError),
+			expected: fmt.Sprintf("https://example.com/?test=param#%s&sb=", redirectError),
 		},
 	}
 	for _, c := range cases {

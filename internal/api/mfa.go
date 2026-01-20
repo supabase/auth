@@ -140,7 +140,7 @@ func validateFactors(db *storage.Connection, user *models.User, newFactorName st
 		if factor.FriendlyName == newFactorName {
 			return apierrors.NewUnprocessableEntityError(
 				apierrors.ErrorCodeMFAFactorNameConflict,
-				fmt.Sprintf("A factor with the friendly name %q for this user already exists", newFactorName),
+				"A factor with the friendly name %q for this user already exists", newFactorName,
 			)
 		}
 		if factor.IsVerified() {
@@ -389,7 +389,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 
 	if factor.IsPhoneFactor() && factor.LastChallengedAt != nil {
 		if !factor.LastChallengedAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
-			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(factor.LastChallengedAt, config.MFA.Phone.MaxFrequency))
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, "%s", generateFrequencyLimitErrorMessage(factor.LastChallengedAt, config.MFA.Phone.MaxFrequency))
 		}
 	}
 
@@ -670,7 +670,7 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 				output.Message = v0hooks.DefaultMFAHookRejectionMessage
 			}
 
-			return apierrors.NewForbiddenError(apierrors.ErrorCodeMFAVerificationRejected, output.Message)
+			return apierrors.NewForbiddenError(apierrors.ErrorCodeMFAVerificationRejected, "%s", output.Message)
 		}
 	}
 	if !valid {
@@ -821,7 +821,7 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 				output.Message = v0hooks.DefaultMFAHookRejectionMessage
 			}
 
-			return apierrors.NewForbiddenError(apierrors.ErrorCodeMFAVerificationRejected, output.Message)
+			return apierrors.NewForbiddenError(apierrors.ErrorCodeMFAVerificationRejected, "%s", output.Message)
 		}
 	}
 	if !valid {

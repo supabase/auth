@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/api/provider"
 )
 
@@ -115,15 +114,7 @@ func (ts *ExternalTestSuite) TestSignupExternalAzure() {
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("openid", q.Get("scope"))
 
-	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	ts.Require().NoError(err)
-
-	ts.Equal("azure", claims.Provider)
-	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
+	assertValidOAuthState(ts, q.Get("state"), "azure")
 }
 
 func AzureTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, code string, user string) *httptest.Server {

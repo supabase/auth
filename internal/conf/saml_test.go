@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -97,11 +98,13 @@ func TestSAMLConfiguration(t *testing.T) {
 	t.Run("PopulateFieldInvalidCreateCertificate", func(t *testing.T) {
 		c := &SAMLConfiguration{
 			Enabled:    true,
-			PrivateKey: base64.StdEncoding.EncodeToString([]byte("INVALID")),
+			PrivateKey: validPrivateKey,
 		}
+		certTemplate, err := c.populateFields("https://projectref.supabase.co")
+		require.NoError(t, err)
 
-		tmpl := &x509.Certificate{}
-		err := c.createCertificate(tmpl)
+		certTemplate.SerialNumber = big.NewInt(-1)
+		err = c.createCertificate(certTemplate)
 		require.Error(t, err)
 	})
 

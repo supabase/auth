@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -1021,4 +1023,106 @@ func (ts *IDTokenTestSuite) TestIDTokenWithMultipleScopes() {
 	// Should NOT have phone claims
 	phoneNumber, hasPhone := claims["phone_number"]
 	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
+}
+
+func TestAMRClaimUnmarshal(t *testing.T) {
+	t.Run("mixed string and object formats", func(t *testing.T) {
+		var claim AMRClaim
+		before := time.Now().Unix()
+
+		err := json.Unmarshal([]byte(`["password", {"method":"totp","timestamp":123,"provider":"webauthn"}]`), &claim)
+		require.NoError(t, err)
+		require.Len(t, claim, 2)
+
+		require.Equal(t, "password", claim[0].Method)
+		require.GreaterOrEqual(t, claim[0].Timestamp, before)
+		require.LessOrEqual(t, claim[0].Timestamp, time.Now().Unix())
+		require.Empty(t, claim[0].Provider, "string format should not have provider")
+
+		require.Equal(t, "totp", claim[1].Method)
+		require.Equal(t, int64(123), claim[1].Timestamp)
+		require.Equal(t, "webauthn", claim[1].Provider, "provider should be preserved from object format")
+	})
+
+	t.Run("object with provider", func(t *testing.T) {
+		var claim AMRClaim
+		err := json.Unmarshal([]byte(`[{"method":"sso","timestamp":456,"provider":"saml"}]`), &claim)
+		require.NoError(t, err)
+		require.Len(t, claim, 1)
+		require.Equal(t, "sso", claim[0].Method)
+		require.Equal(t, int64(456), claim[0].Timestamp)
+		require.Equal(t, "saml", claim[0].Provider, "provider should be preserved")
+	})
+
+	t.Run("object without provider", func(t *testing.T) {
+		var claim AMRClaim
+		err := json.Unmarshal([]byte(`[{"method":"password","timestamp":789}]`), &claim)
+		require.NoError(t, err)
+		require.Len(t, claim, 1)
+		require.Equal(t, "password", claim[0].Method)
+		require.Equal(t, int64(789), claim[0].Timestamp)
+		require.Empty(t, claim[0].Provider, "provider should be empty when not provided")
+	})
+
+	t.Run("all strings", func(t *testing.T) {
+		var claim AMRClaim
+		before := time.Now().Unix()
+		err := json.Unmarshal([]byte(`["password", "totp"]`), &claim)
+		require.NoError(t, err)
+		require.Len(t, claim, 2)
+		require.Equal(t, "password", claim[0].Method)
+		require.Equal(t, "totp", claim[1].Method)
+		require.GreaterOrEqual(t, claim[0].Timestamp, before)
+		require.Empty(t, claim[0].Provider)
+		require.Empty(t, claim[1].Provider)
+	})
+
+	t.Run("all objects", func(t *testing.T) {
+		var claim AMRClaim
+		err := json.Unmarshal([]byte(`[{"method":"password","timestamp":100},{"method":"totp","timestamp":200,"provider":"webauthn"}]`), &claim)
+		require.NoError(t, err)
+		require.Len(t, claim, 2)
+		require.Equal(t, "password", claim[0].Method)
+		require.Equal(t, int64(100), claim[0].Timestamp)
+		require.Empty(t, claim[0].Provider)
+		require.Equal(t, "totp", claim[1].Method)
+		require.Equal(t, int64(200), claim[1].Timestamp)
+		require.Equal(t, "webauthn", claim[1].Provider, "provider should be preserved")
+	})
+}
+
+// TestAsRedirectURL tests that AsRedirectURL includes the Supabase Auth identifier
+func TestAsRedirectURL(t *testing.T) {
+	response := &AccessTokenResponse{
+		Token:        "test_access_token",
+		TokenType:    "bearer",
+		ExpiresIn:    3600,
+		ExpiresAt:    1234567890,
+		RefreshToken: "test_refresh_token",
+	}
+
+	extraParams := url.Values{}
+	extraParams.Set("provider_token", "provider_access_token")
+
+	redirectURL := response.AsRedirectURL("https://example.com/callback", extraParams)
+
+	// Parse the URL
+	u, err := url.Parse(redirectURL)
+	require.NoError(t, err)
+
+	// Parse the fragment
+	fragment, err := url.ParseQuery(u.Fragment)
+	require.NoError(t, err)
+
+	// Verify all expected parameters are present
+	require.Equal(t, "test_access_token", fragment.Get("access_token"))
+	require.Equal(t, "bearer", fragment.Get("token_type"))
+	require.Equal(t, "3600", fragment.Get("expires_in"))
+	require.Equal(t, "1234567890", fragment.Get("expires_at"))
+	require.Equal(t, "test_refresh_token", fragment.Get("refresh_token"))
+	require.Equal(t, "provider_access_token", fragment.Get("provider_token"))
+
+	// Verify Supabase Auth identifier is present
+	require.Contains(t, fragment, "sb", "Fragment should contain Supabase Auth identifier 'sb'")
+	require.Equal(t, "", fragment.Get("sb"), "Supabase Auth identifier should have empty value")
 }

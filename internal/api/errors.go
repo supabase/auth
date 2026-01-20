@@ -15,10 +15,13 @@ import (
 )
 
 // Common error messages during signup flow
+const (
+	DuplicateEmailMsg = "A user with this email address has already been registered"
+	DuplicatePhoneMsg = "A user with this phone number has already been registered"
+)
+
 var (
-	DuplicateEmailMsg       = "A user with this email address has already been registered"
-	DuplicatePhoneMsg       = "A user with this phone number has already been registered"
-	UserExistsError   error = errors.New("user already exists")
+	UserExistsError error = errors.New("user already exists")
 )
 
 const InvalidChannelError = "Invalid channel, supported values are 'sms' or 'whatsapp'. 'whatsapp' is only supported if Twilio or Twilio Verify is used as the provider."

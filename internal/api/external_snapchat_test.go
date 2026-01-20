@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-
-	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 const (
@@ -26,15 +24,7 @@ func (ts *ExternalTestSuite) TestSignupExternalSnapchat() {
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("https://auth.snapchat.com/oauth2/api/user.external_id https://auth.snapchat.com/oauth2/api/user.display_name https://auth.snapchat.com/oauth2/api/user.bitmoji.avatar", q.Get("scope"))
 
-	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	ts.Require().NoError(err)
-
-	ts.Equal("snapchat", claims.Provider)
-	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
+	assertValidOAuthState(ts, q.Get("state"), "snapchat")
 }
 
 func SnapchatTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, user string) *httptest.Server {
