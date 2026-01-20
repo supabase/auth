@@ -164,12 +164,12 @@ func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (co
 
 	// Validate that the auth method used matches the client's registered method
 	if err := oauthserver.ValidateClientAuthMethod(client, creds.AuthMethod); err != nil {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, err.Error())
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "%s", err.Error())
 	}
 
 	// Validate authentication using centralized logic (secret verification)
 	if err := oauthserver.ValidateClientAuthentication(client, creds.ClientSecret); err != nil {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, err.Error())
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "%s", err.Error())
 	}
 
 	// Add authenticated client to context
