@@ -151,9 +151,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	logger := observability.NewStructuredLogger(logrus.StandardLogger(), globalConfig)
 
 	r := newRouter()
-	r.UseBypass(observability.AddRequestID(globalConfig))
-	r.UseBypass(logger)
 	r.UseBypass(recoverer)
+	r.UseBypass(observability.AddRequestID(globalConfig))
 	r.UseBypass(
 		sbff.Middleware(
 			&globalConfig.Security,
@@ -163,6 +162,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			},
 		),
 	)
+	r.UseBypass(logger)
 	r.UseBypass(xffmw.Handler)
 
 	if globalConfig.API.MaxRequestDuration > 0 {
