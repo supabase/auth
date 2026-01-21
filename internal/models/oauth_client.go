@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,10 +29,11 @@ const (
 
 // OAuthServerClient represents an OAuth client application registered with this OAuth server
 type OAuthServerClient struct {
-	ID               uuid.UUID `json:"client_id" db:"id"`
-	ClientSecretHash string    `json:"-" db:"client_secret_hash"`
-	RegistrationType string    `json:"registration_type" db:"registration_type"`
-	ClientType       string    `json:"client_type" db:"client_type"`
+	ID                      uuid.UUID `json:"client_id" db:"id"`
+	ClientSecretHash        string    `json:"-" db:"client_secret_hash"`
+	RegistrationType        string    `json:"registration_type" db:"registration_type"`
+	ClientType              string    `json:"client_type" db:"client_type"`
+	TokenEndpointAuthMethod string    `json:"token_endpoint_auth_method" db:"token_endpoint_auth_method"`
 
 	RedirectURIs string     `json:"-" db:"redirect_uris"`
 	GrantTypes   string     `json:"grant_types" db:"grant_types"`
@@ -82,6 +84,34 @@ func (c *OAuthServerClient) Validate() error {
 		return fmt.Errorf("client_secret is not allowed for public clients, use PKCE instead")
 	}
 
+	// Apply default token_endpoint_auth_method per RFC 7591:
+	// "If unspecified or omitted, the default is 'client_secret_basic'"
+	// For public clients, the default is 'none' since they don't have a client secret
+	if c.TokenEndpointAuthMethod == "" {
+		if c.ClientType == OAuthServerClientTypePublic {
+			c.TokenEndpointAuthMethod = TokenEndpointAuthMethodNone
+		} else {
+			c.TokenEndpointAuthMethod = TokenEndpointAuthMethodClientSecretBasic
+		}
+	}
+
+	// Validate token_endpoint_auth_method
+	validMethods := []string{TokenEndpointAuthMethodNone, TokenEndpointAuthMethodClientSecretBasic, TokenEndpointAuthMethodClientSecretPost}
+	if !slices.Contains(validMethods, c.TokenEndpointAuthMethod) {
+		return fmt.Errorf("token_endpoint_auth_method must be one of: %s, %s, %s",
+			TokenEndpointAuthMethodNone, TokenEndpointAuthMethodClientSecretBasic, TokenEndpointAuthMethodClientSecretPost)
+	}
+
+	// Public clients must use 'none'
+	if c.ClientType == OAuthServerClientTypePublic && c.TokenEndpointAuthMethod != TokenEndpointAuthMethodNone {
+		return fmt.Errorf("public clients must use token_endpoint_auth_method '%s'", TokenEndpointAuthMethodNone)
+	}
+
+	// Confidential clients cannot use 'none'
+	if c.ClientType == OAuthServerClientTypeConfidential && c.TokenEndpointAuthMethod == TokenEndpointAuthMethodNone {
+		return fmt.Errorf("confidential clients cannot use token_endpoint_auth_method '%s'", TokenEndpointAuthMethodNone)
+	}
+
 	return nil
 }
 
@@ -119,6 +149,11 @@ func (c *OAuthServerClient) IsPublic() bool {
 // IsConfidential returns true if the client is a confidential client
 func (c *OAuthServerClient) IsConfidential() bool {
 	return c.ClientType == OAuthServerClientTypeConfidential
+}
+
+// GetTokenEndpointAuthMethod returns the token endpoint auth method
+func (c *OAuthServerClient) GetTokenEndpointAuthMethod() string {
+	return c.TokenEndpointAuthMethod
 }
 
 // IsGrantTypeAllowed returns true if the client is allowed to use the specified grant type
