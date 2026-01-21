@@ -238,7 +238,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			desc: "Only phone",
 			params: map[string]interface{}{
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "StrongPassword123!",
 			},
 			expected: map[string]interface{}{
 				"email":           "",
@@ -246,7 +246,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "phone",
 				"providers":       []string{"phone"},
-				"password":        "test1",
+				"password":        "StrongPassword123!",
 			},
 		},
 		{
@@ -254,7 +254,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"email":    "test1@example.com",
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "StrongPassword123!",
 			},
 			expected: map[string]interface{}{
 				"email":           "test1@example.com",
@@ -262,7 +262,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email", "phone"},
-				"password":        "test1",
+				"password":        "StrongPassword123!",
 			},
 		},
 		{
@@ -300,7 +300,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"email":        "test4@example.com",
 				"phone":        "",
-				"password":     "test1",
+				"password":     "StrongPassword123!",
 				"ban_duration": "24h",
 			},
 			expected: map[string]interface{}{
@@ -309,7 +309,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email"},
-				"password":        "test1",
+				"password":        "StrongPassword123!",
 			},
 		},
 		{
@@ -332,7 +332,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"id":       "fc56ab41-2010-4870-a9b9-767c1dc573fb",
 				"email":    "test6@example.com",
-				"password": "test",
+				"password": "StrongPassword123!",
 			},
 			expected: map[string]interface{}{
 				"id":              "fc56ab41-2010-4870-a9b9-767c1dc573fb",
@@ -341,7 +341,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email"},
-				"password":        "test",
+				"password":        "StrongPassword123!",
 			},
 		},
 	}
@@ -505,6 +505,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 			"password": "",
+			"enforce_password_check": true,
 		}))
 
 		// Setup request
@@ -711,7 +712,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"email":    "test1@example.com",
-				"password": "test1",
+				"password": "StrongPassword123!",
 			},
 			expected: http.StatusOK,
 		},
@@ -727,7 +728,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "StrongPassword123!",
 			},
 			expected: http.StatusOK,
 		},
@@ -739,7 +740,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"email":    "test2@example.com",
-				"password": "test2",
+				"password": "StrongPassword123!",
 			},
 			expected: http.StatusOK,
 		},
@@ -860,20 +861,32 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 	cases := []struct {
 		desc   string
 		params map[string]interface{}
+		code   int
 	}{
 		{
 			desc: "create user without email and phone",
 			params: map[string]interface{}{
-				"password": "test_password",
+				"password": "StrongPassword123!",
 			},
+			code: http.StatusBadRequest,
+		},
+		{
+			desc: "weak password that doesn't meet the minimum length",
+			params: map[string]interface{}{
+				"email":    "test@example.com",
+				"password": "weak",
+				"enforce_password_check": true,
+			},
+			code: http.StatusUnprocessableEntity,
 		},
 		{
 			desc: "create user with password and password hash",
 			params: map[string]interface{}{
 				"email":         "test@example.com",
-				"password":      "test_password",
+				"password":      "StrongPassword123!",
 				"password_hash": "$2y$10$Tk6yEdmTbb/eQ/haDMaCsuCsmtPVprjHMcij1RqiJdLGPDXnL3L1a",
 			},
+			code: http.StatusBadRequest,
 		},
 		{
 			desc: "invalid ban duration",
@@ -881,6 +894,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 				"email":        "test@example.com",
 				"ban_duration": "never",
 			},
+			code: http.StatusBadRequest,
 		},
 		{
 			desc: "custom id is nil",
@@ -888,6 +902,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 				"id":    "00000000-0000-0000-0000-000000000000",
 				"email": "test@example.com",
 			},
+			code: http.StatusBadRequest,
 		},
 		{
 			desc: "bad id format",
@@ -895,8 +910,13 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 				"id":    "bad_uuid_format",
 				"email": "test@example.com",
 			},
+			code: http.StatusBadRequest,
 		},
 	}
+
+	originalMinLength := ts.Config.Password.MinLength
+	ts.Config.Password.MinLength = 8
+
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			var buffer bytes.Buffer
@@ -905,12 +925,149 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), http.StatusBadRequest, w.Code, w)
+
+			require.Equal(ts.T(), c.code, w.Code, "Expected status code %d but got %d for test case: %s", c.code, w.Code, c.desc)
 
 			data := map[string]interface{}{}
 			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-			require.Equal(ts.T(), data["error_code"], apierrors.ErrorCodeValidationFailed)
+
+			if c.code == http.StatusBadRequest {
+				require.Equal(ts.T(), data["error_code"], apierrors.ErrorCodeValidationFailed)
+			} else if c.code == http.StatusUnprocessableEntity && c.desc == "weak password that doesn't meet the minimum length" {
+				require.Equal(ts.T(), "weak_password", data["error_code"])
+			}
 		})
 
 	}
+
+	ts.Config.Password.MinLength = originalMinLength
+}
+
+func (ts *AdminTestSuite) TestAdminUserCreateWithEnforcePasswordCheck() {
+	originalMinLength := ts.Config.Password.MinLength
+	ts.Config.Password.MinLength = 20
+
+	weakPassword := "short"
+
+	ts.Run("With enforce flag, should fail validation", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":                  "test@example.com",
+			"password":               weakPassword,
+			"enforce_password_check": true,
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+	})
+
+	ts.Run("Without enforce flag, should succeed despite weak password", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":                  "test@example.com",
+			"password":               weakPassword,
+			"enforce_password_check": false,
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		data := models.User{}
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+		require.Equal(ts.T(), "test@example.com", data.GetEmail())
+
+		u, err := models.FindUserByID(ts.API.db, data.ID)
+		require.NoError(ts.T(), err)
+		isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, weakPassword,
+			ts.API.config.Security.DBEncryption.DecryptionKeys,
+			ts.API.config.Security.DBEncryption.Encrypt,
+			ts.API.config.Security.DBEncryption.EncryptionKeyID)
+		require.NoError(ts.T(), err)
+		require.True(ts.T(), isAuthenticated)
+	})
+
+	ts.Config.Password.MinLength = originalMinLength
+}
+
+func (ts *AdminTestSuite) TestAdminUserUpdateWithEnforcePasswordCheck() {
+	u, err := models.NewUser("", "test@example.com", "original", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	originalMinLength := ts.Config.Password.MinLength
+	ts.Config.Password.MinLength = 20 // Set a high minimum to ensure our test password is "weak"
+
+	weakPassword := "short"
+
+	ts.Run("Without enforce_password_check parameter (default), should accept weak password", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"password": weakPassword,
+		}))
+
+		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusOK, w.Code, "Expected weak password to be accepted when enforce_password_check is not provided")
+
+		updatedUser, err := models.FindUserByID(ts.API.db, u.ID)
+		require.NoError(ts.T(), err)
+		isAuthenticated, _, err := updatedUser.Authenticate(context.Background(), ts.API.db, weakPassword,
+			ts.API.config.Security.DBEncryption.DecryptionKeys,
+			ts.API.config.Security.DBEncryption.Encrypt,
+			ts.API.config.Security.DBEncryption.EncryptionKeyID)
+		require.NoError(ts.T(), err)
+		require.True(ts.T(), isAuthenticated, "Should be able to authenticate with the weak password")
+	})
+
+	ts.Run("With enforce_password_check=false, should accept weak password", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"password":               weakPassword,
+			"enforce_password_check": false,
+		}))
+
+		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusOK, w.Code, "Expected weak password to be accepted when enforce_password_check=false")
+
+		updatedUser, err := models.FindUserByID(ts.API.db, u.ID)
+		require.NoError(ts.T(), err)
+		isAuthenticated, _, err := updatedUser.Authenticate(context.Background(), ts.API.db, weakPassword,
+			ts.API.config.Security.DBEncryption.DecryptionKeys,
+			ts.API.config.Security.DBEncryption.Encrypt,
+			ts.API.config.Security.DBEncryption.EncryptionKeyID)
+		require.NoError(ts.T(), err)
+		require.True(ts.T(), isAuthenticated, "Should be able to authenticate with the weak password")
+	})
+
+	ts.Run("With enforce_password_check=true, should reject weak password", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"password":               weakPassword,
+			"enforce_password_check": true,
+		}))
+
+		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code, "Expected weak password to be rejected when enforce_password_check=true")
+	})
+
+	ts.Config.Password.MinLength = originalMinLength
 }
