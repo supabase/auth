@@ -320,7 +320,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		token, terr = a.issueRefreshToken(r, tx, user, models.SSOSAML, grantParams)
+		token, terr = a.issueRefreshToken(r, w.Header(), tx, user, models.SSOSAML, grantParams)
 
 		if terr != nil {
 			return apierrors.NewInternalServerError("Unable to issue refresh token from SAML Assertion").WithInternalError(terr)

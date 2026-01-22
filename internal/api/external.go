@@ -257,7 +257,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			terr = tx.Update(flowState)
 		} else {
 			// Implicit flow: issue tokens directly
-			token, terr = a.issueRefreshToken(r, tx, user, models.OAuth, grantParams)
+			token, terr = a.issueRefreshToken(r, w.Header(), tx, user, models.OAuth, grantParams)
 			if terr == nil && flowState != nil {
 				terr = tx.Destroy(flowState)
 			}
