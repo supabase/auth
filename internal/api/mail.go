@@ -27,8 +27,8 @@ import (
 
 var (
 	EmailRateLimitExceeded error = errors.New("email rate limit exceeded")
-	emailSendCounter             = observability.ObtainMetricCounter("gotrue_email_send_operations_counter_total", "Number of email send operations")
-	emailErrorsCounter           = observability.ObtainMetricCounter("gotrue_email_send_errors_counter_total", "Number of email send errors")
+	emailSendCounter             = observability.ObtainMetricCounter("global_auth_email_send_operations_total", "Number of email send operations")
+	emailErrorsCounter           = observability.ObtainMetricCounter("global_auth_email_send_errors_total", "Number of email send errors")
 )
 
 type GenerateLinkParams struct {
