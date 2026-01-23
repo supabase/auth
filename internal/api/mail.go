@@ -9,6 +9,7 @@ import (
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/mailer/validateclient"
+	"github.com/supabase/auth/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
@@ -26,6 +27,8 @@ import (
 
 var (
 	EmailRateLimitExceeded error = errors.New("email rate limit exceeded")
+	emailSendCounter             = observability.ObtainMetricCounter("global_auth_email_send_operations_total", "Number of email send operations")
+	emailErrorsCounter           = observability.ObtainMetricCounter("global_auth_email_send_errors_total", "Number of email send errors")
 )
 
 type GenerateLinkParams struct {
@@ -865,6 +868,10 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		return a.hooksMgr.InvokeHook(tx, r, &input, &output)
 	}
 
+	// Increment email send operations here, since this metric is meant to count number of mail
+	// send operations rather than simply number of attempts to send mail
+	emailSendCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("type", params.emailActionType)))
+
 	mr := a.Mailer()
 	var err error
 	switch params.emailActionType {
@@ -902,10 +909,15 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	case errors.Is(err, validateclient.ErrInvalidEmailAddress),
 		errors.Is(err, validateclient.ErrInvalidEmailFormat),
 		errors.Is(err, validateclient.ErrInvalidEmailDNS):
+
+		emailErrorsCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("type", params.emailActionType)))
 		return apierrors.NewBadRequestError(
 			apierrors.ErrorCodeEmailAddressInvalid,
 			"Email address %q is invalid",
 			u.GetEmail())
+	case err != nil:
+		emailErrorsCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("type", params.emailActionType)))
+		return err
 	default:
 		return err
 	}
