@@ -246,7 +246,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user, config.Experimental.ProvidersWithOwnLinkingDomain); terr != nil {
+			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user, config.Experimental.ProvidersWithOwnLinkingDomain, config.Security.DangerousSSOAutoLinking); terr != nil {
 				return apierrors.NewInternalServerError("Database error checking email").WithInternalError(terr)
 			} else if duplicateUser != nil {
 				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)

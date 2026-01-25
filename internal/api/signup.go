@@ -146,7 +146,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain)
+		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain, config.Security.DangerousSSOAutoLinking)
 	case "phone":
 		if !config.External.Phone.Enabled {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodePhoneProviderDisabled, "Phone signups are disabled")
