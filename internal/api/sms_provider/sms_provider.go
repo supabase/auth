@@ -49,6 +49,8 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 		return NewVonageProvider(config.Sms.Vonage)
 	case "twilio_verify":
 		return NewTwilioVerifyProvider(config.Sms.TwilioVerify)
+	case "plivo":
+		return NewPlivoProvider(config.Sms.Plivo)
 	default:
 		return nil, fmt.Errorf("sms Provider %s could not be found", name)
 	}
@@ -63,7 +65,7 @@ func IsValidMessageChannel(channel string, config *conf.GlobalConfiguration) boo
 	case SMSProvider:
 		return true
 	case WhatsappProvider:
-		return config.Sms.Provider == "twilio" || config.Sms.Provider == "twilio_verify"
+		return config.Sms.Provider == "twilio" || config.Sms.Provider == "twilio_verify" || config.Sms.Provider == "plivo"
 	default:
 		return false
 	}

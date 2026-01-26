@@ -611,6 +611,7 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
+	Plivo        PlivoProviderConfiguration        `json:"plivo"`
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
@@ -649,6 +650,12 @@ type VonageProviderConfiguration struct {
 	ApiKey    string `json:"api_key" split_words:"true"`
 	ApiSecret string `json:"api_secret" split_words:"true"`
 	From      string `json:"from" split_words:"true"`
+}
+
+type PlivoProviderConfiguration struct {
+	AuthID    string `json:"auth_id" split_words:"true"`
+	AuthToken string `json:"auth_token" split_words:"true"`
+	SenderID  string `json:"sender_id" split_words:"true"`
 }
 
 type CaptchaConfiguration struct {
@@ -1339,6 +1346,19 @@ func (t *VonageProviderConfiguration) Validate() error {
 	}
 	if t.From == "" {
 		return errors.New("missing Vonage 'from' parameter")
+	}
+	return nil
+}
+
+func (p *PlivoProviderConfiguration) Validate() error {
+	if p.AuthID == "" {
+		return errors.New("plivo: Auth ID is required")
+	}
+	if p.AuthToken == "" {
+		return errors.New("plivo: Auth Token is required")
+	}
+	if p.SenderID == "" {
+		return errors.New("plivo: Sender ID is required")
 	}
 	return nil
 }
