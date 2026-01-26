@@ -16,6 +16,7 @@ var defaultTimeout time.Duration = time.Second * 10
 
 const SMSProvider = "sms"
 const WhatsappProvider = "whatsapp"
+const VoiceProvider = "voice"
 
 func init() {
 	timeoutStr := os.Getenv("GOTRUE_INTERNAL_HTTP_TIMEOUT")
@@ -49,6 +50,8 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 		return NewVonageProvider(config.Sms.Vonage)
 	case "twilio_verify":
 		return NewTwilioVerifyProvider(config.Sms.TwilioVerify)
+	case "plivo_verify":
+		return NewPlivoVerifyProvider(config.Sms.PlivoVerify)
 	default:
 		return nil, fmt.Errorf("sms Provider %s could not be found", name)
 	}
@@ -64,6 +67,8 @@ func IsValidMessageChannel(channel string, config *conf.GlobalConfiguration) boo
 		return true
 	case WhatsappProvider:
 		return config.Sms.Provider == "twilio" || config.Sms.Provider == "twilio_verify"
+	case VoiceProvider:
+		return config.Sms.Provider == "plivo_verify"
 	default:
 		return false
 	}

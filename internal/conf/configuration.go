@@ -611,6 +611,7 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
+	PlivoVerify  PlivoVerifyProviderConfiguration  `json:"plivo_verify" split_words:"true"`
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
@@ -649,6 +650,28 @@ type VonageProviderConfiguration struct {
 	ApiKey    string `json:"api_key" split_words:"true"`
 	ApiSecret string `json:"api_secret" split_words:"true"`
 	From      string `json:"from" split_words:"true"`
+}
+
+type PlivoVerifyProviderConfiguration struct {
+	AuthID     string `json:"auth_id" split_words:"true"`
+	AuthToken  string `json:"auth_token" split_words:"true"`
+	AppUUID    string `json:"app_uuid" split_words:"true"`
+	Locale     string `json:"locale"`
+	BrandName  string `json:"brand_name" split_words:"true"`
+	CodeLength int    `json:"code_length" split_words:"true"`
+}
+
+func (p *PlivoVerifyProviderConfiguration) Validate() error {
+	if p.AuthID == "" {
+		return errors.New("plivo verify: missing auth_id")
+	}
+	if p.AuthToken == "" {
+		return errors.New("plivo verify: missing auth_token")
+	}
+	if p.AppUUID == "" {
+		return errors.New("plivo verify: missing app_uuid")
+	}
+	return nil
 }
 
 type CaptchaConfiguration struct {
