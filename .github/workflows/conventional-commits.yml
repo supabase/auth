@@ -26,7 +26,7 @@ jobs:
     env:
       EVENT: ${{ toJSON(github.event) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           sparse-checkout: |
             .github

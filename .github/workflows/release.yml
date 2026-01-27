@@ -40,7 +40,7 @@ jobs:
           target-branch: ${{ github.ref_name }}
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
           fetch-depth: 0
@@ -89,7 +89,7 @@ jobs:
           echo "RELEASE_CANDIDATE=${RELEASE_CANDIDATE}" >> "${GITHUB_OUTPUT}"
           echo "RELEASE_NAME=${RELEASE_NAME}" >> "${GITHUB_OUTPUT}"
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
           go-version-file: go.mod

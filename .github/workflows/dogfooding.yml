@@ -15,7 +15,7 @@ jobs:
   check_dogfooding:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: github.event.pull_request.base.ref == 'master' && github.event.pull_request.head.ref == 'release-please--branches--master'
         with:
           ref: master # used to identify the latest RC version via git describe --tags --match rc*
