@@ -312,7 +312,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}); terr != nil {
 				return terr
 			}
-			token, terr = a.issueRefreshToken(r, tx, user, models.PasswordGrant, grantParams)
+			token, terr = a.issueRefreshToken(r, w.Header(), tx, user, models.PasswordGrant, grantParams)
 
 			if terr != nil {
 				return terr

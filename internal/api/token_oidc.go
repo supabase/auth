@@ -306,7 +306,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(r, tx, user, models.OAuth, grantParams)
+		token, terr = a.issueRefreshToken(r, w.Header(), tx, user, models.OAuth, grantParams)
 		if terr != nil {
 			return terr
 		}
