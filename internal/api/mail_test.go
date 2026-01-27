@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/gobwas/glob"
 	"github.com/golang-jwt/jwt/v5"
@@ -17,6 +18,7 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type MailTestSuite struct {
@@ -254,4 +256,105 @@ func (ts *MailTestSuite) setURIAllowListMap(uris ...string) {
 		g := glob.MustCompile(uri, '.', '/')
 		ts.Config.URIAllowListMap[uri] = g
 	}
+}
+
+// mockLimiter is a test implementation of ratelimit.Limiter
+type mockLimiter struct {
+	allowFunc func() bool
+}
+
+func (m *mockLimiter) Allow() bool {
+	if m.allowFunc != nil {
+		return m.allowFunc()
+	}
+	return true
+}
+
+func (m *mockLimiter) AllowAt(at time.Time) bool {
+	return m.Allow()
+}
+
+func (ts *MailTestSuite) TestSendEmailRateLimitingWithHook() {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	// Enable the send email hook
+	ts.Config.Hook.SendEmail.Enabled = true
+	ts.Config.Mailer.Autoconfirm = false
+
+	// Create a limiter that always returns false (would normally block)
+	rateLimitExceeded := false
+	mockLimiter := &mockLimiter{
+		allowFunc: func() bool {
+			rateLimitExceeded = true
+			return false
+		},
+	}
+
+	// Set up the API with the mock limiter
+	originalLimiter := ts.API.limiterOpts.Email
+	ts.API.limiterOpts.Email = mockLimiter
+	defer func() {
+		ts.API.limiterOpts.Email = originalLimiter
+	}()
+
+	// Create a request with proper context
+	testURL, _ := url.Parse("http://localhost")
+	req := httptest.NewRequest(http.MethodPost, "http://localhost", nil)
+	ctx := req.Context()
+	ctx = withExternalHost(ctx, testURL)
+	req = req.WithContext(ctx)
+
+	// Call sendConfirmation which internally calls sendEmail
+	err = ts.API.db.Transaction(func(tx *storage.Connection) error {
+		return ts.API.sendConfirmation(req, tx, u, models.ImplicitFlow)
+	})
+
+	// When hook is enabled, the hook should be invoked and rate limiting should be skipped
+	// Since we don't have a real hook configured, it will return an error from hook invocation
+	// But the important part is that rateLimitExceeded should remain false
+	require.False(ts.T(), rateLimitExceeded, "Rate limiting check should be skipped when send email hook is enabled")
+}
+
+func (ts *MailTestSuite) TestSendEmailRateLimitingWithoutHook() {
+	// Test that rate limiting is applied when send email hook is NOT enabled
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	// Disable the send email hook
+	ts.Config.Hook.SendEmail.Enabled = false
+	ts.Config.Mailer.Autoconfirm = false
+
+	// Create a limiter that always returns false (blocks)
+	rateLimitChecked := false
+	mockLimiter := &mockLimiter{
+		allowFunc: func() bool {
+			rateLimitChecked = true
+			return false
+		},
+	}
+
+	// Set up the API with the mock limiter
+	originalLimiter := ts.API.limiterOpts.Email
+	ts.API.limiterOpts.Email = mockLimiter
+	defer func() {
+		ts.API.limiterOpts.Email = originalLimiter
+	}()
+
+	// Create a request with proper context
+	testURL, _ := url.Parse("http://localhost")
+	req := httptest.NewRequest(http.MethodPost, "http://localhost", nil)
+	ctx := req.Context()
+	ctx = withExternalHost(ctx, testURL)
+	req = req.WithContext(ctx)
+
+	// Call sendConfirmation which internally calls sendEmail
+	err = ts.API.db.Transaction(func(tx *storage.Connection) error {
+		return ts.API.sendConfirmation(req, tx, u, models.ImplicitFlow)
+	})
+
+	// Rate limiting should be checked and the request should be blocked
+	require.True(ts.T(), rateLimitChecked, "Rate limiting check should be performed when send email hook is disabled")
+	require.Error(ts.T(), err, "Should return an error when rate limit is exceeded")
+	require.Contains(ts.T(), err.Error(), "email rate limit exceeded", "Error should indicate rate limit exceeded")
 }

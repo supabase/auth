@@ -780,29 +780,8 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		}
 	}
 
-	// if the number of events is set to zero, we immediately apply rate limits.
-	if config.RateLimitEmailSent.Events == 0 {
-		emailRateLimitCounter.Add(
-			ctx,
-			1,
-			metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
-		)
-		return EmailRateLimitExceeded
-	}
-
-	// TODO(km): Deprecate this behaviour - rate limits should still be applied to autoconfirm
-	if !config.Mailer.Autoconfirm {
-		// apply rate limiting before the email is sent out
-		if ok := a.limiterOpts.Email.Allow(); !ok {
-			emailRateLimitCounter.Add(
-				ctx,
-				1,
-				metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
-			)
-			return EmailRateLimitExceeded
-		}
-	}
-
+	// When custom email hooks are enabled, skip rate limiting since the project
+	// is handling email delivery themselves and should not be subject to built-in limits
 	if config.Hook.SendEmail.Enabled {
 		// When secure email change is disabled, we place the token for the new email on emailData.Token
 		if params.emailActionType == mail.EmailChangeVerification && !config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
@@ -863,6 +842,29 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		}
 		output := v0hooks.SendEmailOutput{}
 		return a.hooksMgr.InvokeHook(tx, r, &input, &output)
+	}
+
+	// if the number of events is set to zero, we immediately apply rate limits.
+	if config.RateLimitEmailSent.Events == 0 {
+		emailRateLimitCounter.Add(
+			ctx,
+			1,
+			metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
+		)
+		return EmailRateLimitExceeded
+	}
+
+	// TODO(km): Deprecate this behaviour - rate limits should still be applied to autoconfirm
+	if !config.Mailer.Autoconfirm {
+		// apply rate limiting before the email is sent out
+		if ok := a.limiterOpts.Email.Allow(); !ok {
+			emailRateLimitCounter.Add(
+				ctx,
+				1,
+				metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
+			)
+			return EmailRateLimitExceeded
+		}
 	}
 
 	mr := a.Mailer()
