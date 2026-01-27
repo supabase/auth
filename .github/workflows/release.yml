@@ -135,14 +135,14 @@ jobs:
 
       - name: GitHub OIDC Auth
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
-        uses: aws-actions/configure-aws-credentials@v4.1.0
+        uses: aws-actions/configure-aws-credentials@v5.1.1
         with:
           aws-region: ap-southeast-1
           role-to-assume: arn:aws:iam::${{ secrets.SHARED_SERVICES_AWS_ACCOUNT_ID }}:role/supabase-github-oidc-role
           role-session-name: shared-services-jump
 
       - name: Assume destination role
-        uses: aws-actions/configure-aws-credentials@v4.1.0
+        uses: aws-actions/configure-aws-credentials@v5.1.1
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
           aws-region: ap-southeast-1
