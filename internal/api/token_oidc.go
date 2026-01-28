@@ -29,7 +29,7 @@ type IdTokenGrantParams struct {
 	LinkIdentity bool   `json:"link_identity"`
 }
 
-func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, bool, string, []string, bool, error) {
+func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connection, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, bool, string, []string, bool, error) {
 	log := observability.GetLogEntry(r).Entry
 
 	var cfg *conf.OAuthProviderConfiguration
@@ -123,6 +123,40 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		issuer = provider.IssuerSnapchat
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Snapchat.ClientID...)
 
+	case strings.HasPrefix(p.Provider, "custom:"):
+		// Custom OIDC provider - identifier already includes 'custom:' prefix
+		customProvider, err := models.FindCustomOAuthProviderByIdentifier(db, p.Provider)
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Custom provider %q not found", p.Provider))
+			}
+			return nil, false, "", nil, false, apierrors.NewInternalServerError("Error finding custom provider").WithInternalError(err)
+		}
+
+		if !customProvider.Enabled {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, fmt.Sprintf("Custom provider %q is disabled", p.Provider))
+		}
+
+		// Ensure it's an OIDC provider
+		if !customProvider.IsOIDC() {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Provider %q is not an OIDC provider", p.Provider))
+		}
+
+		if customProvider.Issuer == nil {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("OIDC provider %q missing issuer", p.Provider))
+		}
+
+		providerType = p.Provider
+		issuer = *customProvider.Issuer
+		acceptableClientIDs = append(acceptableClientIDs, customProvider.ClientID)
+		acceptableClientIDs = append(acceptableClientIDs, customProvider.AcceptableClientIDs...)
+
+		cfg = &conf.OAuthProviderConfiguration{
+			Enabled:        true, // already checked above
+			SkipNonceCheck: customProvider.SkipNonceCheck,
+			EmailOptional:  customProvider.EmailOptional,
+		}
+
 	default:
 		log.WithField("issuer", p.Issuer).WithField("client_id", p.ClientID).Warn("Use of POST /token with arbitrary issuer and client_id is deprecated for security reasons. Please switch to using the API with provider only!")
 
@@ -200,7 +234,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		ctx = withTargetUser(ctx, targetUser)
 	}
 
-	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, emailOptional, err := params.getProvider(ctx, config, r)
+	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, emailOptional, err := params.getProvider(ctx, db, config, r)
 	if err != nil {
 		return err
 	}

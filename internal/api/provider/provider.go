@@ -43,6 +43,42 @@ func (a *audience) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// UnixTimeOrString accepts either:
+// - number: seconds since epoch (OIDC NumericDate)
+// - string: RFC3339 timestamp
+type UnixTimeOrString time.Time
+
+func (t *UnixTimeOrString) UnmarshalJSON(b []byte) error {
+	// null
+	if bytes.Equal(b, []byte("null")) {
+		*t = UnixTimeOrString(time.Time{})
+		return nil
+	}
+
+	// number (possibly float)
+	var f float64
+	if err := json.Unmarshal(b, &f); err == nil {
+		sec := int64(f)
+		*t = UnixTimeOrString(time.Unix(sec, 0).UTC())
+		return nil
+	}
+
+	// string (RFC3339)
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	if s == "" {
+		*t = UnixTimeOrString(time.Time{})
+		return nil
+	}
+	if sec, err := time.Parse(time.RFC3339, s); err == nil {
+		*t = UnixTimeOrString(sec.UTC())
+		return nil
+	}
+	return &time.ParseError{Layout: time.RFC3339, Value: s}
+}
+
 type Claims struct {
 	// Reserved claims
 	Issuer  string   `json:"iss,omitempty" structs:"iss,omitempty"`
@@ -65,7 +101,7 @@ type Claims struct {
 	Birthdate         string `json:"birthdate,omitempty" structs:"birthdate,omitempty"`
 	ZoneInfo          string `json:"zoneinfo,omitempty" structs:"zoneinfo,omitempty"`
 	Locale            string `json:"locale,omitempty" structs:"locale,omitempty"`
-	UpdatedAt         string `json:"updated_at,omitempty" structs:"updated_at,omitempty"`
+	UpdatedAt         *UnixTimeOrString `json:"updated_at,omitempty" structs:"updated_at,omitempty"`
 	Email             string `json:"email,omitempty" structs:"email,omitempty"`
 	EmailVerified     bool   `json:"email_verified,omitempty" structs:"email_verified"`
 	Phone             string `json:"phone,omitempty" structs:"phone,omitempty"`

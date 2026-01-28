@@ -104,4 +104,9 @@ const (
 	ErrorCodeOAuthClientNotFound        ErrorCode = "oauth_client_not_found"
 	ErrorCodeOAuthAuthorizationNotFound ErrorCode = "oauth_authorization_not_found"
 	ErrorCodeOAuthConsentNotFound       ErrorCode = "oauth_consent_not_found"
+
+	// Custom OAuth/OIDC provider error codes
+	ErrorCodeProviderNotFound ErrorCode = "provider_not_found"
+	ErrorCodeFeatureDisabled  ErrorCode = "feature_disabled"
+	ErrorCodeOverQuota        ErrorCode = "over_quota"
 )
