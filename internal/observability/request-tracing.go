@@ -15,7 +15,6 @@ import (
 
 func getChiRoutePattern(r *http.Request) string {
 	ctx := r.Context()
-
 	routeContext := chi.RouteContext(ctx)
 	if routeContext == nil {
 		return "noroute"
@@ -115,7 +114,6 @@ func countStatusCodesSafely(w *interceptingResponseWriter, r *http.Request, coun
 func addMetricAttributes(r *http.Request) []attribute.KeyValue {
 	routePattern := getChiRoutePattern(r)
 	routePatternAttr := semconv.HTTPRouteKey.String(routePattern)
-
 	out := []attribute.KeyValue{
 		routePatternAttr,
 	}
