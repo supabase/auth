@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.186.0](https://github.com/supabase/auth/compare/v2.185.0...v2.186.0) (2026-01-28)
+
+
+### Features
+
+* Add email send operation metrics ([#2311](https://github.com/supabase/auth/issues/2311)) ([0096575](https://github.com/supabase/auth/commit/00965758762301875df2d7e4e552b2346bc09236))
+* add Supabase Auth identifier to OAuth redirect URLs ([#2299](https://github.com/supabase/auth/issues/2299)) ([2d3dbc6](https://github.com/supabase/auth/commit/2d3dbc652c1beb47c2eade28b45e94f6e2c56982))
+* log sb-auth-user-id, sb-auth-session-id, ... on sign in not just refresh token ([#2342](https://github.com/supabase/auth/issues/2342)) ([a486ada](https://github.com/supabase/auth/commit/a486ada3683bb078b8f396a5ba2e606826f0044b))
+* **oauth-server:** store and enforce token_endpoint_auth_method ([#2300](https://github.com/supabase/auth/issues/2300)) ([bcd6cd5](https://github.com/supabase/auth/commit/bcd6cd590a47e963b7afe615c889f62d28cb94a2))
+* replace JWT OAuth state with `flow_state.id` UUID ([#2331](https://github.com/supabase/auth/issues/2331)) ([645654d](https://github.com/supabase/auth/commit/645654df63a3da7929840659c065f6a9cdd4ba96))
+* upgrade existing sessions to v2 refresh tokens though config value ([#2356](https://github.com/supabase/auth/issues/2356)) ([6fb0e8a](https://github.com/supabase/auth/commit/6fb0e8adc104e3b9119b79506997e29bbb2ca9a2))
+
+
+### Bug Fixes
+
+* reloader unittest races on writeWg ([#2352](https://github.com/supabase/auth/issues/2352)) ([088b714](https://github.com/supabase/auth/commit/088b7149d6857cfe65e4338c1ee9e079688f8c92))
+* update migration version ([#2343](https://github.com/supabase/auth/issues/2343)) ([61ef4db](https://github.com/supabase/auth/commit/61ef4dbb5146c4379d495c2fb77c7ade753d1f3b))
+
 ## [2.185.0](https://github.com/supabase/auth/compare/v2.184.0...v2.185.0) (2026-01-12)
 
 
