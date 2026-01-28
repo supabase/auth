@@ -193,7 +193,7 @@ func (s *StringSlice) Scan(src interface{}) error {
 }
 
 func (s StringSlice) Value() (driver.Value, error) {
-	if s == nil || len(s) == 0 {
+	if len(s) == 0 {
 		return []byte("[]"), nil
 	}
 
