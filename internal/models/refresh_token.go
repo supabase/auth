@@ -168,6 +168,10 @@ func (s *Session) SetupRefreshTokenData(dbEncryption conf.DatabaseEncryptionConf
 	return nil
 }
 
+func (s *Session) UpdateRefreshTokenCounterAndHmacKey(tx *storage.Connection) error {
+	return tx.UpdateOnly(s, "refresh_token_hmac_key", "refresh_token_counter")
+}
+
 func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken, params *GrantParams) (*RefreshToken, error) {
 	token := &RefreshToken{
 		UserID: user.ID,
