@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 )
 
 type OpenTelemetryTracerTestSuite struct {
@@ -75,19 +75,19 @@ func (ts *OpenTelemetryTracerTestSuite) TestOpenTelemetryTracer_Spans() {
 
 	if assert.Equal(ts.T(), 2, len(spans)) {
 		attributes1 := spans[0].Attributes()
-		method1 := getAttribute(attributes1, semconv.HTTPMethodKey)
+		method1 := getAttribute(attributes1, semconv.HTTPRequestMethodKey)
 		assert.Equal(ts.T(), "POST", method1.AsString())
-		url1 := getAttribute(attributes1, semconv.HTTPTargetKey)
+		url1 := getAttribute(attributes1, semconv.URLPathKey)
 		assert.Equal(ts.T(), "/something1", url1.AsString())
-		statusCode1 := getAttribute(attributes1, semconv.HTTPStatusCodeKey)
+		statusCode1 := getAttribute(attributes1, semconv.HTTPResponseStatusCodeKey)
 		assert.Equal(ts.T(), int64(404), statusCode1.AsInt64())
 
 		attributes2 := spans[1].Attributes()
-		method2 := getAttribute(attributes2, semconv.HTTPMethodKey)
+		method2 := getAttribute(attributes2, semconv.HTTPRequestMethodKey)
 		assert.Equal(ts.T(), "GET", method2.AsString())
-		url2 := getAttribute(attributes2, semconv.HTTPTargetKey)
+		url2 := getAttribute(attributes2, semconv.URLPathKey)
 		assert.Equal(ts.T(), "/something2", url2.AsString())
-		statusCode2 := getAttribute(attributes2, semconv.HTTPStatusCodeKey)
+		statusCode2 := getAttribute(attributes2, semconv.HTTPResponseStatusCodeKey)
 		assert.Equal(ts.T(), int64(404), statusCode2.AsInt64())
 	}
 }

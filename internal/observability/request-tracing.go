@@ -9,9 +9,19 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.opentelemetry.io/otel/trace"
 )
+
+func getChiRoutePattern(r *http.Request) string {
+	ctx := r.Context()
+	routeContext := chi.RouteContext(ctx)
+	if routeContext == nil {
+		return "noroute"
+	}
+
+	return routeContext.RoutePattern()
+}
 
 // traceChiRoutesSafely attempts to extract the Chi RouteContext. If the
 // request does not have a RouteContext it will recover from the panic and
@@ -26,9 +36,9 @@ func traceChiRoutesSafely(r *http.Request) {
 		}
 	}()
 
-	routeContext := chi.RouteContext(r.Context())
+	routePattern := getChiRoutePattern(r)
 	span := trace.SpanFromContext(r.Context())
-	span.SetAttributes(semconv.HTTPRouteKey.String(routeContext.RoutePattern()))
+	span.SetAttributes(semconv.HTTPRouteKey.String(routePattern))
 }
 
 // traceChiRouteURLParamsSafely attempts to extract the Chi RouteContext
@@ -90,26 +100,31 @@ func countStatusCodesSafely(w *interceptingResponseWriter, r *http.Request, coun
 	defer func() {
 		if rec := recover(); rec != nil {
 			logrus.WithField("error", rec).Error("unable to count status codes safely, metrics may be off")
-			counter.Add(
-				r.Context(),
-				1,
-				metric.WithAttributes(
-					attribute.Bool("noroute", true),
-					attribute.Int("code", w.statusCode)),
-			)
 		}
 	}()
 
 	ctx := r.Context()
 
-	routeContext := chi.RouteContext(ctx)
-	routePattern := semconv.HTTPRouteKey.String(routeContext.RoutePattern())
+	routePattern := getChiRoutePattern(r)
 
 	counter.Add(
 		ctx,
 		1,
-		metric.WithAttributes(attribute.Int("code", w.statusCode), routePattern),
+		metric.WithAttributes(
+			attribute.Int("code", w.statusCode),
+			semconv.HTTPRouteKey.String(routePattern),
+		),
 	)
+}
+
+func addMetricAttributes(r *http.Request) []attribute.KeyValue {
+	routePattern := getChiRoutePattern(r)
+	routePatternAttr := semconv.HTTPRouteKey.String(routePattern)
+	out := []attribute.KeyValue{
+		routePatternAttr,
+	}
+
+	return out
 }
 
 // RequestTracing returns an HTTP handler that traces all HTTP requests coming
@@ -148,7 +163,11 @@ func RequestTracing() func(http.Handler) http.Handler {
 			}
 		}
 
-		otelHandler := otelhttp.NewHandler(http.HandlerFunc(fn), "api")
+		otelHandler := otelhttp.NewHandler(
+			http.HandlerFunc(fn),
+			"api",
+			otelhttp.WithMetricAttributesFn(addMetricAttributes),
+		)
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// there is a vulnerability with otelhttp where
