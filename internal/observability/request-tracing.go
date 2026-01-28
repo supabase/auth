@@ -97,6 +97,12 @@ func countStatusCodesSafely(w *interceptingResponseWriter, r *http.Request, coun
 		return
 	}
 
+	defer func() {
+		if rec := recover(); rec != nil {
+			logrus.WithField("error", rec).Error("unable to count status codes safely, metrics may be off")
+		}
+	}()
+
 	ctx := r.Context()
 
 	routePattern := getChiRoutePattern(r)
