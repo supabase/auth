@@ -167,19 +167,19 @@ func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 func (ts *UserTestSuite) TestIsDuplicatedEmail() {
 	_ = ts.createUserWithEmail("david.calavera@netlify.com")
 
-	e, err := IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "test", nil, nil)
+	e, err := IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "test", nil, nil, false)
 	require.NoError(ts.T(), err)
 	require.NotNil(ts.T(), e, "expected email to be duplicated")
 
-	e, err = IsDuplicatedEmail(ts.db, "davidcalavera@netlify.com", "test", nil, nil)
+	e, err = IsDuplicatedEmail(ts.db, "davidcalavera@netlify.com", "test", nil, nil, false)
 	require.NoError(ts.T(), err)
-	require.Nil(ts.T(), e, "expected email to not be duplicated", nil, nil)
+	require.Nil(ts.T(), e, "expected email to not be duplicated")
 
-	e, err = IsDuplicatedEmail(ts.db, "david@netlify.com", "test", nil, nil)
+	e, err = IsDuplicatedEmail(ts.db, "david@netlify.com", "test", nil, nil, false)
 	require.NoError(ts.T(), err)
-	require.Nil(ts.T(), e, "expected same email to not be duplicated", nil, nil)
+	require.Nil(ts.T(), e, "expected same email to not be duplicated")
 
-	e, err = IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "other-aud", nil, nil)
+	e, err = IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "other-aud", nil, nil, false)
 	require.NoError(ts.T(), err)
 	require.Nil(ts.T(), e, "expected same email to not be duplicated")
 }

@@ -14,11 +14,21 @@ import (
 // _should_ generally fall under the same User entity. It's just a runtime
 // string, and is not typically persisted in the database. This value can vary
 // across time.
-func GetAccountLinkingDomain(provider string, ownLinkingDomains []string) string {
-	if strings.HasPrefix(provider, "sso:") || slices.Contains(ownLinkingDomains, provider) {
-		// when the provider ID is a SSO provider, then the linking
-		// domain is the provider itself i.e. there can only be one
-		// user + identity per identity provider
+func GetAccountLinkingDomain(provider string, ownLinkingDomains []string, dangerousSSOAutoLinking bool) string {
+	if strings.HasPrefix(provider, "sso:") {
+		if dangerousSSOAutoLinking {
+			// When dangerous SSO auto-linking is enabled, treat SSO providers
+			// like OAuth providers - they join the default linking domain and
+			// will be linked to existing accounts based on email matching.
+			return "default"
+		}
+		// Default behavior: SSO providers get their own isolated linking domain,
+		// meaning they will always create new user accounts.
+		return provider
+	}
+
+	if slices.Contains(ownLinkingDomains, provider) {
+		// Providers explicitly configured to have their own linking domain
 		return provider
 	}
 
@@ -65,7 +75,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 	}
 
 	// this is the linking domain for the new identity
-	candidateLinkingDomain := GetAccountLinkingDomain(providerName, config.Experimental.ProvidersWithOwnLinkingDomain)
+	candidateLinkingDomain := GetAccountLinkingDomain(providerName, config.Experimental.ProvidersWithOwnLinkingDomain, config.Security.DangerousSSOAutoLinking)
 
 	if identity, terr := FindIdentityByIdAndProvider(tx, sub, providerName); terr == nil {
 		// account exists
@@ -93,7 +103,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 	// or link to an existing one
 	if len(verifiedEmails) == 0 {
 		// if there are no verified emails, we always decide to create a new account
-		user, terr := IsDuplicatedEmail(tx, candidateEmail.Email, aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain)
+		user, terr := IsDuplicatedEmail(tx, candidateEmail.Email, aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain, config.Security.DangerousSSOAutoLinking)
 		if terr != nil {
 			return AccountLinkingResult{}, terr
 		}
@@ -131,7 +141,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 	// now let's see if there are any existing and similar identities in
 	// the same linking domain
 	for _, identity := range similarIdentities {
-		if GetAccountLinkingDomain(identity.Provider, config.Experimental.ProvidersWithOwnLinkingDomain) == candidateLinkingDomain {
+		if GetAccountLinkingDomain(identity.Provider, config.Experimental.ProvidersWithOwnLinkingDomain, config.Security.DangerousSSOAutoLinking) == candidateLinkingDomain {
 			linkingIdentities = append(linkingIdentities, identity)
 		}
 	}
