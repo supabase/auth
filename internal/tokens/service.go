@@ -414,7 +414,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 
 					issuedToken = newToken.Token
 
-					shouldUpgrade := config.Security.RefreshTokenAlgorithmVersion == 2 && (config.Security.RefreshTokenUpgradePercentage >= 100 || mathRand.Intn(100) <= config.Security.RefreshTokenUpgradePercentage) // #nosec
+					shouldUpgrade := config.Security.RefreshTokenAlgorithmVersion == 2 && (config.Security.RefreshTokenUpgradePercentage >= 100 || mathRand.Intn(100) < config.Security.RefreshTokenUpgradePercentage) // #nosec
 
 					if shouldUpgrade {
 						// got v1 refresh token that should be upgraded to v2
