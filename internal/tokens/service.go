@@ -443,6 +443,8 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 						if terr := tx.UpdateOnly(newToken, "revoked"); terr != nil {
 							return apierrors.NewInternalServerError("failed to mark v1 refresh token as revoked").WithInternalError(terr)
 						}
+
+						responseHeaders.Set("sb-auth-refresh-token-counter", strconv.FormatInt(*session.RefreshTokenCounter, 10))
 					}
 
 					responseHeaders.Set("sb-auth-refresh-token-reuse", "false")
