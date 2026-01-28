@@ -13,8 +13,9 @@ create table if not exists {{ index .Options "Namespace" }}.custom_oauth_provide
     name text not null,
     client_id text not null,
     client_secret text not null, -- Encrypted at application level
-    acceptable_client_ids text[] not null default array[]::text[], -- Additional client IDs for multi-platform apps
-    scopes text[] not null default array[]::text[],
+    -- Store JSON-encoded string slices in jsonb columns
+    acceptable_client_ids jsonb not null default '[]'::jsonb, -- Additional client IDs for multi-platform apps
+    scopes jsonb not null default '[]'::jsonb,
     pkce_enabled boolean not null default true,
     attribute_mapping jsonb not null default '{}',
     authorization_params jsonb not null default '{}',
@@ -93,10 +94,7 @@ create table if not exists {{ index .Options "Namespace" }}.custom_oauth_provide
     ),
     constraint custom_oauth_providers_client_id_length check (
         char_length(client_id) >= 1 and char_length(client_id) <= 512
-    ),
-    constraint custom_oauth_providers_client_secret_length check (
-        char_length(client_secret) >= 1 and char_length(client_secret) <= 1024
-    ),
+    )
 );
 
 /* auth_migration: 20260128120000 */

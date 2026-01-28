@@ -4,10 +4,11 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
@@ -156,7 +157,7 @@ func (p *CustomOAuthProvider) GetDiscoveryURL() string {
 	return *p.Issuer + "/.well-known/openid-configuration"
 }
 
-// StringSlice handles PostgreSQL text[] type
+// StringSlice handles JSON-encoded string arrays stored as jsonb
 type StringSlice []string
 
 func (s *StringSlice) Scan(src interface{}) error {
@@ -165,26 +166,42 @@ func (s *StringSlice) Scan(src interface{}) error {
 		return nil
 	}
 
-	// Create a temporary []string slice and scan into it
-	var tmp []string
-	if err := pq.Array(&tmp).Scan(src); err != nil {
-		return errors.Wrap(err, "error scanning string slice")
+	var b []byte
+	switch v := src.(type) {
+	case []byte:
+		b = v
+	case string:
+		b = []byte(v)
+	default:
+		return fmt.Errorf("cannot scan %T into StringSlice", src)
 	}
 
-	// Convert to StringSlice
+	// Handle empty/null JSON values
+	b = []byte(strings.TrimSpace(string(b)))
+	if len(b) == 0 || string(b) == "null" || string(b) == "[]" {
+		*s = []string{}
+		return nil
+	}
+
+	var tmp []string
+	if err := json.Unmarshal(b, &tmp); err != nil {
+		return errors.Wrap(err, "error unmarshaling StringSlice")
+	}
+
 	*s = StringSlice(tmp)
 	return nil
 }
 
 func (s StringSlice) Value() (driver.Value, error) {
 	if s == nil || len(s) == 0 {
-		return "{}", nil
+		return []byte("[]"), nil
 	}
 
-	// Convert StringSlice to []string and use pq.Array
-	// This will handle escaping and formatting correctly
-	tmp := []string(s)
-	return pq.Array(tmp).Value()
+	b, err := json.Marshal([]string(s))
+	if err != nil {
+		return nil, errors.Wrap(err, "error marshaling StringSlice")
+	}
+	return b, nil
 }
 
 // OAuthAttributeMapping defines how to map provider attributes to user fields
@@ -214,7 +231,7 @@ func (m *OAuthAttributeMapping) Scan(src interface{}) error {
 
 func (m OAuthAttributeMapping) Value() (driver.Value, error) {
 	if m == nil {
-		return "{}", nil
+		return []byte("{}"), nil
 	}
 
 	b, err := json.Marshal(m)
@@ -222,7 +239,7 @@ func (m OAuthAttributeMapping) Value() (driver.Value, error) {
 		return nil, errors.Wrap(err, "error marshaling attribute mapping")
 	}
 
-	return string(b), nil
+	return b, nil
 }
 
 // OAuthAuthorizationParams holds additional parameters for authorization requests
@@ -252,7 +269,7 @@ func (p *OAuthAuthorizationParams) Scan(src interface{}) error {
 
 func (p OAuthAuthorizationParams) Value() (driver.Value, error) {
 	if p == nil {
-		return "{}", nil
+		return []byte("{}"), nil
 	}
 
 	b, err := json.Marshal(p)
@@ -260,7 +277,7 @@ func (p OAuthAuthorizationParams) Value() (driver.Value, error) {
 		return nil, errors.Wrap(err, "error marshaling authorization params")
 	}
 
-	return string(b), nil
+	return b, nil
 }
 
 // OIDCDiscovery represents cached OIDC discovery document
@@ -307,7 +324,7 @@ func (d *OIDCDiscovery) Value() (driver.Value, error) {
 		return nil, errors.Wrap(err, "error marshaling OIDC discovery")
 	}
 
-	return string(b), nil
+	return b, nil
 }
 
 // CRUD operations for CustomOAuthProvider
