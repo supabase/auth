@@ -379,6 +379,7 @@ func (ts *CustomOAuthProviderTestSuite) createTestProvider(providerType Provider
 
 	if providerType == ProviderTypeOAuth2 {
 		authURL := "https://example.com/authorize"
+		// #nosec G101 - These are test URLs, not actual credentials
 		tokenURL := "https://example.com/token"
 		userinfoURL := "https://example.com/userinfo"
 		provider.AuthorizationURL = &authURL
