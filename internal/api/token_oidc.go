@@ -128,22 +128,22 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 		customProvider, err := models.FindCustomOAuthProviderByIdentifier(db, p.Provider)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Custom provider %q not found", p.Provider))
+				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Custom provider %q not found", p.Provider)
 			}
 			return nil, false, "", nil, false, apierrors.NewInternalServerError("Error finding custom provider").WithInternalError(err)
 		}
 
 		if !customProvider.Enabled {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, fmt.Sprintf("Custom provider %q is disabled", p.Provider))
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, "Custom provider %q is disabled", p.Provider)
 		}
 
 		// Ensure it's an OIDC provider
 		if !customProvider.IsOIDC() {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Provider %q is not an OIDC provider", p.Provider))
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Provider %q is not an OIDC provider", p.Provider)
 		}
 
 		if customProvider.Issuer == nil {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("OIDC provider %q missing issuer", p.Provider))
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "OIDC provider %q missing issuer", p.Provider)
 		}
 
 		providerType = p.Provider
