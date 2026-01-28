@@ -725,6 +725,7 @@ func (c *DatabaseEncryptionConfiguration) Validate() error {
 
 type SecurityConfiguration struct {
 	Captcha                               CaptchaConfiguration `json:"captcha"`
+	RefreshTokenUpgradePercentage         int                  `json:"refresh_token_upgrade_percentage" split_words:"true"`
 	RefreshTokenAlgorithmVersion          int                  `json:"refresh_token_algorithm_version" split_words:"true"`
 	RefreshTokenRotationEnabled           bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
 	RefreshTokenReuseInterval             int                  `json:"refresh_token_reuse_interval" split_words:"true"`
@@ -743,6 +744,14 @@ func (c *SecurityConfiguration) Validate() error {
 
 	if err := c.DBEncryption.Validate(); err != nil {
 		return err
+	}
+
+	if c.RefreshTokenAlgorithmVersion < 0 || c.RefreshTokenAlgorithmVersion > 2 {
+		return fmt.Errorf("refresh token algorithm version must be 0, 1 or 2 but was %v", c.RefreshTokenAlgorithmVersion)
+	}
+
+	if c.RefreshTokenUpgradePercentage < 0 || c.RefreshTokenUpgradePercentage > 100 {
+		return fmt.Errorf("refresh token upgrade percentage must be between 0 and 100, but was %v", c.RefreshTokenUpgradePercentage)
 	}
 
 	return nil

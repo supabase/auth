@@ -1091,6 +1091,72 @@ func TestAMRClaimUnmarshal(t *testing.T) {
 	})
 }
 
+func (ts *RefreshTokenV2Suite) TestRefreshTokenVersionUpgrade() {
+	config := ts.config()
+
+	require.Equal(ts.T(), 2, config.Security.RefreshTokenAlgorithmVersion)
+
+	// start out with version 1, to issue a session with the old refresh tokens
+	// which then will be upgraded to the new one
+	config.Security.RefreshTokenAlgorithmVersion = 1
+	config.Security.RefreshTokenRotationEnabled = false
+	config.Security.RefreshTokenReuseInterval = 1
+	config.Security.RefreshTokenAllowReuse = false
+
+	clock := time.Now()
+
+	srv := NewService(config, &panicHookManager{})
+	srv.SetTimeFunc(func() time.Time {
+		return clock
+	})
+
+	req, err := http.NewRequest("POST", "https://example.com/", nil)
+	require.NoError(ts.T(), err)
+
+	req = req.WithContext(context.Background())
+	responseHeaders := make(http.Header)
+
+	at, err := srv.IssueRefreshToken(
+		req,
+		responseHeaders,
+		ts.Conn,
+		ts.User,
+		models.PasswordGrant,
+		models.GrantParams{},
+	)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), at)
+
+	refreshTokenToUse := at.RefreshToken
+
+	// now set the algorithm to 2 and start upgrading
+	config.Security.RefreshTokenAlgorithmVersion = 2
+	config.Security.RefreshTokenUpgradePercentage = 100
+
+	clock = clock.Add(time.Duration(config.Security.RefreshTokenReuseInterval)*time.Second + time.Duration(100)*time.Millisecond)
+	responseHeaders = make(http.Header)
+
+	nrt, err := srv.RefreshTokenGrant(context.Background(), ts.Conn, req, responseHeaders, RefreshTokenGrantParams{
+		RefreshToken: refreshTokenToUse,
+	})
+	require.NoError(ts.T(), err)
+
+	pnrt, err := crypto.ParseRefreshToken(nrt.RefreshToken)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), pnrt)
+	require.Equal(ts.T(), int64(0), pnrt.Counter)
+
+	refreshedSession, err := models.FindSessionByID(ts.Conn, pnrt.SessionID, false)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), refreshedSession.RefreshTokenCounter)
+	require.NotNil(ts.T(), refreshedSession.RefreshTokenHmacKey)
+	require.Equal(ts.T(), int64(0), *refreshedSession.RefreshTokenCounter)
+
+	require.Equal(ts.T(), refreshedSession.UserID.String(), responseHeaders.Get("sb-auth-user-id"))
+	require.Equal(ts.T(), refreshedSession.ID.String(), responseHeaders.Get("sb-auth-session-id"))
+	require.Equal(ts.T(), "0", responseHeaders.Get("sb-auth-refresh-token-counter"))
+}
+
 // TestAsRedirectURL tests that AsRedirectURL includes the Supabase Auth identifier
 func TestAsRedirectURL(t *testing.T) {
 	response := &AccessTokenResponse{

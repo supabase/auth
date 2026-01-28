@@ -413,6 +413,39 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 					}
 
 					issuedToken = newToken.Token
+
+					shouldUpgrade := config.Security.RefreshTokenAlgorithmVersion == 2 && (config.Security.RefreshTokenUpgradePercentage >= 100 || mathRand.Intn(100) <= config.Security.RefreshTokenUpgradePercentage) // #nosec
+
+					if shouldUpgrade {
+						// got v1 refresh token that should be upgraded to v2
+						// so discard the previously generated v1 token, revoke it and issue a v2 token instead
+
+						if serr := session.SetupRefreshTokenData(config.Security.DBEncryption); serr != nil {
+							return apierrors.NewInternalServerError("failed to set up refresh token data for session").WithInternalError(serr)
+						}
+
+						signingKey, _, kerr := session.GetRefreshTokenHmacKey(config.Security.DBEncryption)
+						if kerr != nil {
+							return apierrors.NewInternalServerError("failed to load session signing key from database").WithInternalError(kerr)
+						}
+
+						issuedToken = (&crypto.RefreshToken{
+							Version:   0,
+							SessionID: session.ID,
+							Counter:   *session.RefreshTokenCounter,
+						}).Encode(signingKey)
+
+						if terr := session.UpdateRefreshTokenCounterAndHmacKey(tx); terr != nil {
+							return apierrors.NewInternalServerError("failed to set up session with refresh token algorithm v2").WithInternalError(terr)
+						}
+
+						newToken.Revoked = true
+						if terr := tx.UpdateOnly(newToken, "revoked"); terr != nil {
+							return apierrors.NewInternalServerError("failed to mark v1 refresh token as revoked").WithInternalError(terr)
+						}
+					}
+
+					responseHeaders.Set("sb-auth-refresh-token-reuse", "false")
 				}
 
 				responseHeaders.Set("sb-auth-refresh-token-prefix", issuedToken[0:5])
