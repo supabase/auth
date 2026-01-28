@@ -420,8 +420,14 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 						// got v1 refresh token that should be upgraded to v2
 						// so discard the previously generated v1 token, revoke it and issue a v2 token instead
 
-						if serr := session.SetupRefreshTokenData(config.Security.DBEncryption); serr != nil {
-							return apierrors.NewInternalServerError("failed to set up refresh token data for session").WithInternalError(serr)
+						if session.RefreshTokenHmacKey == nil || session.RefreshTokenCounter == nil {
+							if serr := session.SetupRefreshTokenData(config.Security.DBEncryption); serr != nil {
+								return apierrors.NewInternalServerError("failed to set up refresh token data for session").WithInternalError(serr)
+							}
+						} else if session.RefreshTokenCounter != nil {
+							// session already set up, increment the counter by 1
+							counter := *session.RefreshTokenCounter + 1
+							session.RefreshTokenCounter = &counter
 						}
 
 						signingKey, _, kerr := session.GetRefreshTokenHmacKey(config.Security.DBEncryption)
