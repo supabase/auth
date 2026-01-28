@@ -360,6 +360,7 @@ type GlobalConfiguration struct {
 
 type CORSConfiguration struct {
 	AllowedHeaders []string `json:"allowed_headers" split_words:"true"`
+	AllowedOrigins []string `json:"allowed_origins" split_words:"true" default:"*"`
 }
 
 func (c *CORSConfiguration) AllAllowedHeaders(defaults []string) []string {
