@@ -322,7 +322,10 @@ func applyAttributeMapping(claims Claims, mapping map[string]interface{}) Claims
 	// Create a map representation of claims for easier manipulation
 	claimsMap := make(map[string]interface{})
 	claimsBytes, _ := json.Marshal(claims)
-	json.Unmarshal(claimsBytes, &claimsMap)
+	if err := json.Unmarshal(claimsBytes, &claimsMap); err != nil {
+		// If unmarshaling fails, return original claims
+		return claims
+	}
 
 	// Apply mappings
 	for targetField, sourceFieldOrValue := range mapping {
@@ -341,7 +344,10 @@ func applyAttributeMapping(claims Claims, mapping map[string]interface{}) Claims
 	// Convert back to Claims struct
 	var result Claims
 	mappedBytes, _ := json.Marshal(claimsMap)
-	json.Unmarshal(mappedBytes, &result)
+	if err := json.Unmarshal(mappedBytes, &result); err != nil {
+		// If unmarshaling fails, return original claims
+		return claims
+	}
 
 	return result
 }
