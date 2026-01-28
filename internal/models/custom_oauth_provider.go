@@ -396,6 +396,8 @@ func CreateCustomOAuthProvider(tx *storage.Connection, provider *CustomOAuthProv
 
 // UpdateCustomOAuthProvider updates an existing custom OAuth provider
 func UpdateCustomOAuthProvider(tx *storage.Connection, provider *CustomOAuthProvider) error {
+	// Set updated_at timestamp explicitly in application code
+	provider.UpdatedAt = time.Now()
 	if err := tx.Update(provider); err != nil {
 		return errors.Wrap(err, "error updating custom OAuth provider")
 	}

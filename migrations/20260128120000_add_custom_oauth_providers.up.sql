@@ -1,6 +1,7 @@
 -- Create unified custom OAuth/OIDC providers table
 -- This table stores both OAuth2 and OIDC providers with type discrimination
 
+/* auth_migration: 20260128120000 */
 create table if not exists {{ index .Options "Namespace" }}.custom_oauth_providers (
     id uuid not null default gen_random_uuid(),
 
@@ -96,50 +97,20 @@ create table if not exists {{ index .Options "Namespace" }}.custom_oauth_provide
     constraint custom_oauth_providers_client_secret_length check (
         char_length(client_secret) >= 1 and char_length(client_secret) <= 1024
     ),
-
-    -- Reserved provider names check
-    constraint custom_oauth_providers_identifier_not_reserved check (
-        identifier not in (
-            'google', 'github', 'apple', 'facebook', 'azure', 'twitter', 'gitlab',
-            'bitbucket', 'discord', 'twitch', 'slack', 'spotify', 'linkedin',
-            'notion', 'kakao', 'zoom', 'figma', 'fly', 'snapchat', 'keycloak',
-            'workos', 'linkedin-oidc', 'slack-oidc', 'vercel-marketplace', 'x'
-        )
-    )
 );
 
--- Create indexes for efficient queries
+/* auth_migration: 20260128120000 */
 create index if not exists custom_oauth_providers_identifier_idx
     on {{ index .Options "Namespace" }}.custom_oauth_providers (identifier);
 
+/* auth_migration: 20260128120000 */
 create index if not exists custom_oauth_providers_provider_type_idx
     on {{ index .Options "Namespace" }}.custom_oauth_providers (provider_type);
 
--- Create unique partial index for OIDC issuer (acts as unique constraint with WHERE clause)
-create unique index if not exists custom_oauth_providers_oidc_issuer_key
-    on {{ index .Options "Namespace" }}.custom_oauth_providers (issuer)
-    where provider_type = 'oidc' and issuer is not null;
-
+/* auth_migration: 20260128120000 */
 create index if not exists custom_oauth_providers_enabled_idx
     on {{ index .Options "Namespace" }}.custom_oauth_providers (enabled);
 
+/* auth_migration: 20260128120000 */
 create index if not exists custom_oauth_providers_created_at_idx
     on {{ index .Options "Namespace" }}.custom_oauth_providers (created_at);
-
-create index if not exists custom_oauth_providers_discovery_cached_at_idx
-    on {{ index .Options "Namespace" }}.custom_oauth_providers (discovery_cached_at)
-    where provider_type = 'oidc';
-
--- Add trigger to update updated_at timestamp
-create or replace function {{ index .Options "Namespace" }}.update_custom_oauth_providers_updated_at()
-returns trigger as $$
-begin
-    new.updated_at = now();
-    return new;
-end;
-$$ language plpgsql;
-
-create trigger update_custom_oauth_providers_updated_at
-    before update on {{ index .Options "Namespace" }}.custom_oauth_providers
-    for each row
-    execute function {{ index .Options "Namespace" }}.update_custom_oauth_providers_updated_at();
