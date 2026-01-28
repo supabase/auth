@@ -370,6 +370,24 @@ func validateProviderParams(params *AdminCustomOAuthProviderParams, providerType
 		params.Identifier = "custom:" + params.Identifier
 	}
 
+	// Check for reserved provider names (built-in OAuth providers)
+	// These are already handled by Supabase Auth and shouldn't be overridden with custom providers
+	reservedProviderNames := []string{
+		"apple", "azure", "bitbucket", "discord", "facebook", "figma", "fly", "github", "gitlab",
+		"google", "kakao", "keycloak", "linkedin_oidc", "linkedin", "notion", "slack_oidc",
+		"slack", "spotify", "twitch", "twitter", "workos", "x", "zoom",
+	}
+
+	// Extract the base identifier without the "custom:" prefix for checking
+	baseIdentifier := strings.TrimPrefix(params.Identifier, "custom:")
+	if slices.Contains(reservedProviderNames, strings.ToLower(baseIdentifier)) {
+		return apierrors.NewBadRequestError(
+			apierrors.ErrorCodeValidationFailed,
+			"Cannot use reserved provider name: %s. This provider is already built into Supabase Auth.",
+			baseIdentifier,
+		)
+	}
+
 	if params.Name == "" {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "name is required")
 	}
