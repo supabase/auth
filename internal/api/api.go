@@ -11,6 +11,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/api/oauthserver"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
@@ -123,6 +124,11 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	// Initialize OAuth server (only if enabled)
 	if globalConfig.OAuthServer.Enabled {
 		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
+	}
+
+	// Configure OIDC provider cache TTL from configuration
+	if globalConfig.External.OIDCProviderCacheTTL > 0 {
+		provider.SetDefaultOIDCProviderCacheTTL(globalConfig.External.OIDCProviderCacheTTL)
 	}
 
 	if api.config.Password.HIBP.Enabled {
