@@ -572,7 +572,10 @@ func (ts *CustomOAuthAdminTestSuite) TestDeleteProvider() {
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	// Verify the response body is empty (204 No Content should have no body)
+	assert.Empty(ts.T(), w.Body.String())
 
 	// Verify deletion
 	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/custom-providers/%s", created.Identifier), nil)
