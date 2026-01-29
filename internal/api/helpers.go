@@ -48,6 +48,7 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 
 type RequestParams interface {
 	AdminUserParams |
+		AdminCustomOAuthProviderParams |
 		CreateSSOProviderParams |
 		EnrollFactorParams |
 		GenerateLinkParams |

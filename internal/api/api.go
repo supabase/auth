@@ -375,6 +375,21 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 					})
 				})
 			}
+
+			// Custom OAuth/OIDC provider management endpoints
+			if globalConfig.CustomOAuth.Enabled {
+				r.Route("/custom-providers", func(r *router) {
+					// supports both OAuth2 and OIDC via provider_type)
+					r.Get("/", api.adminCustomOAuthProvidersList)   // Optional ?type=oauth2 or ?type=oidc filter
+					r.Post("/", api.adminCustomOAuthProviderCreate) // provider_type in request body
+
+					r.Route("/{identifier}", func(r *router) {
+						r.Get("/", api.adminCustomOAuthProviderGet)
+						r.Put("/", api.adminCustomOAuthProviderUpdate)
+						r.Delete("/", api.adminCustomOAuthProviderDelete)
+					})
+				})
+			}
 		})
 
 		// OAuth Dynamic Client Registration endpoint (public, rate limited)
