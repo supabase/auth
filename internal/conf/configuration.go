@@ -85,6 +85,12 @@ type AnonymousProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"false"`
 }
 
+// CustomOAuthConfiguration holds configuration for custom OAuth and OIDC providers
+type CustomOAuthConfiguration struct {
+	Enabled      bool `json:"enabled" split_words:"true" default:"false"`
+	MaxProviders int  `json:"max_providers" split_words:"true" default:"0"`
+}
+
 type EmailProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"true"`
 
@@ -318,6 +324,7 @@ type GlobalConfiguration struct {
 	API           APIConfiguration
 	DB            DBConfiguration
 	External      ProviderConfiguration
+	CustomOAuth   CustomOAuthConfiguration `envconfig:"CUSTOM_OAUTH"`
 	OAuthServer   OAuthServerConfiguration `envconfig:"OAUTH_SERVER"`
 	Logging       LoggingConfig            `envconfig:"LOG"`
 	Profiler      ProfilerConfig           `envconfig:"PROFILER"`

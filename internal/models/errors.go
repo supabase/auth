@@ -33,6 +33,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case OAuthClientStateNotFoundError, *OAuthClientStateNotFoundError:
 		return true
+	case CustomOAuthProviderNotFoundError, *CustomOAuthProviderNotFoundError:
+		return true
 	}
 	return false
 }
@@ -134,4 +136,11 @@ type OAuthClientStateNotFoundError struct{}
 
 func (e OAuthClientStateNotFoundError) Error() string {
 	return "OAuth state not found"
+}
+
+// CustomOAuthProviderNotFoundError represents an error when a custom OAuth/OIDC provider can't be found
+type CustomOAuthProviderNotFoundError struct{}
+
+func (e CustomOAuthProviderNotFoundError) Error() string {
+	return "Custom OAuth provider not found"
 }
