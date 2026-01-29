@@ -523,9 +523,9 @@ The `From` email address for all emails sent.
 
 The mail server hostname to send emails through.
 
-`SMTP_PORT` - `number` **required**
+`SMTP_PORT` - `number`
 
-The port number to connect to the mail server on.
+The port number to connect to the mail server on. Defaults to `587`.
 
 `SMTP_USER` - `string`
 
@@ -537,7 +537,7 @@ If the mail server requires authentication, the password to use.
 
 `SMTP_MAX_FREQUENCY` - `number`
 
-Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email. The value is the number of seconds. Defaults to 900 (15 minutes).
+Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email. The value is the number of seconds. Defaults to `60` (1 minute).
 
 `SMTP_SENDER_NAME` - `string`
 
@@ -549,7 +549,11 @@ If you do not require email confirmation, you may set this to `true`. Defaults t
 
 `MAILER_OTP_EXP` - `number`
 
-Controls the duration an email link or OTP is valid for.
+Controls the duration an email link or OTP is valid for. Defaults to `86400` (1 day).
+
+`MAILER_OTP_LENGTH` - `number`
+
+Controls the number of digits of the email OTP sent. Defaults to `6`.
 
 `MAILER_URLPATHS_INVITE` - `string`
 
@@ -834,15 +838,15 @@ If you do not require phone confirmation, you may set this to `true`. Defaults t
 
 `SMS_MAX_FREQUENCY` - `number`
 
-Controls the minimum amount of time that must pass before sending another SMS OTP. The value is the number of seconds. Defaults to 60 (1 minute).
+Controls the minimum amount of time that must pass before sending another SMS OTP. The value is the number of seconds. Defaults to `60` (1 minute).
 
 `SMS_OTP_EXP` - `number`
 
-Controls the duration an SMS OTP is valid for.
+Controls the duration an SMS OTP is valid for. Defaults to `60` (1 minute).
 
 `SMS_OTP_LENGTH` - `number`
 
-Controls the number of digits of the SMS OTP sent.
+Controls the number of digits of the SMS OTP sent. Defaults to `6`.
 
 `SMS_PROVIDER` - `string`
 
