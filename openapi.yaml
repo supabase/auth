@@ -2234,6 +2234,444 @@ paths:
         403:
           $ref: "#/components/responses/ForbiddenResponse"
 
+  /admin/custom-providers:
+    get:
+      summary: List all custom OIDC/OAuth providers
+      description: >
+        Retrieves a list of all custom OAuth 2.0 and OIDC provider configurations.
+        Optionally filter by provider type. Only available when custom OIDC/OAuth providers are enabled
+        (set `GOTRUE_CUSTOM_OAUTH_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
+      tags:
+        - admin
+        - oauth-client
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: Filter by provider type
+          schema:
+            type: string
+            enum:
+              - oauth2
+              - oidc
+      responses:
+        200:
+          description: List of custom OIDC/OAuth providers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CustomOAuthProviderSchema"
+        400:
+          description: Invalid type parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                invalid_type:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                    msg: "type must be either 'oauth2' or 'oidc'"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+    post:
+      summary: Create a new custom OIDC/OAuth provider
+      description: >
+        Creates a new custom OAuth 2.0 or OIDC provider configuration.
+        Required fields differ based on provider_type. Only available when custom OIDC/OAuth providers are enabled.
+      tags:
+        - admin
+        - oauth-client
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - provider_type
+                - identifier
+                - name
+                - client_id
+                - client_secret
+              properties:
+                provider_type:
+                  type: string
+                  enum:
+                    - oauth2
+                    - oidc
+                  description: Type of OAuth provider
+                identifier:
+                  type: string
+                  pattern: "^[a-zA-Z0-9_-]+$"
+                  description: Unique identifier (will be prefixed with 'custom:' automatically). Cannot use reserved provider names.
+                  example: "mycompany"
+                name:
+                  type: string
+                  description: Human-readable display name
+                  example: "My Company SSO"
+                client_id:
+                  type: string
+                  description: OAuth client ID from the provider
+                client_secret:
+                  type: string
+                  description: OAuth client secret (will be encrypted at rest)
+                acceptable_client_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: Additional acceptable client IDs for token validation
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                  description: OAuth scopes to request (OIDC providers will automatically include 'openid')
+                  example: ["email", "profile"]
+                pkce_enabled:
+                  type: boolean
+                  description: Enable PKCE (Proof Key for Code Exchange)
+                  default: true
+                attribute_mapping:
+                  type: object
+                  description: Map provider claims to user attributes (cannot map to protected system fields)
+                  additionalProperties: true
+                  example:
+                    email: "user_email"
+                    name: "full_name"
+                authorization_params:
+                  type: object
+                  description: Additional authorization request parameters (cannot override reserved OAuth parameters)
+                  additionalProperties: true
+                  example:
+                    prompt: "consent"
+                enabled:
+                  type: boolean
+                  description: Whether the provider is enabled
+                  default: true
+                email_optional:
+                  type: boolean
+                  description: Whether email is optional for users from this provider
+                  default: false
+                issuer:
+                  type: string
+                  format: uri
+                  description: "OIDC issuer URL (required for provider_type: oidc)"
+                  example: "https://accounts.google.com"
+                discovery_url:
+                  type: string
+                  format: uri
+                  description: OIDC discovery URL (optional for OIDC, defaults to {issuer}/.well-known/openid-configuration)
+                skip_nonce_check:
+                  type: boolean
+                  description: Skip nonce validation for OIDC (not recommended for production)
+                  default: false
+                authorization_url:
+                  type: string
+                  format: uri
+                  description: "OAuth 2.0 authorization endpoint (required for provider_type: oauth2)"
+                  example: "https://provider.com/oauth/authorize"
+                token_url:
+                  type: string
+                  format: uri
+                  description: "OAuth 2.0 token endpoint (required for provider_type: oauth2)"
+                  example: "https://provider.com/oauth/token"
+                userinfo_url:
+                  type: string
+                  format: uri
+                  description: "OAuth 2.0 userinfo endpoint (required for provider_type: oauth2)"
+                  example: "https://provider.com/oauth/userinfo"
+                jwks_uri:
+                  type: string
+                  format: uri
+                  description: JWKS URI for token validation (optional for OAuth2)
+            examples:
+              oidc_provider:
+                summary: Create OIDC provider
+                value:
+                  provider_type: "oidc"
+                  identifier: "mycompany"
+                  name: "My Company SSO"
+                  client_id: "your-client-id"
+                  client_secret: "your-client-secret"
+                  issuer: "https://accounts.mycompany.com"
+                  scopes: ["email", "profile"]
+              oauth2_provider:
+                summary: Create OAuth2 provider
+                value:
+                  provider_type: "oauth2"
+                  identifier: "customauth"
+                  name: "Custom Auth Provider"
+                  client_id: "your-client-id"
+                  client_secret: "your-client-secret"
+                  authorization_url: "https://provider.com/oauth/authorize"
+                  token_url: "https://provider.com/oauth/token"
+                  userinfo_url: "https://provider.com/oauth/userinfo"
+                  scopes: ["email", "profile"]
+      responses:
+        201:
+          description: Custom OIDC/OAuth provider created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomOAuthProviderSchema"
+        400:
+          description: Bad request - validation failed, provider exists, or quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                validation_failed:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                    msg: "issuer is required for OIDC providers"
+                provider_exists:
+                  summary: conflict
+                  value:
+                    error_code: conflict
+                    msg: "A custom OAuth provider with this identifier already exists"
+                quota_exceeded:
+                  summary: over_quota
+                  value:
+                    error_code: over_quota
+                    msg: "Maximum number of custom OIDC/OAuth providers reached"
+                reserved_name:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                    msg: "Cannot use reserved provider name: google. This provider is already built into Supabase Auth."
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+
+  /admin/custom-providers/{identifier}:
+    parameters:
+      - name: identifier
+        in: path
+        required: true
+        description: Provider identifier (must start with 'custom:' prefix)
+        schema:
+          type: string
+          pattern: "^custom:[a-zA-Z0-9_-]+$"
+        example: "custom:mycompany"
+    get:
+      summary: Get custom OIDC/OAuth provider details
+      description: >
+        Retrieves details of a specific custom OIDC/OAuth provider.
+        Only available when custom OIDC/OAuth providers are enabled.
+      tags:
+        - admin
+        - oauth-client
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        200:
+          description: Custom OIDC/OAuth provider details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomOAuthProviderSchema"
+        400:
+          description: Invalid identifier format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                validation_failed:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                    msg: "identifier must start with 'custom:' prefix"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+        404:
+          description: Provider not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                not_found:
+                  summary: provider_not_found
+                  value:
+                    error_code: provider_not_found
+                    msg: "Custom OAuth provider not found"
+    put:
+      summary: Update custom OIDC/OAuth provider
+      description: >
+        Updates an existing custom OIDC/OAuth provider. All fields are optional.
+        Only provided fields will be updated. Only available when custom OIDC/OAuth providers are enabled.
+      tags:
+        - admin
+        - oauth-client
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Human-readable display name
+                client_id:
+                  type: string
+                  description: OAuth client ID
+                client_secret:
+                  type: string
+                  description: OAuth client secret (only provide if changing, will be encrypted)
+                acceptable_client_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: Additional acceptable client IDs
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                  description: OAuth scopes to request
+                pkce_enabled:
+                  type: boolean
+                  description: Enable PKCE
+                attribute_mapping:
+                  type: object
+                  description: Map provider claims to user attributes
+                  additionalProperties: true
+                authorization_params:
+                  type: object
+                  description: Additional authorization request parameters
+                  additionalProperties: true
+                enabled:
+                  type: boolean
+                  description: Whether the provider is enabled
+                email_optional:
+                  type: boolean
+                  description: Whether email is optional
+                issuer:
+                  type: string
+                  format: uri
+                  description: OIDC issuer URL (for OIDC providers)
+                discovery_url:
+                  type: string
+                  format: uri
+                  description: OIDC discovery URL (for OIDC providers)
+                skip_nonce_check:
+                  type: boolean
+                  description: Skip nonce validation for OIDC
+                authorization_url:
+                  type: string
+                  format: uri
+                  description: OAuth 2.0 authorization endpoint (for OAuth2 providers)
+                token_url:
+                  type: string
+                  format: uri
+                  description: OAuth 2.0 token endpoint (for OAuth2 providers)
+                userinfo_url:
+                  type: string
+                  format: uri
+                  description: OAuth 2.0 userinfo endpoint (for OAuth2 providers)
+                jwks_uri:
+                  type: string
+                  format: uri
+                  description: JWKS URI for token validation (for OAuth2 providers)
+            examples:
+              update_name:
+                summary: Update provider name
+                value:
+                  name: "Updated Company Name"
+              update_scopes:
+                summary: Update scopes
+                value:
+                  scopes: ["openid", "email", "profile", "groups"]
+      responses:
+        200:
+          description: Custom OIDC/OAuth provider updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomOAuthProviderSchema"
+        400:
+          description: Invalid identifier or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+        404:
+          description: Provider not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+    delete:
+      summary: Delete custom OIDC/OAuth provider
+      description: >
+        Permanently removes a custom OIDC/OAuth provider configuration.
+        Only available when custom OIDC/OAuth providers are enabled.
+      tags:
+        - admin
+        - oauth-client
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        204:
+          description: Custom OIDC/OAuth provider deleted successfully (no content)
+        400:
+          description: Invalid identifier format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                validation_failed:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                    msg: "identifier must start with 'custom:' prefix"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+        404:
+          description: Provider not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                not_found:
+                  summary: provider_not_found
+                  value:
+                    error_code: provider_not_found
+                    msg: "Custom OAuth provider not found"
+
   /oauth/clients/register:
     post:
       summary: Register a new OAuth client dynamically (public endpoint).
@@ -3256,6 +3694,110 @@ components:
         scope:
           type: string
           description: Space-separated list of scope values
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CustomOAuthProviderSchema:
+      type: object
+      description: Represents a custom OAuth 2.0 or OIDC provider configuration
+      required:
+        - id
+        - provider_type
+        - identifier
+        - name
+        - client_id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique provider identifier
+        provider_type:
+          type: string
+          enum:
+            - oauth2
+            - oidc
+          description: Type of OAuth provider
+        identifier:
+          type: string
+          pattern: "^custom:[a-zA-Z0-9_-]+$"
+          description: Unique identifier for the provider (must start with 'custom:' prefix)
+          example: "custom:mycompany"
+        name:
+          type: string
+          description: Human-readable name of the provider
+          example: "My Company SSO"
+        client_id:
+          type: string
+          description: OAuth client ID
+        acceptable_client_ids:
+          type: array
+          items:
+            type: string
+          description: Additional acceptable client IDs for token validation
+        scopes:
+          type: array
+          items:
+            type: string
+          description: OAuth scopes to request (OIDC providers will automatically include 'openid')
+          example: ["openid", "email", "profile"]
+        pkce_enabled:
+          type: boolean
+          description: Whether PKCE (Proof Key for Code Exchange) is enabled
+          default: true
+        attribute_mapping:
+          type: object
+          description: Maps provider claims to user attributes
+          additionalProperties: true
+          example:
+            email: "user_email"
+            name: "full_name"
+        authorization_params:
+          type: object
+          description: Additional parameters to include in authorization requests (cannot override reserved OAuth parameters)
+          additionalProperties: true
+          example:
+            prompt: "consent"
+        enabled:
+          type: boolean
+          description: Whether the provider is enabled
+          default: true
+        email_optional:
+          type: boolean
+          description: Whether email is optional for users from this provider
+          default: false
+        issuer:
+          type: string
+          format: uri
+          description: OIDC issuer URL (required for OIDC providers)
+          example: "https://accounts.google.com"
+        discovery_url:
+          type: string
+          format: uri
+          description: OIDC discovery URL (optional, defaults to {issuer}/.well-known/openid-configuration)
+        skip_nonce_check:
+          type: boolean
+          description: Skip nonce validation for OIDC (not recommended for production)
+          default: false
+        authorization_url:
+          type: string
+          format: uri
+          description: OAuth 2.0 authorization endpoint (required for OAuth2 providers)
+        token_url:
+          type: string
+          format: uri
+          description: OAuth 2.0 token endpoint (required for OAuth2 providers)
+        userinfo_url:
+          type: string
+          format: uri
+          description: OAuth 2.0 userinfo endpoint (required for OAuth2 providers)
+        jwks_uri:
+          type: string
+          format: uri
+          description: JWKS URI for token validation (optional for OAuth2 providers)
         created_at:
           type: string
           format: date-time

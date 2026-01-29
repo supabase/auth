@@ -349,9 +349,8 @@ func (a *API) adminCustomOAuthProviderDelete(w http.ResponseWriter, r *http.Requ
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Custom OAuth provider deleted successfully",
-	})
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 // ===================================
