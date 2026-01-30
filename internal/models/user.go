@@ -606,16 +606,14 @@ func CountOtherUsers(tx *storage.Connection, id uuid.UUID) (int, error) {
 }
 
 func findUser(tx *storage.Connection, query string, args ...interface{}) (*User, error) {
-	obj := &User{}
-
-	// Single query with JSON aggregation for identities and factors
+	// Single query with JSON aggregation - embed by VALUE not pointer
 	type userWithJSON struct {
-		*User
+		User
 		IdentitiesJSON []byte `db:"identities_json"`
 		FactorsJSON    []byte `db:"factors_json"`
 	}
 
-	result := &userWithJSON{User: obj}
+	var result userWithJSON
 
 	sqlQuery := `
 select u.*,
@@ -624,7 +622,7 @@ select u.*,
 from ` + User{}.TableName() + ` u
 where ` + query
 
-	if err := tx.RawQuery(sqlQuery, args...).First(result); err != nil {
+	if err := tx.RawQuery(sqlQuery, args...).First(&result); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, UserNotFoundError{}
 		}
@@ -632,15 +630,15 @@ where ` + query
 	}
 
 	// Deserialize identities and factors from JSON
-	if err := json.Unmarshal(result.IdentitiesJSON, &obj.Identities); err != nil {
+	if err := json.Unmarshal(result.IdentitiesJSON, &result.User.Identities); err != nil {
 		return nil, errors.Wrap(err, "error unmarshaling identities")
 	}
 
-	if err := json.Unmarshal(result.FactorsJSON, &obj.Factors); err != nil {
+	if err := json.Unmarshal(result.FactorsJSON, &result.User.Factors); err != nil {
 		return nil, errors.Wrap(err, "error unmarshaling factors")
 	}
 
-	return obj, nil
+	return &result.User, nil
 }
 
 // FindUserByEmailAndAudience finds a user with the matching email and audience.
