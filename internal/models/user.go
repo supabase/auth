@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -25,10 +26,11 @@ type User struct {
 
 	Aud       string             `json:"aud" db:"aud"`
 	Role      string             `json:"role" db:"role"`
-	Email     storage.NullString `json:"email" db:"email"`
-	IsSSOUser bool               `json:"-" db:"is_sso_user"`
+	Email        storage.NullString `json:"email" db:"email"`
+	IsSSOUser    bool            `json:"-" db:"is_sso_user"`
+	IsSuperAdmin *bool           `json:"-" db:"is_super_admin"`
 
-	EncryptedPassword *string    `json:"-" db:"encrypted_password"`
+	EncryptedPassword *string `json:"-" db:"encrypted_password"`
 	EmailConfirmedAt  *time.Time `json:"email_confirmed_at,omitempty" db:"email_confirmed_at"`
 	InvitedAt         *time.Time `json:"invited_at,omitempty" db:"invited_at"`
 
@@ -605,11 +607,37 @@ func CountOtherUsers(tx *storage.Connection, id uuid.UUID) (int, error) {
 
 func findUser(tx *storage.Connection, query string, args ...interface{}) (*User, error) {
 	obj := &User{}
-	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
+
+	// Single query with JSON aggregation for identities and factors
+	type userWithJSON struct {
+		*User
+		IdentitiesJSON []byte `db:"identities_json"`
+		FactorsJSON    []byte `db:"factors_json"`
+	}
+
+	result := &userWithJSON{User: obj}
+
+	sqlQuery := `
+select u.*,
+  coalesce((select json_agg(i.*) from ` + Identity{}.TableName() + ` i where i.user_id = u.id), '[]') as identities_json,
+  coalesce((select json_agg(f.*) from ` + Factor{}.TableName() + ` f where f.user_id = u.id), '[]') as factors_json
+from ` + User{}.TableName() + ` u
+where ` + query
+
+	if err := tx.RawQuery(sqlQuery, args...).First(result); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, UserNotFoundError{}
 		}
 		return nil, errors.Wrap(err, "error finding user")
+	}
+
+	// Deserialize identities and factors from JSON
+	if err := json.Unmarshal(result.IdentitiesJSON, &obj.Identities); err != nil {
+		return nil, errors.Wrap(err, "error unmarshaling identities")
+	}
+
+	if err := json.Unmarshal(result.FactorsJSON, &obj.Factors); err != nil {
+		return nil, errors.Wrap(err, "error unmarshaling factors")
 	}
 
 	return obj, nil
