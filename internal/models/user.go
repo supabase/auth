@@ -24,13 +24,13 @@ import (
 type User struct {
 	ID uuid.UUID `json:"id" db:"id"`
 
-	Aud       string             `json:"aud" db:"aud"`
-	Role      string             `json:"role" db:"role"`
+	Aud          string             `json:"aud" db:"aud"`
+	Role         string             `json:"role" db:"role"`
 	Email        storage.NullString `json:"email" db:"email"`
-	IsSSOUser    bool            `json:"-" db:"is_sso_user"`
-	IsSuperAdmin *bool           `json:"-" db:"is_super_admin"`
+	IsSSOUser    bool               `json:"-" db:"is_sso_user"`
+	IsSuperAdmin *bool              `json:"-" db:"is_super_admin"`
 
-	EncryptedPassword *string `json:"-" db:"encrypted_password"`
+	EncryptedPassword *string    `json:"-" db:"encrypted_password"`
 	EmailConfirmedAt  *time.Time `json:"email_confirmed_at,omitempty" db:"email_confirmed_at"`
 	InvitedAt         *time.Time `json:"invited_at,omitempty" db:"invited_at"`
 
