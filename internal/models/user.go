@@ -24,11 +24,10 @@ import (
 type User struct {
 	ID uuid.UUID `json:"id" db:"id"`
 
-	Aud          string             `json:"aud" db:"aud"`
-	Role         string             `json:"role" db:"role"`
-	Email        storage.NullString `json:"email" db:"email"`
-	IsSSOUser    bool               `json:"-" db:"is_sso_user"`
-	IsSuperAdmin *bool              `json:"-" db:"is_super_admin"`
+	Aud       string             `json:"aud" db:"aud"`
+	Role      string             `json:"role" db:"role"`
+	Email     storage.NullString `json:"email" db:"email"`
+	IsSSOUser bool               `json:"-" db:"is_sso_user"`
 
 	EncryptedPassword *string    `json:"-" db:"encrypted_password"`
 	EmailConfirmedAt  *time.Time `json:"email_confirmed_at,omitempty" db:"email_confirmed_at"`
@@ -616,7 +615,20 @@ func findUser(tx *storage.Connection, query string, args ...interface{}) (*User,
 	var result userWithJSON
 
 	sqlQuery := `
-select u.*,
+select
+  u.id, u.aud, u.role, u.email, u.is_sso_user,
+  u.encrypted_password, u.email_confirmed_at, u.invited_at,
+  u.phone, u.phone_confirmed_at,
+  u.confirmation_token, u.confirmation_sent_at, u.confirmed_at,
+  u.recovery_token, u.recovery_sent_at,
+  u.email_change_token_current, u.email_change_token_new, u.email_change,
+  u.email_change_sent_at, u.email_change_confirm_status,
+  u.phone_change_token, u.phone_change, u.phone_change_sent_at,
+  u.reauthentication_token, u.reauthentication_sent_at,
+  u.last_sign_in_at,
+  u.raw_app_meta_data, u.raw_user_meta_data,
+  u.created_at, u.updated_at, u.banned_until, u.deleted_at, u.is_anonymous,
+  u.instance_id,
   coalesce((select json_agg(json_build_object(
     'identity_id', i.id,
     'id', i.provider_id,
