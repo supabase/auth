@@ -617,8 +617,30 @@ func findUser(tx *storage.Connection, query string, args ...interface{}) (*User,
 
 	sqlQuery := `
 select u.*,
-  coalesce((select json_agg(i.*) from ` + Identity{}.TableName() + ` i where i.user_id = u.id), '[]') as identities_json,
-  coalesce((select json_agg(f.*) from ` + Factor{}.TableName() + ` f where f.user_id = u.id), '[]') as factors_json
+  coalesce((select json_agg(json_build_object(
+    'identity_id', i.id,
+    'id', i.provider_id,
+    'user_id', i.user_id,
+    'identity_data', i.identity_data,
+    'provider', i.provider,
+    'last_sign_in_at', i.last_sign_in_at,
+    'created_at', i.created_at,
+    'updated_at', i.updated_at,
+    'email', i.email
+  )) from ` + Identity{}.TableName() + ` i where i.user_id = u.id), '[]') as identities_json,
+  coalesce((select json_agg(json_build_object(
+    'id', f.id,
+    'user_id', f.user_id,
+    'created_at', f.created_at,
+    'updated_at', f.updated_at,
+    'status', f.status,
+    'friendly_name', f.friendly_name,
+    'factor_type', f.factor_type,
+    'secret', f.secret,
+    'phone', f.phone,
+    'last_challenged_at', f.last_challenged_at,
+    'web_authn_credential', f.web_authn_credential
+  )) from ` + Factor{}.TableName() + ` f where f.user_id = u.id), '[]') as factors_json
 from ` + User{}.TableName() + ` u
 where ` + query
 
