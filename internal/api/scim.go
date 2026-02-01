@@ -153,9 +153,51 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 
 		if existingUser != nil {
 			if existingUser.BannedReason != nil && *existingUser.BannedReason == scimDeprovisionedReason {
+				if !userBelongsToProvider(existingUser, provider.ID) {
+					return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")
+				}
 				if err := existingUser.Ban(tx, 0, nil); err != nil {
 					return apierrors.NewInternalServerError("Error reactivating user").WithInternalError(err)
 				}
+
+				if params.Name != nil {
+					if existingUser.UserMetaData == nil {
+						existingUser.UserMetaData = make(map[string]interface{})
+					}
+					if params.Name.GivenName != "" {
+						existingUser.UserMetaData["given_name"] = params.Name.GivenName
+					}
+					if params.Name.FamilyName != "" {
+						existingUser.UserMetaData["family_name"] = params.Name.FamilyName
+					}
+					if params.Name.Formatted != "" {
+						existingUser.UserMetaData["full_name"] = params.Name.Formatted
+					}
+					if err := tx.UpdateOnly(existingUser, "raw_user_meta_data"); err != nil {
+						return apierrors.NewInternalServerError("Error updating user metadata").WithInternalError(err)
+					}
+				}
+
+				for i := range existingUser.Identities {
+					if existingUser.Identities[i].Provider == providerType {
+						if existingUser.Identities[i].IdentityData == nil {
+							existingUser.Identities[i].IdentityData = make(map[string]interface{})
+						}
+						if params.ExternalID != "" {
+							existingUser.Identities[i].ProviderID = params.ExternalID
+							existingUser.Identities[i].IdentityData["external_id"] = params.ExternalID
+							existingUser.Identities[i].IdentityData["sub"] = params.ExternalID
+						}
+						if params.UserName != "" {
+							existingUser.Identities[i].IdentityData["user_name"] = params.UserName
+						}
+						if err := tx.UpdateOnly(&existingUser.Identities[i], "provider_id", "identity_data"); err != nil {
+							return apierrors.NewInternalServerError("Error updating identity").WithInternalError(err)
+						}
+						break
+					}
+				}
+
 				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, existingUser, models.UserModifiedAction, "", map[string]interface{}{
 					"provider":        "scim",
 					"sso_provider_id": provider.ID,
@@ -163,6 +205,11 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
 				}
+
+				if err := tx.Eager().Find(existingUser, existingUser.ID); err != nil {
+					return apierrors.NewInternalServerError("Error reloading user").WithInternalError(err)
+				}
+
 				user = existingUser
 				return nil
 			}
@@ -288,7 +335,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Active != nil {
-			if *params.Active {
+			if bool(*params.Active) {
 				if err := user.Ban(tx, 0, nil); err != nil {
 					return apierrors.NewInternalServerError("Error unbanning user").WithInternalError(err)
 				}
@@ -306,8 +353,44 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewInternalServerError("Error updating user").WithInternalError(err)
 		}
 
+		providerType := "sso:" + provider.ID.String()
+
+		if len(params.Emails) > 0 {
+			var primaryEmail string
+			for _, e := range params.Emails {
+				if bool(e.Primary) {
+					primaryEmail = e.Value
+					break
+				}
+			}
+			if primaryEmail == "" {
+				primaryEmail = params.Emails[0].Value
+			}
+			if primaryEmail != "" {
+				validatedEmail, err := a.validateEmail(primaryEmail)
+				if err != nil {
+					return apierrors.NewSCIMBadRequestError("Invalid email address", "invalidValue")
+				}
+				user.Email = storage.NullString(validatedEmail)
+				if err := tx.UpdateOnly(user, "email"); err != nil {
+					return apierrors.NewInternalServerError("Error updating email").WithInternalError(err)
+				}
+				for i := range user.Identities {
+					if user.Identities[i].Provider == providerType {
+						if user.Identities[i].IdentityData == nil {
+							user.Identities[i].IdentityData = make(map[string]interface{})
+						}
+						user.Identities[i].IdentityData["email"] = validatedEmail
+						if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
+							return apierrors.NewInternalServerError("Error updating identity").WithInternalError(err)
+						}
+						break
+					}
+				}
+			}
+		}
+
 		if params.UserName != "" {
-			providerType := "sso:" + provider.ID.String()
 			for i := range user.Identities {
 				if user.Identities[i].Provider == providerType {
 					if user.Identities[i].IdentityData == nil {
@@ -315,6 +398,26 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 					}
 					user.Identities[i].IdentityData["user_name"] = params.UserName
 					if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
+						return apierrors.NewInternalServerError("Error updating identity").WithInternalError(err)
+					}
+					break
+				}
+			}
+		}
+
+		if params.ExternalID != "" {
+			for i := range user.Identities {
+				if user.Identities[i].Provider == providerType {
+					user.Identities[i].ProviderID = params.ExternalID
+					if user.Identities[i].IdentityData == nil {
+						user.Identities[i].IdentityData = make(map[string]interface{})
+					}
+					user.Identities[i].IdentityData["external_id"] = params.ExternalID
+					user.Identities[i].IdentityData["sub"] = params.ExternalID
+					if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
+						if models.IsUniqueConstraintViolatedError(err) {
+							return apierrors.NewSCIMConflictError("externalId already exists", "uniqueness")
+						}
 						return apierrors.NewInternalServerError("Error updating identity").WithInternalError(err)
 					}
 					break
@@ -446,8 +549,20 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 	case "replace":
 		switch strings.ToLower(op.Path) {
 		case "active":
-			active, ok := op.Value.(bool)
-			if !ok {
+			var active bool
+			switch v := op.Value.(type) {
+			case bool:
+				active = v
+			case string:
+				s := strings.ToLower(strings.TrimSpace(v))
+				if s == "true" {
+					active = true
+				} else if s == "false" {
+					active = false
+				} else {
+					return apierrors.NewSCIMBadRequestError("active must be true or false", "invalidValue")
+				}
+			default:
 				return apierrors.NewSCIMBadRequestError("active must be a boolean", "invalidValue")
 			}
 			if active {
@@ -561,7 +676,23 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 					}
 				}
 
-				if active, ok := valueMap["active"].(bool); ok {
+				if activeVal, exists := valueMap["active"]; exists {
+					var active bool
+					switch v := activeVal.(type) {
+					case bool:
+						active = v
+					case string:
+						s := strings.ToLower(strings.TrimSpace(v))
+						if s == "true" {
+							active = true
+						} else if s == "false" {
+							active = false
+						} else {
+							return apierrors.NewSCIMBadRequestError("active must be true or false", "invalidValue")
+						}
+					default:
+						return apierrors.NewSCIMBadRequestError("active must be a boolean", "invalidValue")
+					}
 					if active {
 						if err := user.Ban(tx, 0, nil); err != nil {
 							return apierrors.NewInternalServerError("Error unbanning user").WithInternalError(err)

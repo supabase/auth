@@ -25,15 +25,26 @@ var scimDeprovisionedReason = "SCIM_DEPROVISIONED"
 type FlexBool bool
 
 func (fb *FlexBool) UnmarshalJSON(data []byte) error {
+	// Handle JSON boolean
 	var b bool
 	if err := json.Unmarshal(data, &b); err == nil {
 		*fb = FlexBool(b)
 		return nil
 	}
+	// Handle JSON string (Azure AD sends "True"/"False")
 	var s string
 	if err := json.Unmarshal(data, &s); err == nil {
-		*fb = FlexBool(strings.ToLower(s) == "true")
-		return nil
+		s = strings.TrimSpace(strings.ToLower(s))
+		switch s {
+		case "true":
+			*fb = FlexBool(true)
+			return nil
+		case "false":
+			*fb = FlexBool(false)
+			return nil
+		default:
+			return fmt.Errorf("invalid boolean string: %q (expected true or false)", s)
+		}
 	}
 	return fmt.Errorf("cannot unmarshal %s into FlexBool", string(data))
 }
@@ -44,7 +55,7 @@ type SCIMUserParams struct {
 	UserName   string      `json:"userName"`
 	Name       *SCIMName   `json:"name,omitempty"`
 	Emails     []SCIMEmail `json:"emails,omitempty"`
-	Active     *bool       `json:"active,omitempty"`
+	Active     *FlexBool   `json:"active,omitempty"`
 }
 
 func (p *SCIMUserParams) Validate() error {
