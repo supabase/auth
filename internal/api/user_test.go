@@ -297,8 +297,10 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 	var cases = []struct {
 		desc                    string
 		newPassword             string
+		currentPassword         string
 		nonce                   string
 		requireReauthentication bool
+		requireCurrentPassword  bool
 		sessionId               *uuid.UUID
 		expected                expected
 	}{
@@ -334,11 +336,32 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			sessionId:               r.SessionId,
 			expected:                expected{code: http.StatusOK, isAuthenticated: true},
 		},
+		{
+			desc:                    "Current password checked when require current password set",
+			newPassword:             "newpassword123",
+			currentPassword:         "password",
+			nonce:                   "",
+			requireReauthentication: false,
+			requireCurrentPassword:  true,
+			sessionId:               r.SessionId,
+			expected:                expected{code: http.StatusOK, isAuthenticated: true},
+		},
+		{
+			desc:                    "Fails if current password incorrect when require current password set",
+			newPassword:             "newpassword123",
+			currentPassword:         "randompassword",
+			nonce:                   "",
+			requireReauthentication: false,
+			requireCurrentPassword:  true,
+			sessionId:               r.SessionId,
+			expected:                expected{code: http.StatusBadRequest, isAuthenticated: false},
+		},
 	}
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			ts.Config.Security.UpdatePasswordRequireReauthentication = c.requireReauthentication
+			ts.Config.Security.UpdatePasswordRequireCurrentPassword = c.requireCurrentPassword
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"password": c.newPassword, "nonce": c.nonce}))
 

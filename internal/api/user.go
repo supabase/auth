@@ -18,6 +18,7 @@ import (
 type UserUpdateParams struct {
 	Email               string                 `json:"email"`
 	Password            *string                `json:"password"`
+	CurrentPassword     *string                `json:"current_password,omitempty"`
 	Nonce               string                 `json:"nonce"`
 	Data                map[string]interface{} `json:"data"`
 	AppData             map[string]interface{} `json:"app_metadata,omitempty"`
@@ -165,6 +166,21 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			isSamePassword := false
 
 			if user.HasPassword() {
+				// current password required when updating password
+				if config.Security.UpdatePasswordRequireCurrentPassword {
+					currentPassword := *params.CurrentPassword
+					isCurrentPasswordCorrect := false
+					if currentPassword != "" {
+						auth, _, err := user.Authenticate(ctx, db, currentPassword, config.Security.DBEncryption.DecryptionKeys, false, "")
+						if err != nil {
+							return err
+						}
+						isCurrentPasswordCorrect = auth
+					}
+					if !isCurrentPasswordCorrect {
+						return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeCurrentPasswordMismatch, "Current password required when setting new password.")
+					}
+				}
 				auth, _, err := user.Authenticate(ctx, db, password, config.Security.DBEncryption.DecryptionKeys, false, "")
 				if err != nil {
 					return err
