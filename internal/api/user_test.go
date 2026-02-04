@@ -338,8 +338,8 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 		},
 		{
 			desc:                    "Current password checked when require current password set",
-			newPassword:             "newpassword123",
-			currentPassword:         "password",
+			newPassword:             "updateToNewpassword123",
+			currentPassword:         "newpassword123", // match to the test case above
 			nonce:                   "",
 			requireReauthentication: false,
 			requireCurrentPassword:  true,
@@ -362,8 +362,13 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 		ts.Run(c.desc, func() {
 			ts.Config.Security.UpdatePasswordRequireReauthentication = c.requireReauthentication
 			ts.Config.Security.UpdatePasswordRequireCurrentPassword = c.requireCurrentPassword
+
+			userUpdateBody := map[string]string{"password": c.newPassword, "nonce": c.nonce}
+			if c.requireCurrentPassword {
+				userUpdateBody["current_password"] = c.currentPassword
+			}
 			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"password": c.newPassword, "nonce": c.nonce}))
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(userUpdateBody))
 
 			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
 			req.Header.Set("Content-Type", "application/json")
@@ -389,6 +394,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 }
 
 func (ts *UserTestSuite) TestUserUpdatePasswordNoReauthenticationRequired() {
+	ts.Config.Security.UpdatePasswordRequireCurrentPassword = false
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
@@ -452,7 +458,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordNoReauthenticationRequired() {
 
 func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	ts.Config.Security.UpdatePasswordRequireReauthentication = true
-
+	ts.Config.Security.UpdatePasswordRequireCurrentPassword = false
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
@@ -510,6 +516,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 
 func (ts *UserTestSuite) TestUserUpdatePasswordLogoutOtherSessions() {
 	ts.Config.Security.UpdatePasswordRequireReauthentication = false
+	ts.Config.Security.UpdatePasswordRequireCurrentPassword = false
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
@@ -609,6 +616,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordSendsNotificationEmail() {
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			ts.Config.Security.UpdatePasswordRequireReauthentication = false
+			ts.Config.Security.UpdatePasswordRequireCurrentPassword = false
 			ts.Config.Mailer.Autoconfirm = false
 			ts.Config.Mailer.Notifications.PasswordChangedEnabled = c.notificationEnabled
 
