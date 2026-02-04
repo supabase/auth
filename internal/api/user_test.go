@@ -356,6 +356,15 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			sessionId:               r.SessionId,
 			expected:                expected{code: http.StatusBadRequest, isAuthenticated: false},
 		},
+		{
+			desc:                    "Fails if current password not set when required",
+			newPassword:             "newpassword123",
+			nonce:                   "",
+			requireReauthentication: false,
+			requireCurrentPassword:  true,
+			sessionId:               r.SessionId,
+			expected:                expected{code: http.StatusBadRequest, isAuthenticated: false},
+		},
 	}
 
 	for _, c := range cases {

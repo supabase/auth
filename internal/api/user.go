@@ -168,13 +168,12 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			if user.HasPassword() {
 				// current password required when updating password
 				if config.Security.UpdatePasswordRequireCurrentPassword {
-					isCurrentPasswordCorrect := false
-					if params.CurrentPassword != nil && *params.CurrentPassword != "" {
-						auth, _, err := user.Authenticate(ctx, db, *params.CurrentPassword, config.Security.DBEncryption.DecryptionKeys, false, "")
-						if err != nil {
-							return err
-						}
-						isCurrentPasswordCorrect = auth
+					if params.CurrentPassword == nil || *params.CurrentPassword == "" {
+						return apierrors.NewBadRequestError(apierrors.ErrorCodeCurrentPasswordRequired, "Current password required when setting new password.")
+					}
+					isCurrentPasswordCorrect, _, err := user.Authenticate(ctx, db, *params.CurrentPassword, config.Security.DBEncryption.DecryptionKeys, false, "")
+					if err != nil {
+						return err
 					}
 					if !isCurrentPasswordCorrect {
 						return apierrors.NewBadRequestError(apierrors.ErrorCodeCurrentPasswordMismatch, "Current password required when setting new password.")
