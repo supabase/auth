@@ -4,10 +4,19 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/storage"
 )
+
+func scimGroupTableName() string {
+	return (&pop.Model{Value: SCIMGroup{}}).TableName()
+}
+
+func scimGroupMemberTableName() string {
+	return (&pop.Model{Value: SCIMGroupMember{}}).TableName()
+}
 
 type SCIMGroup struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
@@ -97,12 +106,12 @@ func FindSCIMGroupsBySSOProviderWithFilter(tx *storage.Connection, ssoProviderID
 	}
 
 	var totalResults int
-	countQuery := "SELECT COUNT(*) FROM scim_groups WHERE " + whereClause
+	countQuery := "SELECT COUNT(*) FROM " + scimGroupTableName() + " WHERE " + whereClause
 	if err := tx.RawQuery(countQuery, args...).First(&totalResults); err != nil {
 		return nil, 0, errors.Wrap(err, "error counting SCIM groups")
 	}
 
-	query := "SELECT * FROM scim_groups WHERE " + whereClause + " ORDER BY created_at ASC LIMIT ? OFFSET ?"
+	query := "SELECT * FROM " + scimGroupTableName() + " WHERE " + whereClause + " ORDER BY created_at ASC LIMIT ? OFFSET ?"
 	args = append(args, count, offset)
 	if err := tx.RawQuery(query, args...).All(&groups); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
@@ -115,12 +124,10 @@ func FindSCIMGroupsBySSOProviderWithFilter(tx *storage.Connection, ssoProviderID
 
 func FindSCIMGroupsForUser(tx *storage.Connection, userID uuid.UUID) ([]*SCIMGroup, error) {
 	groups := []*SCIMGroup{}
-	if err := tx.RawQuery(`
-		SELECT g.* FROM scim_groups g
-		INNER JOIN scim_group_members m ON g.id = m.group_id
-		WHERE m.user_id = ?
-		ORDER BY g.display_name ASC
-	`, userID).All(&groups); err != nil {
+	if err := tx.RawQuery(
+		"SELECT g.* FROM "+scimGroupTableName()+" g INNER JOIN "+scimGroupMemberTableName()+" m ON g.id = m.group_id WHERE m.user_id = ? ORDER BY g.display_name ASC",
+		userID,
+	).All(&groups); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return []*SCIMGroup{}, nil
 		}
@@ -140,7 +147,7 @@ func (g *SCIMGroup) AddMember(tx *storage.Connection, userID uuid.UUID) error {
 	}
 
 	return tx.RawQuery(
-		"INSERT INTO scim_group_members (group_id, user_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+		"INSERT INTO "+scimGroupMemberTableName()+" (group_id, user_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
 		g.ID, userID, time.Now(),
 	).Exec()
 }
@@ -158,19 +165,18 @@ func UserBelongsToSSOProvider(user *User, ssoProviderID uuid.UUID) bool {
 
 func (g *SCIMGroup) RemoveMember(tx *storage.Connection, userID uuid.UUID) error {
 	return tx.RawQuery(
-		"DELETE FROM scim_group_members WHERE group_id = ? AND user_id = ?",
+		"DELETE FROM "+scimGroupMemberTableName()+" WHERE group_id = ? AND user_id = ?",
 		g.ID, userID,
 	).Exec()
 }
 
 func (g *SCIMGroup) GetMembers(tx *storage.Connection) ([]*User, error) {
 	users := []*User{}
-	if err := tx.RawQuery(`
-		SELECT u.* FROM users u
-		INNER JOIN scim_group_members m ON u.id = m.user_id
-		WHERE m.group_id = ?
-		ORDER BY u.email ASC
-	`, g.ID).All(&users); err != nil {
+	userTable := (&pop.Model{Value: User{}}).TableName()
+	if err := tx.RawQuery(
+		"SELECT u.* FROM "+userTable+" u INNER JOIN "+scimGroupMemberTableName()+" m ON u.id = m.user_id WHERE m.group_id = ? ORDER BY u.email ASC",
+		g.ID,
+	).All(&users); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return []*User{}, nil
 		}
@@ -180,7 +186,7 @@ func (g *SCIMGroup) GetMembers(tx *storage.Connection) ([]*User, error) {
 }
 
 func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) error {
-	if err := tx.RawQuery("DELETE FROM scim_group_members WHERE group_id = ?", g.ID).Exec(); err != nil {
+	if err := tx.RawQuery("DELETE FROM "+scimGroupMemberTableName()+" WHERE group_id = ?", g.ID).Exec(); err != nil {
 		return errors.Wrap(err, "error clearing SCIM group members")
 	}
 
