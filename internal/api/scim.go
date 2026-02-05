@@ -61,7 +61,7 @@ func (a *API) scimListUsers(w http.ResponseWriter, r *http.Request) error {
 
 	users, totalResults, err := models.FindUsersByProviderWithFilter(db, providerType, filterClause, startIndex, count)
 	if err != nil {
-		return apierrors.NewInternalServerError("Error fetching users").WithInternalError(err)
+		return apierrors.NewSCIMInternalServerError("Error fetching users").WithInternalError(err)
 	}
 
 	resources := make([]interface{}, len(users))
@@ -686,7 +686,7 @@ func (a *API) scimListGroups(w http.ResponseWriter, r *http.Request) error {
 
 	groups, totalResults, err := models.FindSCIMGroupsBySSOProviderWithFilter(db, provider.ID, filterClause, startIndex, count)
 	if err != nil {
-		return apierrors.NewInternalServerError("Error fetching groups").WithInternalError(err)
+		return apierrors.NewSCIMInternalServerError("Error fetching groups").WithInternalError(err)
 	}
 
 	excludeMembers := strings.Contains(strings.ToLower(r.URL.Query().Get("excludedAttributes")), "members")
@@ -698,7 +698,7 @@ func (a *API) scimListGroups(w http.ResponseWriter, r *http.Request) error {
 			var err error
 			members, err = group.GetMembers(db)
 			if err != nil {
-				return apierrors.NewInternalServerError("Error fetching group members").WithInternalError(err)
+				return apierrors.NewSCIMInternalServerError("Error fetching group members").WithInternalError(err)
 			}
 		}
 		resources[i] = a.groupToSCIMResponse(group, members)
