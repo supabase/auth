@@ -402,6 +402,94 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 	}
 }
 
+func (ts *UserTestSuite) TestUserUpdatePasswordViaRecovery() {
+	ts.Config.Security.UpdatePasswordRequireCurrentPassword = true
+	ts.Config.SMTP.MaxFrequency = 60
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	u.RecoverySentAt = &time.Time{}
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
+	type expected struct {
+		code            int
+		isAuthenticated bool
+	}
+
+	var cases = []struct {
+		desc            string
+		newPassword     string
+		currentPassword string
+		recoveryType    models.AuthenticationMethod
+		expected        expected
+	}{
+		{
+			desc:         "Current password not required in OTP recovery flow",
+			newPassword:  "newpassword123",
+			recoveryType: models.OTP,
+			expected:     expected{code: http.StatusOK, isAuthenticated: true},
+		},
+		{
+			desc:         "Current password not required in magiclink recovery flow",
+			newPassword:  "newpassword456",
+			recoveryType: models.MagicLink,
+			expected:     expected{code: http.StatusOK, isAuthenticated: true},
+		},
+		{
+			desc:         "Current password required for any other claim",
+			newPassword:  "newpassword456",
+			recoveryType: models.EmailChange,
+			expected:     expected{code: http.StatusBadRequest, isAuthenticated: true},
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
+
+			// Create a session
+			session, err := models.NewSession(u.ID, nil)
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), ts.API.db.Create(session))
+
+			// Add AMR claim to session to simulate recovery flow
+			require.NoError(ts.T(), models.AddClaimToSession(ts.API.db, session.ID, c.recoveryType))
+
+			// Reload session with AMR claims
+			session, err = models.FindSessionByID(ts.API.db, session.ID, true)
+			require.NoError(ts.T(), err)
+			require.NotEmpty(ts.T(), session.AMRClaims, "Session should have AMR claims")
+
+			// Generate access token with the recovery authentication method
+			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", nil)
+			token, _, err := ts.API.generateAccessToken(req, ts.API.db, u, &session.ID, c.recoveryType)
+			require.NoError(ts.T(), err)
+
+			// Update password without current password
+			userUpdateBody := map[string]string{"password": c.newPassword}
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(userUpdateBody))
+
+			req = httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+			// Setup response recorder
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), c.expected.code, w.Code)
+
+			// Verify password was updated
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+
+			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, c.newPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+			require.NoError(ts.T(), err)
+
+			require.Equal(ts.T(), c.expected.isAuthenticated, isAuthenticated)
+		})
+	}
+}
+
 func (ts *UserTestSuite) TestUserUpdatePasswordNoReauthenticationRequired() {
 	ts.Config.Security.UpdatePasswordRequireCurrentPassword = false
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
