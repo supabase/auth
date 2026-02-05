@@ -640,8 +640,9 @@ func (a *API) scimDeleteUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMNotFoundError("User not found")
 		}
 
+		// Already deprovisioned — return success for idempotent delete
 		if user.IsBanned() && user.BannedReason != nil && *user.BannedReason == scimDeprovisionedReason {
-			return apierrors.NewSCIMNotFoundError("User not found")
+			return nil
 		}
 
 		if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
