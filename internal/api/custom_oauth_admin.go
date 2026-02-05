@@ -551,7 +551,10 @@ func updateProviderFromParams(provider *models.CustomOAuthProvider, params *Admi
 			}
 			provider.Issuer = &params.Issuer
 		}
-		if params.DiscoveryURL != nil {
+		if params.DiscoveryURL != nil && *params.DiscoveryURL != "" {
+			if err := utilities.ValidateOAuthURL(*params.DiscoveryURL); err != nil {
+				return err
+			}
 			provider.DiscoveryURL = params.DiscoveryURL
 		}
 		if params.SkipNonceCheck != nil {
@@ -559,15 +562,27 @@ func updateProviderFromParams(provider *models.CustomOAuthProvider, params *Admi
 		}
 	} else if provider.IsOAuth2() {
 		if params.AuthorizationURL != "" {
+			if err := utilities.ValidateOAuthURL(params.AuthorizationURL); err != nil {
+				return err
+			}
 			provider.AuthorizationURL = &params.AuthorizationURL
 		}
 		if params.TokenURL != "" {
+			if err := utilities.ValidateOAuthURL(params.TokenURL); err != nil {
+				return err
+			}
 			provider.TokenURL = &params.TokenURL
 		}
 		if params.UserinfoURL != "" {
+			if err := utilities.ValidateOAuthURL(params.UserinfoURL); err != nil {
+				return err
+			}
 			provider.UserinfoURL = &params.UserinfoURL
 		}
-		if params.JwksURI != nil {
+		if params.JwksURI != nil && *params.JwksURI != "" {
+			if err := utilities.ValidateOAuthURL(*params.JwksURI); err != nil {
+				return err
+			}
 			provider.JwksURI = params.JwksURI
 		}
 	}
