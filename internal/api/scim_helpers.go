@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -41,7 +40,7 @@ func (a *API) parseSCIMBody(r *http.Request, v interface{}) error {
 		return apierrors.NewInternalServerError("Could not read request body").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, v); err != nil {
-		return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid JSON: %v", err), "invalidSyntax")
+		return apierrors.NewSCIMBadRequestError("Invalid JSON in request body", "invalidSyntax").WithInternalError(err)
 	}
 	return nil
 }
@@ -145,7 +144,7 @@ func (a *API) groupToSCIMResponse(group *models.SCIMGroup, members []*models.Use
 }
 
 func (a *API) getSCIMBaseURL() string {
-	return a.config.SiteURL
+	return strings.TrimRight(a.config.API.ExternalURL, "/")
 }
 
 func sendSCIMJSON(w http.ResponseWriter, status int, obj interface{}) error {
