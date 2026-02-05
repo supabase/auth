@@ -82,7 +82,7 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 			return nil, apierrors.NewSCIMBadRequestError("'co' operator requires a string value", "invalidValue")
 		}
 		return &models.SCIMFilterClause{
-			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?)", dbColumn),
+			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?) ESCAPE '\\'", dbColumn),
 			Args:  []interface{}{"%" + escapeLikePattern(val) + "%"},
 		}, nil
 
@@ -92,7 +92,7 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 			return nil, apierrors.NewSCIMBadRequestError("'sw' operator requires a string value", "invalidValue")
 		}
 		return &models.SCIMFilterClause{
-			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?)", dbColumn),
+			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?) ESCAPE '\\'", dbColumn),
 			Args:  []interface{}{escapeLikePattern(val) + "%"},
 		}, nil
 
@@ -102,7 +102,7 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 			return nil, apierrors.NewSCIMBadRequestError("'ew' operator requires a string value", "invalidValue")
 		}
 		return &models.SCIMFilterClause{
-			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?)", dbColumn),
+			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?) ESCAPE '\\'", dbColumn),
 			Args:  []interface{}{"%" + escapeLikePattern(val)},
 		}, nil
 
