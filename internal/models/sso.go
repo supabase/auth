@@ -303,7 +303,7 @@ func FindAllSSOProviders(tx *storage.Connection) ([]SSOProvider, error) {
 func FindSSOProviderBySCIMToken(ctx context.Context, tx *storage.Connection, token string) (*SSOProvider, error) {
 	var providers []SSOProvider
 
-	if err := tx.Eager().Q().Where("scim_enabled = ? AND scim_bearer_token_hash IS NOT NULL", true).All(&providers); err != nil {
+	if err := tx.Q().Where("scim_enabled = ? AND scim_bearer_token_hash IS NOT NULL", true).All(&providers); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, SSOProviderNotFoundError{}
 		}
@@ -312,6 +312,10 @@ func FindSSOProviderBySCIMToken(ctx context.Context, tx *storage.Connection, tok
 
 	for i := range providers {
 		if providers[i].VerifySCIMToken(ctx, token) {
+			// Reload with associations now that we found the match
+			if err := tx.Eager().Find(&providers[i], providers[i].ID); err != nil {
+				return nil, errors.Wrap(err, "error loading SSO provider")
+			}
 			return &providers[i], nil
 		}
 	}
