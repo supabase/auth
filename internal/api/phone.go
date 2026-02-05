@@ -95,15 +95,16 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		otp = crypto.GenerateOtp(config.Sms.OtpLength)
 
 		if config.Hook.SendSMS.Enabled {
-			input := v0hooks.SendSMSInput{
-				User: user,
-				SMS: v0hooks.SMS{
+			input := v0hooks.NewSendSMSInput(
+				r,
+				user,
+				v0hooks.SMS{
 					OTP:   otp,
 					Phone: phone,
 				},
-			}
+			)
 			output := v0hooks.SendSMSOutput{}
-			err := a.hooksMgr.InvokeHook(tx, r, &input, &output)
+			err := a.hooksMgr.InvokeHook(tx, r, input, &output)
 			if err != nil {
 				return "", err
 			}

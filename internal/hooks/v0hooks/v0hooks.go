@@ -115,10 +115,27 @@ type AccessTokenClaims struct {
 }
 
 type MFAVerificationAttemptInput struct {
+	Metadata   *Metadata `json:"metadata"`
 	UserID     uuid.UUID `json:"user_id"`
 	FactorID   uuid.UUID `json:"factor_id"`
 	FactorType string    `json:"factor_type"`
 	Valid      bool      `json:"valid"`
+}
+
+func NewMFAVerificationAttemptInput(
+	r *http.Request,
+	userID uuid.UUID,
+	factorID uuid.UUID,
+	factorType string,
+	valid bool,
+) *MFAVerificationAttemptInput {
+	return &MFAVerificationAttemptInput{
+		Metadata:   NewMetadata(r, MFAVerification),
+		UserID:     userID,
+		FactorID:   factorID,
+		FactorType: factorType,
+		Valid:      valid,
+	}
 }
 
 type MFAVerificationAttemptOutput struct {
@@ -127,8 +144,21 @@ type MFAVerificationAttemptOutput struct {
 }
 
 type PasswordVerificationAttemptInput struct {
-	UserID uuid.UUID `json:"user_id"`
-	Valid  bool      `json:"valid"`
+	Metadata *Metadata `json:"metadata"`
+	UserID   uuid.UUID `json:"user_id"`
+	Valid    bool      `json:"valid"`
+}
+
+func NewPasswordVerificationAttemptInput(
+	r *http.Request,
+	userID uuid.UUID,
+	valid bool,
+) *PasswordVerificationAttemptInput {
+	return &PasswordVerificationAttemptInput{
+		Metadata: NewMetadata(r, PasswordVerification),
+		UserID:   userID,
+		Valid:    valid,
+	}
 }
 
 type PasswordVerificationAttemptOutput struct {
@@ -138,9 +168,24 @@ type PasswordVerificationAttemptOutput struct {
 }
 
 type CustomAccessTokenInput struct {
+	Metadata             *Metadata          `json:"metadata"`
 	UserID               uuid.UUID          `json:"user_id"`
 	Claims               *AccessTokenClaims `json:"claims"`
 	AuthenticationMethod string             `json:"authentication_method"`
+}
+
+func NewCustomAccessTokenInput(
+	r *http.Request,
+	userID uuid.UUID,
+	claims *AccessTokenClaims,
+	authenticationMethod string,
+) *CustomAccessTokenInput {
+	return &CustomAccessTokenInput{
+		Metadata:             NewMetadata(r, CustomizeAccessToken),
+		UserID:               userID,
+		Claims:               claims,
+		AuthenticationMethod: authenticationMethod,
+	}
 }
 
 type CustomAccessTokenOutput struct {
@@ -178,16 +223,42 @@ func (o *CustomAccessTokenOutput) UnmarshalJSON(b []byte) error {
 }
 
 type SendSMSInput struct {
-	User *models.User `json:"user,omitempty"`
-	SMS  SMS          `json:"sms,omitempty"`
+	Metadata *Metadata    `json:"metadata"`
+	User     *models.User `json:"user,omitempty"`
+	SMS      SMS          `json:"sms,omitempty"`
+}
+
+func NewSendSMSInput(
+	r *http.Request,
+	user *models.User,
+	sms SMS,
+) *SendSMSInput {
+	return &SendSMSInput{
+		Metadata: NewMetadata(r, SendSMS),
+		User:     user,
+		SMS:      sms,
+	}
 }
 
 type SendSMSOutput struct {
 }
 
 type SendEmailInput struct {
+	Metadata  *Metadata        `json:"metadata"`
 	User      *models.User     `json:"user"`
 	EmailData mailer.EmailData `json:"email_data"`
+}
+
+func NewSendEmailInput(
+	r *http.Request,
+	user *models.User,
+	emailData mailer.EmailData,
+) *SendEmailInput {
+	return &SendEmailInput{
+		Metadata:  NewMetadata(r, SendEmail),
+		User:      user,
+		EmailData: emailData,
+	}
 }
 
 type SendEmailOutput struct {

@@ -152,12 +152,13 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	}
 
 	if config.Hook.PasswordVerificationAttempt.Enabled {
-		input := v0hooks.PasswordVerificationAttemptInput{
-			UserID: user.ID,
-			Valid:  isValidPassword,
-		}
+		input := v0hooks.NewPasswordVerificationAttemptInput(
+			r,
+			user.ID,
+			isValidPassword,
+		)
 		output := v0hooks.PasswordVerificationAttemptOutput{}
-		if err := a.hooksMgr.InvokeHook(nil, r, &input, &output); err != nil {
+		if err := a.hooksMgr.InvokeHook(nil, r, input, &output); err != nil {
 			return err
 		}
 
