@@ -2048,3 +2048,113 @@ func (ts *SCIMTestSuite) TestSCIMErrorGroupSchemaValidationMissingDisplayName() 
 	require.True(ts.T(), ok, "SCIM error should have scimType field")
 	require.Equal(ts.T(), "invalidSyntax", scimType)
 }
+
+func (ts *SCIMTestSuite) TestSCIMReplaceUser() {
+	user := ts.createSCIMUserWithName(testUser9.UserName, testUser9.Email, testUser9.GivenName, testUser9.FamilyName)
+
+	body := map[string]interface{}{
+		"schemas":  []string{SCIMSchemaUser},
+		"userName": "replaced@acme.com",
+		"name": map[string]interface{}{
+			"givenName":  "Replaced",
+			"familyName": "Name",
+			"formatted":  "Replaced Name",
+		},
+		"emails": []map[string]interface{}{
+			{"value": "replaced@acme.com", "primary": true, "type": "work"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPut, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+
+	var result SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), "replaced@acme.com", result.UserName)
+	require.NotNil(ts.T(), result.Name)
+	require.Equal(ts.T(), "Replaced", result.Name.GivenName)
+	require.Equal(ts.T(), "Name", result.Name.FamilyName)
+}
+
+func (ts *SCIMTestSuite) TestSCIMReplaceUserNotFound() {
+	req := ts.makeSCIMRequest(http.MethodPut, "/scim/v2/Users/00000000-0000-0000-0000-000000000000", map[string]interface{}{
+		"schemas":  []string{SCIMSchemaUser},
+		"userName": "nobody@acme.com",
+		"emails":   []map[string]interface{}{{"value": "nobody@acme.com", "primary": true}},
+	})
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMReplaceGroup() {
+	group := ts.createSCIMGroupWithExternalID(testGroup1.DisplayName, testGroup1.ExternalID)
+
+	body := map[string]interface{}{
+		"schemas":     []string{SCIMSchemaGroup},
+		"displayName": "Replaced Engineering",
+		"externalId":  "replaced-ext-001",
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPut, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), "Replaced Engineering", result.DisplayName)
+	require.Equal(ts.T(), "replaced-ext-001", result.ExternalID)
+}
+
+func (ts *SCIMTestSuite) TestSCIMReplaceGroupNotFound() {
+	req := ts.makeSCIMRequest(http.MethodPut, "/scim/v2/Groups/00000000-0000-0000-0000-000000000000", map[string]interface{}{
+		"schemas":     []string{SCIMSchemaGroup},
+		"displayName": "Ghost",
+	})
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMCrossProviderIsolationUsers() {
+	user := ts.createSCIMUser(testUser1.UserName, testUser1.Email)
+
+	provider2 := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(provider2))
+	token2 := "other-provider-token"
+	require.NoError(ts.T(), provider2.SetSCIMToken(context.Background(), token2))
+	require.NoError(ts.T(), ts.API.db.Update(provider2))
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/"+user.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+token2)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMCrossProviderIsolationGroups() {
+	group := ts.createSCIMGroup(testGroup1.DisplayName)
+
+	provider2 := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(provider2))
+	token2 := "other-provider-token"
+	require.NoError(ts.T(), provider2.SetSCIMToken(context.Background(), token2))
+	require.NoError(ts.T(), ts.API.db.Update(provider2))
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+token2)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMErrorResponseContentType() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/not-a-uuid", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNotFound, w.Code)
+	require.Equal(ts.T(), "application/scim+json", w.Header().Get("Content-Type"))
+}
