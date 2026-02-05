@@ -860,12 +860,13 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			emailData.FactorType = params.factorType
 		}
 
-		input := v0hooks.SendEmailInput{
-			User:      u,
-			EmailData: emailData,
-		}
+		input := v0hooks.NewSendEmailInput(
+			r,
+			u,
+			emailData,
+		)
 		output := v0hooks.SendEmailOutput{}
-		return a.hooksMgr.InvokeHook(tx, r, &input, &output)
+		return a.hooksMgr.InvokeHook(tx, r, input, &output)
 	}
 
 	// Increment email send operations here, since this metric is meant to count number of mail

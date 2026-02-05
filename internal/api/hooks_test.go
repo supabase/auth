@@ -77,12 +77,6 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 	// setup mock requests for hooks
 	defer gock.OffAll()
 
-	input := v0hooks.SendSMSInput{
-		User: ts.TestUser,
-		SMS: v0hooks.SMS{
-			OTP: "123456",
-		},
-	}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
 	ts.Config.Hook.SendSMS.URI = testURL
 
@@ -126,8 +120,16 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 		ts.Run(tc.description, func() {
 			req, _ := http.NewRequest("POST", ts.Config.Hook.SendSMS.URI, nil)
 
+			input := v0hooks.NewSendSMSInput(
+				req,
+				ts.TestUser,
+				v0hooks.SMS{
+					OTP: "123456",
+				},
+			)
+
 			var output v0hooks.SendSMSOutput
-			err := ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
+			err := ts.API.hooksMgr.InvokeHook(ts.API.db, req, input, &output)
 
 			if !tc.expectError {
 				require.NoError(ts.T(), err)
@@ -143,12 +145,6 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 	defer gock.OffAll()
 
-	input := v0hooks.SendSMSInput{
-		User: ts.TestUser,
-		SMS: v0hooks.SMS{
-			OTP: "123456",
-		},
-	}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
 	ts.Config.Hook.SendSMS.URI = testURL
 
@@ -169,8 +165,16 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 	req, err := http.NewRequest("POST", "http://localhost:9998/otp", nil)
 	require.NoError(ts.T(), err)
 
+	input := v0hooks.NewSendSMSInput(
+		req,
+		ts.TestUser,
+		v0hooks.SMS{
+			OTP: "123456",
+		},
+	)
+
 	var output v0hooks.SendSMSOutput
-	err = ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
+	err = ts.API.hooksMgr.InvokeHook(ts.API.db, req, input, &output)
 	require.NoError(ts.T(), err)
 
 	// Ensure that all expected HTTP interactions (mocks) have been called
@@ -180,12 +184,6 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 func (ts *HooksTestSuite) TestShouldReturnErrorForNonJSONContentType() {
 	defer gock.OffAll()
 
-	input := v0hooks.SendSMSInput{
-		User: ts.TestUser,
-		SMS: v0hooks.SMS{
-			OTP: "123456",
-		},
-	}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
 	ts.Config.Hook.SendSMS.URI = testURL
 
@@ -198,8 +196,16 @@ func (ts *HooksTestSuite) TestShouldReturnErrorForNonJSONContentType() {
 	req, err := http.NewRequest("POST", "http://localhost:9999/otp", nil)
 	require.NoError(ts.T(), err)
 
+	input := v0hooks.NewSendSMSInput(
+		req,
+		ts.TestUser,
+		v0hooks.SMS{
+			OTP: "123456",
+		},
+	)
+
 	var output v0hooks.SendSMSOutput
-	err = ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
+	err = ts.API.hooksMgr.InvokeHook(ts.API.db, req, input, &output)
 	require.Error(ts.T(), err, "Expected an error due to wrong content type")
 	require.Contains(ts.T(), err.Error(), "Invalid JSON response.")
 	require.True(ts.T(), gock.IsDone(), "Expected all mocks to have been called")

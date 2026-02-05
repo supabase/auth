@@ -696,11 +696,12 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 
 	var gotrueClaims jwt.Claims = claims
 	if config.Hook.CustomAccessToken.Enabled {
-		input := &v0hooks.CustomAccessTokenInput{
-			UserID:               params.User.ID,
-			Claims:               claims,
-			AuthenticationMethod: params.AuthenticationMethod.String(),
-		}
+		input := v0hooks.NewCustomAccessTokenInput(
+			r,
+			params.User.ID,
+			claims,
+			params.AuthenticationMethod.String(),
+		)
 
 		output := &v0hooks.CustomAccessTokenOutput{}
 

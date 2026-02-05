@@ -408,16 +408,17 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	phone := factor.Phone.String()
 
 	if config.Hook.SendSMS.Enabled {
-		input := v0hooks.SendSMSInput{
-			User: user,
-			SMS: v0hooks.SMS{
+		input := v0hooks.NewSendSMSInput(
+			r,
+			user,
+			v0hooks.SMS{
 				OTP:     otp,
 				SMSType: "mfa",
 				Phone:   phone,
 			},
-		}
+		)
 		output := v0hooks.SendSMSOutput{}
-		err := a.hooksMgr.InvokeHook(db, r, &input, &output)
+		err := a.hooksMgr.InvokeHook(db, r, input, &output)
 		if err != nil {
 			return apierrors.NewInternalServerError("error invoking hook")
 		}
@@ -648,15 +649,16 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 	})
 
 	if config.Hook.MFAVerificationAttempt.Enabled {
-		input := v0hooks.MFAVerificationAttemptInput{
-			UserID:     user.ID,
-			FactorID:   factor.ID,
-			FactorType: factor.FactorType,
-			Valid:      valid,
-		}
+		input := v0hooks.NewMFAVerificationAttemptInput(
+			r,
+			user.ID,
+			factor.ID,
+			factor.FactorType,
+			valid,
+		)
 
 		output := v0hooks.MFAVerificationAttemptOutput{}
-		err := a.hooksMgr.InvokeHook(nil, r, &input, &output)
+		err := a.hooksMgr.InvokeHook(nil, r, input, &output)
 		if err != nil {
 			return err
 		}
@@ -799,15 +801,16 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		valid = subtle.ConstantTimeCompare([]byte(otpCode), []byte(params.Code)) == 1
 	}
 	if config.Hook.MFAVerificationAttempt.Enabled {
-		input := v0hooks.MFAVerificationAttemptInput{
-			UserID:     user.ID,
-			FactorID:   factor.ID,
-			FactorType: factor.FactorType,
-			Valid:      valid,
-		}
+		input := v0hooks.NewMFAVerificationAttemptInput(
+			r,
+			user.ID,
+			factor.ID,
+			factor.FactorType,
+			valid,
+		)
 
 		output := v0hooks.MFAVerificationAttemptOutput{}
-		err := a.hooksMgr.InvokeHook(nil, r, &input, &output)
+		err := a.hooksMgr.InvokeHook(nil, r, input, &output)
 		if err != nil {
 			return err
 		}
