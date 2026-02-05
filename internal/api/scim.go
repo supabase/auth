@@ -25,7 +25,7 @@ func (a *API) requireSCIMAuthentication(w http.ResponseWriter, r *http.Request) 
 		return nil, apierrors.NewSCIMUnauthorizedError("Invalid or missing SCIM bearer token")
 	}
 
-	provider, err := models.FindSSOProviderBySCIMToken(ctx, db, token)
+	provider, err := models.FindSSOProviderBySCIMToken(db, token)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, apierrors.NewSCIMUnauthorizedError("Invalid SCIM bearer token")

@@ -489,9 +489,7 @@ func (a *API) adminSSOProviderEnableSCIM(w http.ResponseWriter, r *http.Request)
 	token := generateSCIMToken()
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		if err := provider.SetSCIMToken(ctx, token); err != nil {
-			return apierrors.NewInternalServerError("Error generating SCIM token").WithInternalError(err)
-		}
+		provider.SetSCIMToken(token)
 		return tx.UpdateOnly(provider, "scim_enabled", "scim_bearer_token_hash")
 	}); err != nil {
 		return err
@@ -537,9 +535,7 @@ func (a *API) adminSSOProviderRotateSCIMToken(w http.ResponseWriter, r *http.Req
 	token := generateSCIMToken()
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		if err := provider.SetSCIMToken(ctx, token); err != nil {
-			return apierrors.NewInternalServerError("Error generating SCIM token").WithInternalError(err)
-		}
+		provider.SetSCIMToken(token)
 		return tx.UpdateOnly(provider, "scim_bearer_token_hash")
 	}); err != nil {
 		return err
