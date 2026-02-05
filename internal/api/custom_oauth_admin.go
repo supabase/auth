@@ -648,6 +648,8 @@ func validateAttributeMapping(mapping map[string]interface{}) error {
 		"confirmed_at", // Email confirmation - system controlled
 		"email_confirmed_at",
 		"phone_confirmed_at",
+		"email_verified", // Email verification status - should come from provider, not be overridden
+		"phone_verified", // Phone verification status - should come from provider, not be overridden
 		"banned_until",   // Security field - system controlled
 		"is_super_admin", // Admin flag - system controlled
 	}
