@@ -391,6 +391,9 @@ func (a *API) scimPatchUser(w http.ResponseWriter, r *http.Request) error {
 	if err := a.parseSCIMBody(r, &params); err != nil {
 		return err
 	}
+	if err := params.Validate(); err != nil {
+		return err
+	}
 
 	var user *models.User
 	terr := db.Transaction(func(tx *storage.Connection) error {
@@ -811,6 +814,9 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 	if err := a.parseSCIMBody(r, &params); err != nil {
 		return err
 	}
+	if err := params.Validate(); err != nil {
+		return err
+	}
 
 	var group *models.SCIMGroup
 	terr := db.Transaction(func(tx *storage.Connection) error {
@@ -878,6 +884,9 @@ func (a *API) scimPatchGroup(w http.ResponseWriter, r *http.Request) error {
 	if err := a.parseSCIMBody(r, &params); err != nil {
 		return err
 	}
+	if err := params.Validate(); err != nil {
+		return err
+	}
 
 	var group *models.SCIMGroup
 	terr := db.Transaction(func(tx *storage.Connection) error {
@@ -934,6 +943,9 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 			members, ok := op.Value.([]interface{})
 			if !ok {
 				return apierrors.NewSCIMBadRequestError("members must be an array", "invalidValue")
+			}
+			if len(members) > SCIMMaxMembers {
+				return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d members per operation", SCIMMaxMembers))
 			}
 			for _, m := range members {
 				memberMap, ok := m.(map[string]interface{})
@@ -992,6 +1004,9 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 			members, ok := op.Value.([]interface{})
 			if !ok {
 				return apierrors.NewSCIMBadRequestError("members must be an array", "invalidValue")
+			}
+			if len(members) > SCIMMaxMembers {
+				return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d members per operation", SCIMMaxMembers))
 			}
 			memberIDs := make([]uuid.UUID, 0, len(members))
 			for _, m := range members {

@@ -164,6 +164,10 @@ func NewSCIMForbiddenError(detail string) *SCIMHTTPError {
 	return NewSCIMHTTPError(http.StatusForbidden, detail, "")
 }
 
+func NewSCIMRequestTooLargeError(detail string) *SCIMHTTPError {
+	return NewSCIMHTTPError(http.StatusRequestEntityTooLarge, detail, "")
+}
+
 func NewSCIMInternalServerError(detail string) *SCIMHTTPError {
 	return NewSCIMHTTPError(http.StatusInternalServerError, detail, "")
 }
