@@ -311,7 +311,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		user.UserMetaData = metadata
 
 		if params.Active != nil {
-			if *params.Active {
+			if bool(*params.Active) {
 				if err := user.Ban(tx, 0, nil); err != nil {
 					return apierrors.NewInternalServerError("Error unbanning user").WithInternalError(err)
 				}

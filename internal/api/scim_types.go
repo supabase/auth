@@ -44,7 +44,7 @@ type SCIMUserParams struct {
 	UserName   string      `json:"userName"`
 	Name       *SCIMName   `json:"name,omitempty"`
 	Emails     []SCIMEmail `json:"emails,omitempty"`
-	Active     *bool       `json:"active,omitempty"`
+	Active     *FlexBool   `json:"active,omitempty"`
 }
 
 func (p *SCIMUserParams) Validate() error {
