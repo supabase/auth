@@ -256,6 +256,29 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 	if err := a.parseSCIMBody(r, &params); err != nil {
 		return err
 	}
+	if err := params.Validate(); err != nil {
+		return err
+	}
+
+	// Extract primary email from params
+	var email string
+	if len(params.Emails) > 0 {
+		for _, e := range params.Emails {
+			if bool(e.Primary) {
+				email = e.Value
+				break
+			}
+		}
+		if email == "" {
+			email = params.Emails[0].Value
+		}
+	}
+	if email != "" {
+		email, err = a.validateEmail(email)
+		if err != nil {
+			return apierrors.NewSCIMBadRequestError("Invalid email address", "invalidValue")
+		}
+	}
 
 	var user *models.User
 	terr := db.Transaction(func(tx *storage.Connection) error {
@@ -272,20 +295,20 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMNotFoundError("User not found")
 		}
 
+		// PUT is a full replacement — replace metadata entirely instead of merging
+		metadata := make(map[string]interface{})
 		if params.Name != nil {
-			if user.UserMetaData == nil {
-				user.UserMetaData = make(map[string]interface{})
-			}
 			if params.Name.GivenName != "" {
-				user.UserMetaData["given_name"] = params.Name.GivenName
+				metadata["given_name"] = params.Name.GivenName
 			}
 			if params.Name.FamilyName != "" {
-				user.UserMetaData["family_name"] = params.Name.FamilyName
+				metadata["family_name"] = params.Name.FamilyName
 			}
 			if params.Name.Formatted != "" {
-				user.UserMetaData["full_name"] = params.Name.Formatted
+				metadata["full_name"] = params.Name.Formatted
 			}
 		}
+		user.UserMetaData = metadata
 
 		if params.Active != nil {
 			if *params.Active {
@@ -302,23 +325,33 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		// Update email if provided
+		if email != "" && email != user.GetEmail() {
+			if err := user.SetEmail(tx, email); err != nil {
+				return apierrors.NewInternalServerError("Error updating user email").WithInternalError(err)
+			}
+		}
+
 		if err := tx.UpdateOnly(user, "raw_user_meta_data"); err != nil {
 			return apierrors.NewInternalServerError("Error updating user").WithInternalError(err)
 		}
 
-		if params.UserName != "" {
-			providerType := "sso:" + provider.ID.String()
-			for i := range user.Identities {
-				if user.Identities[i].Provider == providerType {
-					if user.Identities[i].IdentityData == nil {
-						user.Identities[i].IdentityData = make(map[string]interface{})
-					}
-					user.Identities[i].IdentityData["user_name"] = params.UserName
-					if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
-						return apierrors.NewInternalServerError("Error updating identity").WithInternalError(err)
-					}
-					break
+		providerType := "sso:" + provider.ID.String()
+		for i := range user.Identities {
+			if user.Identities[i].Provider == providerType {
+				if user.Identities[i].IdentityData == nil {
+					user.Identities[i].IdentityData = make(map[string]interface{})
 				}
+				if params.UserName != "" {
+					user.Identities[i].IdentityData["user_name"] = params.UserName
+				}
+				if email != "" {
+					user.Identities[i].IdentityData["email"] = email
+				}
+				if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
+					return apierrors.NewInternalServerError("Error updating identity").WithInternalError(err)
+				}
+				break
 			}
 		}
 
