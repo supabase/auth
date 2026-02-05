@@ -190,18 +190,22 @@ func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 		return errors.Wrap(err, "error clearing SCIM group members")
 	}
 
-	for _, userID := range userIDs {
-		if err := g.AddMember(tx, userID); err != nil {
-			if IsNotFoundError(err) {
-				// Skip non-existent users silently per SCIM best practice
-				continue
-			}
-			// Skip users that don't belong to this provider silently
-			if _, ok := err.(UserNotInSSOProviderError); ok {
-				continue
-			}
-			return errors.Wrap(err, "error adding SCIM group member")
-		}
+	if len(userIDs) == 0 {
+		return nil
+	}
+
+	identityTable := (&pop.Model{Value: Identity{}}).TableName()
+	userTable := (&pop.Model{Value: User{}}).TableName()
+
+	if err := tx.RawQuery(
+		"INSERT INTO "+scimGroupMemberTableName()+" (group_id, user_id, created_at) "+
+			"SELECT ?, u.id, ? FROM "+userTable+" u "+
+			"INNER JOIN "+identityTable+" i ON i.user_id = u.id "+
+			"WHERE u.id IN (?) AND i.provider = ? "+
+			"ON CONFLICT DO NOTHING",
+		g.ID, time.Now(), userIDs, "sso:"+g.SSOProviderID.String(),
+	).Exec(); err != nil {
+		return errors.Wrap(err, "error setting SCIM group members")
 	}
 	return nil
 }
