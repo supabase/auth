@@ -1,10 +1,12 @@
 package models
 
 import (
-	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"reflect"
 	"strings"
@@ -14,7 +16,6 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -48,23 +49,22 @@ func (p SSOProvider) IsSCIMEnabled() bool {
 	return p.SCIMEnabled != nil && *p.SCIMEnabled
 }
 
-func (p *SSOProvider) SetSCIMToken(ctx context.Context, token string) error {
-	hash, err := crypto.GenerateFromPassword(ctx, token)
-	if err != nil {
-		return err
-	}
+func scimTokenHash(token string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(token)))
+}
+
+func (p *SSOProvider) SetSCIMToken(token string) {
+	hash := scimTokenHash(token)
 	p.SCIMBearerTokenHash = &hash
 	enabled := true
 	p.SCIMEnabled = &enabled
-	return nil
 }
 
-func (p *SSOProvider) VerifySCIMToken(ctx context.Context, token string) bool {
+func (p *SSOProvider) VerifySCIMToken(token string) bool {
 	if p.SCIMBearerTokenHash == nil {
 		return false
 	}
-	err := crypto.CompareHashAndPassword(ctx, *p.SCIMBearerTokenHash, token)
-	return err == nil
+	return subtle.ConstantTimeCompare([]byte(*p.SCIMBearerTokenHash), []byte(scimTokenHash(token))) == 1
 }
 
 func (p *SSOProvider) ClearSCIMToken() {
@@ -300,27 +300,17 @@ func FindAllSSOProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	return providers, nil
 }
 
-func FindSSOProviderBySCIMToken(ctx context.Context, tx *storage.Connection, token string) (*SSOProvider, error) {
-	var providers []SSOProvider
+func FindSSOProviderBySCIMToken(tx *storage.Connection, token string) (*SSOProvider, error) {
+	hash := scimTokenHash(token)
 
-	if err := tx.Q().Where("scim_enabled = ? AND scim_bearer_token_hash IS NOT NULL", true).All(&providers); err != nil {
+	var provider SSOProvider
+	if err := tx.Eager().Q().Where("scim_enabled = ? AND scim_bearer_token_hash = ?", true, hash).First(&provider); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, SSOProviderNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding SCIM-enabled SSO providers")
+		return nil, errors.Wrap(err, "error finding SSO provider by SCIM token")
 	}
-
-	for i := range providers {
-		if providers[i].VerifySCIMToken(ctx, token) {
-			// Reload with associations now that we found the match
-			if err := tx.Eager().Find(&providers[i], providers[i].ID); err != nil {
-				return nil, errors.Wrap(err, "error loading SSO provider")
-			}
-			return &providers[i], nil
-		}
-	}
-
-	return nil, SSOProviderNotFoundError{}
+	return &provider, nil
 }
 
 const (

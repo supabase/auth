@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -84,7 +83,7 @@ func (ts *SCIMTestSuite) SetupTest() {
 func (ts *SCIMTestSuite) createSSOProviderWithSCIM() *models.SSOProvider {
 	provider := &models.SSOProvider{}
 	require.NoError(ts.T(), ts.API.db.Create(provider))
-	require.NoError(ts.T(), provider.SetSCIMToken(context.Background(), ts.SCIMToken))
+	provider.SetSCIMToken(ts.SCIMToken)
 	require.NoError(ts.T(), ts.API.db.Update(provider))
 	require.NoError(ts.T(), ts.API.db.Reload(provider))
 	return provider
@@ -502,7 +501,7 @@ func (ts *SCIMTestSuite) TestSCIMDeleteUser() {
 	w = httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
-	ts.assertSCIMError(w, http.StatusNotFound)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
 }
 
 func (ts *SCIMTestSuite) TestSCIMDeleteGroup() {
@@ -722,7 +721,7 @@ func (ts *SCIMTestSuite) TestSCIMDeleteUserTwice() {
 	w = httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
-	ts.assertSCIMError(w, http.StatusNotFound)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
 }
 
 func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameExisting() {
@@ -2125,7 +2124,7 @@ func (ts *SCIMTestSuite) TestSCIMCrossProviderIsolationUsers() {
 	provider2 := &models.SSOProvider{}
 	require.NoError(ts.T(), ts.API.db.Create(provider2))
 	token2 := "other-provider-token"
-	require.NoError(ts.T(), provider2.SetSCIMToken(context.Background(), token2))
+	provider2.SetSCIMToken(token2)
 	require.NoError(ts.T(), ts.API.db.Update(provider2))
 
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/"+user.ID, nil)
@@ -2141,7 +2140,7 @@ func (ts *SCIMTestSuite) TestSCIMCrossProviderIsolationGroups() {
 	provider2 := &models.SSOProvider{}
 	require.NoError(ts.T(), ts.API.db.Create(provider2))
 	token2 := "other-provider-token"
-	require.NoError(ts.T(), provider2.SetSCIMToken(context.Background(), token2))
+	provider2.SetSCIMToken(token2)
 	require.NoError(ts.T(), ts.API.db.Update(provider2))
 
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/"+group.ID, nil)
