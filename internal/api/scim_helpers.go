@@ -24,7 +24,7 @@ func parseSCIMPagination(r *http.Request) (startIndex, count int) {
 	}
 
 	if v := r.URL.Query().Get("count"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i > 0 {
+		if i, err := strconv.Atoi(v); err == nil && i >= 0 {
 			count = i
 			if count > SCIMMaxPageSize {
 				count = SCIMMaxPageSize
