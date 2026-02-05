@@ -79,10 +79,13 @@ func (p CustomOAuthProvider) TableName() string {
 }
 
 // SetClientSecret encrypts and stores the client secret using the configured
-// database encryption settings. Encryption must be enabled to store client secrets.
+// database encryption settings. If encryption is disabled, the secret is
+// stored in plaintext (temporary fallback for now)
 func (p *CustomOAuthProvider) SetClientSecret(secret string, dbEncryption conf.DatabaseEncryptionConfiguration) error {
 	if !dbEncryption.Encrypt {
-		return errors.New("database encryption must be enabled to store custom OAuth provider client secrets")
+		// Fallback: store in plaintext when encryption is not enabled.
+		p.ClientSecret = secret
+		return nil
 	}
 
 	if dbEncryption.EncryptionKeyID == "" || dbEncryption.EncryptionKey == "" {
