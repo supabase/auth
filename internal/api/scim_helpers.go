@@ -35,8 +35,12 @@ func parseSCIMPagination(r *http.Request) (startIndex, count int) {
 }
 
 func (a *API) parseSCIMBody(r *http.Request, v interface{}) error {
+	r.Body = http.MaxBytesReader(nil, r.Body, SCIMMaxBodySize)
 	body, err := utilities.GetBodyBytes(r)
 	if err != nil {
+		if err.Error() == "http: request body too large" {
+			return apierrors.NewSCIMRequestTooLargeError("Request body exceeds maximum size of 1MB")
+		}
 		return apierrors.NewInternalServerError("Could not read request body").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, v); err != nil {

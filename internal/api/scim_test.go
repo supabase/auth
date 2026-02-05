@@ -1916,7 +1916,7 @@ func (ts *SCIMTestSuite) TestSCIMErrorInvalidPatchMissingOperations() {
 
 	ts.API.handler.ServeHTTP(w, req)
 
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+	ts.assertSCIMError(w, http.StatusBadRequest)
 }
 
 func (ts *SCIMTestSuite) TestSCIMErrorInvalidJSON() {

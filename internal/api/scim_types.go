@@ -12,6 +12,9 @@ import (
 const (
 	SCIMDefaultPageSize    = 100
 	SCIMMaxPageSize        = 1000
+	SCIMMaxBodySize        = 1 << 20 // 1 MB
+	SCIMMaxMembers         = 1000
+	SCIMMaxPatchOperations = 100
 	SCIMSchemaUser         = "urn:ietf:params:scim:schemas:core:2.0:User"
 	SCIMSchemaGroup        = "urn:ietf:params:scim:schemas:core:2.0:Group"
 	SCIMSchemaListResponse = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
@@ -77,6 +80,9 @@ func (p *SCIMGroupParams) Validate() error {
 	if p.DisplayName == "" {
 		return apierrors.NewSCIMBadRequestError("displayName is required", "invalidSyntax")
 	}
+	if len(p.Members) > SCIMMaxMembers {
+		return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d members per request", SCIMMaxMembers))
+	}
 	return nil
 }
 
@@ -89,6 +95,16 @@ type SCIMGroupMemberRef struct {
 type SCIMPatchRequest struct {
 	Schemas    []string             `json:"schemas"`
 	Operations []SCIMPatchOperation `json:"Operations"`
+}
+
+func (p *SCIMPatchRequest) Validate() error {
+	if len(p.Operations) == 0 {
+		return apierrors.NewSCIMBadRequestError("At least one operation is required", "invalidSyntax")
+	}
+	if len(p.Operations) > SCIMMaxPatchOperations {
+		return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d operations per request", SCIMMaxPatchOperations))
+	}
+	return nil
 }
 
 type SCIMPatchOperation struct {
