@@ -475,7 +475,7 @@ func (a *API) adminSSOProviderGetSCIM(w http.ResponseWriter, r *http.Request) er
 	return sendJSON(w, http.StatusOK, map[string]interface{}{
 		"enabled":   provider.IsSCIMEnabled(),
 		"token_set": provider.SCIMBearerTokenHash != nil,
-		"base_url":  a.config.SiteURL + "/scim/v2",
+		"base_url":  a.getSCIMBaseURL() + "/scim/v2",
 	})
 }
 
@@ -500,7 +500,7 @@ func (a *API) adminSSOProviderEnableSCIM(w http.ResponseWriter, r *http.Request)
 	return sendJSON(w, http.StatusOK, map[string]interface{}{
 		"enabled":  true,
 		"token":    token,
-		"base_url": a.config.SiteURL + "/scim/v2",
+		"base_url": a.getSCIMBaseURL() + "/scim/v2",
 	})
 }
 
@@ -548,6 +548,6 @@ func (a *API) adminSSOProviderRotateSCIMToken(w http.ResponseWriter, r *http.Req
 	return sendJSON(w, http.StatusOK, map[string]interface{}{
 		"enabled":  true,
 		"token":    token,
-		"base_url": a.config.SiteURL + "/scim/v2",
+		"base_url": a.getSCIMBaseURL() + "/scim/v2",
 	})
 }
