@@ -371,7 +371,12 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		providerType := "sso:" + provider.ID.String()
+
 		if email != "" && email != user.GetEmail() {
+			if err := checkSCIMEmailUniqueness(tx, email, config.JWT.Aud, providerType, user.ID); err != nil {
+				return err
+			}
 			if err := user.SetEmail(tx, email); err != nil {
 				if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
 					return apierrors.NewSCIMConflictError("Email already in use", "uniqueness")
@@ -383,8 +388,6 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		if err := tx.UpdateOnly(user, "raw_user_meta_data"); err != nil {
 			return apierrors.NewSCIMInternalServerError("Error updating user").WithInternalError(err)
 		}
-
-		providerType := "sso:" + provider.ID.String()
 		for i := range user.Identities {
 			if user.Identities[i].Provider == providerType {
 				if user.Identities[i].IdentityData == nil {
@@ -643,6 +646,9 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 				if err != nil {
 					return apierrors.NewSCIMBadRequestError("Invalid email address", "invalidValue")
 				}
+				if err := checkSCIMEmailUniqueness(tx, validatedEmail, a.config.JWT.Aud, providerType, user.ID); err != nil {
+					return err
+				}
 				if err := user.SetEmail(tx, validatedEmail); err != nil {
 					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
 						return apierrors.NewSCIMConflictError("Email already in use", "uniqueness")
@@ -741,6 +747,9 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 					validatedEmail, err := a.validateEmail(emailValue)
 					if err != nil {
 						return apierrors.NewSCIMBadRequestError("Invalid email address", "invalidValue")
+					}
+					if err := checkSCIMEmailUniqueness(tx, validatedEmail, a.config.JWT.Aud, providerType, user.ID); err != nil {
+						return err
 					}
 					if err := user.SetEmail(tx, validatedEmail); err != nil {
 						if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
