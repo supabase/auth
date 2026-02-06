@@ -147,7 +147,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 
 	var user *models.User
 	terr := db.Transaction(func(tx *storage.Connection) error {
-		existingUser, err := models.FindUserByEmailAndAudience(tx, email, config.JWT.Aud)
+		existingUser, err := models.FindUserByEmailAndAudienceIncludingSSO(tx, email, config.JWT.Aud)
 		if err != nil && !models.IsNotFoundError(err) {
 			return apierrors.NewSCIMInternalServerError("Error checking existing user").WithInternalError(err)
 		}
