@@ -5,8 +5,8 @@ create table if not exists {{ index .Options "Namespace" }}.scim_groups (
     sso_provider_id uuid not null,
     external_id text null,
     display_name text not null,
-    created_at timestamptz null,
-    updated_at timestamptz null,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
 
     constraint scim_groups_pkey primary key (id),
     constraint scim_groups_sso_provider_fkey foreign key (sso_provider_id)
@@ -35,7 +35,7 @@ comment on column {{ index .Options "Namespace" }}.scim_groups.display_name is '
 create table if not exists {{ index .Options "Namespace" }}.scim_group_members (
     group_id uuid not null,
     user_id uuid not null,
-    created_at timestamptz null,
+    created_at timestamptz not null default now(),
 
     constraint scim_group_members_pkey primary key (group_id, user_id),
     constraint scim_group_members_group_fkey foreign key (group_id)

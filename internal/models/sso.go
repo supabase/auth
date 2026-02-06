@@ -304,7 +304,7 @@ func FindSSOProviderBySCIMToken(tx *storage.Connection, token string) (*SSOProvi
 	hash := scimTokenHash(token)
 
 	var provider SSOProvider
-	if err := tx.Eager().Q().Where("scim_enabled = ? AND scim_bearer_token_hash = ?", true, hash).First(&provider); err != nil {
+	if err := tx.Q().Where("scim_enabled = ? AND scim_bearer_token_hash = ?", true, hash).First(&provider); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, SSOProviderNotFoundError{}
 		}

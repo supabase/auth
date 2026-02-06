@@ -901,11 +901,12 @@ func (a *API) scimListGroups(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewSCIMInternalServerError("Error fetching groups").WithInternalError(err)
 	}
 
-	includeMembers := strings.Contains(strings.ToLower(r.URL.Query().Get("attributes")), "members")
+	attrs := strings.ToLower(r.URL.Query().Get("attributes"))
 	excludeMembers := strings.Contains(strings.ToLower(r.URL.Query().Get("excludedAttributes")), "members")
+	includeMembers := !excludeMembers && (attrs == "" || strings.Contains(attrs, "members"))
 
 	var membersByGroup map[uuid.UUID][]*models.User
-	if includeMembers && !excludeMembers && len(groups) > 0 {
+	if includeMembers && len(groups) > 0 {
 		groupIDs := make([]uuid.UUID, len(groups))
 		for i, g := range groups {
 			groupIDs[i] = g.ID
@@ -920,7 +921,7 @@ func (a *API) scimListGroups(w http.ResponseWriter, r *http.Request) error {
 	resources := make([]interface{}, len(groups))
 	for i, group := range groups {
 		var members []*models.User
-		if includeMembers && !excludeMembers {
+		if includeMembers {
 			members = membersByGroup[group.ID]
 		}
 		resources[i] = a.groupToSCIMResponse(group, members)
