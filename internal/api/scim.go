@@ -147,17 +147,22 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 
 	var user *models.User
 	terr := db.Transaction(func(tx *storage.Connection) error {
-		existingUser, err := models.FindUserByEmailAndAudienceIncludingSSO(tx, email, config.JWT.Aud)
+		nonSSOUser, err := models.FindUserByEmailAndAudience(tx, email, config.JWT.Aud)
 		if err != nil && !models.IsNotFoundError(err) {
 			return apierrors.NewSCIMInternalServerError("Error checking existing user").WithInternalError(err)
 		}
+		if nonSSOUser != nil {
+			return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")
+		}
 
-		if existingUser != nil {
-			if existingUser.BannedReason != nil && *existingUser.BannedReason == scimDeprovisionedReason {
-				if !models.UserBelongsToSSOProvider(existingUser, provider.ID) {
-					return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")
-				}
-				if err := existingUser.Ban(tx, 0, nil); err != nil {
+		ssoUser, err := models.FindSSOUserByEmailAndProvider(tx, email, config.JWT.Aud, providerType)
+		if err != nil && !models.IsNotFoundError(err) {
+			return apierrors.NewSCIMInternalServerError("Error checking existing SSO user").WithInternalError(err)
+		}
+
+		if ssoUser != nil {
+			if ssoUser.BannedReason != nil && *ssoUser.BannedReason == scimDeprovisionedReason {
+				if err := ssoUser.Ban(tx, 0, nil); err != nil {
 					return apierrors.NewSCIMInternalServerError("Error reactivating user").WithInternalError(err)
 				}
 
@@ -173,27 +178,27 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 						metadata["full_name"] = params.Name.Formatted
 					}
 					if len(metadata) > 0 {
-						existingUser.UserMetaData = metadata
-						if err := tx.UpdateOnly(existingUser, "raw_user_meta_data"); err != nil {
+						ssoUser.UserMetaData = metadata
+						if err := tx.UpdateOnly(ssoUser, "raw_user_meta_data"); err != nil {
 							return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
 						}
 					}
 				}
 
-				if email != existingUser.GetEmail() {
-					if err := existingUser.SetEmail(tx, email); err != nil {
+				if email != ssoUser.GetEmail() {
+					if err := ssoUser.SetEmail(tx, email); err != nil {
 						return apierrors.NewSCIMInternalServerError("Error updating user email").WithInternalError(err)
 					}
 				}
 
-				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, existingUser, models.UserModifiedAction, "", map[string]interface{}{
+				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, ssoUser, models.UserModifiedAction, "", map[string]interface{}{
 					"provider":        "scim",
 					"sso_provider_id": provider.ID,
 					"action":          "reactivated",
 				}); terr != nil {
 					return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
 				}
-				user = existingUser
+				user = ssoUser
 				return nil
 			}
 			return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")

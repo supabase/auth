@@ -46,6 +46,7 @@ var (
 	testUser15 = scimTestUser{UserName: "user15@acme.com", Email: "user15@acme.com", ExternalID: "ext-008"}
 	testUser16 = scimTestUser{UserName: "user16@example.com", Email: "user16@example.com", ExternalID: "ext-009"}
 	testUser17 = scimTestUser{UserName: "user17@acme.com", Email: "user17@acme.com", GivenName: "Reactivated", FamilyName: "User", Formatted: "Reactivated User", ExternalID: "ext-010"}
+	testUser18 = scimTestUser{UserName: "crossemail@acme.com", Email: "crossemail@acme.com", ExternalID: "ext-011"}
 
 	testGroup1 = scimTestGroup{DisplayName: "Engineering", ExternalID: "grp-001"}
 	testGroup2 = scimTestGroup{DisplayName: "Sales", ExternalID: "grp-002"}
@@ -767,6 +768,36 @@ func (ts *SCIMTestSuite) TestSCIMReactivateDeprovisionedUser() {
 	require.Equal(ts.T(), user.ID, reactivated.ID, "Reactivated user should have the same ID")
 	require.Equal(ts.T(), "Updated", reactivated.Name.GivenName)
 	require.Equal(ts.T(), "Name", reactivated.Name.FamilyName)
+}
+
+func (ts *SCIMTestSuite) TestSCIMCreateUserCrossProviderSameEmail() {
+	ts.createSCIMUserWithExternalID(testUser18.UserName, testUser18.Email, testUser18.ExternalID)
+
+	provider2 := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(provider2))
+	token2 := "other-provider-token-cross"
+	provider2.SetSCIMToken(token2)
+	require.NoError(ts.T(), ts.API.db.Update(provider2))
+
+	body := map[string]interface{}{
+		"schemas":    []string{SCIMSchemaUser},
+		"userName":   testUser18.UserName,
+		"externalId": "other-provider-ext",
+		"emails": []map[string]interface{}{
+			{"value": testUser18.Email, "primary": true, "type": "work"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Users", body)
+	req.Header.Set("Authorization", "Bearer "+token2)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusCreated, w.Code, "Cross-provider create with same email should succeed: %s", w.Body.String())
+
+	var result SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.True(ts.T(), result.Active)
+	require.Equal(ts.T(), testUser18.UserName, result.UserName)
 }
 
 func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameExisting() {
