@@ -2479,6 +2479,39 @@ func (ts *SCIMTestSuite) TestSCIMCrossProviderIsolationGroups() {
 	ts.assertSCIMError(w, http.StatusNotFound)
 }
 
+func (ts *SCIMTestSuite) TestSCIMPutEmailUniqueness() {
+	userA := ts.createSCIMUser("uniqueA@acme.com", "uniqueA@acme.com")
+	ts.createSCIMUser("uniqueB@acme.com", "uniqueB@acme.com")
+
+	body := map[string]interface{}{
+		"schemas":  []string{SCIMSchemaUser},
+		"userName": "uniqueB@acme.com",
+		"emails":   []map[string]interface{}{{"value": "uniqueB@acme.com", "primary": true}},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPut, "/scim/v2/Users/"+userA.ID, body)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusConflict, "uniqueness")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchEmailUniqueness() {
+	userA := ts.createSCIMUser("patchA@acme.com", "patchA@acme.com")
+	ts.createSCIMUser("patchB@acme.com", "patchB@acme.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "emails[value eq \"patchA@acme.com\"].value", "value": "patchB@acme.com"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+userA.ID, body)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusConflict, "uniqueness")
+}
+
 func (ts *SCIMTestSuite) TestSCIMErrorResponseContentType() {
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/not-a-uuid", nil)
 	w := httptest.NewRecorder()
