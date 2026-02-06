@@ -161,17 +161,21 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if len(ssoUsers) > 0 {
-			var deprovisioned *models.User
+			var deprovisioned []*models.User
 			for _, u := range ssoUsers {
 				if u.BannedReason == nil || *u.BannedReason != scimDeprovisionedReason {
 					return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")
 				}
-				if deprovisioned == nil {
-					deprovisioned = u
-				}
+				deprovisioned = append(deprovisioned, u)
 			}
 
-			if err := deprovisioned.Ban(tx, 0, nil); err != nil {
+			if len(deprovisioned) > 1 {
+				return apierrors.NewSCIMConflictError("Multiple deprovisioned users exist for this email", "uniqueness")
+			}
+
+			candidate := deprovisioned[0]
+
+			if err := candidate.Ban(tx, 0, nil); err != nil {
 				return apierrors.NewSCIMInternalServerError("Error reactivating user").WithInternalError(err)
 			}
 
@@ -187,27 +191,27 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 					metadata["full_name"] = params.Name.Formatted
 				}
 				if len(metadata) > 0 {
-					deprovisioned.UserMetaData = metadata
-					if err := tx.UpdateOnly(deprovisioned, "raw_user_meta_data"); err != nil {
+					candidate.UserMetaData = metadata
+					if err := tx.UpdateOnly(candidate, "raw_user_meta_data"); err != nil {
 						return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
 					}
 				}
 			}
 
-			if email != deprovisioned.GetEmail() {
-				if err := deprovisioned.SetEmail(tx, email); err != nil {
+			if email != candidate.GetEmail() {
+				if err := candidate.SetEmail(tx, email); err != nil {
 					return apierrors.NewSCIMInternalServerError("Error updating user email").WithInternalError(err)
 				}
 			}
 
-			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, deprovisioned, models.UserModifiedAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, candidate, models.UserModifiedAction, "", map[string]interface{}{
 				"provider":        "scim",
 				"sso_provider_id": provider.ID,
 				"action":          "reactivated",
 			}); terr != nil {
 				return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
 			}
-			user = deprovisioned
+			user = candidate
 			return nil
 		}
 

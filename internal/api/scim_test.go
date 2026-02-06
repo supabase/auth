@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -47,6 +49,7 @@ var (
 	testUser16 = scimTestUser{UserName: "user16@example.com", Email: "user16@example.com", ExternalID: "ext-009"}
 	testUser17 = scimTestUser{UserName: "user17@acme.com", Email: "user17@acme.com", GivenName: "Reactivated", FamilyName: "User", Formatted: "Reactivated User", ExternalID: "ext-010"}
 	testUser18 = scimTestUser{UserName: "crossemail@acme.com", Email: "crossemail@acme.com", ExternalID: "ext-011"}
+	testUser19 = scimTestUser{UserName: "ambiguous@acme.com", Email: "ambiguous@acme.com", ExternalID: "ext-012"}
 
 	testGroup1 = scimTestGroup{DisplayName: "Engineering", ExternalID: "grp-001"}
 	testGroup2 = scimTestGroup{DisplayName: "Sales", ExternalID: "grp-002"}
@@ -768,6 +771,42 @@ func (ts *SCIMTestSuite) TestSCIMReactivateDeprovisionedUser() {
 	require.Equal(ts.T(), user.ID, reactivated.ID, "Reactivated user should have the same ID")
 	require.Equal(ts.T(), "Updated", reactivated.Name.GivenName)
 	require.Equal(ts.T(), "Name", reactivated.Name.FamilyName)
+}
+
+func (ts *SCIMTestSuite) TestSCIMReactivateAmbiguousDeprovisioned() {
+	user1 := ts.createSCIMUserWithExternalID(testUser19.UserName, testUser19.Email, testUser19.ExternalID)
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+user1.ID, nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	user2, err := models.NewUser("", testUser19.Email, "", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	user2.IsSSOUser = true
+	reason := "SCIM_DEPROVISIONED"
+	user2.BannedReason = &reason
+	bannedUntil := time.Now().Add(time.Duration(math.MaxInt64))
+	user2.BannedUntil = &bannedUntil
+	require.NoError(ts.T(), ts.API.db.Create(user2))
+
+	providerType := "sso:" + ts.SSOProvider.ID.String()
+	identity, err := models.NewIdentity(user2, providerType, map[string]interface{}{"sub": user2.ID.String()})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(identity))
+
+	body := map[string]interface{}{
+		"schemas":  []string{SCIMSchemaUser},
+		"userName": testUser19.UserName,
+		"emails": []map[string]interface{}{
+			{"value": testUser19.Email, "primary": true, "type": "work"},
+		},
+	}
+
+	req = ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Users", body)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusConflict, w.Code, "Ambiguous deprovisioned users should return 409: %s", w.Body.String())
 }
 
 func (ts *SCIMTestSuite) TestSCIMCreateUserCrossProviderSameEmail() {
