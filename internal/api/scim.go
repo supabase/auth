@@ -954,6 +954,9 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if err := tx.Update(group); err != nil {
+			if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+				return apierrors.NewSCIMConflictError("Group with this displayName already exists", "uniqueness")
+			}
 			return apierrors.NewSCIMInternalServerError("Error updating group").WithInternalError(err)
 		}
 
@@ -967,6 +970,12 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if err := group.SetMembers(tx, memberIDs); err != nil {
+			if models.IsNotFoundError(err) {
+				return apierrors.NewSCIMNotFoundError("One or more member IDs not found")
+			}
+			if _, ok := err.(models.UserNotInSSOProviderError); ok {
+				return apierrors.NewSCIMBadRequestError("One or more members do not belong to this SSO provider", "invalidValue")
+			}
 			return apierrors.NewSCIMInternalServerError("Error setting group members").WithInternalError(err)
 		}
 		return nil
@@ -1066,6 +1075,9 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 			}
 			group.ExternalID = storage.NullString(externalID)
 			if err := tx.UpdateOnly(group, "external_id"); err != nil {
+				if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+					return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
+				}
 				return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
 			}
 			return nil
@@ -1110,6 +1122,9 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 		case attrName == "externalid":
 			group.ExternalID = storage.NullString("")
 			if err := tx.UpdateOnly(group, "external_id"); err != nil {
+				if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+					return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
+				}
 				return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
 			}
 			return nil
@@ -1145,6 +1160,9 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 				}
 				group.ExternalID = storage.NullString(externalID)
 				if err := tx.UpdateOnly(group, "external_id"); err != nil {
+					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+						return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
+					}
 					return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
 				}
 				return nil
@@ -1155,6 +1173,9 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 				}
 				group.DisplayName = displayName
 				if err := tx.UpdateOnly(group, "display_name"); err != nil {
+					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+						return apierrors.NewSCIMConflictError("Group with this displayName already exists", "uniqueness")
+					}
 					return apierrors.NewSCIMInternalServerError("Error updating group display name").WithInternalError(err)
 				}
 				return nil
@@ -1183,6 +1204,12 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 					memberIDs = append(memberIDs, memberID)
 				}
 				if err := group.SetMembers(tx, memberIDs); err != nil {
+					if models.IsNotFoundError(err) {
+						return apierrors.NewSCIMNotFoundError("One or more member IDs not found")
+					}
+					if _, ok := err.(models.UserNotInSSOProviderError); ok {
+						return apierrors.NewSCIMBadRequestError("One or more members do not belong to this SSO provider", "invalidValue")
+					}
 					return apierrors.NewSCIMInternalServerError("Error setting group members").WithInternalError(err)
 				}
 				return nil
@@ -1218,6 +1245,9 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 		}
 		if len(columnsToUpdate) > 0 {
 			if err := tx.UpdateOnly(group, columnsToUpdate...); err != nil {
+				if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+					return apierrors.NewSCIMConflictError("Group already exists with this value", "uniqueness")
+				}
 				return apierrors.NewSCIMInternalServerError("Error updating group").WithInternalError(err)
 			}
 		}

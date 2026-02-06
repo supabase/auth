@@ -1732,6 +1732,64 @@ func (ts *SCIMTestSuite) TestSCIMPatchGroupRemoveAllMembers() {
 	require.Empty(ts.T(), getResult.Members)
 }
 
+func (ts *SCIMTestSuite) TestSCIMPatchGroupDisplayNameConflict() {
+	// Create two groups with distinct names
+	_ = ts.createSCIMGroupWithExternalID("FirstGroup", "conflict-ext-1")
+	secondGroup := ts.createSCIMGroupWithExternalID("SecondGroup", "conflict-ext-2")
+
+	// Try to rename SecondGroup to FirstGroup via PATCH replace with path
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "displayName", "value": "FirstGroup"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+secondGroup.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusConflict, "uniqueness")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupDisplayNameConflictValueMap() {
+	// Create two groups with distinct names
+	_ = ts.createSCIMGroupWithExternalID("ValueMapFirst", "vm-ext-1")
+	secondGroup := ts.createSCIMGroupWithExternalID("ValueMapSecond", "vm-ext-2")
+
+	// Try to rename SecondGroup via PATCH replace without path (value map)
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "value": map[string]interface{}{"displayName": "ValueMapFirst"}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+secondGroup.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusConflict, "uniqueness")
+}
+
+func (ts *SCIMTestSuite) TestSCIMReplaceGroupDisplayNameConflict() {
+	// Create two groups with distinct names
+	_ = ts.createSCIMGroupWithExternalID("ReplaceFirst", "replace-ext-1")
+	secondGroup := ts.createSCIMGroupWithExternalID("ReplaceSecond", "replace-ext-2")
+
+	// Try to replace SecondGroup with FirstGroup's displayName via PUT
+	body := map[string]interface{}{
+		"schemas":     []string{SCIMSchemaGroup},
+		"displayName": "ReplaceFirst",
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPut, "/scim/v2/Groups/"+secondGroup.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusConflict, "uniqueness")
+}
+
 func (ts *SCIMTestSuite) TestSCIMAuthMissingAuthorizationHeader() {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
 	req.Header.Set("Content-Type", "application/scim+json")
