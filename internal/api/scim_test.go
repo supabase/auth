@@ -1403,6 +1403,26 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserRemoveWithoutPath() {
 	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "noTarget")
 }
 
+func (ts *SCIMTestSuite) TestSCIMPatchUserAddExternalIDWithPath() {
+	user := ts.createSCIMUser("add_ext_path@test.com", "add_ext_path@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "add", "path": "externalId", "value": "new-ext-via-path"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code, "add with path should succeed: %s", w.Body.String())
+
+	var result SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), "new-ext-via-path", result.ExternalID)
+}
+
 func (ts *SCIMTestSuite) TestSCIMPatchUserAddInvalidValueType() {
 	user := ts.createSCIMUser("add_invalid_val@test.com", "add_invalid_val@test.com")
 
