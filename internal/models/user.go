@@ -732,7 +732,7 @@ func FindUsersByProviderWithFilter(tx *storage.Connection, provider string, filt
 		LIMIT ? OFFSET ?
 	`
 	args = append(args, count, offset)
-	if err := tx.Eager().RawQuery(query, args...).All(&users); err != nil {
+	if err := tx.Eager("Identities").RawQuery(query, args...).All(&users); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return users, totalResults, nil
 		}
