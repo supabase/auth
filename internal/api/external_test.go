@@ -6,15 +6,12 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
-	"time"
 
 	"github.com/gofrs/uuid"
-	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/tokens"
 )
 
 type ExternalTestSuite struct {
@@ -352,145 +349,62 @@ func setupGenericOAuthServer(ts *ExternalTestSuite, code string) *httptest.Serve
 	return server
 }
 
-// TestOAuthState_BackwardCompatibleJWT tests that the callback endpoint
-// still accepts the legacy JWT state format for backward compatibility during migration.
-func (ts *ExternalTestSuite) TestOAuthState_BackwardCompatibleJWT() {
+// TestOAuthState_UUIDFormat tests that the callback endpoint processes UUID state correctly.
+func (ts *ExternalTestSuite) TestOAuthState_UUIDFormat() {
 	code := "authcode"
 	server := setupGenericOAuthServer(ts, code)
 	defer server.Close()
 
-	// Create a legacy JWT state token manually
-	claims := &ExternalProviderClaims{
-		AuthMicroserviceClaims: AuthMicroserviceClaims{
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
-				IssuedAt:  jwt.NewNumericDate(time.Now()),
-				Issuer:    ts.Config.JWT.Issuer,
-			},
-		},
-		Provider:      "github",
-		Referrer:      "https://example.com/admin",
-		EmailOptional: false,
-	}
+	// Use the standard authorization flow which generates UUID state
+	w := performAuthorizationRequest(ts, "github", "")
+	ts.Require().Equal(http.StatusFound, w.Code)
+	u, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err)
 
-	jwtState, err := tokens.SignJWT(&ts.Config.JWT, claims)
-	require.NoError(ts.T(), err)
-	require.NotEmpty(ts.T(), jwtState)
+	state := u.Query().Get("state")
+	ts.Require().NotEmpty(state)
+
+	stateUUID, err := uuid.FromString(state)
+	require.NoError(ts.T(), err, "state should be a valid UUID")
+	require.NotEqual(ts.T(), uuid.Nil, stateUUID)
 
 	testURL, err := url.Parse("http://localhost/callback")
 	require.NoError(ts.T(), err)
 	v := testURL.Query()
 	v.Set("code", code)
-	v.Set("state", jwtState)
+	v.Set("state", state)
+	testURL.RawQuery = v.Encode()
+
+	req := httptest.NewRequest(http.MethodGet, testURL.String(), nil)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.Require().Equal(http.StatusFound, w.Code)
+	resultURL, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err)
+
+	fragment, err := url.ParseQuery(resultURL.Fragment)
+	ts.Require().NoError(err)
+	ts.NotEmpty(fragment.Get("access_token"), "UUID state should result in access_token")
+}
+
+// TestOAuthState_InvalidFormat tests that non-UUID state parameters are rejected.
+func (ts *ExternalTestSuite) TestOAuthState_InvalidFormat() {
+	code := "authcode"
+	server := setupGenericOAuthServer(ts, code)
+	defer server.Close()
+
+	testURL, err := url.Parse("http://localhost/callback")
+	require.NoError(ts.T(), err)
+	v := testURL.Query()
+	v.Set("code", code)
+	v.Set("state", "not-a-valid-uuid")
 	testURL.RawQuery = v.Encode()
 
 	req := httptest.NewRequest(http.MethodGet, testURL.String(), nil)
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 
-	ts.Require().Equal(http.StatusFound, w.Code)
-	u, err := url.Parse(w.Header().Get("Location"))
-	ts.Require().NoError(err, "redirect url parse failed")
-	ts.Require().Equal("/admin", u.Path)
-
-	fragment, err := url.ParseQuery(u.Fragment)
-	ts.Require().NoError(err)
-	ts.NotEmpty(fragment.Get("access_token"), "should have access_token")
-	ts.NotEmpty(fragment.Get("refresh_token"), "should have refresh_token")
-
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	require.NotNil(ts.T(), user)
-}
-
-// TestOAuthState_MigrationScenario tests that both UUID and JWT state formats
-// can be processed during the migration period.
-func (ts *ExternalTestSuite) TestOAuthState_MigrationScenario() {
-	code := "authcode"
-	server := setupGenericOAuthServer(ts, code)
-	defer server.Close()
-
-	ts.Run("NewUUIDFormat", func() {
-		// Use the standard authorization flow which now generates UUID state
-		w := performAuthorizationRequest(ts, "github", "")
-		ts.Require().Equal(http.StatusFound, w.Code)
-		u, err := url.Parse(w.Header().Get("Location"))
-		ts.Require().NoError(err)
-
-		state := u.Query().Get("state")
-		ts.Require().NotEmpty(state)
-
-		// Verify state is a valid UUID
-		stateUUID, err := uuid.FromString(state)
-		require.NoError(ts.T(), err, "state should be a valid UUID")
-		require.NotEqual(ts.T(), uuid.Nil, stateUUID)
-
-		// Complete the callback
-		testURL, err := url.Parse("http://localhost/callback")
-		require.NoError(ts.T(), err)
-		v := testURL.Query()
-		v.Set("code", code)
-		v.Set("state", state)
-		testURL.RawQuery = v.Encode()
-
-		req := httptest.NewRequest(http.MethodGet, testURL.String(), nil)
-		w = httptest.NewRecorder()
-		ts.API.handler.ServeHTTP(w, req)
-
-		ts.Require().Equal(http.StatusFound, w.Code)
-		resultURL, err := url.Parse(w.Header().Get("Location"))
-		ts.Require().NoError(err)
-
-		fragment, err := url.ParseQuery(resultURL.Fragment)
-		ts.Require().NoError(err)
-		ts.NotEmpty(fragment.Get("access_token"), "UUID state should result in access_token")
-	})
-
-	// Clean up user for next test
-	user, _ := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	if user != nil {
-		require.NoError(ts.T(), ts.API.db.Destroy(user))
-	}
-
-	ts.Run("LegacyJWTFormat", func() {
-		// Create a legacy JWT state
-		claims := &ExternalProviderClaims{
-			AuthMicroserviceClaims: AuthMicroserviceClaims{
-				RegisteredClaims: jwt.RegisteredClaims{
-					ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
-					IssuedAt:  jwt.NewNumericDate(time.Now()),
-					Issuer:    ts.Config.JWT.Issuer,
-				},
-			},
-			Provider: "github",
-			Referrer: "https://example.com/admin",
-		}
-
-		jwtState, err := tokens.SignJWT(&ts.Config.JWT, claims)
-		require.NoError(ts.T(), err)
-
-		// Verify state is NOT a UUID (it's a JWT)
-		_, uuidErr := uuid.FromString(jwtState)
-		require.Error(ts.T(), uuidErr, "JWT state should not be parseable as UUID")
-
-		// Complete the callback with JWT state
-		testURL, err := url.Parse("http://localhost/callback")
-		require.NoError(ts.T(), err)
-		v := testURL.Query()
-		v.Set("code", code)
-		v.Set("state", jwtState)
-		testURL.RawQuery = v.Encode()
-
-		req := httptest.NewRequest(http.MethodGet, testURL.String(), nil)
-		w := httptest.NewRecorder()
-		ts.API.handler.ServeHTTP(w, req)
-
-		ts.Require().Equal(http.StatusFound, w.Code)
-		resultURL, err := url.Parse(w.Header().Get("Location"))
-		ts.Require().NoError(err)
-
-		fragment, err := url.ParseQuery(resultURL.Fragment)
-		ts.Require().NoError(err)
-		ts.NotEmpty(fragment.Get("access_token"), "JWT state should also result in access_token")
-	})
+	// Should redirect to site URL with error since state is invalid
+	ts.Require().Equal(http.StatusSeeOther, w.Code)
 }

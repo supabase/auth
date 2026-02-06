@@ -10,7 +10,6 @@ import (
 
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
-	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
@@ -22,18 +21,6 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
-
-// ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
-type ExternalProviderClaims struct {
-	AuthMicroserviceClaims
-	Provider           string `json:"provider"`
-	InviteToken        string `json:"invite_token,omitempty"`
-	Referrer           string `json:"referrer,omitempty"`
-	FlowStateID        string `json:"flow_state_id"`
-	OAuthClientStateID string `json:"oauth_client_state_id,omitempty"`
-	LinkingTargetID    string `json:"linking_target_id,omitempty"`
-	EmailOptional      bool   `json:"email_optional,omitempty"`
-}
 
 // ExternalProviderRedirect redirects the request to the oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
@@ -203,20 +190,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	providerAccessToken := data.token
 	providerRefreshToken := data.refreshToken
 
-	// Get flow state from context (new UUID format) or load from FlowStateID (legacy JWT format)
 	flowState := getFlowState(ctx)
-	if flowState == nil {
-		// Backward compatibility: load from FlowStateID for legacy JWT state
-		// To be removed in subsequent release.
-		if flowStateID := getFlowStateID(ctx); flowStateID != "" {
-			flowState, err = models.FindFlowStateByID(db, flowStateID)
-			if models.IsNotFoundError(err) {
-				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeFlowStateNotFound, "Flow state not found").WithInternalError(err)
-			} else if err != nil {
-				return apierrors.NewInternalServerError("Failed to find flow state").WithInternalError(err)
-			}
-		}
-	}
 
 	targetUser := getTargetUser(ctx)
 	inviteToken := getInviteToken(ctx)
@@ -545,13 +519,12 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request, db *storag
 		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthCallback, "OAuth state parameter missing")
 	}
 
-	// Try to parse state as UUID first (new format)
-	if stateUUID, err := uuid.FromString(state); err == nil {
-		return a.loadExternalStateFromUUID(ctx, db, stateUUID)
+	stateUUID, err := uuid.FromString(state)
+	if err != nil {
+		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth state parameter is invalid")
 	}
 
-	// Fall back to JWT parsing for backward compatibility
-	return a.loadExternalStateFromJWT(ctx, db, state)
+	return a.loadExternalStateFromUUID(ctx, db, stateUUID)
 }
 
 // loadExternalStateFromUUID loads OAuth state from a flow_state record (new UUID format)
@@ -596,75 +569,6 @@ func (a *API) loadExternalStateFromUUID(ctx context.Context, db *storage.Connect
 	ctx = withFlowState(ctx, flowState)
 
 	return withSignature(ctx, stateID.String()), nil
-}
-
-// loadExternalStateFromJWT loads OAuth state from a JWT (legacy format for backward compatibility)
-func (a *API) loadExternalStateFromJWT(ctx context.Context, db *storage.Connection, state string) (context.Context, error) {
-	config := a.config
-	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
-	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
-		if kid, ok := token.Header["kid"]; ok {
-			if kidStr, ok := kid.(string); ok {
-				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
-				if err != nil {
-					return nil, err
-				}
-
-				if key != nil {
-					return key, nil
-				}
-
-				// otherwise try to use fallback
-			}
-		}
-		if alg, ok := token.Header["alg"]; ok {
-			if alg == jwt.SigningMethodHS256.Name {
-				// preserve backward compatibility for cases where the kid is not set or potentially invalid but the key can be decoded with the secret
-				return []byte(config.JWT.Secret), nil
-			}
-		}
-
-		return nil, fmt.Errorf("unrecognized JWT kid %v for algorithm %v", token.Header["kid"], token.Header["alg"])
-	})
-	if err != nil {
-		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
-	}
-	if claims.Provider == "" {
-		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (missing provider)")
-	}
-	if claims.InviteToken != "" {
-		ctx = withInviteToken(ctx, claims.InviteToken)
-	}
-	if claims.Referrer != "" {
-		ctx = withExternalReferrer(ctx, claims.Referrer)
-	}
-	if claims.FlowStateID != "" {
-		ctx = withFlowStateID(ctx, claims.FlowStateID)
-	}
-	if claims.OAuthClientStateID != "" {
-		oauthClientStateID, err := uuid.FromString(claims.OAuthClientStateID)
-		if err != nil {
-			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (oauth_client_state_id must be UUID)")
-		}
-		ctx = withOAuthClientStateID(ctx, oauthClientStateID)
-	}
-	if claims.LinkingTargetID != "" {
-		linkingTargetUserID, err := uuid.FromString(claims.LinkingTargetID)
-		if err != nil {
-			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (linking_target_id must be UUID)")
-		}
-		u, err := models.FindUserByID(db, linkingTargetUserID)
-		if err != nil {
-			if models.IsNotFoundError(err) {
-				return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeUserNotFound, "Linking target user not found")
-			}
-			return nil, apierrors.NewInternalServerError("Database error loading user").WithInternalError(err)
-		}
-		ctx = withTargetUser(ctx, u)
-	}
-	ctx = withExternalProviderType(ctx, claims.Provider, claims.EmailOptional)
-	return withSignature(ctx, state), nil
 }
 
 // Provider returns a Provider interface for the given name.

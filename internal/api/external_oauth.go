@@ -26,8 +26,8 @@ type OAuthProviderData struct {
 	code         string
 }
 
-// loadFlowState parses the `state` query parameter as a JWS payload,
-// extracting the provider requested
+// loadFlowState parses the `state` query parameter as a UUID,
+// loads the flow state from the database, and extracts the provider requested
 func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
