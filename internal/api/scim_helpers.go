@@ -7,8 +7,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
 )
 
@@ -155,4 +157,20 @@ func sendSCIMJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	w.Header().Set("Content-Type", "application/scim+json")
 	w.WriteHeader(status)
 	return json.NewEncoder(w).Encode(obj)
+}
+
+func checkSCIMEmailUniqueness(tx *storage.Connection, email, aud, providerType string, excludeUserID uuid.UUID) error {
+	ssoUsers, err := models.FindSSOUsersByEmailAndProvider(tx, email, aud, providerType)
+	if err != nil {
+		return apierrors.NewSCIMInternalServerError("Error checking email uniqueness").WithInternalError(err)
+	}
+	for _, u := range ssoUsers {
+		if u.ID == excludeUserID {
+			continue
+		}
+		if u.BannedReason == nil || *u.BannedReason != scimDeprovisionedReason {
+			return apierrors.NewSCIMConflictError("Email already in use by another user", "uniqueness")
+		}
+	}
+	return nil
 }
