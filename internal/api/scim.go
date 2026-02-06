@@ -155,53 +155,60 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")
 		}
 
-		ssoUser, err := models.FindSSOUserByEmailAndProvider(tx, email, config.JWT.Aud, providerType)
-		if err != nil && !models.IsNotFoundError(err) {
+		ssoUsers, err := models.FindSSOUsersByEmailAndProvider(tx, email, config.JWT.Aud, providerType)
+		if err != nil {
 			return apierrors.NewSCIMInternalServerError("Error checking existing SSO user").WithInternalError(err)
 		}
 
-		if ssoUser != nil {
-			if ssoUser.BannedReason != nil && *ssoUser.BannedReason == scimDeprovisionedReason {
-				if err := ssoUser.Ban(tx, 0, nil); err != nil {
-					return apierrors.NewSCIMInternalServerError("Error reactivating user").WithInternalError(err)
+		if len(ssoUsers) > 0 {
+			var deprovisioned *models.User
+			for _, u := range ssoUsers {
+				if u.BannedReason == nil || *u.BannedReason != scimDeprovisionedReason {
+					return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")
 				}
-
-				if params.Name != nil {
-					metadata := make(map[string]interface{})
-					if params.Name.GivenName != "" {
-						metadata["given_name"] = params.Name.GivenName
-					}
-					if params.Name.FamilyName != "" {
-						metadata["family_name"] = params.Name.FamilyName
-					}
-					if params.Name.Formatted != "" {
-						metadata["full_name"] = params.Name.Formatted
-					}
-					if len(metadata) > 0 {
-						ssoUser.UserMetaData = metadata
-						if err := tx.UpdateOnly(ssoUser, "raw_user_meta_data"); err != nil {
-							return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
-						}
-					}
+				if deprovisioned == nil {
+					deprovisioned = u
 				}
-
-				if email != ssoUser.GetEmail() {
-					if err := ssoUser.SetEmail(tx, email); err != nil {
-						return apierrors.NewSCIMInternalServerError("Error updating user email").WithInternalError(err)
-					}
-				}
-
-				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, ssoUser, models.UserModifiedAction, "", map[string]interface{}{
-					"provider":        "scim",
-					"sso_provider_id": provider.ID,
-					"action":          "reactivated",
-				}); terr != nil {
-					return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
-				}
-				user = ssoUser
-				return nil
 			}
-			return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")
+
+			if err := deprovisioned.Ban(tx, 0, nil); err != nil {
+				return apierrors.NewSCIMInternalServerError("Error reactivating user").WithInternalError(err)
+			}
+
+			if params.Name != nil {
+				metadata := make(map[string]interface{})
+				if params.Name.GivenName != "" {
+					metadata["given_name"] = params.Name.GivenName
+				}
+				if params.Name.FamilyName != "" {
+					metadata["family_name"] = params.Name.FamilyName
+				}
+				if params.Name.Formatted != "" {
+					metadata["full_name"] = params.Name.Formatted
+				}
+				if len(metadata) > 0 {
+					deprovisioned.UserMetaData = metadata
+					if err := tx.UpdateOnly(deprovisioned, "raw_user_meta_data"); err != nil {
+						return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
+					}
+				}
+			}
+
+			if email != deprovisioned.GetEmail() {
+				if err := deprovisioned.SetEmail(tx, email); err != nil {
+					return apierrors.NewSCIMInternalServerError("Error updating user email").WithInternalError(err)
+				}
+			}
+
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, deprovisioned, models.UserModifiedAction, "", map[string]interface{}{
+				"provider":        "scim",
+				"sso_provider_id": provider.ID,
+				"action":          "reactivated",
+			}); terr != nil {
+				return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
+			}
+			user = deprovisioned
+			return nil
 		}
 
 		user, err = models.NewUser("", email, "", config.JWT.Aud, nil)
