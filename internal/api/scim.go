@@ -111,7 +111,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	var params SCIMUserParams
-	if err := a.parseSCIMBody(r, &params); err != nil {
+	if err := a.parseSCIMBody(w, r, &params); err != nil {
 		return err
 	}
 	if err := params.Validate(); err != nil {
@@ -283,7 +283,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var params SCIMUserParams
-	if err := a.parseSCIMBody(r, &params); err != nil {
+	if err := a.parseSCIMBody(w, r, &params); err != nil {
 		return err
 	}
 	if err := params.Validate(); err != nil {
@@ -425,7 +425,7 @@ func (a *API) scimPatchUser(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var params SCIMPatchRequest
-	if err := a.parseSCIMBody(r, &params); err != nil {
+	if err := a.parseSCIMBody(w, r, &params); err != nil {
 		return err
 	}
 	if err := params.Validate(); err != nil {
@@ -859,7 +859,7 @@ func (a *API) scimCreateGroup(w http.ResponseWriter, r *http.Request) error {
 	provider := getSSOProvider(ctx)
 
 	var params SCIMGroupParams
-	if err := a.parseSCIMBody(r, &params); err != nil {
+	if err := a.parseSCIMBody(w, r, &params); err != nil {
 		return err
 	}
 	if err := params.Validate(); err != nil {
@@ -924,7 +924,7 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var params SCIMGroupParams
-	if err := a.parseSCIMBody(r, &params); err != nil {
+	if err := a.parseSCIMBody(w, r, &params); err != nil {
 		return err
 	}
 	if err := params.Validate(); err != nil {
@@ -996,7 +996,7 @@ func (a *API) scimPatchGroup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var params SCIMPatchRequest
-	if err := a.parseSCIMBody(r, &params); err != nil {
+	if err := a.parseSCIMBody(w, r, &params); err != nil {
 		return err
 	}
 	if err := params.Validate(); err != nil {
