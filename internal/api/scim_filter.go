@@ -112,27 +112,16 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 			Args:  nil,
 		}, nil
 
-	case filter.GT:
+	case filter.GT, filter.GE, filter.LT, filter.LE:
+		if _, ok := e.CompareValue.(string); !ok {
+			return nil, apierrors.NewSCIMBadRequestError(
+				fmt.Sprintf("'%s' operator requires a string value", e.Operator), "invalidValue")
+		}
+		ops := map[filter.CompareOperator]string{
+			filter.GT: ">", filter.GE: ">=", filter.LT: "<", filter.LE: "<=",
+		}
 		return &models.SCIMFilterClause{
-			Where: fmt.Sprintf("%s > ?", dbColumn),
-			Args:  []interface{}{e.CompareValue},
-		}, nil
-
-	case filter.GE:
-		return &models.SCIMFilterClause{
-			Where: fmt.Sprintf("%s >= ?", dbColumn),
-			Args:  []interface{}{e.CompareValue},
-		}, nil
-
-	case filter.LT:
-		return &models.SCIMFilterClause{
-			Where: fmt.Sprintf("%s < ?", dbColumn),
-			Args:  []interface{}{e.CompareValue},
-		}, nil
-
-	case filter.LE:
-		return &models.SCIMFilterClause{
-			Where: fmt.Sprintf("%s <= ?", dbColumn),
+			Where: fmt.Sprintf("%s %s ?", dbColumn, ops[e.Operator]),
 			Args:  []interface{}{e.CompareValue},
 		}, nil
 

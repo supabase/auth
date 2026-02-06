@@ -402,6 +402,9 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 					delete(user.Identities[i].IdentityData, "external_id")
 				}
 				if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
+					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+						return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+					}
 					return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 				}
 				break
@@ -539,6 +542,9 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 							}
 							user.Identities[i].IdentityData["external_id"] = externalID
 							if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
+								if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+									return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+								}
 								return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 							}
 							break
@@ -573,6 +579,9 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 							}
 							user.Identities[i].IdentityData["external_id"] = externalID
 							if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
+								if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+									return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+								}
 								return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 							}
 							break
@@ -632,9 +641,23 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 				if err != nil {
 					return apierrors.NewSCIMBadRequestError("Invalid email address", "invalidValue")
 				}
-				user.Email = storage.NullString(validatedEmail)
-				if err := tx.UpdateOnly(user, "email"); err != nil {
+				if err := user.SetEmail(tx, validatedEmail); err != nil {
+					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+						return apierrors.NewSCIMConflictError("Email already in use", "uniqueness")
+					}
 					return apierrors.NewSCIMInternalServerError("Error updating email").WithInternalError(err)
+				}
+				for i := range user.Identities {
+					if user.Identities[i].Provider == providerType {
+						if user.Identities[i].IdentityData == nil {
+							user.Identities[i].IdentityData = make(map[string]interface{})
+						}
+						user.Identities[i].IdentityData["email"] = validatedEmail
+						if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
+							return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
+						}
+						break
+					}
 				}
 				return nil
 			default:
@@ -702,6 +725,9 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 							}
 							user.Identities[i].IdentityData["external_id"] = externalID
 							if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
+								if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+									return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+								}
 								return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 							}
 							break
