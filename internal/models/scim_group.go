@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/gobuffalo/pop/v6"
@@ -23,8 +24,8 @@ type SCIMGroup struct {
 	SSOProviderID uuid.UUID          `db:"sso_provider_id" json:"-"`
 	ExternalID    storage.NullString `db:"external_id" json:"external_id,omitempty"`
 	DisplayName   string             `db:"display_name" json:"display_name"`
-	CreatedAt     time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt     time.Time `db:"updated_at" json:"updated_at"`
+	CreatedAt     time.Time          `db:"created_at" json:"created_at"`
+	UpdatedAt     time.Time          `db:"updated_at" json:"updated_at"`
 
 	SSOProvider *SSOProvider `belongs_to:"sso_providers" json:"-"`
 	Members     []User       `many_to_many:"scim_group_members" json:"members,omitempty"`
@@ -197,16 +198,64 @@ func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 	identityTable := (&pop.Model{Value: Identity{}}).TableName()
 	userTable := (&pop.Model{Value: User{}}).TableName()
 
+	placeholders := make([]string, len(userIDs))
+	args := []interface{}{g.ID, time.Now()}
+	for i, id := range userIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	args = append(args, "sso:"+g.SSOProviderID.String())
+
 	if err := tx.RawQuery(
 		"INSERT INTO "+scimGroupMemberTableName()+" (group_id, user_id, created_at) "+
 			"SELECT ?, u.id, ? FROM "+userTable+" u "+
 			"INNER JOIN "+identityTable+" i ON i.user_id = u.id "+
-			"WHERE u.id IN (?) AND i.provider = ? "+
+			"WHERE u.id IN ("+strings.Join(placeholders, ",")+") AND i.provider = ? "+
 			"ON CONFLICT DO NOTHING",
-		g.ID, time.Now(), userIDs, "sso:"+g.SSOProviderID.String(),
+		args...,
 	).Exec(); err != nil {
 		return errors.Wrap(err, "error setting SCIM group members")
 	}
 	return nil
 }
 
+func GetMembersForGroups(tx *storage.Connection, groupIDs []uuid.UUID) (map[uuid.UUID][]*User, error) {
+	result := make(map[uuid.UUID][]*User)
+	if len(groupIDs) == 0 {
+		return result, nil
+	}
+
+	userTable := (&pop.Model{Value: User{}}).TableName()
+
+	type memberRow struct {
+		GroupID uuid.UUID `db:"group_id"`
+		User
+	}
+
+	placeholders := make([]string, len(groupIDs))
+	args := make([]interface{}, len(groupIDs))
+	for i, id := range groupIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	rows := []memberRow{}
+	if err := tx.RawQuery(
+		"SELECT m.group_id, u.* FROM "+userTable+" u "+
+			"INNER JOIN "+scimGroupMemberTableName()+" m ON u.id = m.user_id "+
+			"WHERE m.group_id IN ("+strings.Join(placeholders, ",")+") "+
+			"ORDER BY u.email ASC",
+		args...,
+	).All(&rows); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return result, nil
+		}
+		return nil, errors.Wrap(err, "error batch loading SCIM group members")
+	}
+
+	for i := range rows {
+		user := rows[i].User
+		result[rows[i].GroupID] = append(result[rows[i].GroupID], &user)
+	}
+	return result, nil
+}
