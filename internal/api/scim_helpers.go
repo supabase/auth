@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/utilities"
@@ -49,10 +48,6 @@ func (a *API) parseSCIMBody(r *http.Request, v interface{}) error {
 		return apierrors.NewSCIMBadRequestError("Invalid JSON in request body", "invalidSyntax").WithInternalError(err)
 	}
 	return nil
-}
-
-func userBelongsToProvider(user *models.User, providerID uuid.UUID) bool {
-	return models.UserBelongsToSSOProvider(user, providerID)
 }
 
 func (a *API) userToSCIMResponse(user *models.User, providerType string) *SCIMUserResponse {
