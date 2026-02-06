@@ -607,9 +607,9 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 			attrName := strings.ToLower(path.AttributePath.AttributeName)
 			switch {
 			case attrName == "active":
-				active, ok := op.Value.(bool)
-				if !ok {
-					return apierrors.NewSCIMBadRequestError("active must be a boolean", "invalidValue")
+				active, err := parseSCIMActiveBool(op.Value)
+				if err != nil {
+					return err
 				}
 				if active {
 					if err := user.Ban(tx, 0, nil); err != nil {
@@ -776,18 +776,20 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 					}
 				}
 			case attrName == "active":
-				if active, ok := val.(bool); ok {
-					if active {
-						if err := user.Ban(tx, 0, nil); err != nil {
-							return apierrors.NewSCIMInternalServerError("Error unbanning user").WithInternalError(err)
-						}
-					} else {
-						if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
-							return apierrors.NewSCIMInternalServerError("Error banning user").WithInternalError(err)
-						}
-						if err := models.Logout(tx, user.ID); err != nil {
-							return apierrors.NewSCIMInternalServerError("Error invalidating sessions").WithInternalError(err)
-						}
+				active, err := parseSCIMActiveBool(val)
+				if err != nil {
+					return err
+				}
+				if active {
+					if err := user.Ban(tx, 0, nil); err != nil {
+						return apierrors.NewSCIMInternalServerError("Error unbanning user").WithInternalError(err)
+					}
+				} else {
+					if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
+						return apierrors.NewSCIMInternalServerError("Error banning user").WithInternalError(err)
+					}
+					if err := models.Logout(tx, user.ID); err != nil {
+						return apierrors.NewSCIMInternalServerError("Error invalidating sessions").WithInternalError(err)
 					}
 				}
 			}
@@ -884,10 +886,11 @@ func (a *API) scimListGroups(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewSCIMInternalServerError("Error fetching groups").WithInternalError(err)
 	}
 
+	includeMembers := strings.Contains(strings.ToLower(r.URL.Query().Get("attributes")), "members")
 	excludeMembers := strings.Contains(strings.ToLower(r.URL.Query().Get("excludedAttributes")), "members")
 
 	var membersByGroup map[uuid.UUID][]*models.User
-	if !excludeMembers && len(groups) > 0 {
+	if includeMembers && !excludeMembers && len(groups) > 0 {
 		groupIDs := make([]uuid.UUID, len(groups))
 		for i, g := range groups {
 			groupIDs[i] = g.ID
@@ -902,7 +905,7 @@ func (a *API) scimListGroups(w http.ResponseWriter, r *http.Request) error {
 	resources := make([]interface{}, len(groups))
 	for i, group := range groups {
 		var members []*models.User
-		if !excludeMembers {
+		if includeMembers && !excludeMembers {
 			members = membersByGroup[group.ID]
 		}
 		resources[i] = a.groupToSCIMResponse(group, members)

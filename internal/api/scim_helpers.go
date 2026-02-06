@@ -73,10 +73,10 @@ func (a *API) userToSCIMResponse(user *models.User, providerType string) *SCIMUs
 	var emailType string
 	for _, identity := range user.Identities {
 		if identity.Provider == providerType {
-			if identity.ProviderID != "" {
-				resp.ExternalID = identity.ProviderID
-			}
 			if identity.IdentityData != nil {
+				if extID, ok := identity.IdentityData["external_id"].(string); ok && extID != "" {
+					resp.ExternalID = extID
+				}
 				if userName, ok := identity.IdentityData["user_name"].(string); ok && userName != "" {
 					resp.UserName = userName
 				}
@@ -157,6 +157,21 @@ func sendSCIMJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	w.Header().Set("Content-Type", "application/scim+json")
 	w.WriteHeader(status)
 	return json.NewEncoder(w).Encode(obj)
+}
+
+func parseSCIMActiveBool(val interface{}) (bool, error) {
+	switch v := val.(type) {
+	case bool:
+		return v, nil
+	case string:
+		switch strings.ToLower(v) {
+		case "true":
+			return true, nil
+		case "false":
+			return false, nil
+		}
+	}
+	return false, apierrors.NewSCIMBadRequestError("active must be a boolean or \"true\"/\"false\"", "invalidValue")
 }
 
 func checkSCIMEmailUniqueness(tx *storage.Connection, email, aud, providerType string, excludeUserID uuid.UUID) error {
