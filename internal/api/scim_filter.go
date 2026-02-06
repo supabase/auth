@@ -21,9 +21,15 @@ var SCIMGroupFilterAttrs = map[string]string{
 	"externalid":  "external_id",
 }
 
+const SCIMMaxFilterLength = 1024
+
 func ParseSCIMFilterToSQL(filterStr string, allowedAttrs map[string]string) (*models.SCIMFilterClause, error) {
 	if filterStr == "" {
 		return &models.SCIMFilterClause{Where: "1=1", Args: nil}, nil
+	}
+
+	if len(filterStr) > SCIMMaxFilterLength {
+		return nil, apierrors.NewSCIMBadRequestError("Filter exceeds maximum length", "invalidFilter")
 	}
 
 	expr, err := filter.ParseFilter([]byte(filterStr))
