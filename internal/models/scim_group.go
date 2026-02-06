@@ -164,6 +164,74 @@ func UserBelongsToSSOProvider(user *User, ssoProviderID uuid.UUID) bool {
 	return false
 }
 
+func (g *SCIMGroup) AddMembers(tx *storage.Connection, userIDs []uuid.UUID) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+
+	identityTable := (&pop.Model{Value: Identity{}}).TableName()
+	userTable := (&pop.Model{Value: User{}}).TableName()
+	providerType := "sso:" + g.SSOProviderID.String()
+
+	placeholders := make([]string, len(userIDs))
+	queryArgs := make([]interface{}, len(userIDs))
+	for i, id := range userIDs {
+		placeholders[i] = "?"
+		queryArgs[i] = id
+	}
+	inClause := strings.Join(placeholders, ",")
+
+	var rawValidIDs []uuid.UUID
+	validationArgs := make([]interface{}, 0, len(userIDs)+1)
+	validationArgs = append(validationArgs, queryArgs...)
+	validationArgs = append(validationArgs, providerType)
+	if err := tx.RawQuery(
+		"SELECT u.id FROM "+userTable+" u "+
+			"INNER JOIN "+identityTable+" i ON i.user_id = u.id "+
+			"WHERE u.id IN ("+inClause+") AND i.provider = ?",
+		validationArgs...,
+	).All(&rawValidIDs); err != nil {
+		return errors.Wrap(err, "error validating SCIM group member IDs")
+	}
+
+	validSet := make(map[uuid.UUID]struct{}, len(rawValidIDs))
+	for _, id := range rawValidIDs {
+		validSet[id] = struct{}{}
+	}
+
+	if len(validSet) != len(userIDs) {
+		for _, id := range userIDs {
+			if _, ok := validSet[id]; !ok {
+				if _, err := FindUserByID(tx, id); err != nil {
+					if IsNotFoundError(err) {
+						return UserNotFoundError{}
+					}
+					return errors.Wrap(err, "error looking up user for SCIM group membership")
+				}
+				return UserNotInSSOProviderError{}
+			}
+		}
+	}
+
+	now := time.Now()
+	insertArgs := make([]interface{}, 0, 2+len(userIDs)+1)
+	insertArgs = append(insertArgs, g.ID, now)
+	insertArgs = append(insertArgs, queryArgs...)
+	insertArgs = append(insertArgs, providerType)
+
+	if err := tx.RawQuery(
+		"INSERT INTO "+scimGroupMemberTableName()+" (group_id, user_id, created_at) "+
+			"SELECT ?, u.id, ? FROM "+userTable+" u "+
+			"INNER JOIN "+identityTable+" i ON i.user_id = u.id "+
+			"WHERE u.id IN ("+inClause+") AND i.provider = ? "+
+			"ON CONFLICT DO NOTHING",
+		insertArgs...,
+	).Exec(); err != nil {
+		return errors.Wrap(err, "error adding SCIM group members")
+	}
+	return nil
+}
+
 func (g *SCIMGroup) RemoveMember(tx *storage.Connection, userID uuid.UUID) error {
 	return tx.RawQuery(
 		"DELETE FROM "+scimGroupMemberTableName()+" WHERE group_id = ? AND user_id = ?",
