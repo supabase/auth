@@ -502,9 +502,10 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 	switch strings.ToLower(op.Op) {
 	case "remove":
 		if path == nil {
-			return nil
+			return apierrors.NewSCIMBadRequestError("remove operation requires a path", "noTarget")
 		}
-		if strings.ToLower(path.AttributePath.AttributeName) == "externalid" {
+		attrName := strings.ToLower(path.AttributePath.AttributeName)
+		if attrName == "externalid" {
 			for i := range user.Identities {
 				if user.Identities[i].Provider == providerType {
 					user.Identities[i].ProviderID = ""
@@ -517,13 +518,14 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 					break
 				}
 			}
+			return nil
 		}
-		return nil
+		return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported remove path: %s", op.Path), "invalidPath")
 
 	case "add":
 		valueMap, ok := op.Value.(map[string]interface{})
 		if !ok {
-			return nil
+			return apierrors.NewSCIMBadRequestError("add operation value must be an object", "invalidValue")
 		}
 		for key, val := range valueMap {
 			if key == "" {
@@ -531,7 +533,7 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 			}
 			keyPath, err := filter.ParsePath([]byte(key))
 			if err != nil {
-				continue
+				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid attribute path: %s", key), "invalidPath")
 			}
 			if strings.ToLower(keyPath.AttributePath.AttributeName) == "externalid" {
 				if externalID, ok := val.(string); ok {
@@ -607,13 +609,14 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 					return apierrors.NewSCIMInternalServerError("Error updating email").WithInternalError(err)
 				}
 				return nil
+			default:
+				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported replace path: %s", op.Path), "invalidPath")
 			}
-			return nil
 		}
 
 		valueMap, ok := op.Value.(map[string]interface{})
 		if !ok {
-			return nil
+			return apierrors.NewSCIMBadRequestError("replace operation value must be an object when path is not specified", "invalidValue")
 		}
 		if user.UserMetaData == nil {
 			user.UserMetaData = make(map[string]interface{})
@@ -625,7 +628,7 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 			}
 			keyPath, err := filter.ParsePath([]byte(key))
 			if err != nil {
-				continue
+				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid attribute path: %s", key), "invalidPath")
 			}
 			attrName := strings.ToLower(keyPath.AttributePath.AttributeName)
 			subAttr := strings.ToLower(keyPath.AttributePath.SubAttributeName())
@@ -1080,19 +1083,27 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 
 	switch strings.ToLower(op.Op) {
 	case "add":
-		if path != nil && strings.ToLower(path.AttributePath.AttributeName) == "externalid" {
-			externalID, ok := op.Value.(string)
-			if !ok {
-				return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
-			}
-			group.ExternalID = storage.NullString(externalID)
-			if err := tx.UpdateOnly(group, "external_id"); err != nil {
-				if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-					return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
+		if path != nil {
+			attrName := strings.ToLower(path.AttributePath.AttributeName)
+			switch attrName {
+			case "externalid":
+				externalID, ok := op.Value.(string)
+				if !ok {
+					return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
 				}
-				return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
+				group.ExternalID = storage.NullString(externalID)
+				if err := tx.UpdateOnly(group, "external_id"); err != nil {
+					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+						return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
+					}
+					return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
+				}
+				return nil
+			case "members":
+				// fall through to member handling below
+			default:
+				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported add path: %s", op.Path), "invalidPath")
 			}
-			return nil
 		}
 		members, ok := op.Value.([]interface{})
 		if !ok {
@@ -1225,13 +1236,14 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 					return apierrors.NewSCIMInternalServerError("Error setting group members").WithInternalError(err)
 				}
 				return nil
+			default:
+				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported replace path: %s", op.Path), "invalidPath")
 			}
-			return nil
 		}
 
 		valueMap, ok := op.Value.(map[string]interface{})
 		if !ok {
-			return nil
+			return apierrors.NewSCIMBadRequestError("replace operation value must be an object when path is not specified", "invalidValue")
 		}
 		columnsToUpdate := []string{}
 		for key, val := range valueMap {
@@ -1240,7 +1252,7 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 			}
 			keyPath, err := filter.ParsePath([]byte(key))
 			if err != nil {
-				continue
+				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid attribute path: %s", key), "invalidPath")
 			}
 			switch strings.ToLower(keyPath.AttributePath.AttributeName) {
 			case "externalid":

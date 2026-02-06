@@ -1313,6 +1313,142 @@ func (ts *SCIMTestSuite) TestSCIMPatchUserUnsupportedOp() {
 	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidSyntax")
 }
 
+func (ts *SCIMTestSuite) TestSCIMPatchUserUnsupportedReplacePath() {
+	user := ts.createSCIMUser("unsup_replace_path@test.com", "unsup_replace_path@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "displayName", "value": "Foo"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidPath")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserUnsupportedRemovePath() {
+	user := ts.createSCIMUser("unsup_remove_path@test.com", "unsup_remove_path@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "remove", "path": "displayName"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidPath")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserRemoveWithoutPath() {
+	user := ts.createSCIMUser("remove_no_path@test.com", "remove_no_path@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "remove"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "noTarget")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserAddInvalidValueType() {
+	user := ts.createSCIMUser("add_invalid_val@test.com", "add_invalid_val@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "add", "value": "not_an_object"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidValue")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchUserReplaceInvalidValueType() {
+	user := ts.createSCIMUser("replace_invalid_val@test.com", "replace_invalid_val@test.com")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "value": "not_an_object"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidValue")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupUnsupportedReplacePath() {
+	group := ts.createSCIMGroupWithExternalID("UnsupReplPath", "unsup-repl-path-ext")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "schemas", "value": "Foo"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidPath")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupReplaceInvalidValueType() {
+	group := ts.createSCIMGroupWithExternalID("ReplInvalidVal", "repl-invalid-val-ext")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "value": "not_an_object"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidValue")
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupUnsupportedAddPath() {
+	group := ts.createSCIMGroupWithExternalID("UnsupAddPath", "unsup-add-path-ext")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "add", "path": "schemas", "value": "Foo"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidPath")
+}
+
 func (ts *SCIMTestSuite) TestSCIMFilterGroupByDisplayNameExisting() {
 	created := ts.createSCIMGroupWithExternalID("YWWBHTHEMMLR", "94631638-0b6c-4b97-a369-aba35a454041")
 
