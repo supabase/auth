@@ -175,8 +175,10 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 
 			candidate := deprovisioned[0]
 
-			if err := candidate.Ban(tx, 0, nil); err != nil {
-				return apierrors.NewSCIMInternalServerError("Error reactivating user").WithInternalError(err)
+			if params.Active == nil || bool(*params.Active) {
+				if err := candidate.Ban(tx, 0, nil); err != nil {
+					return apierrors.NewSCIMInternalServerError("Error reactivating user").WithInternalError(err)
+				}
 			}
 
 			if params.Name != nil {
@@ -275,6 +277,15 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 
 		if err := tx.Eager().Find(user, user.ID); err != nil {
 			return apierrors.NewSCIMInternalServerError("Error reloading user").WithInternalError(err)
+		}
+
+		if params.Active != nil && !bool(*params.Active) {
+			if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
+				return apierrors.NewSCIMInternalServerError("Error banning user").WithInternalError(err)
+			}
+			if err := models.Logout(tx, user.ID); err != nil {
+				return apierrors.NewSCIMInternalServerError("Error invalidating sessions").WithInternalError(err)
+			}
 		}
 
 		return nil
