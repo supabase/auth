@@ -974,6 +974,9 @@ func (a *API) scimCreateGroup(w http.ResponseWriter, r *http.Request) error {
 
 		group = models.NewSCIMGroup(provider.ID, params.ExternalID, params.DisplayName)
 		if err := tx.Create(group); err != nil {
+			if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+				return apierrors.NewSCIMConflictError("Group already exists", "uniqueness")
+			}
 			return apierrors.NewSCIMInternalServerError("Error creating group").WithInternalError(err)
 		}
 

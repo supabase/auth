@@ -36,7 +36,14 @@ func (fb *FlexBool) UnmarshalJSON(data []byte) error {
 	}
 	var s string
 	if err := json.Unmarshal(data, &s); err == nil {
-		*fb = FlexBool(strings.ToLower(s) == "true")
+		switch strings.ToLower(s) {
+		case "true":
+			*fb = FlexBool(true)
+		case "false":
+			*fb = FlexBool(false)
+		default:
+			return fmt.Errorf("cannot unmarshal %q into FlexBool: must be true or false", s)
+		}
 		return nil
 	}
 	return fmt.Errorf("cannot unmarshal %s into FlexBool", string(data))

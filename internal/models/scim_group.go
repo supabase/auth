@@ -302,8 +302,7 @@ func GetMembersForGroups(tx *storage.Connection, groupIDs []uuid.UUID) (map[uuid
 	}
 
 	for i := range rows {
-		user := rows[i].User
-		result[rows[i].GroupID] = append(result[rows[i].GroupID], &user)
+		result[rows[i].GroupID] = append(result[rows[i].GroupID], &rows[i].User)
 	}
 	return result, nil
 }
