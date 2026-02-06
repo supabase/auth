@@ -206,27 +206,31 @@ func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 	}
 	inClause := strings.Join(placeholders, ",")
 
-	var validIDs []uuid.UUID
+	var rawValidIDs []uuid.UUID
 	validationArgs := make([]interface{}, 0, len(userIDs)+1)
 	validationArgs = append(validationArgs, queryArgs...)
 	validationArgs = append(validationArgs, providerType)
-	// Use FOR SHARE to lock user rows during validation, preventing concurrent
+	// Use FOR SHARE OF u to lock user rows during validation, preventing concurrent
 	// deletion or modification between validation and the subsequent membership write.
+	// DISTINCT is omitted because PostgreSQL disallows row-locking with DISTINCT;
+	// de-duplication is done in Go below.
 	if err := tx.RawQuery(
-		"SELECT DISTINCT u.id FROM "+userTable+" u "+
+		"SELECT u.id FROM "+userTable+" u "+
 			"INNER JOIN "+identityTable+" i ON i.user_id = u.id "+
 			"WHERE u.id IN ("+inClause+") AND i.provider = ? "+
 			"FOR SHARE OF u",
 		validationArgs...,
-	).All(&validIDs); err != nil {
+	).All(&rawValidIDs); err != nil {
 		return errors.Wrap(err, "error validating SCIM group member IDs")
 	}
 
-	if len(validIDs) != len(userIDs) {
-		validSet := make(map[uuid.UUID]struct{}, len(validIDs))
-		for _, id := range validIDs {
-			validSet[id] = struct{}{}
-		}
+	// De-duplicate IDs in Go since we cannot use DISTINCT with FOR SHARE.
+	validSet := make(map[uuid.UUID]struct{}, len(rawValidIDs))
+	for _, id := range rawValidIDs {
+		validSet[id] = struct{}{}
+	}
+
+	if len(validSet) != len(userIDs) {
 		for _, id := range userIDs {
 			if _, ok := validSet[id]; !ok {
 				if _, err := FindUserByID(tx, id); err != nil {
