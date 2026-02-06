@@ -204,7 +204,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 				}
 			}
 
-			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, candidate, models.UserModifiedAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, candidate, models.UserModifiedAction, utilities.GetIPAddress(r), map[string]interface{}{
 				"provider":        "scim",
 				"sso_provider_id": provider.ID,
 				"action":          "reactivated",
@@ -266,7 +266,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, utilities.GetIPAddress(r), map[string]interface{}{
 			"provider":        "scim",
 			"sso_provider_id": provider.ID,
 		}); terr != nil {
@@ -341,8 +341,13 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMNotFoundError("User not found")
 		}
 
-		// PUT is a full replacement — replace metadata entirely instead of merging
-		metadata := make(map[string]interface{})
+		metadata := user.UserMetaData
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		delete(metadata, "given_name")
+		delete(metadata, "family_name")
+		delete(metadata, "full_name")
 		if params.Name != nil {
 			if params.Name.GivenName != "" {
 				metadata["given_name"] = params.Name.GivenName
@@ -416,7 +421,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, utilities.GetIPAddress(r), map[string]interface{}{
 			"provider":        "scim",
 			"sso_provider_id": provider.ID,
 		}); terr != nil {
@@ -481,7 +486,7 @@ func (a *API) scimPatchUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMInternalServerError("Error reloading user").WithInternalError(err)
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, utilities.GetIPAddress(r), map[string]interface{}{
 			"provider":        "scim",
 			"sso_provider_id": provider.ID,
 		}); terr != nil {
@@ -825,7 +830,7 @@ func (a *API) scimDeleteUser(w http.ResponseWriter, r *http.Request) error {
 
 		// Already deprovisioned — return success for idempotent delete
 		if user.IsBanned() && user.BannedReason != nil && *user.BannedReason == scimDeprovisionedReason {
-			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserDeletedAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserDeletedAction, utilities.GetIPAddress(r), map[string]interface{}{
 				"provider":        "scim",
 				"sso_provider_id": provider.ID,
 				"action":          "idempotent_delete",
@@ -839,7 +844,7 @@ func (a *API) scimDeleteUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMInternalServerError("Error deprovisioning user").WithInternalError(err)
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserDeletedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserDeletedAction, utilities.GetIPAddress(r), map[string]interface{}{
 			"provider":        "scim",
 			"sso_provider_id": provider.ID,
 		}); terr != nil {
