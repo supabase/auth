@@ -210,10 +210,13 @@ func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 	validationArgs := make([]interface{}, 0, len(userIDs)+1)
 	validationArgs = append(validationArgs, queryArgs...)
 	validationArgs = append(validationArgs, providerType)
+	// Use FOR SHARE to lock user rows during validation, preventing concurrent
+	// deletion or modification between validation and the subsequent membership write.
 	if err := tx.RawQuery(
 		"SELECT DISTINCT u.id FROM "+userTable+" u "+
 			"INNER JOIN "+identityTable+" i ON i.user_id = u.id "+
-			"WHERE u.id IN ("+inClause+") AND i.provider = ?",
+			"WHERE u.id IN ("+inClause+") AND i.provider = ? "+
+			"FOR SHARE OF u",
 		validationArgs...,
 	).All(&validIDs); err != nil {
 		return errors.Wrap(err, "error validating SCIM group member IDs")
@@ -227,7 +230,10 @@ func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 		for _, id := range userIDs {
 			if _, ok := validSet[id]; !ok {
 				if _, err := FindUserByID(tx, id); err != nil {
-					return UserNotFoundError{}
+					if IsNotFoundError(err) {
+						return UserNotFoundError{}
+					}
+					return errors.Wrap(err, "error looking up user for SCIM group membership")
 				}
 				return UserNotInSSOProviderError{}
 			}
