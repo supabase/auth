@@ -404,14 +404,15 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 				if email != "" {
 					user.Identities[i].IdentityData["email"] = email
 				}
+				updateCols := []string{"identity_data"}
 				if params.ExternalID != "" {
 					user.Identities[i].ProviderID = params.ExternalID
 					user.Identities[i].IdentityData["external_id"] = params.ExternalID
+					updateCols = append(updateCols, "provider_id")
 				} else {
-					user.Identities[i].ProviderID = ""
 					delete(user.Identities[i].IdentityData, "external_id")
 				}
-				if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
+				if err := tx.UpdateOnly(&user.Identities[i], updateCols...); err != nil {
 					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
 						return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
 					}
@@ -525,11 +526,10 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 		if attrName == "externalid" {
 			for i := range user.Identities {
 				if user.Identities[i].Provider == providerType {
-					user.Identities[i].ProviderID = ""
 					if user.Identities[i].IdentityData != nil {
 						delete(user.Identities[i].IdentityData, "external_id")
 					}
-					if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
+					if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
 						return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 					}
 					break
@@ -985,19 +985,23 @@ func (a *API) scimCreateGroup(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMInternalServerError("Error creating group").WithInternalError(err)
 		}
 
-		for _, member := range params.Members {
-			memberID, err := uuid.FromString(member.Value)
-			if err != nil {
-				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid member ID: %s", member.Value), "invalidValue")
+		if len(params.Members) > 0 {
+			memberIDs := make([]uuid.UUID, 0, len(params.Members))
+			for _, member := range params.Members {
+				memberID, err := uuid.FromString(member.Value)
+				if err != nil {
+					return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid member ID: %s", member.Value), "invalidValue")
+				}
+				memberIDs = append(memberIDs, memberID)
 			}
-			if err := group.AddMember(tx, memberID); err != nil {
-				if models.IsNotFoundError(err) {
-					return apierrors.NewSCIMNotFoundError(fmt.Sprintf("User %s not found", member.Value))
+			if err := group.AddMembers(tx, memberIDs); err != nil {
+				if _, ok := err.(models.UserNotFoundError); ok {
+					return apierrors.NewSCIMNotFoundError("One or more members not found")
 				}
 				if _, ok := err.(models.UserNotInSSOProviderError); ok {
-					return apierrors.NewSCIMBadRequestError(fmt.Sprintf("User %s does not belong to this SSO provider", member.Value), "invalidValue")
+					return apierrors.NewSCIMBadRequestError("One or more members do not belong to this SSO provider", "invalidValue")
 				}
-				return apierrors.NewSCIMInternalServerError("Error adding group member").WithInternalError(err)
+				return apierrors.NewSCIMInternalServerError("Error adding group members").WithInternalError(err)
 			}
 		}
 
@@ -1199,6 +1203,7 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 		if len(members) > SCIMMaxMembers {
 			return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d members per operation", SCIMMaxMembers))
 		}
+		memberIDs := make([]uuid.UUID, 0, len(members))
 		for _, m := range members {
 			memberMap, ok := m.(map[string]interface{})
 			if !ok {
@@ -1212,15 +1217,16 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 			if err != nil {
 				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid member ID: %s", value), "invalidValue")
 			}
-			if err := group.AddMember(tx, memberID); err != nil {
-				if models.IsNotFoundError(err) {
-					return apierrors.NewSCIMNotFoundError(fmt.Sprintf("User %s not found", value))
-				}
-				if _, ok := err.(models.UserNotInSSOProviderError); ok {
-					return apierrors.NewSCIMBadRequestError(fmt.Sprintf("User %s does not belong to this SSO provider", value), "invalidValue")
-				}
-				return apierrors.NewSCIMInternalServerError("Error adding group member").WithInternalError(err)
+			memberIDs = append(memberIDs, memberID)
+		}
+		if err := group.AddMembers(tx, memberIDs); err != nil {
+			if _, ok := err.(models.UserNotFoundError); ok {
+				return apierrors.NewSCIMNotFoundError("One or more members not found")
 			}
+			if _, ok := err.(models.UserNotInSSOProviderError); ok {
+				return apierrors.NewSCIMBadRequestError("One or more members do not belong to this SSO provider", "invalidValue")
+			}
+			return apierrors.NewSCIMInternalServerError("Error adding group members").WithInternalError(err)
 		}
 
 	case "remove":
