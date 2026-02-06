@@ -527,9 +527,33 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 		return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported remove path: %s", op.Path), "invalidPath")
 
 	case "add":
+		if path != nil {
+			attrName := strings.ToLower(path.AttributePath.AttributeName)
+			if attrName == "externalid" {
+				if externalID, ok := op.Value.(string); ok {
+					for i := range user.Identities {
+						if user.Identities[i].Provider == providerType {
+							user.Identities[i].ProviderID = externalID
+							if user.Identities[i].IdentityData == nil {
+								user.Identities[i].IdentityData = make(map[string]interface{})
+							}
+							user.Identities[i].IdentityData["external_id"] = externalID
+							if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
+								return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
+							}
+							break
+						}
+					}
+					return nil
+				}
+				return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
+			}
+			return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported add path: %s", op.Path), "invalidPath")
+		}
+
 		valueMap, ok := op.Value.(map[string]interface{})
 		if !ok {
-			return apierrors.NewSCIMBadRequestError("add operation value must be an object", "invalidValue")
+			return apierrors.NewSCIMBadRequestError("add operation without path requires an object value", "invalidValue")
 		}
 		for key, val := range valueMap {
 			if key == "" {
