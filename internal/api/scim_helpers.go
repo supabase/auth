@@ -175,6 +175,14 @@ func parseSCIMActiveBool(val interface{}) (bool, error) {
 }
 
 func checkSCIMEmailUniqueness(tx *storage.Connection, email, aud, providerType string, excludeUserID uuid.UUID) error {
+	nonSSOUser, err := models.FindUserByEmailAndAudience(tx, email, aud)
+	if err != nil && !models.IsNotFoundError(err) {
+		return apierrors.NewSCIMInternalServerError("Error checking email uniqueness").WithInternalError(err)
+	}
+	if nonSSOUser != nil && nonSSOUser.ID != excludeUserID && !nonSSOUser.IsSSOUser {
+		return apierrors.NewSCIMConflictError("Email already in use by another user", "uniqueness")
+	}
+
 	ssoUsers, err := models.FindSSOUsersByEmailAndProvider(tx, email, aud, providerType)
 	if err != nil {
 		return apierrors.NewSCIMInternalServerError("Error checking email uniqueness").WithInternalError(err)

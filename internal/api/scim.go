@@ -419,6 +419,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 				if params.ExternalID != "" {
 					user.Identities[i].ProviderID = params.ExternalID
 					user.Identities[i].IdentityData["external_id"] = params.ExternalID
+					user.Identities[i].IdentityData["sub"] = params.ExternalID
 					updateCols = append(updateCols, "provider_id")
 				} else {
 					delete(user.Identities[i].IdentityData, "external_id")
@@ -562,6 +563,7 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 								user.Identities[i].IdentityData = make(map[string]interface{})
 							}
 							user.Identities[i].IdentityData["external_id"] = externalID
+							user.Identities[i].IdentityData["sub"] = externalID
 							if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
 								if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
 									return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
@@ -599,6 +601,7 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 								user.Identities[i].IdentityData = make(map[string]interface{})
 							}
 							user.Identities[i].IdentityData["external_id"] = externalID
+							user.Identities[i].IdentityData["sub"] = externalID
 							if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
 								if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
 									return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
@@ -748,6 +751,7 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 								user.Identities[i].IdentityData = make(map[string]interface{})
 							}
 							user.Identities[i].IdentityData["external_id"] = externalID
+							user.Identities[i].IdentityData["sub"] = externalID
 							if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
 								if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
 									return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
@@ -1075,7 +1079,7 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 
 		if err := tx.Update(group); err != nil {
 			if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-				return apierrors.NewSCIMConflictError("Group with this displayName already exists", "uniqueness")
+				return apierrors.NewSCIMConflictError("Group already exists", "uniqueness")
 			}
 			return apierrors.NewSCIMInternalServerError("Error updating group").WithInternalError(err)
 		}
