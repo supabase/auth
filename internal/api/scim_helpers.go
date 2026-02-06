@@ -19,6 +19,9 @@ func parseSCIMPagination(r *http.Request) (startIndex, count int) {
 	if v := r.URL.Query().Get("startIndex"); v != "" {
 		if i, err := strconv.Atoi(v); err == nil && i > 0 {
 			startIndex = i
+			if startIndex > SCIMMaxStartIndex {
+				startIndex = SCIMMaxStartIndex
+			}
 		}
 	}
 

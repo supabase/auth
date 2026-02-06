@@ -15,6 +15,7 @@ const (
 	SCIMMaxBodySize        = 1 << 20 // 1 MB
 	SCIMMaxMembers         = 1000
 	SCIMMaxPatchOperations = 100
+	SCIMMaxStartIndex      = 100000
 	SCIMSchemaUser         = "urn:ietf:params:scim:schemas:core:2.0:User"
 	SCIMSchemaGroup        = "urn:ietf:params:scim:schemas:core:2.0:Group"
 	SCIMSchemaListResponse = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
