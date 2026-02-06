@@ -189,7 +189,7 @@ func (g *SCIMGroup) AddMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 		"SELECT u.id FROM "+userTable+" u "+
 			"INNER JOIN "+identityTable+" i ON i.user_id = u.id "+
 			"WHERE u.id IN ("+inClause+") AND i.provider = ? "+
-			"FOR SHARE OF u",
+			"FOR SHARE OF u, i",
 		validationArgs...,
 	).All(&rawValidIDs); err != nil {
 		return errors.Wrap(err, "error validating SCIM group member IDs")
@@ -279,15 +279,15 @@ func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 	validationArgs := make([]interface{}, 0, len(userIDs)+1)
 	validationArgs = append(validationArgs, queryArgs...)
 	validationArgs = append(validationArgs, providerType)
-	// Use FOR SHARE OF u to lock user rows during validation, preventing concurrent
-	// deletion or modification between validation and the subsequent membership write.
+	// Lock both user and identity rows during validation to prevent concurrent
+	// deletion or identity changes between validation and the membership write.
 	// DISTINCT is omitted because PostgreSQL disallows row-locking with DISTINCT;
 	// de-duplication is done in Go below.
 	if err := tx.RawQuery(
 		"SELECT u.id FROM "+userTable+" u "+
 			"INNER JOIN "+identityTable+" i ON i.user_id = u.id "+
 			"WHERE u.id IN ("+inClause+") AND i.provider = ? "+
-			"FOR SHARE OF u",
+			"FOR SHARE OF u, i",
 		validationArgs...,
 	).All(&rawValidIDs); err != nil {
 		return errors.Wrap(err, "error validating SCIM group member IDs")
