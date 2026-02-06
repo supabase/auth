@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -38,10 +39,11 @@ func (a *API) parseSCIMBody(r *http.Request, v interface{}) error {
 	r.Body = http.MaxBytesReader(nil, r.Body, SCIMMaxBodySize)
 	body, err := utilities.GetBodyBytes(r)
 	if err != nil {
-		if err.Error() == "http: request body too large" {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
 			return apierrors.NewSCIMRequestTooLargeError("Request body exceeds maximum size of 1MB")
 		}
-		return apierrors.NewInternalServerError("Could not read request body").WithInternalError(err)
+		return apierrors.NewSCIMInternalServerError("Could not read request body").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, v); err != nil {
 		return apierrors.NewSCIMBadRequestError("Invalid JSON in request body", "invalidSyntax").WithInternalError(err)
@@ -53,7 +55,7 @@ func userBelongsToProvider(user *models.User, providerID uuid.UUID) bool {
 	return models.UserBelongsToSSOProvider(user, providerID)
 }
 
-func (a *API) userToSCIMResponse(user *models.User) *SCIMUserResponse {
+func (a *API) userToSCIMResponse(user *models.User, providerType string) *SCIMUserResponse {
 	baseURL := a.getSCIMBaseURL()
 	resp := &SCIMUserResponse{
 		Schemas:  []string{SCIMSchemaUser},
@@ -70,7 +72,7 @@ func (a *API) userToSCIMResponse(user *models.User) *SCIMUserResponse {
 
 	var emailType string
 	for _, identity := range user.Identities {
-		if strings.HasPrefix(identity.Provider, "sso:") {
+		if identity.Provider == providerType {
 			if identity.ProviderID != "" {
 				resp.ExternalID = identity.ProviderID
 			}
