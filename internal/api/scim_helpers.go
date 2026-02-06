@@ -34,8 +34,8 @@ func parseSCIMPagination(r *http.Request) (startIndex, count int) {
 	return startIndex, count
 }
 
-func (a *API) parseSCIMBody(r *http.Request, v interface{}) error {
-	r.Body = http.MaxBytesReader(nil, r.Body, SCIMMaxBodySize)
+func (a *API) parseSCIMBody(w http.ResponseWriter, r *http.Request, v interface{}) error {
+	r.Body = http.MaxBytesReader(w, r.Body, SCIMMaxBodySize)
 	body, err := utilities.GetBodyBytes(r)
 	if err != nil {
 		var maxBytesErr *http.MaxBytesError
