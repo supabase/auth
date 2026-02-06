@@ -966,7 +966,10 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 			memberIDs = append(memberIDs, memberID)
 		}
 
-		return group.SetMembers(tx, memberIDs)
+		if err := group.SetMembers(tx, memberIDs); err != nil {
+			return apierrors.NewSCIMInternalServerError("Error setting group members").WithInternalError(err)
+		}
+		return nil
 	})
 
 	if terr != nil {
@@ -1062,7 +1065,10 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 				return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
 			}
 			group.ExternalID = storage.NullString(externalID)
-			return tx.UpdateOnly(group, "external_id")
+			if err := tx.UpdateOnly(group, "external_id"); err != nil {
+				return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
+			}
+			return nil
 		}
 		members, ok := op.Value.([]interface{})
 		if !ok {
@@ -1103,7 +1109,10 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 		switch {
 		case attrName == "externalid":
 			group.ExternalID = storage.NullString("")
-			return tx.UpdateOnly(group, "external_id")
+			if err := tx.UpdateOnly(group, "external_id"); err != nil {
+				return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
+			}
+			return nil
 		case attrName == "members" && path.ValueExpression != nil:
 			attrExpr, ok := path.ValueExpression.(*filter.AttributeExpression)
 			if !ok || attrExpr.Operator != filter.EQ || strings.ToLower(attrExpr.AttributePath.AttributeName) != "value" {
@@ -1117,7 +1126,10 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 			if err != nil {
 				return apierrors.NewSCIMBadRequestError("Invalid member ID in path", "invalidValue")
 			}
-			return group.RemoveMember(tx, memberID)
+			if err := group.RemoveMember(tx, memberID); err != nil {
+				return apierrors.NewSCIMInternalServerError("Error removing group member").WithInternalError(err)
+			}
+			return nil
 		default:
 			return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported remove path: %s", op.Path), "invalidPath")
 		}
@@ -1132,14 +1144,20 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 					return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
 				}
 				group.ExternalID = storage.NullString(externalID)
-				return tx.UpdateOnly(group, "external_id")
+				if err := tx.UpdateOnly(group, "external_id"); err != nil {
+					return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
+				}
+				return nil
 			case "displayname":
 				displayName, ok := op.Value.(string)
 				if !ok {
 					return apierrors.NewSCIMBadRequestError("displayName must be a string", "invalidValue")
 				}
 				group.DisplayName = displayName
-				return tx.UpdateOnly(group, "display_name")
+				if err := tx.UpdateOnly(group, "display_name"); err != nil {
+					return apierrors.NewSCIMInternalServerError("Error updating group display name").WithInternalError(err)
+				}
+				return nil
 			case "members":
 				members, ok := op.Value.([]interface{})
 				if !ok {
@@ -1164,7 +1182,10 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 					}
 					memberIDs = append(memberIDs, memberID)
 				}
-				return group.SetMembers(tx, memberIDs)
+				if err := group.SetMembers(tx, memberIDs); err != nil {
+					return apierrors.NewSCIMInternalServerError("Error setting group members").WithInternalError(err)
+				}
+				return nil
 			}
 			return nil
 		}
@@ -1196,7 +1217,9 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 			}
 		}
 		if len(columnsToUpdate) > 0 {
-			return tx.UpdateOnly(group, columnsToUpdate...)
+			if err := tx.UpdateOnly(group, columnsToUpdate...); err != nil {
+				return apierrors.NewSCIMInternalServerError("Error updating group").WithInternalError(err)
+			}
 		}
 
 	default:
@@ -1228,7 +1251,10 @@ func (a *API) scimDeleteGroup(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMNotFoundError("Group not found")
 		}
 
-		return tx.Destroy(group)
+		if err := tx.Destroy(group); err != nil {
+			return apierrors.NewSCIMInternalServerError("Error deleting group").WithInternalError(err)
+		}
+		return nil
 	})
 
 	if terr != nil {
