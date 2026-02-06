@@ -188,7 +188,8 @@ func (g *SCIMGroup) AddMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 	if err := tx.RawQuery(
 		"SELECT u.id FROM "+userTable+" u "+
 			"INNER JOIN "+identityTable+" i ON i.user_id = u.id "+
-			"WHERE u.id IN ("+inClause+") AND i.provider = ?",
+			"WHERE u.id IN ("+inClause+") AND i.provider = ? "+
+			"FOR SHARE OF u",
 		validationArgs...,
 	).All(&rawValidIDs); err != nil {
 		return errors.Wrap(err, "error validating SCIM group member IDs")
