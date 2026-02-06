@@ -45,6 +45,7 @@ var (
 	testUser14 = scimTestUser{UserName: "user14@acme.com", Email: "user14@acme.com", ExternalID: "ext-007"}
 	testUser15 = scimTestUser{UserName: "user15@acme.com", Email: "user15@acme.com", ExternalID: "ext-008"}
 	testUser16 = scimTestUser{UserName: "user16@example.com", Email: "user16@example.com", ExternalID: "ext-009"}
+	testUser17 = scimTestUser{UserName: "user17@acme.com", Email: "user17@acme.com", GivenName: "Reactivated", FamilyName: "User", Formatted: "Reactivated User", ExternalID: "ext-010"}
 
 	testGroup1 = scimTestGroup{DisplayName: "Engineering", ExternalID: "grp-001"}
 	testGroup2 = scimTestGroup{DisplayName: "Sales", ExternalID: "grp-002"}
@@ -722,6 +723,50 @@ func (ts *SCIMTestSuite) TestSCIMDeleteUserTwice() {
 
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+}
+
+func (ts *SCIMTestSuite) TestSCIMReactivateDeprovisionedUser() {
+	user := ts.createSCIMUserWithName(testUser17.UserName, testUser17.Email, testUser17.GivenName, testUser17.FamilyName)
+	require.True(ts.T(), user.Active)
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+user.ID, nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/"+user.ID, nil)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var deprovisioned SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&deprovisioned))
+	require.False(ts.T(), deprovisioned.Active)
+
+	body := map[string]interface{}{
+		"schemas":  []string{SCIMSchemaUser},
+		"userName": testUser17.UserName,
+		"name": map[string]interface{}{
+			"givenName":  "Updated",
+			"familyName": "Name",
+			"formatted":  "Updated Name",
+		},
+		"emails": []map[string]interface{}{
+			{"value": testUser17.Email, "primary": true, "type": "work"},
+		},
+	}
+
+	req = ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Users", body)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusCreated, w.Code, "Reactivating a deprovisioned SSO user should succeed: %s", w.Body.String())
+
+	var reactivated SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&reactivated))
+	require.True(ts.T(), reactivated.Active)
+	require.Equal(ts.T(), user.ID, reactivated.ID, "Reactivated user should have the same ID")
+	require.Equal(ts.T(), "Updated", reactivated.Name.GivenName)
+	require.Equal(ts.T(), "Name", reactivated.Name.FamilyName)
 }
 
 func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameExisting() {
