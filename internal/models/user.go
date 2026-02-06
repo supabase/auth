@@ -622,24 +622,26 @@ func FindUserByEmailAndAudience(tx *storage.Connection, email, aud string) (*Use
 	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = false", uuid.Nil, strings.ToLower(email), aud)
 }
 
-// FindSSOUserByEmailAndProvider finds an SSO user with the matching email,
+// FindSSOUsersByEmailAndProvider finds all SSO users with the matching email,
 // audience, and identity provider. This is used by SCIM provisioning to detect
 // previously deprovisioned SSO users for reactivation without crossing provider
-// boundaries.
-func FindSSOUserByEmailAndProvider(tx *storage.Connection, email, aud, provider string) (*User, error) {
+// boundaries. Results are ordered with active users first.
+func FindSSOUsersByEmailAndProvider(tx *storage.Connection, email, aud, provider string) ([]*User, error) {
+	users := []*User{}
 	user := &User{}
 	query := `
 		SELECT DISTINCT u.* FROM ` + user.TableName() + ` u
 		INNER JOIN identities i ON u.id = i.user_id
 		WHERE u.instance_id = ? AND LOWER(u.email) = ? AND u.aud = ? AND u.is_sso_user = true AND i.provider = ?
+		ORDER BY u.banned_until ASC NULLS FIRST, u.created_at ASC
 	`
-	if err := tx.Eager().RawQuery(query, uuid.Nil, strings.ToLower(email), aud, provider).First(user); err != nil {
+	if err := tx.Eager().RawQuery(query, uuid.Nil, strings.ToLower(email), aud, provider).All(&users); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, UserNotFoundError{}
+			return nil, nil
 		}
-		return nil, errors.Wrap(err, "error finding SSO user by email and provider")
+		return nil, errors.Wrap(err, "error finding SSO users by email and provider")
 	}
-	return user, nil
+	return users, nil
 }
 
 // FindUserByPhoneAndAudience finds a user with the matching email and audience.
