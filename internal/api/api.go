@@ -212,6 +212,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	})
 
 	// SCIM v2 API endpoints
+	if api.config.SCIM.Enabled {
 	r.Route("/scim/v2", func(r *router) {
 		r.Use(api.requireSCIMAuthentication)
 
@@ -249,6 +250,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			})
 		})
 	})
+	}
 
 	r.Route("/", func(r *router) {
 
