@@ -185,10 +185,6 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 				}
 			}
 
-			identityID := params.ExternalID
-			if identityID == "" {
-				identityID = params.UserName
-			}
 			for i := range candidate.Identities {
 				if candidate.Identities[i].Provider == providerType {
 					if candidate.Identities[i].IdentityData == nil {
