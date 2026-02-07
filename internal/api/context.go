@@ -33,7 +33,6 @@ const (
 	oauthVerifierKey    = contextKey("oauth_verifier")
 	ssoProviderKey      = contextKey("sso_provider")
 	externalHostKey     = contextKey("external_host")
-	flowStateKey        = contextKey("flow_state_id")
 	oauthClientStateKey = contextKey("oauth_client_state_id")
 	flowStateContextKey = contextKey("flow_state")
 )
@@ -126,18 +125,6 @@ func withSignature(ctx context.Context, id string) context.Context {
 
 func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
-}
-
-func withFlowStateID(ctx context.Context, FlowStateID string) context.Context {
-	return context.WithValue(ctx, flowStateKey, FlowStateID)
-}
-
-func getFlowStateID(ctx context.Context) string {
-	obj := ctx.Value(flowStateKey)
-	if obj == nil {
-		return ""
-	}
-	return obj.(string)
 }
 
 func withOAuthClientStateID(ctx context.Context, oauthClientStateID uuid.UUID) context.Context {
