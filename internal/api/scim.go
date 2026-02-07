@@ -753,16 +753,8 @@ func (a *API) scimDeleteUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMNotFoundError("User not found")
 		}
 
-		// Already deprovisioned — return success for idempotent delete
 		if user.IsBanned() && user.BannedReason != nil && *user.BannedReason == scimDeprovisionedReason {
-			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserDeletedAction, utilities.GetIPAddress(r), map[string]interface{}{
-				"provider":        "scim",
-				"sso_provider_id": provider.ID,
-				"action":          "idempotent_delete",
-			}); terr != nil {
-				return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
-			}
-			return nil
+			return apierrors.NewSCIMNotFoundError("User not found")
 		}
 
 		if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
