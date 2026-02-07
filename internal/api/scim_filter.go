@@ -176,18 +176,15 @@ func notExprToSQL(e filter.NotExpression, allowedAttrs map[string]string) (*mode
 func valuePathToSQL(e filter.ValuePath, allowedAttrs map[string]string) (*models.SCIMFilterClause, error) {
 	attrName := strings.ToLower(e.AttributePath.AttributeName)
 
-	switch attrName {
-	case "emails":
-		if e.ValueFilter != nil {
-			if attrExpr, ok := e.ValueFilter.(*filter.AttributeExpression); ok {
-				if strings.ToLower(attrExpr.AttributePath.AttributeName) == "value" {
-					modifiedExpr := filter.AttributeExpression{
-						AttributePath: filter.AttributePath{AttributeName: "email"},
-						Operator:      attrExpr.Operator,
-						CompareValue:  attrExpr.CompareValue,
-					}
-					return attrExprToSQL(modifiedExpr, allowedAttrs)
+	if attrName == "emails" && e.ValueFilter != nil {
+		if attrExpr, ok := e.ValueFilter.(*filter.AttributeExpression); ok {
+			if strings.ToLower(attrExpr.AttributePath.AttributeName) == "value" {
+				modifiedExpr := filter.AttributeExpression{
+					AttributePath: filter.AttributePath{AttributeName: "email"},
+					Operator:      attrExpr.Operator,
+					CompareValue:  attrExpr.CompareValue,
 				}
+				return attrExprToSQL(modifiedExpr, allowedAttrs)
 			}
 		}
 	}
