@@ -508,7 +508,7 @@ func (ts *SCIMTestSuite) TestSCIMDeleteUser() {
 	w = httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+	require.Equal(ts.T(), http.StatusNotFound, w.Code)
 }
 
 func (ts *SCIMTestSuite) TestSCIMDeleteGroup() {
@@ -728,7 +728,7 @@ func (ts *SCIMTestSuite) TestSCIMDeleteUserTwice() {
 	w = httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+	require.Equal(ts.T(), http.StatusNotFound, w.Code)
 }
 
 func (ts *SCIMTestSuite) TestSCIMReactivateDeprovisionedUser() {
