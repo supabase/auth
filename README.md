@@ -65,7 +65,7 @@ further clarifications on backward compatibility guarantees:
 **Go API compatibility**
 
 Auth is not meant to be used as a Go library. There are no guarantees on
-backward API compatibility when used this way regardless of which version 
+backward API compatibility when used this way regardless of which version
 number changes.
 
 **Patch**
@@ -1106,7 +1106,7 @@ Returns:
 
 ### **POST /verify**
 
-Verify a registration or a password recovery. Type can be `signup` or `recovery` or `invite`
+Verify a registration or a password recovery. Type can be `signup`, `recovery`, `invite`, `magiclink`, `email_change`, or `phone_change`
 and the `token` is a token returned from either `/signup` or `/recover`.
 
 ```json
@@ -1126,7 +1126,7 @@ Returns:
   "token_type": "bearer",
   "expires_in": 3600,
   "refresh_token": "a-refresh-token",
-  "type": "signup | recovery | invite"
+  "type": "signup | recovery | invite | magiclink | email_change | phone_change"
 }
 ```
 
@@ -1152,9 +1152,29 @@ Returns:
 }
 ```
 
+Verify an email address change. Type should be set to `email_change`.
+
+```json
+{
+  "type": "email_change",
+  "token": "confirmation-code-delivered-in-email",
+  "email": "new-email-address-to-change-to"
+}
+```
+
+Verify a phone number change. Type should be set to `phone_change`.
+
+```json
+{
+  "type": "phone_change",
+  "token": "confirmation-otp-delivered-in-sms",
+  "phone": "new-phone-number-to-change-to"
+}
+```
+
 ### **GET /verify**
 
-Verify a registration or a password recovery. Type can be `signup` or `recovery` or `magiclink` or `invite`
+Verify a registration or a password recovery. Type can be `signup`, `recovery`, `magiclink`, `invite`, or `email_change`
 and the `token` is a token returned from either `/signup` or `/recover` or `/magiclink`.
 
 query params:
