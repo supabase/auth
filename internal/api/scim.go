@@ -118,21 +118,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	var email string
-	var emailType string
-	if len(params.Emails) > 0 {
-		for _, e := range params.Emails {
-			if e.Primary {
-				email = e.Value
-				emailType = e.Type
-				break
-			}
-		}
-		if email == "" {
-			email = params.Emails[0].Value
-			emailType = params.Emails[0].Type
-		}
-	}
+	email, emailType := extractPrimarySCIMEmail(params.Emails)
 
 	if email == "" {
 		return apierrors.NewSCIMBadRequestError("At least one email address is required", "invalidValue")
@@ -186,15 +172,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 				if metadata == nil {
 					metadata = make(map[string]interface{})
 				}
-				if params.Name.GivenName != "" {
-					metadata["given_name"] = params.Name.GivenName
-				}
-				if params.Name.FamilyName != "" {
-					metadata["family_name"] = params.Name.FamilyName
-				}
-				if params.Name.Formatted != "" {
-					metadata["full_name"] = params.Name.Formatted
-				}
+				applySCIMNameToMetadata(metadata, params.Name)
 				candidate.UserMetaData = metadata
 				if err := tx.UpdateOnly(candidate, "raw_user_meta_data"); err != nil {
 					return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
@@ -259,15 +237,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 
 		if params.Name != nil {
 			metadata := make(map[string]interface{})
-			if params.Name.GivenName != "" {
-				metadata["given_name"] = params.Name.GivenName
-			}
-			if params.Name.FamilyName != "" {
-				metadata["family_name"] = params.Name.FamilyName
-			}
-			if params.Name.Formatted != "" {
-				metadata["full_name"] = params.Name.Formatted
-			}
+			applySCIMNameToMetadata(metadata, params.Name)
 			if len(metadata) > 0 {
 				user.UserMetaData = metadata
 			}
@@ -351,19 +321,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// Extract primary email from params
-	var email string
-	if len(params.Emails) > 0 {
-		for _, e := range params.Emails {
-			if e.Primary {
-				email = e.Value
-				break
-			}
-		}
-		if email == "" {
-			email = params.Emails[0].Value
-		}
-	}
+	email, _ := extractPrimarySCIMEmail(params.Emails)
 	if email != "" {
 		email, err = a.validateEmail(email)
 		if err != nil {
@@ -393,17 +351,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		delete(metadata, "given_name")
 		delete(metadata, "family_name")
 		delete(metadata, "full_name")
-		if params.Name != nil {
-			if params.Name.GivenName != "" {
-				metadata["given_name"] = params.Name.GivenName
-			}
-			if params.Name.FamilyName != "" {
-				metadata["family_name"] = params.Name.FamilyName
-			}
-			if params.Name.Formatted != "" {
-				metadata["full_name"] = params.Name.Formatted
-			}
-		}
+		applySCIMNameToMetadata(metadata, params.Name)
 		user.UserMetaData = metadata
 
 		if params.Active != nil {
@@ -965,13 +913,9 @@ func (a *API) scimCreateGroup(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if len(params.Members) > 0 {
-			memberIDs := make([]uuid.UUID, 0, len(params.Members))
-			for _, member := range params.Members {
-				memberID, err := uuid.FromString(member.Value)
-				if err != nil {
-					return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid member ID: %s", member.Value), "invalidValue")
-				}
-				memberIDs = append(memberIDs, memberID)
+			memberIDs, err := parseSCIMGroupMemberRefs(params.Members)
+			if err != nil {
+				return err
 			}
 			if err := group.AddMembers(tx, memberIDs); err != nil {
 				if _, ok := err.(models.UserNotFoundError); ok {
@@ -1032,11 +976,7 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		group.DisplayName = params.DisplayName
-		if params.ExternalID != "" {
-			group.ExternalID = storage.NullString(params.ExternalID)
-		} else {
-			group.ExternalID = storage.NullString("")
-		}
+		group.ExternalID = storage.NullString(params.ExternalID)
 
 		if err := tx.Update(group); err != nil {
 			if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
@@ -1045,13 +985,9 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMInternalServerError("Error updating group").WithInternalError(err)
 		}
 
-		memberIDs := make([]uuid.UUID, 0, len(params.Members))
-		for _, member := range params.Members {
-			memberID, err := uuid.FromString(member.Value)
-			if err != nil {
-				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid member ID: %s", member.Value), "invalidValue")
-			}
-			memberIDs = append(memberIDs, memberID)
+		memberIDs, err := parseSCIMGroupMemberRefs(params.Members)
+		if err != nil {
+			return err
 		}
 
 		if err := group.SetMembers(tx, memberIDs); err != nil {
@@ -1161,14 +1097,7 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 				if !ok {
 					return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
 				}
-				group.ExternalID = storage.NullString(externalID)
-				if err := tx.UpdateOnly(group, "external_id"); err != nil {
-					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-						return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
-					}
-					return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
-				}
-				return nil
+				return updateGroupExternalID(tx, group, externalID)
 			case "members":
 				// fall through to member handling below
 			default:
@@ -1182,21 +1111,9 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 		if len(members) > SCIMMaxMembers {
 			return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d members per operation", SCIMMaxMembers))
 		}
-		memberIDs := make([]uuid.UUID, 0, len(members))
-		for _, m := range members {
-			memberMap, ok := m.(map[string]interface{})
-			if !ok {
-				return apierrors.NewSCIMBadRequestError("Invalid member format", "invalidValue")
-			}
-			value, ok := memberMap["value"].(string)
-			if !ok {
-				return apierrors.NewSCIMBadRequestError("Member value must be a string", "invalidValue")
-			}
-			memberID, err := uuid.FromString(value)
-			if err != nil {
-				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid member ID: %s", value), "invalidValue")
-			}
-			memberIDs = append(memberIDs, memberID)
+		memberIDs, err := parseSCIMGroupMemberIDsRaw(members)
+		if err != nil {
+			return err
 		}
 		if err := group.AddMembers(tx, memberIDs); err != nil {
 			if _, ok := err.(models.UserNotFoundError); ok {
@@ -1215,14 +1132,7 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 		attrName := strings.ToLower(path.AttributePath.AttributeName)
 		switch {
 		case attrName == "externalid":
-			group.ExternalID = storage.NullString("")
-			if err := tx.UpdateOnly(group, "external_id"); err != nil {
-				if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-					return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
-				}
-				return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
-			}
-			return nil
+			return updateGroupExternalID(tx, group, "")
 		case attrName == "members" && path.ValueExpression != nil:
 			attrExpr, ok := path.ValueExpression.(*filter.AttributeExpression)
 			if !ok || attrExpr.Operator != filter.EQ || strings.ToLower(attrExpr.AttributePath.AttributeName) != "value" {
@@ -1253,14 +1163,7 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 				if !ok {
 					return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
 				}
-				group.ExternalID = storage.NullString(externalID)
-				if err := tx.UpdateOnly(group, "external_id"); err != nil {
-					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-						return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
-					}
-					return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
-				}
-				return nil
+				return updateGroupExternalID(tx, group, externalID)
 			case "displayname":
 				displayName, ok := op.Value.(string)
 				if !ok {
@@ -1282,21 +1185,9 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 				if len(members) > SCIMMaxMembers {
 					return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d members per operation", SCIMMaxMembers))
 				}
-				memberIDs := make([]uuid.UUID, 0, len(members))
-				for _, m := range members {
-					memberMap, ok := m.(map[string]interface{})
-					if !ok {
-						return apierrors.NewSCIMBadRequestError("Invalid member format", "invalidValue")
-					}
-					value, ok := memberMap["value"].(string)
-					if !ok {
-						return apierrors.NewSCIMBadRequestError("Member value must be a string", "invalidValue")
-					}
-					memberID, err := uuid.FromString(value)
-					if err != nil {
-						return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid member ID: %s", value), "invalidValue")
-					}
-					memberIDs = append(memberIDs, memberID)
+				memberIDs, err := parseSCIMGroupMemberIDsRaw(members)
+				if err != nil {
+					return err
 				}
 				if err := group.SetMembers(tx, memberIDs); err != nil {
 					if models.IsNotFoundError(err) {
@@ -1514,7 +1405,7 @@ func (a *API) scimResourceTypeByID(w http.ResponseWriter, r *http.Request) error
 	case "Group":
 		resourceType = a.buildSCIMResourceType("Group", "Group", "/Groups", "Group", SCIMSchemaGroup)
 	default:
-		return sendSCIMError(w, http.StatusNotFound, "Resource type not found", "")
+		return sendSCIMError(w, http.StatusNotFound, "Resource type not found")
 	}
 
 	return sendSCIMJSON(w, http.StatusOK, resourceType)
@@ -1530,16 +1421,16 @@ func (a *API) scimSchemaByID(w http.ResponseWriter, r *http.Request) error {
 	case SCIMSchemaGroup:
 		schema = a.buildSCIMSchema(SCIMSchemaGroup, "Group", "Group", scimGroupSchemaAttributes)
 	default:
-		return sendSCIMError(w, http.StatusNotFound, "Schema not found", "")
+		return sendSCIMError(w, http.StatusNotFound, "Schema not found")
 	}
 
 	return sendSCIMJSON(w, http.StatusOK, schema)
 }
 
-func sendSCIMError(w http.ResponseWriter, status int, detail string, scimType string) error {
-	return sendSCIMJSON(w, status, apierrors.NewSCIMHTTPError(status, detail, scimType))
+func sendSCIMError(w http.ResponseWriter, status int, detail string) error {
+	return sendSCIMJSON(w, status, apierrors.NewSCIMHTTPError(status, detail, ""))
 }
 
 func (a *API) scimNotFound(w http.ResponseWriter, r *http.Request) error {
-	return sendSCIMError(w, http.StatusNotFound, "Resource not found", "")
+	return sendSCIMError(w, http.StatusNotFound, "Resource not found")
 }

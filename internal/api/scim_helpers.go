@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -206,6 +207,76 @@ func setSCIMIdentityField(tx *storage.Connection, identity *models.Identity, key
 	identity.IdentityData[key] = value
 	if err := tx.UpdateOnly(identity, "identity_data"); err != nil {
 		return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
+	}
+	return nil
+}
+
+func extractPrimarySCIMEmail(emails []SCIMEmail) (email, emailType string) {
+	if len(emails) == 0 {
+		return "", ""
+	}
+	for _, e := range emails {
+		if e.Primary {
+			return e.Value, e.Type
+		}
+	}
+	return emails[0].Value, emails[0].Type
+}
+
+func applySCIMNameToMetadata(metadata map[string]interface{}, name *SCIMName) {
+	if name == nil {
+		return
+	}
+	if name.GivenName != "" {
+		metadata["given_name"] = name.GivenName
+	}
+	if name.FamilyName != "" {
+		metadata["family_name"] = name.FamilyName
+	}
+	if name.Formatted != "" {
+		metadata["full_name"] = name.Formatted
+	}
+}
+
+func parseSCIMGroupMemberRefs(members []SCIMGroupMemberRef) ([]uuid.UUID, error) {
+	ids := make([]uuid.UUID, 0, len(members))
+	for _, member := range members {
+		id, err := uuid.FromString(member.Value)
+		if err != nil {
+			return nil, apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid member ID: %s", member.Value), "invalidValue")
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func parseSCIMGroupMemberIDsRaw(members []interface{}) ([]uuid.UUID, error) {
+	ids := make([]uuid.UUID, 0, len(members))
+	for _, m := range members {
+		memberMap, ok := m.(map[string]interface{})
+		if !ok {
+			return nil, apierrors.NewSCIMBadRequestError("Invalid member format", "invalidValue")
+		}
+		value, ok := memberMap["value"].(string)
+		if !ok {
+			return nil, apierrors.NewSCIMBadRequestError("Member value must be a string", "invalidValue")
+		}
+		id, err := uuid.FromString(value)
+		if err != nil {
+			return nil, apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid member ID: %s", value), "invalidValue")
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func updateGroupExternalID(tx *storage.Connection, group *models.SCIMGroup, externalID string) error {
+	group.ExternalID = storage.NullString(externalID)
+	if err := tx.UpdateOnly(group, "external_id"); err != nil {
+		if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+			return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
+		}
+		return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
 	}
 	return nil
 }
