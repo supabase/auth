@@ -51,6 +51,23 @@ func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 
 	provider.AuthnNameIDFormat = saml.PersistentNameIDFormat
 
+	baseURL := *externalURL
+
+	// Set MetadataURL
+	metadataURL := baseURL
+	metadataURL.Path += "saml/metadata"
+	provider.MetadataURL = metadataURL
+
+	// Set AcsURL (Assertion Consumer Service)
+	acsURL := baseURL
+	acsURL.Path += "saml/acs"
+	provider.AcsURL = acsURL
+
+	// Set SloURL (Single Logout)
+	sloURL := baseURL
+	sloURL.Path += "saml/slo"
+	provider.SloURL = sloURL
+
 	return &provider
 }
 
