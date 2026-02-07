@@ -169,6 +169,8 @@ func (g *SCIMGroup) AddMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 		return nil
 	}
 
+	userIDs = deduplicateUUIDs(userIDs)
+
 	identityTable := (&pop.Model{Value: Identity{}}).TableName()
 	userTable := (&pop.Model{Value: User{}}).TableName()
 	providerType := "sso:" + g.SSOProviderID.String()
@@ -262,6 +264,8 @@ func (g *SCIMGroup) SetMembers(tx *storage.Connection, userIDs []uuid.UUID) erro
 		}
 		return nil
 	}
+
+	userIDs = deduplicateUUIDs(userIDs)
 
 	identityTable := (&pop.Model{Value: Identity{}}).TableName()
 	userTable := (&pop.Model{Value: User{}}).TableName()
@@ -374,4 +378,16 @@ func GetMembersForGroups(tx *storage.Connection, groupIDs []uuid.UUID) (map[uuid
 		result[rows[i].GroupID] = append(result[rows[i].GroupID], &rows[i].User)
 	}
 	return result, nil
+}
+
+func deduplicateUUIDs(ids []uuid.UUID) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	out := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	return out
 }
