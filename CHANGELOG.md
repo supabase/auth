@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.187.0](https://github.com/supabase/auth/compare/v2.186.0...v2.187.0) (2026-02-07)
+
+
+### Features
+
+* add metadata field to all hooks ([#2365](https://github.com/supabase/auth/issues/2365)) ([c675749](https://github.com/supabase/auth/commit/c67574946d1e11c7986d2c868336df0cefbe3452))
+
+
+### Bug Fixes
+
+* flaky index worker test ([#2366](https://github.com/supabase/auth/issues/2366)) ([961a7e6](https://github.com/supabase/auth/commit/961a7e620109d554ae81ca8227a5107671679982))
+
 ## [2.186.0](https://github.com/supabase/auth/compare/v2.185.0...v2.186.0) (2026-01-28)
 
 
