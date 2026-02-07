@@ -246,7 +246,7 @@ func (g *SCIMGroup) GetMembers(tx *storage.Connection) ([]*User, error) {
 	users := []*User{}
 	userTable := (&pop.Model{Value: User{}}).TableName()
 	if err := tx.RawQuery(
-		"SELECT u.* FROM "+userTable+" u INNER JOIN "+scimGroupMemberTableName()+" m ON u.id = m.user_id WHERE m.group_id = ? ORDER BY u.email ASC",
+		"SELECT u.* FROM "+userTable+" u INNER JOIN "+scimGroupMemberTableName()+" m ON u.id = m.user_id WHERE m.group_id = ? ORDER BY u.email ASC LIMIT 10000",
 		g.ID,
 	).All(&users); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
