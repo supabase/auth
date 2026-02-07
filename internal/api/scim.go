@@ -206,10 +206,14 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 				}
 			}
 
+			auditAction := "reactivated"
+			if params.Active != nil && !bool(*params.Active) {
+				auditAction = "reprovisioned_inactive"
+			}
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, candidate, models.UserModifiedAction, utilities.GetIPAddress(r), map[string]interface{}{
 				"provider":        "scim",
 				"sso_provider_id": provider.ID,
-				"action":          "reactivated",
+				"action":          auditAction,
 			}); terr != nil {
 				return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
 			}
