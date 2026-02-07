@@ -182,7 +182,10 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			if params.Name != nil {
-				metadata := make(map[string]interface{})
+				metadata := candidate.UserMetaData
+				if metadata == nil {
+					metadata = make(map[string]interface{})
+				}
 				if params.Name.GivenName != "" {
 					metadata["given_name"] = params.Name.GivenName
 				}
@@ -192,17 +195,43 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 				if params.Name.Formatted != "" {
 					metadata["full_name"] = params.Name.Formatted
 				}
-				if len(metadata) > 0 {
-					candidate.UserMetaData = metadata
-					if err := tx.UpdateOnly(candidate, "raw_user_meta_data"); err != nil {
-						return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
-					}
+				candidate.UserMetaData = metadata
+				if err := tx.UpdateOnly(candidate, "raw_user_meta_data"); err != nil {
+					return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
 				}
 			}
 
 			if email != candidate.GetEmail() {
 				if err := candidate.SetEmail(tx, email); err != nil {
 					return apierrors.NewSCIMInternalServerError("Error updating user email").WithInternalError(err)
+				}
+			}
+
+			identityID := params.ExternalID
+			if identityID == "" {
+				identityID = params.UserName
+			}
+			for i := range candidate.Identities {
+				if candidate.Identities[i].Provider == providerType {
+					if candidate.Identities[i].IdentityData == nil {
+						candidate.Identities[i].IdentityData = make(map[string]interface{})
+					}
+					candidate.Identities[i].IdentityData["user_name"] = params.UserName
+					candidate.Identities[i].IdentityData["email"] = email
+					if params.ExternalID != "" {
+						candidate.Identities[i].ProviderID = params.ExternalID
+						candidate.Identities[i].IdentityData["external_id"] = params.ExternalID
+						candidate.Identities[i].IdentityData["sub"] = params.ExternalID
+					} else if identityID != "" {
+						candidate.Identities[i].IdentityData["sub"] = identityID
+					}
+					if err := tx.UpdateOnly(&candidate.Identities[i], "provider_id", "identity_data"); err != nil {
+						if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+							return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+						}
+						return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
+					}
+					break
 				}
 			}
 
