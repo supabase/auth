@@ -145,12 +145,8 @@ func serve(ctx context.Context) {
 						templatemailer.FromConfig(latestCfg, mrCache),
 					),
 
-					// Persist existing rate limiters.
-					//
-					// TODO(cstockton): we should consider updating these, if we
-					// rely on hot config reloads 100% then rate limiter changes
-					// won't be picked up.
-					limiterOpts,
+					// Update rate limiters based on new config.
+					api.NewLimiterOptions(latestCfg),
 				)
 				ah.Store(latestAPI)
 			}
