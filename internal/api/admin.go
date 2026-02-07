@@ -348,7 +348,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if user, err := models.IsDuplicatedEmail(db, params.Email, aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain); err != nil {
+		if user, err := models.IsDuplicatedEmail(db, params.Email, aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain, config.Security.DangerousSSOAutoLinking); err != nil {
 			return apierrors.NewInternalServerError("Database error checking email").WithInternalError(err)
 		} else if user != nil {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
