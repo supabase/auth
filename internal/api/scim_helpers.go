@@ -185,6 +185,10 @@ func findSSOIdentity(user *models.User, providerType string) *models.Identity {
 }
 
 func setSCIMExternalID(tx *storage.Connection, identity *models.Identity, externalID string) error {
+	if strings.TrimSpace(externalID) == "" {
+		return apierrors.NewSCIMBadRequestError("externalId must not be empty", "invalidValue")
+	}
+
 	identity.ProviderID = externalID
 	if identity.IdentityData == nil {
 		identity.IdentityData = make(map[string]interface{})
@@ -194,6 +198,28 @@ func setSCIMExternalID(tx *storage.Connection, identity *models.Identity, extern
 	if err := tx.UpdateOnly(identity, "provider_id", "identity_data"); err != nil {
 		if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
 			return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+		}
+		return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
+	}
+	return nil
+}
+
+func setSCIMUserName(tx *storage.Connection, identity *models.Identity, userName string) error {
+	if identity.IdentityData == nil {
+		identity.IdentityData = make(map[string]interface{})
+	}
+	identity.IdentityData["user_name"] = userName
+
+	updateCols := []string{"identity_data"}
+	if externalID, ok := identity.IdentityData["external_id"].(string); !ok || externalID == "" {
+		identity.ProviderID = userName
+		identity.IdentityData["sub"] = userName
+		updateCols = append(updateCols, "provider_id")
+	}
+
+	if err := tx.UpdateOnly(identity, updateCols...); err != nil {
+		if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+			return apierrors.NewSCIMConflictError("User with this userName already exists", "uniqueness")
 		}
 		return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 	}

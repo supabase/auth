@@ -612,7 +612,7 @@ func (a *API) applySCIMUserReplace(tx *storage.Connection, user *models.User, op
 		case attrName == "username":
 			if userName, ok := val.(string); ok && userName != "" {
 				if identity := findSSOIdentity(user, providerType); identity != nil {
-					if err := setSCIMIdentityField(tx, identity, "user_name", userName); err != nil {
+					if err := setSCIMUserName(tx, identity, userName); err != nil {
 						return err
 					}
 				}
@@ -671,7 +671,7 @@ func (a *API) applySCIMUserReplaceWithPath(tx *storage.Connection, user *models.
 			return apierrors.NewSCIMBadRequestError("userName must be a string", "invalidValue")
 		}
 		if identity := findSSOIdentity(user, providerType); identity != nil {
-			return setSCIMIdentityField(tx, identity, "user_name", userName)
+			return setSCIMUserName(tx, identity, userName)
 		}
 		return nil
 	case attrName == "emails" && path.ValueExpression != nil && strings.ToLower(path.SubAttributeName()) == "value":
@@ -1421,4 +1421,8 @@ func sendSCIMError(w http.ResponseWriter, status int, detail string) error {
 
 func (a *API) scimNotFound(w http.ResponseWriter, r *http.Request) error {
 	return sendSCIMError(w, http.StatusNotFound, "Resource not found")
+}
+
+func (a *API) scimMethodNotAllowed(w http.ResponseWriter, r *http.Request) error {
+	return sendSCIMError(w, http.StatusMethodNotAllowed, "Method not allowed")
 }
