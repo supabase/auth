@@ -10,7 +10,7 @@ import (
 )
 
 var SCIMUserFilterAttrs = map[string]string{
-	"username":     "COALESCE(i.identity_data->>'user_name', u.email)",
+	"username":     "COALESCE(NULLIF(i.identity_data->>'user_name', ''), u.email)",
 	"externalid":   "i.identity_data->>'external_id'",
 	"email":        "u.email",
 	"emails.value": "u.email",
