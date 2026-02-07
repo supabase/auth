@@ -174,6 +174,42 @@ func parseSCIMActiveBool(val interface{}) (bool, error) {
 	return false, apierrors.NewSCIMBadRequestError("active must be a boolean or \"true\"/\"false\"", "invalidValue")
 }
 
+func findSSOIdentity(user *models.User, providerType string) *models.Identity {
+	for i := range user.Identities {
+		if user.Identities[i].Provider == providerType {
+			return &user.Identities[i]
+		}
+	}
+	return nil
+}
+
+func setSCIMExternalID(tx *storage.Connection, identity *models.Identity, externalID string) error {
+	identity.ProviderID = externalID
+	if identity.IdentityData == nil {
+		identity.IdentityData = make(map[string]interface{})
+	}
+	identity.IdentityData["external_id"] = externalID
+	identity.IdentityData["sub"] = externalID
+	if err := tx.UpdateOnly(identity, "provider_id", "identity_data"); err != nil {
+		if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+			return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+		}
+		return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
+	}
+	return nil
+}
+
+func setSCIMIdentityField(tx *storage.Connection, identity *models.Identity, key, value string) error {
+	if identity.IdentityData == nil {
+		identity.IdentityData = make(map[string]interface{})
+	}
+	identity.IdentityData[key] = value
+	if err := tx.UpdateOnly(identity, "identity_data"); err != nil {
+		return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
+	}
+	return nil
+}
+
 func checkSCIMEmailUniqueness(tx *storage.Connection, email, aud, providerType string, excludeUserID uuid.UUID) error {
 	nonSSOUser, err := models.FindUserByEmailAndAudience(tx, email, aud)
 	if err != nil && !models.IsNotFoundError(err) {

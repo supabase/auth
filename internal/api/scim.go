@@ -564,292 +564,213 @@ func (a *API) applySCIMUserPatch(tx *storage.Connection, user *models.User, op S
 
 	switch strings.ToLower(op.Op) {
 	case "remove":
-		if path == nil {
-			return apierrors.NewSCIMBadRequestError("remove operation requires a path", "noTarget")
-		}
-		attrName := strings.ToLower(path.AttributePath.AttributeName)
-		if attrName == "externalid" {
-			for i := range user.Identities {
-				if user.Identities[i].Provider == providerType {
-					if user.Identities[i].IdentityData != nil {
-						delete(user.Identities[i].IdentityData, "external_id")
-					}
-					if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
-						return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
-					}
-					break
-				}
-			}
-			return nil
-		}
-		return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported remove path: %s", op.Path), "invalidPath")
-
+		return a.applySCIMUserRemove(tx, user, op, path, providerType)
 	case "add":
-		if path != nil {
-			attrName := strings.ToLower(path.AttributePath.AttributeName)
-			if attrName == "externalid" {
-				if externalID, ok := op.Value.(string); ok {
-					for i := range user.Identities {
-						if user.Identities[i].Provider == providerType {
-							user.Identities[i].ProviderID = externalID
-							if user.Identities[i].IdentityData == nil {
-								user.Identities[i].IdentityData = make(map[string]interface{})
-							}
-							user.Identities[i].IdentityData["external_id"] = externalID
-							user.Identities[i].IdentityData["sub"] = externalID
-							if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
-								if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-									return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
-								}
-								return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
-							}
-							break
-						}
-					}
-					return nil
-				}
-				return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
-			}
-			return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported add path: %s", op.Path), "invalidPath")
-		}
+		return a.applySCIMUserAdd(tx, user, op, path, providerType)
+	case "replace":
+		return a.applySCIMUserReplace(tx, user, op, path, providerType)
+	default:
+		return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported patch operation: %s", op.Op), "invalidSyntax")
+	}
+}
 
-		valueMap, ok := op.Value.(map[string]interface{})
-		if !ok {
-			return apierrors.NewSCIMBadRequestError("add operation without path requires an object value", "invalidValue")
-		}
-		for key, val := range valueMap {
-			if key == "" {
-				continue
+func (a *API) applySCIMUserRemove(tx *storage.Connection, user *models.User, op SCIMPatchOperation, path *filter.Path, providerType string) error {
+	if path == nil {
+		return apierrors.NewSCIMBadRequestError("remove operation requires a path", "noTarget")
+	}
+	attrName := strings.ToLower(path.AttributePath.AttributeName)
+	if attrName == "externalid" {
+		if identity := findSSOIdentity(user, providerType); identity != nil {
+			if identity.IdentityData != nil {
+				delete(identity.IdentityData, "external_id")
 			}
-			keyPath, err := filter.ParsePath([]byte(key))
-			if err != nil {
-				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid attribute path: %s", key), "invalidPath")
-			}
-			if strings.ToLower(keyPath.AttributePath.AttributeName) == "externalid" {
-				if externalID, ok := val.(string); ok {
-					for i := range user.Identities {
-						if user.Identities[i].Provider == providerType {
-							user.Identities[i].ProviderID = externalID
-							if user.Identities[i].IdentityData == nil {
-								user.Identities[i].IdentityData = make(map[string]interface{})
-							}
-							user.Identities[i].IdentityData["external_id"] = externalID
-							user.Identities[i].IdentityData["sub"] = externalID
-							if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
-								if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-									return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
-								}
-								return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
-							}
-							break
-						}
-					}
-				}
+			if err := tx.UpdateOnly(identity, "identity_data"); err != nil {
+				return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 			}
 		}
 		return nil
+	}
+	return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported remove path: %s", op.Path), "invalidPath")
+}
 
-	case "replace":
-		if path != nil {
-			attrName := strings.ToLower(path.AttributePath.AttributeName)
-			switch {
-			case attrName == "active":
-				active, err := parseSCIMActiveBool(op.Value)
-				if err != nil {
-					return err
-				}
-				if active {
-					if err := user.Ban(tx, 0, nil); err != nil {
-						return apierrors.NewSCIMInternalServerError("Error unbanning user").WithInternalError(err)
-					}
-					return nil
-				}
-				if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
-					return apierrors.NewSCIMInternalServerError("Error banning user").WithInternalError(err)
-				}
-				if err := models.Logout(tx, user.ID); err != nil {
-					return apierrors.NewSCIMInternalServerError("Error invalidating sessions").WithInternalError(err)
-				}
-				return nil
-			case attrName == "username":
-				userName, ok := op.Value.(string)
-				if !ok {
-					return apierrors.NewSCIMBadRequestError("userName must be a string", "invalidValue")
-				}
-				for i := range user.Identities {
-					if user.Identities[i].Provider == providerType {
-						if user.Identities[i].IdentityData == nil {
-							user.Identities[i].IdentityData = make(map[string]interface{})
-						}
-						user.Identities[i].IdentityData["user_name"] = userName
-						if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
-							return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
-						}
-						break
-					}
-				}
-				return nil
-			case attrName == "emails" && path.ValueExpression != nil && strings.ToLower(path.SubAttributeName()) == "value":
-				newEmail, ok := op.Value.(string)
-				if !ok {
-					return apierrors.NewSCIMBadRequestError("email value must be a string", "invalidValue")
-				}
-				validatedEmail, err := a.validateEmail(newEmail)
-				if err != nil {
-					return apierrors.NewSCIMBadRequestError("Invalid email address", "invalidValue")
-				}
-				if err := checkSCIMEmailUniqueness(tx, validatedEmail, a.config.JWT.Aud, providerType, user.ID); err != nil {
-					return err
-				}
-				if err := user.SetEmail(tx, validatedEmail); err != nil {
-					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-						return apierrors.NewSCIMConflictError("Email already in use", "uniqueness")
-					}
-					return apierrors.NewSCIMInternalServerError("Error updating email").WithInternalError(err)
-				}
-				for i := range user.Identities {
-					if user.Identities[i].Provider == providerType {
-						if user.Identities[i].IdentityData == nil {
-							user.Identities[i].IdentityData = make(map[string]interface{})
-						}
-						user.Identities[i].IdentityData["email"] = validatedEmail
-						if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
-							return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
-						}
-						break
-					}
-				}
-				return nil
-			default:
-				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported replace path: %s", op.Path), "invalidPath")
+func (a *API) applySCIMUserAdd(tx *storage.Connection, user *models.User, op SCIMPatchOperation, path *filter.Path, providerType string) error {
+	if path != nil {
+		attrName := strings.ToLower(path.AttributePath.AttributeName)
+		if attrName == "externalid" {
+			externalID, ok := op.Value.(string)
+			if !ok {
+				return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
 			}
+			if identity := findSSOIdentity(user, providerType); identity != nil {
+				return setSCIMExternalID(tx, identity, externalID)
+			}
+			return nil
 		}
+		return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported add path: %s", op.Path), "invalidPath")
+	}
 
-		valueMap, ok := op.Value.(map[string]interface{})
-		if !ok {
-			return apierrors.NewSCIMBadRequestError("replace operation value must be an object when path is not specified", "invalidValue")
+	valueMap, ok := op.Value.(map[string]interface{})
+	if !ok {
+		return apierrors.NewSCIMBadRequestError("add operation without path requires an object value", "invalidValue")
+	}
+	for key, val := range valueMap {
+		if key == "" {
+			continue
 		}
-		if user.UserMetaData == nil {
-			user.UserMetaData = make(map[string]interface{})
+		keyPath, err := filter.ParsePath([]byte(key))
+		if err != nil {
+			return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid attribute path: %s", key), "invalidPath")
 		}
-		metadataUpdated := false
-		for key, val := range valueMap {
-			if key == "" {
-				continue
-			}
-			keyPath, err := filter.ParsePath([]byte(key))
-			if err != nil {
-				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid attribute path: %s", key), "invalidPath")
-			}
-			attrName := strings.ToLower(keyPath.AttributePath.AttributeName)
-			subAttr := strings.ToLower(keyPath.AttributePath.SubAttributeName())
-
-			switch {
-			case attrName == "username":
-				if userName, ok := val.(string); ok && userName != "" {
-					for i := range user.Identities {
-						if user.Identities[i].Provider == providerType {
-							if user.Identities[i].IdentityData == nil {
-								user.Identities[i].IdentityData = make(map[string]interface{})
-							}
-							user.Identities[i].IdentityData["user_name"] = userName
-							if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
-								return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
-							}
-							break
-						}
-					}
-				}
-			case attrName == "name" && subAttr == "formatted":
-				if v, ok := val.(string); ok {
-					user.UserMetaData["full_name"] = v
-					metadataUpdated = true
-				}
-			case attrName == "name" && subAttr == "familyname":
-				if v, ok := val.(string); ok {
-					user.UserMetaData["family_name"] = v
-					metadataUpdated = true
-				}
-			case attrName == "name" && subAttr == "givenname":
-				if v, ok := val.(string); ok {
-					user.UserMetaData["given_name"] = v
-					metadataUpdated = true
-				}
-			case attrName == "externalid":
-				if externalID, ok := val.(string); ok {
-					for i := range user.Identities {
-						if user.Identities[i].Provider == providerType {
-							user.Identities[i].ProviderID = externalID
-							if user.Identities[i].IdentityData == nil {
-								user.Identities[i].IdentityData = make(map[string]interface{})
-							}
-							user.Identities[i].IdentityData["external_id"] = externalID
-							user.Identities[i].IdentityData["sub"] = externalID
-							if err := tx.UpdateOnly(&user.Identities[i], "provider_id", "identity_data"); err != nil {
-								if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-									return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
-								}
-								return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
-							}
-							break
-						}
-					}
-				}
-			case attrName == "emails" && keyPath.ValueExpression != nil && strings.ToLower(keyPath.SubAttributeName()) == "value":
-				if emailValue, ok := val.(string); ok {
-					validatedEmail, err := a.validateEmail(emailValue)
-					if err != nil {
-						return apierrors.NewSCIMBadRequestError("Invalid email address", "invalidValue")
-					}
-					if err := checkSCIMEmailUniqueness(tx, validatedEmail, a.config.JWT.Aud, providerType, user.ID); err != nil {
+		if strings.ToLower(keyPath.AttributePath.AttributeName) == "externalid" {
+			if externalID, ok := val.(string); ok {
+				if identity := findSSOIdentity(user, providerType); identity != nil {
+					if err := setSCIMExternalID(tx, identity, externalID); err != nil {
 						return err
 					}
-					if err := user.SetEmail(tx, validatedEmail); err != nil {
-						if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-							return apierrors.NewSCIMConflictError("Email already in use", "uniqueness")
-						}
-						return apierrors.NewSCIMInternalServerError("Error updating email").WithInternalError(err)
-					}
-					for i := range user.Identities {
-						if user.Identities[i].Provider == providerType {
-							if user.Identities[i].IdentityData == nil {
-								user.Identities[i].IdentityData = make(map[string]interface{})
-							}
-							user.Identities[i].IdentityData["email"] = validatedEmail
-							if err := tx.UpdateOnly(&user.Identities[i], "identity_data"); err != nil {
-								return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
-							}
-							break
-						}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (a *API) applySCIMUserReplace(tx *storage.Connection, user *models.User, op SCIMPatchOperation, path *filter.Path, providerType string) error {
+	if path != nil {
+		return a.applySCIMUserReplaceWithPath(tx, user, op, path, providerType)
+	}
+
+	valueMap, ok := op.Value.(map[string]interface{})
+	if !ok {
+		return apierrors.NewSCIMBadRequestError("replace operation value must be an object when path is not specified", "invalidValue")
+	}
+	if user.UserMetaData == nil {
+		user.UserMetaData = make(map[string]interface{})
+	}
+	metadataUpdated := false
+	for key, val := range valueMap {
+		if key == "" {
+			continue
+		}
+		keyPath, err := filter.ParsePath([]byte(key))
+		if err != nil {
+			return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid attribute path: %s", key), "invalidPath")
+		}
+		attrName := strings.ToLower(keyPath.AttributePath.AttributeName)
+		subAttr := strings.ToLower(keyPath.AttributePath.SubAttributeName())
+
+		switch {
+		case attrName == "username":
+			if userName, ok := val.(string); ok && userName != "" {
+				if identity := findSSOIdentity(user, providerType); identity != nil {
+					if err := setSCIMIdentityField(tx, identity, "user_name", userName); err != nil {
+						return err
 					}
 				}
-			case attrName == "active":
-				active, err := parseSCIMActiveBool(val)
-				if err != nil {
+			}
+		case attrName == "name" && subAttr == "formatted":
+			if v, ok := val.(string); ok {
+				user.UserMetaData["full_name"] = v
+				metadataUpdated = true
+			}
+		case attrName == "name" && subAttr == "familyname":
+			if v, ok := val.(string); ok {
+				user.UserMetaData["family_name"] = v
+				metadataUpdated = true
+			}
+		case attrName == "name" && subAttr == "givenname":
+			if v, ok := val.(string); ok {
+				user.UserMetaData["given_name"] = v
+				metadataUpdated = true
+			}
+		case attrName == "externalid":
+			if externalID, ok := val.(string); ok {
+				if identity := findSSOIdentity(user, providerType); identity != nil {
+					if err := setSCIMExternalID(tx, identity, externalID); err != nil {
+						return err
+					}
+				}
+			}
+		case attrName == "emails" && keyPath.ValueExpression != nil && strings.ToLower(keyPath.SubAttributeName()) == "value":
+			if emailValue, ok := val.(string); ok {
+				if err := a.applySCIMEmailUpdate(tx, user, emailValue, providerType); err != nil {
 					return err
 				}
-				if active {
-					if err := user.Ban(tx, 0, nil); err != nil {
-						return apierrors.NewSCIMInternalServerError("Error unbanning user").WithInternalError(err)
-					}
-				} else {
-					if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
-						return apierrors.NewSCIMInternalServerError("Error banning user").WithInternalError(err)
-					}
-					if err := models.Logout(tx, user.ID); err != nil {
-						return apierrors.NewSCIMInternalServerError("Error invalidating sessions").WithInternalError(err)
-					}
-				}
+			}
+		case attrName == "active":
+			if err := a.applySCIMActiveUpdate(tx, user, val); err != nil {
+				return err
 			}
 		}
-		if metadataUpdated {
-			if err := tx.UpdateOnly(user, "raw_user_meta_data"); err != nil {
-				return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
-			}
+	}
+	if metadataUpdated {
+		if err := tx.UpdateOnly(user, "raw_user_meta_data"); err != nil {
+			return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
 		}
+	}
+	return nil
+}
 
+func (a *API) applySCIMUserReplaceWithPath(tx *storage.Connection, user *models.User, op SCIMPatchOperation, path *filter.Path, providerType string) error {
+	attrName := strings.ToLower(path.AttributePath.AttributeName)
+	switch {
+	case attrName == "active":
+		return a.applySCIMActiveUpdate(tx, user, op.Value)
+	case attrName == "username":
+		userName, ok := op.Value.(string)
+		if !ok {
+			return apierrors.NewSCIMBadRequestError("userName must be a string", "invalidValue")
+		}
+		if identity := findSSOIdentity(user, providerType); identity != nil {
+			return setSCIMIdentityField(tx, identity, "user_name", userName)
+		}
+		return nil
+	case attrName == "emails" && path.ValueExpression != nil && strings.ToLower(path.SubAttributeName()) == "value":
+		newEmail, ok := op.Value.(string)
+		if !ok {
+			return apierrors.NewSCIMBadRequestError("email value must be a string", "invalidValue")
+		}
+		return a.applySCIMEmailUpdate(tx, user, newEmail, providerType)
 	default:
-		return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported patch operation: %s", op.Op), "invalidSyntax")
+		return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported replace path: %s", op.Path), "invalidPath")
+	}
+}
+
+func (a *API) applySCIMEmailUpdate(tx *storage.Connection, user *models.User, newEmail, providerType string) error {
+	validatedEmail, err := a.validateEmail(newEmail)
+	if err != nil {
+		return apierrors.NewSCIMBadRequestError("Invalid email address", "invalidValue")
+	}
+	if err := checkSCIMEmailUniqueness(tx, validatedEmail, a.config.JWT.Aud, providerType, user.ID); err != nil {
+		return err
+	}
+	if err := user.SetEmail(tx, validatedEmail); err != nil {
+		if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+			return apierrors.NewSCIMConflictError("Email already in use", "uniqueness")
+		}
+		return apierrors.NewSCIMInternalServerError("Error updating email").WithInternalError(err)
+	}
+	if identity := findSSOIdentity(user, providerType); identity != nil {
+		return setSCIMIdentityField(tx, identity, "email", validatedEmail)
+	}
+	return nil
+}
+
+func (a *API) applySCIMActiveUpdate(tx *storage.Connection, user *models.User, val interface{}) error {
+	active, err := parseSCIMActiveBool(val)
+	if err != nil {
+		return err
+	}
+	if active {
+		if err := user.Ban(tx, 0, nil); err != nil {
+			return apierrors.NewSCIMInternalServerError("Error unbanning user").WithInternalError(err)
+		}
+		return nil
+	}
+	if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
+		return apierrors.NewSCIMInternalServerError("Error banning user").WithInternalError(err)
+	}
+	if err := models.Logout(tx, user.ID); err != nil {
+		return apierrors.NewSCIMInternalServerError("Error invalidating sessions").WithInternalError(err)
 	}
 	return nil
 }
