@@ -2,7 +2,6 @@ package models
 
 import (
 	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
@@ -58,13 +57,6 @@ func (p *SSOProvider) SetSCIMToken(token string) {
 	p.SCIMBearerTokenHash = &hash
 	enabled := true
 	p.SCIMEnabled = &enabled
-}
-
-func (p *SSOProvider) VerifySCIMToken(token string) bool {
-	if p.SCIMBearerTokenHash == nil {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(*p.SCIMBearerTokenHash), []byte(scimTokenHash(token))) == 1
 }
 
 func (p *SSOProvider) ClearSCIMToken() {
