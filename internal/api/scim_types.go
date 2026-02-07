@@ -59,6 +59,9 @@ type SCIMUserParams struct {
 }
 
 func (p *SCIMUserParams) Validate() error {
+	if err := requireSCIMSchema(p.Schemas, SCIMSchemaUser); err != nil {
+		return err
+	}
 	if p.UserName == "" {
 		return apierrors.NewSCIMBadRequestError("userName is required", "invalidSyntax")
 	}
@@ -85,6 +88,9 @@ type SCIMGroupParams struct {
 }
 
 func (p *SCIMGroupParams) Validate() error {
+	if err := requireSCIMSchema(p.Schemas, SCIMSchemaGroup); err != nil {
+		return err
+	}
 	if p.DisplayName == "" {
 		return apierrors.NewSCIMBadRequestError("displayName is required", "invalidSyntax")
 	}
@@ -106,6 +112,9 @@ type SCIMPatchRequest struct {
 }
 
 func (p *SCIMPatchRequest) Validate() error {
+	if err := requireSCIMSchema(p.Schemas, SCIMSchemaPatchOp); err != nil {
+		return err
+	}
 	if len(p.Operations) == 0 {
 		return apierrors.NewSCIMBadRequestError("At least one operation is required", "invalidSyntax")
 	}
@@ -154,4 +163,16 @@ type SCIMListResponse struct {
 	StartIndex   int           `json:"startIndex"`
 	ItemsPerPage int           `json:"itemsPerPage"`
 	Resources    []interface{} `json:"Resources"`
+}
+
+func requireSCIMSchema(schemas []string, required string) error {
+	for _, s := range schemas {
+		if s == required {
+			return nil
+		}
+	}
+	return apierrors.NewSCIMBadRequestError(
+		fmt.Sprintf("schemas must include %s", required),
+		"invalidValue",
+	)
 }
