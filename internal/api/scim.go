@@ -1414,28 +1414,64 @@ func (a *API) scimServiceProviderConfig(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (a *API) scimResourceTypes(w http.ResponseWriter, r *http.Request) error {
+func (a *API) buildSCIMResourceType(id, name, endpoint, description, schema string) map[string]interface{} {
 	baseURL := a.getSCIMBaseURL()
+	return map[string]interface{}{
+		"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:ResourceType"},
+		"id":          id,
+		"name":        name,
+		"endpoint":    endpoint,
+		"description": description,
+		"schema":      schema,
+		"meta":        map[string]interface{}{"resourceType": "ResourceType", "location": baseURL + "/scim/v2/ResourceTypes/" + id},
+	}
+}
 
+func (a *API) buildSCIMSchema(id, name, description string, attributes []map[string]interface{}) map[string]interface{} {
+	baseURL := a.getSCIMBaseURL()
+	return map[string]interface{}{
+		"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:Schema"},
+		"id":          id,
+		"name":        name,
+		"description": description,
+		"attributes":  attributes,
+		"meta": map[string]interface{}{
+			"resourceType": "Schema",
+			"location":     baseURL + "/scim/v2/Schemas/" + id,
+		},
+	}
+}
+
+var scimUserSchemaAttributes = []map[string]interface{}{
+	{"name": "userName", "type": "string", "multiValued": false, "required": true, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "server"},
+	{"name": "name", "type": "complex", "multiValued": false, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none", "subAttributes": []map[string]interface{}{
+		{"name": "formatted", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
+		{"name": "familyName", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
+		{"name": "givenName", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
+	}},
+	{"name": "emails", "type": "complex", "multiValued": true, "required": true, "mutability": "readWrite", "returned": "default", "uniqueness": "none", "subAttributes": []map[string]interface{}{
+		{"name": "value", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
+		{"name": "type", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
+		{"name": "primary", "type": "boolean", "multiValued": false, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
+	}},
+	{"name": "active", "type": "boolean", "multiValued": false, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
+	{"name": "externalId", "type": "string", "multiValued": false, "required": false, "caseExact": true, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
+}
+
+var scimGroupSchemaAttributes = []map[string]interface{}{
+	{"name": "displayName", "type": "string", "multiValued": false, "required": true, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
+	{"name": "members", "type": "complex", "multiValued": true, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none", "subAttributes": []map[string]interface{}{
+		{"name": "value", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "immutable", "returned": "default", "uniqueness": "none"},
+		{"name": "$ref", "type": "reference", "multiValued": false, "required": false, "caseExact": false, "mutability": "immutable", "returned": "default", "uniqueness": "none", "referenceTypes": []string{"User"}},
+		{"name": "display", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readOnly", "returned": "default", "uniqueness": "none"},
+	}},
+	{"name": "externalId", "type": "string", "multiValued": false, "required": false, "caseExact": true, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
+}
+
+func (a *API) scimResourceTypes(w http.ResponseWriter, r *http.Request) error {
 	resourceTypes := []interface{}{
-		map[string]interface{}{
-			"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:ResourceType"},
-			"id":          "User",
-			"name":        "User",
-			"endpoint":    "/Users",
-			"description": "User Account",
-			"schema":      SCIMSchemaUser,
-			"meta":        map[string]interface{}{"resourceType": "ResourceType", "location": baseURL + "/scim/v2/ResourceTypes/User"},
-		},
-		map[string]interface{}{
-			"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:ResourceType"},
-			"id":          "Group",
-			"name":        "Group",
-			"endpoint":    "/Groups",
-			"description": "Group",
-			"schema":      SCIMSchemaGroup,
-			"meta":        map[string]interface{}{"resourceType": "ResourceType", "location": baseURL + "/scim/v2/ResourceTypes/Group"},
-		},
+		a.buildSCIMResourceType("User", "User", "/Users", "User Account", SCIMSchemaUser),
+		a.buildSCIMResourceType("Group", "Group", "/Groups", "Group", SCIMSchemaGroup),
 	}
 
 	return sendSCIMJSON(w, http.StatusOK, SCIMListResponse{
@@ -1448,52 +1484,9 @@ func (a *API) scimResourceTypes(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) scimSchemas(w http.ResponseWriter, r *http.Request) error {
-	baseURL := a.getSCIMBaseURL()
 	schemas := []interface{}{
-		map[string]interface{}{
-			"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:Schema"},
-			"id":          SCIMSchemaUser,
-			"name":        "User",
-			"description": "User Account",
-			"attributes": []map[string]interface{}{
-				{"name": "userName", "type": "string", "multiValued": false, "required": true, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "server"},
-				{"name": "name", "type": "complex", "multiValued": false, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none", "subAttributes": []map[string]interface{}{
-					{"name": "formatted", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-					{"name": "familyName", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-					{"name": "givenName", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-				}},
-				{"name": "emails", "type": "complex", "multiValued": true, "required": true, "mutability": "readWrite", "returned": "default", "uniqueness": "none", "subAttributes": []map[string]interface{}{
-					{"name": "value", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-					{"name": "type", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-					{"name": "primary", "type": "boolean", "multiValued": false, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-				}},
-				{"name": "active", "type": "boolean", "multiValued": false, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-				{"name": "externalId", "type": "string", "multiValued": false, "required": false, "caseExact": true, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-			},
-			"meta": map[string]interface{}{
-				"resourceType": "Schema",
-				"location":     baseURL + "/scim/v2/Schemas/" + SCIMSchemaUser,
-			},
-		},
-		map[string]interface{}{
-			"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:Schema"},
-			"id":          SCIMSchemaGroup,
-			"name":        "Group",
-			"description": "Group",
-			"attributes": []map[string]interface{}{
-				{"name": "displayName", "type": "string", "multiValued": false, "required": true, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-				{"name": "members", "type": "complex", "multiValued": true, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none", "subAttributes": []map[string]interface{}{
-					{"name": "value", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "immutable", "returned": "default", "uniqueness": "none"},
-					{"name": "$ref", "type": "reference", "multiValued": false, "required": false, "caseExact": false, "mutability": "immutable", "returned": "default", "uniqueness": "none", "referenceTypes": []string{"User"}},
-					{"name": "display", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readOnly", "returned": "default", "uniqueness": "none"},
-				}},
-				{"name": "externalId", "type": "string", "multiValued": false, "required": false, "caseExact": true, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-			},
-			"meta": map[string]interface{}{
-				"resourceType": "Schema",
-				"location":     baseURL + "/scim/v2/Schemas/" + SCIMSchemaGroup,
-			},
-		},
+		a.buildSCIMSchema(SCIMSchemaUser, "User", "User Account", scimUserSchemaAttributes),
+		a.buildSCIMSchema(SCIMSchemaGroup, "Group", "Group", scimGroupSchemaAttributes),
 	}
 
 	return sendSCIMJSON(w, http.StatusOK, SCIMListResponse{
@@ -1507,31 +1500,13 @@ func (a *API) scimSchemas(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) scimResourceTypeByID(w http.ResponseWriter, r *http.Request) error {
 	resourceTypeID := chi.URLParam(r, "resource_type_id")
-	baseURL := a.getSCIMBaseURL()
 
 	var resourceType map[string]interface{}
-
 	switch resourceTypeID {
 	case "User":
-		resourceType = map[string]interface{}{
-			"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:ResourceType"},
-			"id":          "User",
-			"name":        "User",
-			"endpoint":    "/Users",
-			"description": "User Account",
-			"schema":      SCIMSchemaUser,
-			"meta":        map[string]interface{}{"resourceType": "ResourceType", "location": baseURL + "/scim/v2/ResourceTypes/User"},
-		}
+		resourceType = a.buildSCIMResourceType("User", "User", "/Users", "User Account", SCIMSchemaUser)
 	case "Group":
-		resourceType = map[string]interface{}{
-			"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:ResourceType"},
-			"id":          "Group",
-			"name":        "Group",
-			"endpoint":    "/Groups",
-			"description": "Group",
-			"schema":      SCIMSchemaGroup,
-			"meta":        map[string]interface{}{"resourceType": "ResourceType", "location": baseURL + "/scim/v2/ResourceTypes/Group"},
-		}
+		resourceType = a.buildSCIMResourceType("Group", "Group", "/Groups", "Group", SCIMSchemaGroup)
 	default:
 		return sendSCIMError(w, http.StatusNotFound, "Resource type not found", "")
 	}
@@ -1541,57 +1516,13 @@ func (a *API) scimResourceTypeByID(w http.ResponseWriter, r *http.Request) error
 
 func (a *API) scimSchemaByID(w http.ResponseWriter, r *http.Request) error {
 	schemaID := chi.URLParam(r, "schema_id")
-	baseURL := a.getSCIMBaseURL()
 
 	var schema map[string]interface{}
-
 	switch schemaID {
 	case SCIMSchemaUser:
-		schema = map[string]interface{}{
-			"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:Schema"},
-			"id":          SCIMSchemaUser,
-			"name":        "User",
-			"description": "User Account",
-			"attributes": []map[string]interface{}{
-				{"name": "userName", "type": "string", "multiValued": false, "required": true, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "server"},
-				{"name": "name", "type": "complex", "multiValued": false, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none", "subAttributes": []map[string]interface{}{
-					{"name": "formatted", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-					{"name": "familyName", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-					{"name": "givenName", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-				}},
-				{"name": "emails", "type": "complex", "multiValued": true, "required": true, "mutability": "readWrite", "returned": "default", "uniqueness": "none", "subAttributes": []map[string]interface{}{
-					{"name": "value", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-					{"name": "type", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-					{"name": "primary", "type": "boolean", "multiValued": false, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-				}},
-				{"name": "active", "type": "boolean", "multiValued": false, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-				{"name": "externalId", "type": "string", "multiValued": false, "required": false, "caseExact": true, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-			},
-			"meta": map[string]interface{}{
-				"resourceType": "Schema",
-				"location":     baseURL + "/scim/v2/Schemas/" + SCIMSchemaUser,
-			},
-		}
+		schema = a.buildSCIMSchema(SCIMSchemaUser, "User", "User Account", scimUserSchemaAttributes)
 	case SCIMSchemaGroup:
-		schema = map[string]interface{}{
-			"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:Schema"},
-			"id":          SCIMSchemaGroup,
-			"name":        "Group",
-			"description": "Group",
-			"attributes": []map[string]interface{}{
-				{"name": "displayName", "type": "string", "multiValued": false, "required": true, "caseExact": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-				{"name": "members", "type": "complex", "multiValued": true, "required": false, "mutability": "readWrite", "returned": "default", "uniqueness": "none", "subAttributes": []map[string]interface{}{
-					{"name": "value", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "immutable", "returned": "default", "uniqueness": "none"},
-					{"name": "$ref", "type": "reference", "multiValued": false, "required": false, "caseExact": false, "mutability": "immutable", "returned": "default", "uniqueness": "none", "referenceTypes": []string{"User"}},
-					{"name": "display", "type": "string", "multiValued": false, "required": false, "caseExact": false, "mutability": "readOnly", "returned": "default", "uniqueness": "none"},
-				}},
-				{"name": "externalId", "type": "string", "multiValued": false, "required": false, "caseExact": true, "mutability": "readWrite", "returned": "default", "uniqueness": "none"},
-			},
-			"meta": map[string]interface{}{
-				"resourceType": "Schema",
-				"location":     baseURL + "/scim/v2/Schemas/" + SCIMSchemaGroup,
-			},
-		}
+		schema = a.buildSCIMSchema(SCIMSchemaGroup, "Group", "Group", scimGroupSchemaAttributes)
 	default:
 		return sendSCIMError(w, http.StatusNotFound, "Schema not found", "")
 	}
