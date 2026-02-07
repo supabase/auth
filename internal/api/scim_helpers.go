@@ -211,12 +211,17 @@ func setSCIMIdentityField(tx *storage.Connection, identity *models.Identity, key
 }
 
 func checkSCIMEmailUniqueness(tx *storage.Connection, email, aud, providerType string, excludeUserID uuid.UUID) error {
-	nonSSOUser, err := models.FindUserByEmailAndAudience(tx, email, aud)
+	existingUser, err := models.FindUserByEmailAndAudience(tx, email, aud)
 	if err != nil && !models.IsNotFoundError(err) {
 		return apierrors.NewSCIMInternalServerError("Error checking email uniqueness").WithInternalError(err)
 	}
-	if nonSSOUser != nil && nonSSOUser.ID != excludeUserID && !nonSSOUser.IsSSOUser {
-		return apierrors.NewSCIMConflictError("Email already in use by another user", "uniqueness")
+	if existingUser != nil && existingUser.ID != excludeUserID {
+		if !existingUser.IsSSOUser {
+			return apierrors.NewSCIMConflictError("Email already in use by another user", "uniqueness")
+		}
+		if existingUser.BannedReason == nil || *existingUser.BannedReason != scimDeprovisionedReason {
+			return apierrors.NewSCIMConflictError("Email already in use by another user", "uniqueness")
+		}
 	}
 
 	ssoUsers, err := models.FindSSOUsersByEmailAndProvider(tx, email, aud, providerType)
