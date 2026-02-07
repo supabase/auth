@@ -7,9 +7,11 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
@@ -2518,4 +2520,627 @@ func (ts *SCIMTestSuite) TestSCIMErrorResponseContentType() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusNotFound, w.Code)
 	require.Equal(ts.T(), "application/scim+json", w.Header().Get("Content-Type"))
+}
+
+func (ts *SCIMTestSuite) adminToken() string {
+	claims := &AccessTokenClaims{
+		Role: "supabase_admin",
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+	require.NoError(ts.T(), err)
+	return token
+}
+
+func (ts *SCIMTestSuite) makeAdminRequest(method, path string, body interface{}) *http.Request {
+	var reqBody *bytes.Buffer
+	if body != nil {
+		jsonBody, err := json.Marshal(body)
+		require.NoError(ts.T(), err)
+		reqBody = bytes.NewBuffer(jsonBody)
+	} else {
+		reqBody = bytes.NewBuffer(nil)
+	}
+	req := httptest.NewRequest(method, "http://localhost"+path, reqBody)
+	req.Header.Set("Authorization", "Bearer "+ts.adminToken())
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+func (ts *SCIMTestSuite) TestSCIMAdminGetConfig() {
+	req := ts.makeAdminRequest(http.MethodGet, "/admin/sso/providers/"+ts.SSOProvider.ID.String()+"/scim", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), true, result["enabled"])
+	require.Equal(ts.T(), true, result["token_set"])
+	require.NotEmpty(ts.T(), result["base_url"])
+}
+
+func (ts *SCIMTestSuite) TestSCIMAdminEnableSCIM() {
+	provider := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(provider))
+
+	req := ts.makeAdminRequest(http.MethodPost, "/admin/sso/providers/"+provider.ID.String()+"/scim", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), true, result["enabled"])
+	require.NotEmpty(ts.T(), result["token"])
+	require.NotEmpty(ts.T(), result["base_url"])
+}
+
+func (ts *SCIMTestSuite) TestSCIMAdminDisableSCIM() {
+	req := ts.makeAdminRequest(http.MethodDelete, "/admin/sso/providers/"+ts.SSOProvider.ID.String()+"/scim", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), false, result["enabled"])
+
+	scimReq := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users", nil)
+	scimW := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(scimW, scimReq)
+	require.Equal(ts.T(), http.StatusUnauthorized, scimW.Code)
+}
+
+func (ts *SCIMTestSuite) TestSCIMAdminRotateToken() {
+	scimReq := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users", nil)
+	scimW := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(scimW, scimReq)
+	require.Equal(ts.T(), http.StatusOK, scimW.Code)
+
+	req := ts.makeAdminRequest(http.MethodPost, "/admin/sso/providers/"+ts.SSOProvider.ID.String()+"/scim/rotate", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), true, result["enabled"])
+	newToken, ok := result["token"].(string)
+	require.True(ts.T(), ok)
+	require.NotEmpty(ts.T(), newToken)
+
+	scimReq = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users", nil)
+	scimW = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(scimW, scimReq)
+	require.Equal(ts.T(), http.StatusUnauthorized, scimW.Code)
+
+	scimReq2 := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
+	scimReq2.Header.Set("Authorization", "Bearer "+newToken)
+	scimReq2.Header.Set("Content-Type", "application/scim+json")
+	scimW2 := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(scimW2, scimReq2)
+	require.Equal(ts.T(), http.StatusOK, scimW2.Code)
+}
+
+func (ts *SCIMTestSuite) TestSCIMAdminRotateTokenWhenDisabled() {
+	provider := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(provider))
+
+	req := ts.makeAdminRequest(http.MethodPost, "/admin/sso/providers/"+provider.ID.String()+"/scim/rotate", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+
+	var result map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), "scim_disabled", result["error_code"])
+}
+
+func (ts *SCIMTestSuite) TestSCIMDisabledSCIMProvider() {
+	provider := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(provider))
+	token := "disabled-scim-provider-token"
+	provider.SetSCIMToken(token)
+	provider.ClearSCIMToken()
+	require.NoError(ts.T(), ts.API.db.Update(provider))
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/scim+json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusUnauthorized, w.Code)
+}
+
+func (ts *SCIMTestSuite) TestSCIMDisabledSSOProvider() {
+	provider := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(provider))
+	token := "disabled-sso-provider-token"
+	provider.SetSCIMToken(token)
+	disabled := true
+	provider.Disabled = &disabled
+	require.NoError(ts.T(), ts.API.db.Update(provider))
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/scim+json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusForbidden, w.Code)
+
+	var errorResp map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
+	detail, ok := errorResp["detail"].(string)
+	require.True(ts.T(), ok)
+	require.Contains(ts.T(), detail, "SSO provider is disabled")
+}
+
+func (ts *SCIMTestSuite) createFilterTestUsers() {
+	ts.createSCIMUserWithExternalID("user1@acme.com", "user1@acme.com", "ext-f-001")
+	ts.createSCIMUserWithExternalID("user2@acme.com", "user2@acme.com", "ext-f-002")
+	ts.createSCIMUserWithExternalID("user3@other.com", "user3@other.com", "ext-f-003")
+	ts.createSCIMUser("user4@acme.com", "user4@acme.com")
+	ts.createSCIMUser("user5@other.com", "user5@other.com")
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterNE() {
+	ts.createFilterTestUsers()
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+ne+%22user1%40acme.com%22", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 4, result.TotalResults)
+	for _, r := range result.Resources {
+		resource := r.(map[string]interface{})
+		require.NotEqual(ts.T(), "user1@acme.com", resource["userName"])
+	}
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterCO() {
+	ts.createFilterTestUsers()
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+co+%22acme%22", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 3, result.TotalResults)
+	for _, r := range result.Resources {
+		resource := r.(map[string]interface{})
+		require.Contains(ts.T(), resource["userName"], "acme")
+	}
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterSW() {
+	ts.createFilterTestUsers()
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+sw+%22user1%22", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 1, result.TotalResults)
+	resource := result.Resources[0].(map[string]interface{})
+	require.Equal(ts.T(), "user1@acme.com", resource["userName"])
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterEW() {
+	ts.createFilterTestUsers()
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+ew+%22acme.com%22", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 3, result.TotalResults)
+	for _, r := range result.Resources {
+		resource := r.(map[string]interface{})
+		userName := resource["userName"].(string)
+		require.True(ts.T(), strings.HasSuffix(userName, "acme.com"))
+	}
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterPR() {
+	ts.createFilterTestUsers()
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=externalId+pr", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 3, result.TotalResults)
+	for _, r := range result.Resources {
+		resource := r.(map[string]interface{})
+		require.NotEmpty(ts.T(), resource["externalId"])
+	}
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterAnd() {
+	ts.createFilterTestUsers()
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+sw+%22user%22+and+userName+ew+%22acme.com%22", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 3, result.TotalResults)
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterOr() {
+	ts.createFilterTestUsers()
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22user1%40acme.com%22+or+userName+eq+%22user2%40acme.com%22", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 2, result.TotalResults)
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterNot() {
+	ts.createFilterTestUsers()
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=not+userName+eq+%22user1%40acme.com%22", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 4, result.TotalResults)
+	for _, r := range result.Resources {
+		resource := r.(map[string]interface{})
+		require.NotEqual(ts.T(), "user1@acme.com", resource["userName"])
+	}
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterEmailsValuePath() {
+	ts.createFilterTestUsers()
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=emails%5Bvalue+eq+%22user1%40acme.com%22%5D", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 1, result.TotalResults)
+}
+
+func (ts *SCIMTestSuite) TestSCIMGroupFilterCO() {
+	ts.createSCIMGroupWithExternalID("Engineering Team", "grp-fc-001")
+	ts.createSCIMGroupWithExternalID("Sales Team", "grp-fc-002")
+	ts.createSCIMGroupWithExternalID("Eng Ops", "grp-fc-003")
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups?filter=displayName+co+%22Eng%22", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 2, result.TotalResults)
+}
+
+func (ts *SCIMTestSuite) TestSCIMBodyExceedsMaxSize() {
+	// Create a body larger than 1MB
+	largeBody := strings.Repeat("x", SCIMMaxBodySize+1)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/scim/v2/Users", bytes.NewBufferString(largeBody))
+	req.Header.Set("Authorization", "Bearer "+ts.SCIMToken)
+	req.Header.Set("Content-Type", "application/scim+json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	// Should get an error (400 or 413)
+	require.True(ts.T(), w.Code >= 400, "Expected error status for oversized body, got %d", w.Code)
+}
+
+func (ts *SCIMTestSuite) TestSCIMFilterExceedsMaxLength() {
+	longFilter := "userName eq \"" + strings.Repeat("a", SCIMMaxFilterLength+1) + "\""
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter="+longFilter, nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidFilter")
+}
+
+func (ts *SCIMTestSuite) TestSCIMResourceTypeByID() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/ResourceTypes/User", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), "User", result["id"])
+	require.Equal(ts.T(), "User", result["name"])
+}
+
+func (ts *SCIMTestSuite) TestSCIMResourceTypeByIDGroup() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/ResourceTypes/Group", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), "Group", result["id"])
+	require.Equal(ts.T(), "Group", result["name"])
+}
+
+func (ts *SCIMTestSuite) TestSCIMResourceTypeByIDNotFound() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/ResourceTypes/Invalid", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMSchemaByID() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Schemas/"+SCIMSchemaUser, nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), SCIMSchemaUser, result["id"])
+	require.Equal(ts.T(), "User", result["name"])
+}
+
+func (ts *SCIMTestSuite) TestSCIMSchemaByIDNotFound() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Schemas/invalid", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMNotFoundRoute() {
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/nonexistent", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNotFound, w.Code)
+
+	var errorResp map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
+	schemas, ok := errorResp["schemas"].([]interface{})
+	require.True(ts.T(), ok)
+	require.Len(ts.T(), schemas, 1)
+	require.Equal(ts.T(), "urn:ietf:params:scim:api:messages:2.0:Error", schemas[0])
+}
+
+func (ts *SCIMTestSuite) TestSCIMPaginationCountZero() {
+	for i := 0; i < 3; i++ {
+		ts.createSCIMUser(fmt.Sprintf("pagezero%d@acme.com", i), fmt.Sprintf("pagezero%d@acme.com", i))
+	}
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?count=0", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 3, result.TotalResults)
+	require.Empty(ts.T(), result.Resources)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPaginationStartIndexExceedsTotal() {
+	for i := 0; i < 5; i++ {
+		ts.createSCIMUser(fmt.Sprintf("pageexceed%d@acme.com", i), fmt.Sprintf("pageexceed%d@acme.com", i))
+	}
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?startIndex=999", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 5, result.TotalResults)
+	require.Empty(ts.T(), result.Resources)
+}
+
+func (ts *SCIMTestSuite) TestSCIMGroupPagination() {
+	for i := 0; i < 5; i++ {
+		ts.createSCIMGroupWithExternalID(fmt.Sprintf("PagGroup%d", i), fmt.Sprintf("pag-grp-%d", i))
+	}
+
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups?startIndex=1&count=2", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), 5, result.TotalResults)
+	require.Len(ts.T(), result.Resources, 2)
+}
+
+func (ts *SCIMTestSuite) setupCrossProviderIsolation() (string, *SCIMUserResponse, *SCIMGroupResponse) {
+	user := ts.createSCIMUser("cross_iso@acme.com", "cross_iso@acme.com")
+	group := ts.createSCIMGroup("CrossIsoGroup")
+
+	provider2 := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(provider2))
+	token2 := "cross-provider-iso-token"
+	provider2.SetSCIMToken(token2)
+	require.NoError(ts.T(), ts.API.db.Update(provider2))
+
+	return token2, user, group
+}
+
+func (ts *SCIMTestSuite) TestSCIMCrossProviderPatchUser() {
+	token2, user, _ := ts.setupCrossProviderIsolation()
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "value": map[string]interface{}{"userName": "hacked@evil.com"}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Users/"+user.ID, body)
+	req.Header.Set("Authorization", "Bearer "+token2)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMCrossProviderPutUser() {
+	token2, user, _ := ts.setupCrossProviderIsolation()
+
+	body := map[string]interface{}{
+		"schemas":  []string{SCIMSchemaUser},
+		"userName": "hacked@evil.com",
+		"emails":   []map[string]interface{}{{"value": "hacked@evil.com", "primary": true}},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPut, "/scim/v2/Users/"+user.ID, body)
+	req.Header.Set("Authorization", "Bearer "+token2)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMCrossProviderDeleteUser() {
+	token2, user, _ := ts.setupCrossProviderIsolation()
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+user.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+token2)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMCrossProviderPatchGroup() {
+	token2, _, group := ts.setupCrossProviderIsolation()
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "value": map[string]interface{}{"displayName": "HackedGroup"}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	req.Header.Set("Authorization", "Bearer "+token2)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMCrossProviderDeleteGroup() {
+	token2, _, group := ts.setupCrossProviderIsolation()
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Groups/"+group.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+token2)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMError(w, http.StatusNotFound)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupReplaceExternalIDWithPath() {
+	group := ts.createSCIMGroupWithExternalID("ExtIDPathGroup", "orig-ext-id")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "replace", "path": "externalId", "value": "new-ext-id"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var result SCIMGroupResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
+	require.Equal(ts.T(), "new-ext-id", result.ExternalID)
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupAddMemberWrongProvider() {
+	group := ts.createSCIMGroup("WrongProviderGroup")
+
+	provider2 := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(provider2))
+	token2 := "wrong-provider-member-token"
+	provider2.SetSCIMToken(token2)
+	require.NoError(ts.T(), ts.API.db.Update(provider2))
+
+	userBody := map[string]interface{}{
+		"schemas":  []string{SCIMSchemaUser},
+		"userName": "otherprovider@test.com",
+		"emails":   []map[string]interface{}{{"value": "otherprovider@test.com", "primary": true}},
+	}
+	userReq := ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Users", userBody)
+	userReq.Header.Set("Authorization", "Bearer "+token2)
+	userW := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(userW, userReq)
+	require.Equal(ts.T(), http.StatusCreated, userW.Code)
+
+	var otherUser SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(userW.Body).Decode(&otherUser))
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "add", "path": "members", "value": []map[string]interface{}{
+				{"value": otherUser.ID},
+			}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.True(ts.T(), w.Code >= 400, "Adding cross-provider member should fail, got %d: %s", w.Code, w.Body.String())
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupAddNonExistentMember() {
+	group := ts.createSCIMGroup("NonExistentMemberGroup")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "add", "path": "members", "value": []map[string]interface{}{
+				{"value": "00000000-0000-0000-0000-000000000000"},
+			}},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.True(ts.T(), w.Code >= 400, "Adding non-existent member should fail, got %d: %s", w.Code, w.Body.String())
+}
+
+func (ts *SCIMTestSuite) TestSCIMPatchGroupRemoveWithoutPath() {
+	group := ts.createSCIMGroup("RemoveNoPathGroup")
+
+	body := map[string]interface{}{
+		"schemas": []string{SCIMSchemaPatchOp},
+		"Operations": []map[string]interface{}{
+			{"op": "remove"},
+		},
+	}
+
+	req := ts.makeSCIMRequest(http.MethodPatch, "/scim/v2/Groups/"+group.ID, body)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "noTarget")
 }
