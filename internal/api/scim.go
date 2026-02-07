@@ -222,8 +222,9 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 						candidate.Identities[i].ProviderID = params.ExternalID
 						candidate.Identities[i].IdentityData["external_id"] = params.ExternalID
 						candidate.Identities[i].IdentityData["sub"] = params.ExternalID
-					} else if identityID != "" {
-						candidate.Identities[i].IdentityData["sub"] = identityID
+					} else {
+						candidate.Identities[i].ProviderID = params.UserName
+						candidate.Identities[i].IdentityData["sub"] = params.UserName
 					}
 					if err := tx.UpdateOnly(&candidate.Identities[i], "provider_id", "identity_data"); err != nil {
 						if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
@@ -442,20 +443,19 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 				if user.Identities[i].IdentityData == nil {
 					user.Identities[i].IdentityData = make(map[string]interface{})
 				}
-				if params.UserName != "" {
-					user.Identities[i].IdentityData["user_name"] = params.UserName
-				}
+				user.Identities[i].IdentityData["user_name"] = params.UserName
 				if email != "" {
 					user.Identities[i].IdentityData["email"] = email
 				}
-				updateCols := []string{"identity_data"}
+				updateCols := []string{"identity_data", "provider_id"}
 				if params.ExternalID != "" {
 					user.Identities[i].ProviderID = params.ExternalID
 					user.Identities[i].IdentityData["external_id"] = params.ExternalID
 					user.Identities[i].IdentityData["sub"] = params.ExternalID
-					updateCols = append(updateCols, "provider_id")
 				} else {
 					delete(user.Identities[i].IdentityData, "external_id")
+					user.Identities[i].ProviderID = params.UserName
+					user.Identities[i].IdentityData["sub"] = params.UserName
 				}
 				if err := tx.UpdateOnly(&user.Identities[i], updateCols...); err != nil {
 					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
