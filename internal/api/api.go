@@ -203,43 +203,43 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 	// SCIM v2 API endpoints
 	if api.config.SCIM.Enabled {
-	r.Route("/scim/v2", func(r *router) {
-		r.Use(api.requireSCIMAuthentication)
+		r.Route("/scim/v2", func(r *router) {
+			r.Use(api.requireSCIMAuthentication)
 
-		// SCIM-specific NotFound handler for proper error format
-		r.NotFound(api.scimNotFound)
+			// SCIM-specific NotFound handler for proper error format
+			r.NotFound(api.scimNotFound)
 
-		// Service Provider Configuration
-		r.Get("/ServiceProviderConfig", api.scimServiceProviderConfig)
-		r.Get("/ResourceTypes", api.scimResourceTypes)
-		r.Get("/ResourceTypes/{resource_type_id}", api.scimResourceTypeByID)
-		r.Get("/Schemas", api.scimSchemas)
-		r.Get("/Schemas/{schema_id}", api.scimSchemaByID)
+			// Service Provider Configuration
+			r.Get("/ServiceProviderConfig", api.scimServiceProviderConfig)
+			r.Get("/ResourceTypes", api.scimResourceTypes)
+			r.Get("/ResourceTypes/{resource_type_id}", api.scimResourceTypeByID)
+			r.Get("/Schemas", api.scimSchemas)
+			r.Get("/Schemas/{schema_id}", api.scimSchemaByID)
 
-		// User endpoints
-		r.Route("/Users", func(r *router) {
-			r.Get("/", api.scimListUsers)
-			r.Post("/", api.scimCreateUser)
-			r.Route("/{user_id}", func(r *router) {
-				r.Get("/", api.scimGetUser)
-				r.Put("/", api.scimReplaceUser)
-				r.Patch("/", api.scimPatchUser)
-				r.Delete("/", api.scimDeleteUser)
+			// User endpoints
+			r.Route("/Users", func(r *router) {
+				r.Get("/", api.scimListUsers)
+				r.Post("/", api.scimCreateUser)
+				r.Route("/{user_id}", func(r *router) {
+					r.Get("/", api.scimGetUser)
+					r.Put("/", api.scimReplaceUser)
+					r.Patch("/", api.scimPatchUser)
+					r.Delete("/", api.scimDeleteUser)
+				})
+			})
+
+			// Group endpoints
+			r.Route("/Groups", func(r *router) {
+				r.Get("/", api.scimListGroups)
+				r.Post("/", api.scimCreateGroup)
+				r.Route("/{group_id}", func(r *router) {
+					r.Get("/", api.scimGetGroup)
+					r.Put("/", api.scimReplaceGroup)
+					r.Patch("/", api.scimPatchGroup)
+					r.Delete("/", api.scimDeleteGroup)
+				})
 			})
 		})
-
-		// Group endpoints
-		r.Route("/Groups", func(r *router) {
-			r.Get("/", api.scimListGroups)
-			r.Post("/", api.scimCreateGroup)
-			r.Route("/{group_id}", func(r *router) {
-				r.Get("/", api.scimGetGroup)
-				r.Put("/", api.scimReplaceGroup)
-				r.Patch("/", api.scimPatchGroup)
-				r.Delete("/", api.scimDeleteGroup)
-			})
-		})
-	})
 	}
 
 	r.Route("/", func(r *router) {
