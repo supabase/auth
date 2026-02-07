@@ -584,7 +584,13 @@ func (a *API) applySCIMUserRemove(tx *storage.Connection, user *models.User, op 
 			if identity.IdentityData != nil {
 				delete(identity.IdentityData, "external_id")
 			}
-			if err := tx.UpdateOnly(identity, "identity_data"); err != nil {
+			fallbackID := user.GetEmail()
+			if userName, ok := identity.IdentityData["user_name"].(string); ok && userName != "" {
+				fallbackID = userName
+			}
+			identity.ProviderID = fallbackID
+			identity.IdentityData["sub"] = fallbackID
+			if err := tx.UpdateOnly(identity, "provider_id", "identity_data"); err != nil {
 				return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 			}
 		}
