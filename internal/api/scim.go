@@ -86,19 +86,19 @@ func (a *API) scimGetUser(w http.ResponseWriter, r *http.Request) error {
 
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
-		return apierrors.NewSCIMNotFoundError("User not found")
+		return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 	}
 
 	user, err := models.FindUserByID(db, userID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return apierrors.NewSCIMNotFoundError("User not found")
+			return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 		}
 		return apierrors.NewSCIMInternalServerError("Error fetching user").WithInternalError(err)
 	}
 
 	if !models.UserBelongsToSSOProvider(user, provider.ID) {
-		return apierrors.NewSCIMNotFoundError("User not found")
+		return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 	}
 
 	return sendSCIMJSON(w, http.StatusOK, a.userToSCIMResponse(user, "sso:"+provider.ID.String()))
@@ -138,7 +138,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMInternalServerError("Error checking existing user").WithInternalError(err)
 		}
 		if nonSSOUser != nil {
-			return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")
+			return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 		}
 
 		ssoUsers, err := models.FindSSOUsersByEmailAndProvider(tx, email, config.JWT.Aud, providerType)
@@ -150,13 +150,13 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 			var deprovisioned []*models.User
 			for _, u := range ssoUsers {
 				if u.BannedReason == nil || *u.BannedReason != scimDeprovisionedReason {
-					return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")
+					return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 				}
 				deprovisioned = append(deprovisioned, u)
 			}
 
 			if len(deprovisioned) > 1 {
-				return apierrors.NewSCIMConflictError("Multiple deprovisioned users exist for this email", "uniqueness")
+				return apierrors.NewSCIMConflictError(scimErrAmbiguousDeprovisioned, "uniqueness")
 			}
 
 			candidate := deprovisioned[0]
@@ -202,7 +202,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 					}
 					if err := tx.UpdateOnly(&candidate.Identities[i], "provider_id", "identity_data"); err != nil {
 						if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-							return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+							return apierrors.NewSCIMConflictError(scimErrExternalIDConflict, "uniqueness")
 						}
 						return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 					}
@@ -241,7 +241,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 
 		if err := tx.Create(user); err != nil {
 			if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-				return apierrors.NewSCIMConflictError("User with this email already exists", "uniqueness")
+				return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 			}
 			return apierrors.NewSCIMInternalServerError("Error saving user").WithInternalError(err)
 		}
@@ -263,7 +263,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 				errToCheck = httpErr.InternalError
 			}
 			if pgErr := utilities.NewPostgresError(errToCheck); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-				return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+				return apierrors.NewSCIMConflictError(scimErrExternalIDConflict, "uniqueness")
 			}
 			return err
 		}
@@ -306,7 +306,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
-		return apierrors.NewSCIMNotFoundError("User not found")
+		return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 	}
 
 	var params SCIMUserParams
@@ -331,13 +331,13 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		user, err = models.FindUserByID(tx, userID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return apierrors.NewSCIMNotFoundError("User not found")
+				return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 			}
 			return apierrors.NewSCIMInternalServerError("Error fetching user").WithInternalError(err)
 		}
 
 		if !models.UserBelongsToSSOProvider(user, provider.ID) {
-			return apierrors.NewSCIMNotFoundError("User not found")
+			return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 		}
 
 		metadata := user.UserMetaData
@@ -373,7 +373,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 			}
 			if err := user.SetEmail(tx, email); err != nil {
 				if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-					return apierrors.NewSCIMConflictError("Email already in use", "uniqueness")
+					return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 				}
 				return apierrors.NewSCIMInternalServerError("Error updating user email").WithInternalError(err)
 			}
@@ -403,7 +403,7 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 				}
 				if err := tx.UpdateOnly(&user.Identities[i], updateCols...); err != nil {
 					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-						return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+						return apierrors.NewSCIMConflictError(scimErrExternalIDConflict, "uniqueness")
 					}
 					return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 				}
@@ -440,7 +440,7 @@ func (a *API) scimPatchUser(w http.ResponseWriter, r *http.Request) error {
 
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
-		return apierrors.NewSCIMNotFoundError("User not found")
+		return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 	}
 
 	var params SCIMPatchRequest
@@ -457,13 +457,13 @@ func (a *API) scimPatchUser(w http.ResponseWriter, r *http.Request) error {
 		user, err = models.FindUserByID(tx, userID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return apierrors.NewSCIMNotFoundError("User not found")
+				return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 			}
 			return apierrors.NewSCIMInternalServerError("Error fetching user").WithInternalError(err)
 		}
 
 		if !models.UserBelongsToSSOProvider(user, provider.ID) {
-			return apierrors.NewSCIMNotFoundError("User not found")
+			return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 		}
 
 		for _, op := range params.Operations {
@@ -612,7 +612,7 @@ func (a *API) applySCIMUserReplace(tx *storage.Connection, user *models.User, op
 		case attrName == "username":
 			if userName, ok := val.(string); ok && userName != "" {
 				if identity := findSSOIdentity(user, providerType); identity != nil {
-					if err := setSCIMIdentityField(tx, identity, "user_name", userName); err != nil {
+					if err := setSCIMUserName(tx, identity, userName); err != nil {
 						return err
 					}
 				}
@@ -671,7 +671,7 @@ func (a *API) applySCIMUserReplaceWithPath(tx *storage.Connection, user *models.
 			return apierrors.NewSCIMBadRequestError("userName must be a string", "invalidValue")
 		}
 		if identity := findSSOIdentity(user, providerType); identity != nil {
-			return setSCIMIdentityField(tx, identity, "user_name", userName)
+			return setSCIMUserName(tx, identity, userName)
 		}
 		return nil
 	case attrName == "emails" && path.ValueExpression != nil && strings.ToLower(path.SubAttributeName()) == "value":
@@ -695,7 +695,7 @@ func (a *API) applySCIMEmailUpdate(tx *storage.Connection, user *models.User, ne
 	}
 	if err := user.SetEmail(tx, validatedEmail); err != nil {
 		if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-			return apierrors.NewSCIMConflictError("Email already in use", "uniqueness")
+			return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 		}
 		return apierrors.NewSCIMInternalServerError("Error updating email").WithInternalError(err)
 	}
@@ -733,24 +733,24 @@ func (a *API) scimDeleteUser(w http.ResponseWriter, r *http.Request) error {
 
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
-		return apierrors.NewSCIMNotFoundError("User not found")
+		return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 	}
 
 	terr := db.Transaction(func(tx *storage.Connection) error {
 		user, err := models.FindUserByID(tx, userID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return apierrors.NewSCIMNotFoundError("User not found")
+				return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 			}
 			return apierrors.NewSCIMInternalServerError("Error fetching user").WithInternalError(err)
 		}
 
 		if !models.UserBelongsToSSOProvider(user, provider.ID) {
-			return apierrors.NewSCIMNotFoundError("User not found")
+			return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 		}
 
 		if user.IsBanned() && user.BannedReason != nil && *user.BannedReason == scimDeprovisionedReason {
-			return apierrors.NewSCIMNotFoundError("User not found")
+			return apierrors.NewSCIMNotFoundError(scimErrUserNotFound)
 		}
 
 		if err := user.Ban(tx, time.Duration(math.MaxInt64), &scimDeprovisionedReason); err != nil {
@@ -839,19 +839,19 @@ func (a *API) scimGetGroup(w http.ResponseWriter, r *http.Request) error {
 
 	groupID, err := uuid.FromString(chi.URLParam(r, "group_id"))
 	if err != nil {
-		return apierrors.NewSCIMNotFoundError("Group not found")
+		return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 	}
 
 	group, err := models.FindSCIMGroupByID(db, groupID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return apierrors.NewSCIMNotFoundError("Group not found")
+			return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 		}
 		return apierrors.NewSCIMInternalServerError("Error fetching group").WithInternalError(err)
 	}
 
 	if group.SSOProviderID != provider.ID {
-		return apierrors.NewSCIMNotFoundError("Group not found")
+		return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 	}
 
 	excludeMembers := strings.Contains(strings.ToLower(r.URL.Query().Get("excludedAttributes")), "members")
@@ -885,7 +885,7 @@ func (a *API) scimCreateGroup(w http.ResponseWriter, r *http.Request) error {
 		if params.ExternalID != "" {
 			existing, err := models.FindSCIMGroupByExternalID(tx, provider.ID, params.ExternalID)
 			if err == nil && existing != nil {
-				return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
+				return apierrors.NewSCIMConflictError(scimErrGroupExternalIDConflict, "uniqueness")
 			}
 			if err != nil && !models.IsNotFoundError(err) {
 				return apierrors.NewSCIMInternalServerError("Error checking existing group").WithInternalError(err)
@@ -895,7 +895,7 @@ func (a *API) scimCreateGroup(w http.ResponseWriter, r *http.Request) error {
 		group = models.NewSCIMGroup(provider.ID, params.ExternalID, params.DisplayName)
 		if err := tx.Create(group); err != nil {
 			if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-				return apierrors.NewSCIMConflictError("Group already exists", "uniqueness")
+				return apierrors.NewSCIMConflictError(scimErrGroupDisplayNameConflict, "uniqueness")
 			}
 			return apierrors.NewSCIMInternalServerError("Error creating group").WithInternalError(err)
 		}
@@ -907,10 +907,10 @@ func (a *API) scimCreateGroup(w http.ResponseWriter, r *http.Request) error {
 			}
 			if err := group.AddMembers(tx, memberIDs); err != nil {
 				if _, ok := err.(models.UserNotFoundError); ok {
-					return apierrors.NewSCIMNotFoundError("One or more members not found")
+					return apierrors.NewSCIMNotFoundError(scimErrMembersNotFound)
 				}
 				if _, ok := err.(models.UserNotInSSOProviderError); ok {
-					return apierrors.NewSCIMBadRequestError("One or more members do not belong to this SSO provider", "invalidValue")
+					return apierrors.NewSCIMBadRequestError(scimErrMembersWrongProvider, "invalidValue")
 				}
 				return apierrors.NewSCIMInternalServerError("Error adding group members").WithInternalError(err)
 			}
@@ -937,7 +937,7 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 
 	groupID, err := uuid.FromString(chi.URLParam(r, "group_id"))
 	if err != nil {
-		return apierrors.NewSCIMNotFoundError("Group not found")
+		return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 	}
 
 	var params SCIMGroupParams
@@ -954,13 +954,13 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 		group, err = models.FindSCIMGroupByID(tx, groupID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return apierrors.NewSCIMNotFoundError("Group not found")
+				return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 			}
 			return apierrors.NewSCIMInternalServerError("Error fetching group").WithInternalError(err)
 		}
 
 		if group.SSOProviderID != provider.ID {
-			return apierrors.NewSCIMNotFoundError("Group not found")
+			return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 		}
 
 		group.DisplayName = params.DisplayName
@@ -968,7 +968,7 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 
 		if err := tx.Update(group); err != nil {
 			if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-				return apierrors.NewSCIMConflictError("Group already exists", "uniqueness")
+				return apierrors.NewSCIMConflictError(scimErrGroupDisplayNameConflict, "uniqueness")
 			}
 			return apierrors.NewSCIMInternalServerError("Error updating group").WithInternalError(err)
 		}
@@ -980,10 +980,10 @@ func (a *API) scimReplaceGroup(w http.ResponseWriter, r *http.Request) error {
 
 		if err := group.SetMembers(tx, memberIDs); err != nil {
 			if models.IsNotFoundError(err) {
-				return apierrors.NewSCIMNotFoundError("One or more member IDs not found")
+				return apierrors.NewSCIMNotFoundError(scimErrMembersNotFound)
 			}
 			if _, ok := err.(models.UserNotInSSOProviderError); ok {
-				return apierrors.NewSCIMBadRequestError("One or more members do not belong to this SSO provider", "invalidValue")
+				return apierrors.NewSCIMBadRequestError(scimErrMembersWrongProvider, "invalidValue")
 			}
 			return apierrors.NewSCIMInternalServerError("Error setting group members").WithInternalError(err)
 		}
@@ -1013,7 +1013,7 @@ func (a *API) scimPatchGroup(w http.ResponseWriter, r *http.Request) error {
 
 	groupID, err := uuid.FromString(chi.URLParam(r, "group_id"))
 	if err != nil {
-		return apierrors.NewSCIMNotFoundError("Group not found")
+		return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 	}
 
 	var params SCIMPatchRequest
@@ -1030,13 +1030,13 @@ func (a *API) scimPatchGroup(w http.ResponseWriter, r *http.Request) error {
 		group, err = models.FindSCIMGroupByID(tx, groupID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return apierrors.NewSCIMNotFoundError("Group not found")
+				return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 			}
 			return apierrors.NewSCIMInternalServerError("Error fetching group").WithInternalError(err)
 		}
 
 		if group.SSOProviderID != provider.ID {
-			return apierrors.NewSCIMNotFoundError("Group not found")
+			return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 		}
 
 		for _, op := range params.Operations {
@@ -1105,10 +1105,10 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 		}
 		if err := group.AddMembers(tx, memberIDs); err != nil {
 			if _, ok := err.(models.UserNotFoundError); ok {
-				return apierrors.NewSCIMNotFoundError("One or more members not found")
+				return apierrors.NewSCIMNotFoundError(scimErrMembersNotFound)
 			}
 			if _, ok := err.(models.UserNotInSSOProviderError); ok {
-				return apierrors.NewSCIMBadRequestError("One or more members do not belong to this SSO provider", "invalidValue")
+				return apierrors.NewSCIMBadRequestError(scimErrMembersWrongProvider, "invalidValue")
 			}
 			return apierrors.NewSCIMInternalServerError("Error adding group members").WithInternalError(err)
 		}
@@ -1160,7 +1160,7 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 				group.DisplayName = displayName
 				if err := tx.UpdateOnly(group, "display_name"); err != nil {
 					if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-						return apierrors.NewSCIMConflictError("Group with this displayName already exists", "uniqueness")
+						return apierrors.NewSCIMConflictError(scimErrGroupDisplayNameConflict, "uniqueness")
 					}
 					return apierrors.NewSCIMInternalServerError("Error updating group display name").WithInternalError(err)
 				}
@@ -1179,10 +1179,10 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 				}
 				if err := group.SetMembers(tx, memberIDs); err != nil {
 					if models.IsNotFoundError(err) {
-						return apierrors.NewSCIMNotFoundError("One or more member IDs not found")
+						return apierrors.NewSCIMNotFoundError(scimErrMembersNotFound)
 					}
 					if _, ok := err.(models.UserNotInSSOProviderError); ok {
-						return apierrors.NewSCIMBadRequestError("One or more members do not belong to this SSO provider", "invalidValue")
+						return apierrors.NewSCIMBadRequestError(scimErrMembersWrongProvider, "invalidValue")
 					}
 					return apierrors.NewSCIMInternalServerError("Error setting group members").WithInternalError(err)
 				}
@@ -1221,7 +1221,7 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 		if len(columnsToUpdate) > 0 {
 			if err := tx.UpdateOnly(group, columnsToUpdate...); err != nil {
 				if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-					return apierrors.NewSCIMConflictError("Group already exists with this value", "uniqueness")
+					return apierrors.NewSCIMConflictError(scimErrGroupDisplayNameConflict, "uniqueness")
 				}
 				return apierrors.NewSCIMInternalServerError("Error updating group").WithInternalError(err)
 			}
@@ -1240,20 +1240,20 @@ func (a *API) scimDeleteGroup(w http.ResponseWriter, r *http.Request) error {
 
 	groupID, err := uuid.FromString(chi.URLParam(r, "group_id"))
 	if err != nil {
-		return apierrors.NewSCIMNotFoundError("Group not found")
+		return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 	}
 
 	terr := db.Transaction(func(tx *storage.Connection) error {
 		group, err := models.FindSCIMGroupByID(tx, groupID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return apierrors.NewSCIMNotFoundError("Group not found")
+				return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 			}
 			return apierrors.NewSCIMInternalServerError("Error fetching group").WithInternalError(err)
 		}
 
 		if group.SSOProviderID != provider.ID {
-			return apierrors.NewSCIMNotFoundError("Group not found")
+			return apierrors.NewSCIMNotFoundError(scimErrGroupNotFound)
 		}
 
 		if err := tx.Destroy(group); err != nil {
@@ -1421,4 +1421,8 @@ func sendSCIMError(w http.ResponseWriter, status int, detail string) error {
 
 func (a *API) scimNotFound(w http.ResponseWriter, r *http.Request) error {
 	return sendSCIMError(w, http.StatusNotFound, "Resource not found")
+}
+
+func (a *API) scimMethodNotAllowed(w http.ResponseWriter, r *http.Request) error {
+	return sendSCIMError(w, http.StatusMethodNotAllowed, "Method not allowed")
 }

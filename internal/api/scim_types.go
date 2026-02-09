@@ -20,6 +20,17 @@ const (
 	SCIMSchemaGroup        = "urn:ietf:params:scim:schemas:core:2.0:Group"
 	SCIMSchemaListResponse = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
 	SCIMSchemaPatchOp      = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+
+	scimErrUserNotFound              = "User not found"
+	scimErrGroupNotFound             = "Group not found"
+	scimErrEmailConflict             = "Email already in use by another user"
+	scimErrExternalIDConflict        = "User with this externalId already exists"
+	scimErrUserNameConflict          = "User with this userName already exists"
+	scimErrGroupExternalIDConflict   = "Group with this externalId already exists"
+	scimErrGroupDisplayNameConflict  = "Group with this displayName already exists"
+	scimErrMembersNotFound           = "One or more members not found"
+	scimErrMembersWrongProvider      = "One or more members do not belong to this SSO provider"
+	scimErrAmbiguousDeprovisioned    = "Multiple deprovisioned users exist for this email"
 )
 
 // Must be var (not const) because it's passed by pointer to user.Ban()

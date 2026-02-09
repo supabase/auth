@@ -185,6 +185,10 @@ func findSSOIdentity(user *models.User, providerType string) *models.Identity {
 }
 
 func setSCIMExternalID(tx *storage.Connection, identity *models.Identity, externalID string) error {
+	if strings.TrimSpace(externalID) == "" {
+		return apierrors.NewSCIMBadRequestError("externalId must not be empty", "invalidValue")
+	}
+
 	identity.ProviderID = externalID
 	if identity.IdentityData == nil {
 		identity.IdentityData = make(map[string]interface{})
@@ -193,7 +197,29 @@ func setSCIMExternalID(tx *storage.Connection, identity *models.Identity, extern
 	identity.IdentityData["sub"] = externalID
 	if err := tx.UpdateOnly(identity, "provider_id", "identity_data"); err != nil {
 		if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-			return apierrors.NewSCIMConflictError("User with this externalId already exists", "uniqueness")
+			return apierrors.NewSCIMConflictError(scimErrExternalIDConflict, "uniqueness")
+		}
+		return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
+	}
+	return nil
+}
+
+func setSCIMUserName(tx *storage.Connection, identity *models.Identity, userName string) error {
+	if identity.IdentityData == nil {
+		identity.IdentityData = make(map[string]interface{})
+	}
+	identity.IdentityData["user_name"] = userName
+
+	updateCols := []string{"identity_data"}
+	if externalID, ok := identity.IdentityData["external_id"].(string); !ok || externalID == "" {
+		identity.ProviderID = userName
+		identity.IdentityData["sub"] = userName
+		updateCols = append(updateCols, "provider_id")
+	}
+
+	if err := tx.UpdateOnly(identity, updateCols...); err != nil {
+		if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+			return apierrors.NewSCIMConflictError(scimErrUserNameConflict, "uniqueness")
 		}
 		return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 	}
@@ -274,7 +300,7 @@ func updateGroupExternalID(tx *storage.Connection, group *models.SCIMGroup, exte
 	group.ExternalID = storage.NullString(externalID)
 	if err := tx.UpdateOnly(group, "external_id"); err != nil {
 		if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
-			return apierrors.NewSCIMConflictError("Group with this externalId already exists", "uniqueness")
+			return apierrors.NewSCIMConflictError(scimErrGroupExternalIDConflict, "uniqueness")
 		}
 		return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
 	}
@@ -288,10 +314,10 @@ func checkSCIMEmailUniqueness(tx *storage.Connection, email, aud, providerType s
 	}
 	if existingUser != nil && existingUser.ID != excludeUserID {
 		if !existingUser.IsSSOUser {
-			return apierrors.NewSCIMConflictError("Email already in use by another user", "uniqueness")
+			return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 		}
 		if existingUser.BannedReason == nil || *existingUser.BannedReason != scimDeprovisionedReason {
-			return apierrors.NewSCIMConflictError("Email already in use by another user", "uniqueness")
+			return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 		}
 	}
 
@@ -304,7 +330,7 @@ func checkSCIMEmailUniqueness(tx *storage.Connection, email, aud, providerType s
 			continue
 		}
 		if u.BannedReason == nil || *u.BannedReason != scimDeprovisionedReason {
-			return apierrors.NewSCIMConflictError("Email already in use by another user", "uniqueness")
+			return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 		}
 	}
 	return nil

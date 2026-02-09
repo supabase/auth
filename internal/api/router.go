@@ -58,6 +58,10 @@ func (r *router) NotFound(fn apiHandler) {
 	r.chi.NotFound(handler(fn))
 }
 
+func (r *router) MethodNotAllowed(fn apiHandler) {
+	r.chi.MethodNotAllowed(handler(fn))
+}
+
 func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.chi.ServeHTTP(w, req)
 }
