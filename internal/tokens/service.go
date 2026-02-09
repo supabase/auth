@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	mathRand "math/rand"
 	"net/http"
 	"net/url"
@@ -414,7 +415,15 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 
 					issuedToken = newToken.Token
 
-					shouldUpgrade := config.Security.RefreshTokenAlgorithmVersion == 2 && (config.Security.RefreshTokenUpgradePercentage >= 100 || mathRand.Intn(100) < config.Security.RefreshTokenUpgradePercentage) // #nosec
+					shouldUpgrade := config.Security.RefreshTokenAlgorithmVersion == 2 && config.Security.RefreshTokenUpgradePercentage > 0
+
+					if shouldUpgrade && config.Security.RefreshTokenUpgradePercentage < 100 {
+						// convert the session ID to a number in the range [0, 100) and check whether it should be upgraded
+						// we don't want a % of refresh token requests, but a % of sessions here!
+
+						sessionRand := mathRand.New(mathRand.NewSource(int64(crc32.ChecksumIEEE(session.ID.Bytes())))) // #nosec
+						shouldUpgrade = sessionRand.Intn(100) < config.Security.RefreshTokenUpgradePercentage          // #nosec
+					}
 
 					if shouldUpgrade {
 						// got v1 refresh token that should be upgraded to v2
