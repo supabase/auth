@@ -674,6 +674,15 @@ func (a *API) applySCIMUserReplaceWithPath(tx *storage.Connection, user *models.
 			return setSCIMUserName(tx, identity, userName)
 		}
 		return nil
+	case attrName == "externalid":
+		externalID, ok := op.Value.(string)
+		if !ok {
+			return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
+		}
+		if identity := findSSOIdentity(user, providerType); identity != nil {
+			return setSCIMExternalID(tx, identity, externalID)
+		}
+		return nil
 	case attrName == "emails" && path.ValueExpression != nil && strings.ToLower(path.SubAttributeName()) == "value":
 		newEmail, ok := op.Value.(string)
 		if !ok {

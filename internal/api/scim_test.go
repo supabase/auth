@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -2757,7 +2758,7 @@ func (ts *SCIMTestSuite) TestSCIMFilterOr() {
 func (ts *SCIMTestSuite) TestSCIMFilterNot() {
 	ts.createFilterTestUsers()
 
-	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=not+userName+eq+%22user1%40acme.com%22", nil)
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=not+%28userName+eq+%22user1%40acme.com%22%29", nil)
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
@@ -2811,7 +2812,7 @@ func (ts *SCIMTestSuite) TestSCIMBodyExceedsMaxSize() {
 
 func (ts *SCIMTestSuite) TestSCIMFilterExceedsMaxLength() {
 	longFilter := "userName eq \"" + strings.Repeat("a", SCIMMaxFilterLength+1) + "\""
-	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter="+longFilter, nil)
+	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter="+url.QueryEscape(longFilter), nil)
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	ts.assertSCIMErrorWithType(w, http.StatusBadRequest, "invalidFilter")
