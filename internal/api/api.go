@@ -208,6 +208,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 			// SCIM-specific NotFound handler for proper error format
 			r.NotFound(api.scimNotFound)
+			r.MethodNotAllowed(api.scimMethodNotAllowed)
 
 			// Service Provider Configuration
 			r.Get("/ServiceProviderConfig", api.scimServiceProviderConfig)
