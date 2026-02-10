@@ -965,7 +965,7 @@ headers:
 
 body:
 {
-  "type": "signup" or "magiclink" or "recovery" or "invite",
+  "type": "signup" or "magiclink" or "recovery" or "invite" or "email_change_current" or "email_change_new",
   "email": "email@example.com",
   "password": "secret", // only if type = signup
   "data": {
@@ -1106,7 +1106,7 @@ Returns:
 
 ### **POST /verify**
 
-Verify a registration or a password recovery. Type can be `signup` or `recovery` or `invite`
+Verify a registration or a password recovery. Type can be `signup`, `recovery`, `invite`, `magiclink`, `email_change`, `sms`, or `phone_change`
 and the `token` is a token returned from either `/signup` or `/recover`.
 
 ```json
@@ -1126,7 +1126,7 @@ Returns:
   "token_type": "bearer",
   "expires_in": 3600,
   "refresh_token": "a-refresh-token",
-  "type": "signup | recovery | invite"
+  "type": "signup | recovery | invite | magiclink | email_change | sms | phone_change"
 }
 ```
 
@@ -1154,7 +1154,7 @@ Returns:
 
 ### **GET /verify**
 
-Verify a registration or a password recovery. Type can be `signup` or `recovery` or `magiclink` or `invite`
+Verify a registration or a password recovery. Type can be `signup`, `recovery`, `magiclink`, `invite`, or `email_change`
 and the `token` is a token returned from either `/signup` or `/recover` or `/magiclink`.
 
 query params:
