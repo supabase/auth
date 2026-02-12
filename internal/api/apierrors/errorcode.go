@@ -61,6 +61,7 @@ const (
 	ErrorCodeUserAlreadyExists                 ErrorCode = "user_already_exists"
 	ErrorCodeSSOProviderNotFound               ErrorCode = "sso_provider_not_found"
 	ErrorCodeSSOProviderDisabled               ErrorCode = "sso_provider_disabled"
+	ErrorCodeSCIMDisabled ErrorCode = "scim_disabled"
 	ErrorCodeSAMLMetadataFetchFailed           ErrorCode = "saml_metadata_fetch_failed"
 	ErrorCodeSAMLIdPAlreadyExists              ErrorCode = "saml_idp_already_exists"
 	ErrorCodeSSODomainAlreadyExists            ErrorCode = "sso_domain_already_exists"
