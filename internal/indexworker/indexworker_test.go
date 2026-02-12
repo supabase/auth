@@ -15,16 +15,18 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
 
 type IndexWorkerTestSuite struct {
 	suite.Suite
-	config    *conf.GlobalConfiguration
-	db        *storage.Connection
-	popDB     *pop.Connection
-	namespace string
-	logger    *logrus.Entry
+	config            *conf.GlobalConfiguration
+	db                *storage.Connection
+	popDB             *pop.Connection
+	namespace         string
+	logger            *logrus.Entry
+	maxUsersThreshold int64
 }
 
 func (ts *IndexWorkerTestSuite) SetupSuite() {
@@ -32,6 +34,7 @@ func (ts *IndexWorkerTestSuite) SetupSuite() {
 	config, err := conf.LoadGlobal("../../hack/test.env")
 	require.NoError(ts.T(), err)
 	ts.config = config
+	ts.maxUsersThreshold = config.IndexWorker.MaxUsersThreshold
 	ts.namespace = config.DB.Namespace
 	ts.logger = logrus.NewEntry(logrus.New())
 	ts.logger.Logger.SetLevel(logrus.DebugLevel)
@@ -69,8 +72,9 @@ func (ts *IndexWorkerTestSuite) TearDownSuite() {
 }
 
 func (ts *IndexWorkerTestSuite) SetupTest() {
-	// Clean up before each test
+	models.TruncateAll(ts.db)
 	ts.cleanupIndexes()
+	ts.config.IndexWorker.MaxUsersThreshold = ts.maxUsersThreshold
 }
 
 func (ts *IndexWorkerTestSuite) cleanupIndexes() {
@@ -280,6 +284,55 @@ func getIndexNames(indexes []struct {
 		names[i] = idx.name
 	}
 	return names
+}
+
+func (ts *IndexWorkerTestSuite) TestMaxUsersThresholdSkipsIndexCreation() {
+	ctx := context.Background()
+
+	// SetupTest already called TruncateAll, so the users table is empty.
+	// Insert test users so the approximate count exceeds the threshold.
+	for i := 0; i < 5; i++ {
+		insertQuery := fmt.Sprintf(
+			`INSERT INTO %q.users (instance_id, id, aud, role, email, encrypted_password, created_at, updated_at) VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', 'threshold_test_%d@example.com', '', now(), now())`,
+			ts.namespace, i,
+		)
+		require.NoError(ts.T(), ts.db.RawQuery(insertQuery).Exec())
+	}
+	// Update pg_class.reltuples so getApproximateUserCount reflects the inserts
+	analyzeQuery := fmt.Sprintf(`ANALYZE %q.users`, ts.namespace)
+	require.NoError(ts.T(), ts.db.RawQuery(analyzeQuery).Exec())
+
+	ts.config.IndexWorker.MaxUsersThreshold = 1
+
+	indexes := getUsersIndexes(ts.namespace)
+	existingIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), existingIndexes, "No indexes should exist before the test")
+
+	err = CreateIndexes(ctx, ts.config, ts.logger)
+	require.NoError(ts.T(), err)
+
+	existingIndexes, err = getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), existingIndexes, "No indexes should be created when user count exceeds threshold")
+}
+
+func (ts *IndexWorkerTestSuite) TestMaxUsersThresholdZeroCreatesIndexes() {
+	ctx := context.Background()
+
+	ts.config.IndexWorker.MaxUsersThreshold = 0
+
+	err := CreateIndexes(ctx, ts.config, ts.logger)
+	require.NoError(ts.T(), err)
+
+	indexes := getUsersIndexes(ts.namespace)
+	existingIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), len(indexes), len(existingIndexes), "All indexes should be created when threshold is 0 (no limit)")
+	for _, idx := range existingIndexes {
+		assert.True(ts.T(), idx.IsValid, "Index %s should be valid", idx.IndexName)
+		assert.True(ts.T(), idx.IsReady, "Index %s should be ready", idx.IndexName)
+	}
 }
 
 // TestCreateIndexesWithInvalidIndexes tests that CreateIndexes can recover from invalid indexes

@@ -1359,5 +1359,6 @@ func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
 
 // IndexWorkerConfiguration holds the configuration for database indexes.
 type IndexWorkerConfiguration struct {
-	EnsureUserSearchIndexesExist bool `json:"ensure_user_search_indexes_exist" split_words:"true" default:"false"`
+	EnsureUserSearchIndexesExist bool  `json:"ensure_user_search_indexes_exist" split_words:"true" default:"false"`
+	MaxUsersThreshold            int64 `json:"max_users_threshold" split_words:"true" default:"0"`
 }
