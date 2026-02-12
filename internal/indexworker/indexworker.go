@@ -147,14 +147,25 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 		}
 	}
 
-	userCount, err := getApproximateUserCount(db, config.DB.Namespace)
-	if err != nil {
-		le.WithError(err).Warn("Failed to get approximate user count, proceeding with index creation")
+	// When EnsureUserSearchIndexesExist is true, the user explicitly opted in, so we skip the threshold check entirely.
+	if !config.IndexWorker.EnsureUserSearchIndexesExist && config.IndexWorker.MaxUsersThreshold > 0 {
+		userCount, err := getApproximateUserCount(db, config.DB.Namespace)
+		if err != nil {
+			le.WithError(err).Warn("Failed to get approximate user count, proceeding with index creation")
+		}
+		if userCount > config.IndexWorker.MaxUsersThreshold {
+			le.WithFields(logrus.Fields{
+				"code":                "index_creation_skipped",
+				"user_count":          userCount,
+				"max_users_threshold": config.IndexWorker.MaxUsersThreshold,
+			}).Info("Skipping index creation because user count exceeds threshold")
+			return nil
+		}
+		le.WithFields(logrus.Fields{
+			"code":       "index_creation_starting",
+			"user_count": userCount,
+		}).Info("Starting index creation")
 	}
-	le.WithFields(logrus.Fields{
-		"code":       "index_creation_starting",
-		"user_count": userCount,
-	}).Info("Starting index creation")
 
 	// First, clean up any invalid indexes from previous interrupted attempts
 	dropInvalidIndexes(db, le, config.DB.Namespace, indexNames)
