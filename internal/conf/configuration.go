@@ -1053,28 +1053,28 @@ func populateGlobal(config *GlobalConfiguration) error {
 	}
 
 	if config.Sms.Provider != "" {
-		SMSTemplate := config.Sms.Template
-		if SMSTemplate == "" {
-			SMSTemplate = "Your code is {{ .Code }}"
-		}
-		template, err := template.New("").Parse(SMSTemplate)
-		if err != nil {
-			return err
-		}
-		config.Sms.SMSTemplate = template
-	}
+	SMSTemplate := strings.ReplaceAll(config.Sms.Template, "\\n", "\n")
+if SMSTemplate == "" {
+    SMSTemplate = "Your code is {{ .Code }}"
+}
+template, err := template.New("").Parse(SMSTemplate)
+if err != nil {
+    return err
+}
+config.Sms.SMSTemplate = template
 
-	if config.MFA.Phone.EnrollEnabled || config.MFA.Phone.VerifyEnabled {
-		smsTemplate := config.MFA.Phone.Template
-		if smsTemplate == "" {
-			smsTemplate = "Your code is {{ .Code }}"
-		}
-		template, err := template.New("").Parse(smsTemplate)
-		if err != nil {
-			return err
-		}
-		config.MFA.Phone.SMSTemplate = template
-	}
+if config.MFA.Phone.EnrollEnabled || config.MFA.Phone.VerifyEnabled {
+    smsTemplate := strings.ReplaceAll(config.MFA.Phone.Template, "\\n", "\n")
+    if smsTemplate == "" {
+        smsTemplate = "Your code is {{ .Code }}"
+    }
+    template, err := template.New("").Parse(smsTemplate)
+    if err != nil {
+        return err
+    }
+    config.MFA.Phone.SMSTemplate = template
+}
+
 
 	return nil
 }
