@@ -78,7 +78,7 @@ func (p *VerifyParams) Validate(r *http.Request, a *API) error {
 				}
 				p.TokenHash = crypto.GenerateTokenHash(p.Email, p.Token)
 			} else {
-				return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "When verifying with a token, you must provide either email address or phone number")
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "When verifying with a token, you must provide either an email address or a phone number")
 			}
 		} else if p.TokenHash != "" {
 			if p.Email != "" || p.Phone != "" || p.RedirectTo != "" {
