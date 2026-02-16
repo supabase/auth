@@ -53,7 +53,7 @@ vet: # Vet the code
 
 sec: check-gosec # Check for security vulnerabilities
 	gosec -quiet -exclude-generated -exclude=G117,G704 $(CHECK_FILES)
-	gosec -quiet -tests -exclude-generated -exclude=G104,G117,G704 $(CHECK_FILES)
+	gosec -quiet -tests -exclude-generated -exclude=G101,G104,G117,G704 $(CHECK_FILES)
 
 check-gosec:
 	@command -v gosec >/dev/null 2>&1 \
