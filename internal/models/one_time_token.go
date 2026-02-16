@@ -155,7 +155,7 @@ func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...On
 
 	switch len(tokenTypes) {
 	case 2:
-		query = query.Where("(token_type = ? or token_type = ?) and token_hash = ?", tokenTypes[0], tokenTypes[1], tokenHash)
+		query = query.Where("(token_type = ? or token_type = ?) and token_hash = ?", tokenTypes[0], tokenTypes[1], tokenHash) // #nosec G602
 
 	case 1:
 		query = query.Where("token_type = ? and token_hash = ?", tokenTypes[0], tokenHash)
