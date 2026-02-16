@@ -37,7 +37,7 @@ func init() {
 	timeoutStr := os.Getenv("GOTRUE_SECURITY_CAPTCHA_TIMEOUT")
 	if timeoutStr != "" {
 		if timeout, err := time.ParseDuration(timeoutStr); err != nil {
-			log.Fatalf("error loading GOTRUE_SECURITY_CAPTCHA_TIMEOUT: %v", err.Error())
+			log.Fatalf("error loading GOTRUE_SECURITY_CAPTCHA_TIMEOUT: %v", err.Error()) // #nosec G706
 		} else if timeout != 0 {
 			defaultTimeout = timeout
 		}

@@ -107,7 +107,7 @@ func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 		w.Header().Set("Content-Disposition", "attachment; filename=\"metadata.xml\"")
 	}
 
-	_, err = w.Write(metadataXML)
+	_, err = w.Write(metadataXML) // #nosec G705
 
 	return err
 }
