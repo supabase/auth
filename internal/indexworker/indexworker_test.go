@@ -15,16 +15,19 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
 
 type IndexWorkerTestSuite struct {
 	suite.Suite
-	config    *conf.GlobalConfiguration
-	db        *storage.Connection
-	popDB     *pop.Connection
-	namespace string
-	logger    *logrus.Entry
+	config                       *conf.GlobalConfiguration
+	db                           *storage.Connection
+	popDB                        *pop.Connection
+	namespace                    string
+	logger                       *logrus.Entry
+	maxUsersThreshold            int64
+	ensureUserSearchIndexesExist bool
 }
 
 func (ts *IndexWorkerTestSuite) SetupSuite() {
@@ -32,6 +35,8 @@ func (ts *IndexWorkerTestSuite) SetupSuite() {
 	config, err := conf.LoadGlobal("../../hack/test.env")
 	require.NoError(ts.T(), err)
 	ts.config = config
+	ts.maxUsersThreshold = config.IndexWorker.MaxUsersThreshold
+	ts.ensureUserSearchIndexesExist = config.IndexWorker.EnsureUserSearchIndexesExist
 	ts.namespace = config.DB.Namespace
 	ts.logger = logrus.NewEntry(logrus.New())
 	ts.logger.Logger.SetLevel(logrus.DebugLevel)
@@ -69,8 +74,10 @@ func (ts *IndexWorkerTestSuite) TearDownSuite() {
 }
 
 func (ts *IndexWorkerTestSuite) SetupTest() {
-	// Clean up before each test
+	models.TruncateAll(ts.db)
 	ts.cleanupIndexes()
+	ts.config.IndexWorker.MaxUsersThreshold = ts.maxUsersThreshold
+	ts.config.IndexWorker.EnsureUserSearchIndexesExist = ts.ensureUserSearchIndexesExist
 }
 
 func (ts *IndexWorkerTestSuite) cleanupIndexes() {
@@ -280,6 +287,96 @@ func getIndexNames(indexes []struct {
 		names[i] = idx.name
 	}
 	return names
+}
+
+// TestMaxUsersThresholdSkipsIndexCreation verifies when EnsureUserSearchIndexesExist=false and MaxUsersThreshold > 0,
+// index creation is skipped if user count exceeds the threshold.
+func (ts *IndexWorkerTestSuite) TestMaxUsersThresholdSkipsIndexCreation() {
+	ctx := context.Background()
+
+	// No explicit user opt-in - rely on threshold behavior
+	ts.config.IndexWorker.EnsureUserSearchIndexesExist = false
+
+	// SetupTest already called TruncateAll, so the users table is empty.
+	// Insert test users so the approximate count exceeds the threshold.
+	for i := 0; i < 5; i++ {
+		insertQuery := fmt.Sprintf(
+			`INSERT INTO %q.users (instance_id, id, aud, role, email, encrypted_password, created_at, updated_at) VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', 'threshold_test_%d@example.com', '', now(), now())`,
+			ts.namespace, i,
+		)
+		require.NoError(ts.T(), ts.db.RawQuery(insertQuery).Exec())
+	}
+	// Update pg_class.reltuples so getApproximateUserCount reflects the inserts
+	analyzeQuery := fmt.Sprintf(`ANALYZE %q.users`, ts.namespace)
+	require.NoError(ts.T(), ts.db.RawQuery(analyzeQuery).Exec())
+
+	ts.config.IndexWorker.MaxUsersThreshold = 1
+
+	indexes := getUsersIndexes(ts.namespace)
+	existingIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), existingIndexes, "No indexes should exist before the test")
+
+	err = CreateIndexes(ctx, ts.config, ts.logger)
+	require.NoError(ts.T(), err)
+
+	existingIndexes, err = getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), existingIndexes, "No indexes should be created when user count exceeds threshold")
+}
+
+// TestUserOptInAlwaysCreatesIndexes verifies that when EnsureUserSearchIndexesExist=true,
+// indexes are always created regardless of user count or threshold setting.
+func (ts *IndexWorkerTestSuite) TestUserOptInAlwaysCreatesIndexes() {
+	ctx := context.Background()
+
+	// Insert test users so there's a non-zero user count
+	for i := 0; i < 5; i++ {
+		insertQuery := fmt.Sprintf(
+			`INSERT INTO %q.users (instance_id, id, aud, role, email, encrypted_password, created_at, updated_at) VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', 'optin_test_%d@example.com', '', now(), now())`,
+			ts.namespace, i,
+		)
+		require.NoError(ts.T(), ts.db.RawQuery(insertQuery).Exec())
+	}
+	analyzeQuery := fmt.Sprintf(`ANALYZE %q.users`, ts.namespace)
+	require.NoError(ts.T(), ts.db.RawQuery(analyzeQuery).Exec())
+
+	// User opt-in with threshold set below user count — should still create indexes
+	ts.config.IndexWorker.EnsureUserSearchIndexesExist = true
+	ts.config.IndexWorker.MaxUsersThreshold = 1
+
+	err := CreateIndexes(ctx, ts.config, ts.logger)
+	require.NoError(ts.T(), err)
+
+	indexes := getUsersIndexes(ts.namespace)
+	existingIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), len(indexes), len(existingIndexes), "All indexes should be created when user opted in, even if over threshold")
+	for _, idx := range existingIndexes {
+		assert.True(ts.T(), idx.IsValid, "Index %s should be valid", idx.IndexName)
+		assert.True(ts.T(), idx.IsReady, "Index %s should be ready", idx.IndexName)
+	}
+}
+
+// TestUserOptInWithZeroThreshold verifies that EnsureUserSearchIndexesExist=true
+// with MaxUsersThreshold=0 (disabled) still creates indexes.
+func (ts *IndexWorkerTestSuite) TestUserOptInWithZeroThreshold() {
+	ctx := context.Background()
+
+	ts.config.IndexWorker.EnsureUserSearchIndexesExist = true
+	ts.config.IndexWorker.MaxUsersThreshold = 0
+
+	err := CreateIndexes(ctx, ts.config, ts.logger)
+	require.NoError(ts.T(), err)
+
+	indexes := getUsersIndexes(ts.namespace)
+	existingIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), len(indexes), len(existingIndexes), "All indexes should be created when user opted in with threshold disabled")
+	for _, idx := range existingIndexes {
+		assert.True(ts.T(), idx.IsValid, "Index %s should be valid", idx.IndexName)
+		assert.True(ts.T(), idx.IsReady, "Index %s should be ready", idx.IndexName)
+	}
 }
 
 // TestCreateIndexesWithInvalidIndexes tests that CreateIndexes can recover from invalid indexes

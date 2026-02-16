@@ -215,7 +215,7 @@ func (o *Worker) maybeCreateIndexes(
 	cfg *conf.GlobalConfiguration,
 	le *logrus.Entry,
 ) {
-	if cfg.IndexWorker.EnsureUserSearchIndexesExist {
+	if cfg.IndexWorker.EnsureUserSearchIndexesExist || cfg.IndexWorker.MaxUsersThreshold > 0 {
 		err := indexworker.CreateIndexes(ctx, cfg, le)
 		if err != nil && !errors.Is(err, indexworker.ErrAdvisoryLockAlreadyAcquired) {
 			le.WithError(err).Error("Failed to create indexes")
