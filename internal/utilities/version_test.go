@@ -2,14 +2,19 @@ package utilities
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric"
 )
 
-func TestInitVersionMetrics(t *testing.T) {
+func TestVersionInitVersionMetrics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
@@ -28,23 +33,55 @@ func TestInitVersionMetrics(t *testing.T) {
 		}
 	}
 
-	const ver = "rc2.187.3-rc.23-g33b87ae0"
+	const validVer = "rc2.187.3-rc.23-g33b87ae0"
 
 	{
-		vi, err := parseSemver(ver)
+		vi, err := parseSemver(validVer)
 		require.NoError(t, err)
 		check(vi)
 	}
 
 	{
-		err := initVersionMetrics(ctx, ver)
+		err := initVersionMetrics(ctx, validVer)
 		require.NoError(t, err)
+	}
+
+	{
+		err := initVersionMetrics(ctx, "invalid")
+		require.Error(t, err)
+		const exp = "initVersionMetrics: unable to parse version"
+		if got := err.Error(); !strings.Contains(got, exp) {
+			t.Fatalf("exp err %q to contain %q", got, exp)
+		}
+	}
+
+	{
+		max := strconv.AppendUint(nil, math.MaxUint64, 10)
+		ver := fmt.Sprintf("%v.%v.%s", 2, 187, max)
+		err := initVersionMetrics(ctx, ver)
+		require.Error(t, err)
+		if exp, got := "math.MaxInt64", err.Error(); !strings.Contains(got, exp) {
+			t.Fatalf("exp err %q to contain %q", got, exp)
+		}
+	}
+
+	{
+		sentinel := errors.New("otel-sentinel")
+		errFn := func(name string, options ...metric.Int64GaugeOption) (metric.Int64Gauge, error) {
+			return nil, sentinel
+		}
+
+		err := initGauge(ctx, "metric", 1, errFn)
+		require.Error(t, err)
+		if exp, got := sentinel.Error(), err.Error(); !strings.Contains(got, exp) {
+			t.Fatalf("exp err %q to contain %q", got, exp)
+		}
 	}
 
 	func() {
 		prev := Version
 		defer func() { Version = prev }()
-		Version = ver
+		Version = validVer
 
 		err := InitVersionMetrics(ctx)
 		require.NoError(t, err)
@@ -52,7 +89,7 @@ func TestInitVersionMetrics(t *testing.T) {
 
 }
 
-func TestParseSemver(t *testing.T) {
+func TestVersionParseSemver(t *testing.T) {
 	cases := []struct {
 		str, err          string
 		maj, min, pat, rc uint64
@@ -115,6 +152,9 @@ func TestParseSemver(t *testing.T) {
 		{str: "2.165.1-rc.1", maj: 2, min: 165, pat: 1, rc: 1},
 		{str: "2.165.1-rc1", maj: 2, min: 165, pat: 1, rc: 1},
 
+		{str: "2.165.1-rc.1.5", maj: 2, min: 165, pat: 1, rc: 1},
+		{str: "2.165.1-rc1.5", maj: 2, min: 165, pat: 1, rc: 1},
+
 		{str: "", err: "Invalid Semantic Version"},
 		{str: "abc", err: "Invalid Semantic Version"},
 	}
@@ -144,7 +184,7 @@ func TestParseSemver(t *testing.T) {
 				t.Fatal("exp non-nil err")
 			}
 			if exp, got := tc.err, err.Error(); !strings.Contains(got, exp) {
-				t.Fatalf("exp ")
+				t.Fatalf("exp err %q to contain %q", got, exp)
 			}
 			continue
 		}

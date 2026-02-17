@@ -23,37 +23,55 @@ func InitVersionMetrics(ctx context.Context) error {
 func initVersionMetrics(ctx context.Context, ver string) error {
 	vi, err := parseSemver(ver)
 	if err != nil {
-		vi = &versionInfo{}
+		const msg = "initVersionMetrics: unable to parse version %q: %w"
+		return fmt.Errorf(msg, ver, err)
 	}
 
 	if err := initMetrics(ctx, vi); err != nil {
-		return err
+		const msg = "initVersionMetrics: unable to initialize version %q: %w"
+		return fmt.Errorf(msg, ver, err)
 	}
 	return nil
 }
 
-func initGauge(ctx context.Context, typ string, val uint64) error {
+func initGauge(
+	ctx context.Context,
+	typ string,
+	val uint64,
+	gaugeFunc initGaugeFunc,
+) error {
 	name := fmt.Sprintf("global_auth_version_%v", typ)
 	desc := fmt.Sprintf("Set to this auth servers %v version number.", typ)
 
-	g, err := otel.Meter("gotrue").Int64Gauge(name, metric.WithDescription(desc))
+	g, err := gaugeFunc(name, metric.WithDescription(desc))
 	if err != nil {
-		return err
+		const msg = "initGauge: part %q (%v) otel error: %w"
+		return fmt.Errorf(msg, typ, val, err)
 	}
 	if val > math.MaxInt64 {
-		return errors.New("value is > math.MaxInt64")
+		const msg = "initGauge: part %q (%v) value > math.MaxInt64"
+		return fmt.Errorf(msg, typ, val)
 	}
 
 	g.Record(ctx, int64(val))
 	return nil
 }
 
+type initGaugeFunc func(
+	name string,
+	options ...metric.Int64GaugeOption,
+) (metric.Int64Gauge, error)
+
+func initGaugeOtel(name string, options ...metric.Int64GaugeOption) (metric.Int64Gauge, error) {
+	return otel.Meter("gotrue").Int64Gauge(name, options...)
+}
+
 func initMetrics(ctx context.Context, vi *versionInfo) error {
 	return errors.Join(
-		initGauge(ctx, "major", vi.Major),
-		initGauge(ctx, "minor", vi.Minor),
-		initGauge(ctx, "patch", vi.Patch),
-		initGauge(ctx, "rc", vi.RC),
+		initGauge(ctx, "major", vi.Major, initGaugeOtel),
+		initGauge(ctx, "minor", vi.Minor, initGaugeOtel),
+		initGauge(ctx, "patch", vi.Patch, initGaugeOtel),
+		initGauge(ctx, "rc", vi.RC, initGaugeOtel),
 	)
 }
 
