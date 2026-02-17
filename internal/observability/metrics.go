@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
@@ -195,6 +196,9 @@ func ConfigureMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
 		if err != nil {
 			logrus.WithError(err).Error("unable to get gotrue.gotrue_running gague metric")
 			return
+		}
+		if err = utilities.InitVersionMetrics(ctx); err != nil {
+			logrus.WithError(err).Error("unable to configure version metrics")
 		}
 	})
 
