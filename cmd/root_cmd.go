@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 var (
@@ -51,11 +50,6 @@ func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
 
 	if err := observability.ConfigureMetrics(ctx, &config.Metrics); err != nil {
 		logrus.WithError(err).Error("unable to configure metrics")
-	}
-
-	// Must be done after metrics are enabled.
-	if config.Metrics.Enabled {
-		utilities.InitVersionMetrics(ctx)
 	}
 
 	if err := observability.ConfigureProfiler(ctx, &config.Profiler); err != nil {
