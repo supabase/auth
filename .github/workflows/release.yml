@@ -6,6 +6,7 @@ on:
     branches:
       - master
       - release/*
+      - cs/test-release-please
 
 permissions:
   contents: write
