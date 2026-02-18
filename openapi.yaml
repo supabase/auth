@@ -2354,7 +2354,7 @@ paths:
                     name: "full_name"
                 authorization_params:
                   type: object
-                  description: Additional authorization request parameters as key-value string pairs (cannot override reserved OAuth parameters)
+                  description: Additional authorization request parameters as string key-value pairs (cannot override reserved OAuth parameters)
                   additionalProperties:
                     type: string
                   example:
@@ -2563,7 +2563,7 @@ paths:
                   additionalProperties: true
                 authorization_params:
                   type: object
-                  description: Additional authorization request parameters as key-value string pairs
+                  description: Additional authorization request parameters as string key-value pairs
                   additionalProperties:
                     type: string
                 enabled:
@@ -3759,7 +3759,7 @@ components:
             name: "full_name"
         authorization_params:
           type: object
-          description: Additional parameters to include in authorization requests as key-value string pairs (cannot override reserved OAuth parameters)
+          description: Additional parameters to include in authorization requests as string key-value pairs (cannot override reserved OAuth parameters)
           additionalProperties:
             type: string
           example:

@@ -17,7 +17,7 @@ type CustomOAuthProvider struct {
 	pkceEnabled         bool
 	acceptableClientIDs []string
 	attributeMapping    map[string]interface{}
-	authorizationParams map[string]string
+	authorizationParams map[string]interface{}
 }
 
 // NewCustomOAuthProvider creates a new custom OAuth provider
@@ -26,8 +26,7 @@ func NewCustomOAuthProvider(
 	scopes []string,
 	pkceEnabled bool,
 	acceptableClientIDs []string,
-	attributeMapping map[string]interface{},
-	authorizationParams map[string]string,
+	attributeMapping, authorizationParams map[string]interface{},
 ) *CustomOAuthProvider {
 	config := &oauth2.Config{
 		ClientID:     clientID,
@@ -52,9 +51,11 @@ func NewCustomOAuthProvider(
 
 // AuthCodeURL returns the authorization URL for the OAuth flow
 func (p *CustomOAuthProvider) AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string {
-	// Add any additional authorization parameters
+	// Add any additional authorization parameters (values are validated as strings at the API layer)
 	for key, value := range p.authorizationParams {
-		opts = append(opts, oauth2.SetAuthURLParam(key, value))
+		if s, ok := value.(string); ok {
+			opts = append(opts, oauth2.SetAuthURLParam(key, s))
+		}
 	}
 
 	return p.config.AuthCodeURL(state, opts...)
@@ -106,7 +107,7 @@ type CustomOIDCProvider struct {
 	pkceEnabled         bool
 	acceptableClientIDs []string
 	attributeMapping    map[string]interface{}
-	authorizationParams map[string]string
+	authorizationParams map[string]interface{}
 }
 
 // NewCustomOIDCProvider creates a new custom OIDC provider
@@ -117,8 +118,7 @@ func NewCustomOIDCProvider(
 	issuer string,
 	pkceEnabled bool,
 	acceptableClientIDs []string,
-	attributeMapping map[string]interface{},
-	authorizationParams map[string]string,
+	attributeMapping, authorizationParams map[string]interface{},
 ) (*CustomOIDCProvider, error) {
 	// Ensure 'openid' scope is always present for OIDC
 	hasOpenID := false
@@ -163,9 +163,11 @@ func NewCustomOIDCProvider(
 
 // AuthCodeURL returns the authorization URL for the OIDC flow
 func (p *CustomOIDCProvider) AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string {
-	// Add any additional authorization parameters
+	// Add any additional authorization parameters (values are validated as strings at the API layer)
 	for key, value := range p.authorizationParams {
-		opts = append(opts, oauth2.SetAuthURLParam(key, value))
+		if s, ok := value.(string); ok {
+			opts = append(opts, oauth2.SetAuthURLParam(key, s))
+		}
 	}
 
 	return p.config.AuthCodeURL(state, opts...)

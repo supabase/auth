@@ -52,7 +52,7 @@ type AdminCustomOAuthProviderParams struct {
 	Scopes              []string               `json:"scopes"`
 	PKCEEnabled         *bool                  `json:"pkce_enabled,omitempty"`
 	AttributeMapping    map[string]interface{} `json:"attribute_mapping,omitempty"`
-	AuthorizationParams map[string]string `json:"authorization_params,omitempty"`
+	AuthorizationParams map[string]interface{} `json:"authorization_params,omitempty"`
 	Enabled             *bool                  `json:"enabled,omitempty"`
 	EmailOptional       *bool                  `json:"email_optional,omitempty"`
 
@@ -442,7 +442,7 @@ func buildProviderFromParams(params *AdminCustomOAuthProviderParams, providerTyp
 		Scopes:              popslices.String(params.Scopes),
 		PKCEEnabled:         getBoolOrDefault(params.PKCEEnabled, true),
 		AttributeMapping:    popslices.Map(params.AttributeMapping),
-		AuthorizationParams: stringMapToSlicesMap(params.AuthorizationParams),
+		AuthorizationParams: popslices.Map(params.AuthorizationParams),
 		Enabled:             getBoolOrDefault(params.Enabled, true),
 		EmailOptional:       getBoolOrDefault(params.EmailOptional, false),
 	}
@@ -517,7 +517,7 @@ func updateProviderFromParams(provider *models.CustomOAuthProvider, params *Admi
 		provider.AttributeMapping = popslices.Map(params.AttributeMapping)
 	}
 	if params.AuthorizationParams != nil {
-		provider.AuthorizationParams = stringMapToSlicesMap(params.AuthorizationParams)
+		provider.AuthorizationParams = popslices.Map(params.AuthorizationParams)
 	}
 	if params.Enabled != nil {
 		provider.Enabled = *params.Enabled
@@ -582,7 +582,7 @@ func getBoolOrDefault(value *bool, defaultValue bool) bool {
 }
 
 // validateAuthorizationParams ensures no reserved OAuth parameters are overridden
-func validateAuthorizationParams(params map[string]string) error {
+func validateAuthorizationParams(params map[string]interface{}) error {
 	if params == nil {
 		return nil
 	}
@@ -601,11 +601,17 @@ func validateAuthorizationParams(params map[string]string) error {
 		"nonce", // We control nonce generation for security
 	}
 
-	for key := range params {
+	for key, value := range params {
 		if slices.Contains(reservedParams, key) {
 			return apierrors.NewBadRequestError(
 				apierrors.ErrorCodeValidationFailed,
 				"Cannot override reserved OAuth parameter: %s", key,
+			)
+		}
+		if _, ok := value.(string); !ok {
+			return apierrors.NewBadRequestError(
+				apierrors.ErrorCodeValidationFailed,
+				"Authorization parameter %q must be a string", key,
 			)
 		}
 	}
@@ -649,29 +655,3 @@ func validateAttributeMapping(mapping map[string]interface{}) error {
 	return nil
 }
 
-// stringMapToSlicesMap converts map[string]string to popslices.Map for DB storage.
-func stringMapToSlicesMap(m map[string]string) popslices.Map {
-	if m == nil {
-		return nil
-	}
-	result := make(popslices.Map, len(m))
-	for k, v := range m {
-		result[k] = v
-	}
-	return result
-}
-
-// slicesMapToStringMap converts popslices.Map to map[string]string.
-// Non-string values are skipped (should not occur if validated on input).
-func slicesMapToStringMap(m popslices.Map) map[string]string {
-	if m == nil {
-		return nil
-	}
-	result := make(map[string]string, len(m))
-	for k, v := range m {
-		if s, ok := v.(string); ok {
-			result[k] = s
-		}
-	}
-	return result
-}

@@ -26,7 +26,7 @@ func TestNewCustomOAuthProvider(t *testing.T) {
 		map[string]interface{}{
 			"email": "user_email",
 		},
-		map[string]string{
+		map[string]interface{}{
 			"prompt": "consent",
 		},
 	)
@@ -58,7 +58,7 @@ func TestCustomOAuthProvider_AuthCodeURL(t *testing.T) {
 			false,
 			nil,
 			nil,
-			map[string]string{
+			map[string]interface{}{
 				"prompt":       "consent",
 				"access_type":  "offline",
 				"custom_param": "custom_value",
@@ -277,7 +277,7 @@ func TestNewCustomOIDCProvider(t *testing.T) {
 		true, // PKCE enabled
 		[]string{"ios-client", "android-client"},
 		map[string]interface{}{"email": "user_email"},
-		map[string]string{"prompt": "consent"},
+		map[string]interface{}{"prompt": "consent"},
 	)
 
 	require.NoError(t, err)
@@ -405,7 +405,7 @@ func TestCustomOIDCProvider_AuthCodeURL(t *testing.T) {
 		false,
 		nil,
 		nil,
-		map[string]string{
+		map[string]interface{}{
 			"prompt":     "consent",
 			"max_age":    "3600",
 			"ui_locales": "en",
