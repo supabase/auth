@@ -1,4 +1,4 @@
-package utilities
+package version
 
 import (
 	"context"
@@ -42,12 +42,12 @@ func TestVersionInitVersionMetrics(t *testing.T) {
 	}
 
 	{
-		err := initVersionMetrics(ctx, validVer)
+		err := InitVersionMetrics(ctx, validVer)
 		require.NoError(t, err)
 	}
 
 	{
-		err := initVersionMetrics(ctx, "invalid")
+		err := InitVersionMetrics(ctx, "invalid")
 		require.Error(t, err)
 		const exp = "initVersionMetrics: unable to parse version"
 		if got := err.Error(); !strings.Contains(got, exp) {
@@ -58,7 +58,7 @@ func TestVersionInitVersionMetrics(t *testing.T) {
 	{
 		max := strconv.AppendUint(nil, math.MaxUint64, 10)
 		ver := fmt.Sprintf("%v.%v.%s", 2, 187, max)
-		err := initVersionMetrics(ctx, ver)
+		err := InitVersionMetrics(ctx, ver)
 		require.Error(t, err)
 		if exp, got := "math.MaxInt64", err.Error(); !strings.Contains(got, exp) {
 			t.Fatalf("exp err %q to contain %q", got, exp)
@@ -77,16 +77,6 @@ func TestVersionInitVersionMetrics(t *testing.T) {
 			t.Fatalf("exp err %q to contain %q", got, exp)
 		}
 	}
-
-	func() {
-		prev := Version
-		defer func() { Version = prev }()
-		Version = validVer
-
-		err := InitVersionMetrics(ctx)
-		require.NoError(t, err)
-	}()
-
 }
 
 func TestVersionParseSemver(t *testing.T) {
