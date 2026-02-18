@@ -215,34 +215,7 @@ func (p *CustomOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token)
 			SkipAccessTokenCheck: true, // We don't need at_hash validation in callback flow
 		})
 		if err != nil {
-			// If ID token verification fails, fall back to userinfo endpoint
-			if p.userinfoEndpoint != "" {
-				var claims Claims
-				if err := makeRequest(ctx, tok, p.config, p.userinfoEndpoint, &claims); err != nil {
-					return nil, fmt.Errorf("failed to verify ID token and fetch userinfo: %w", err)
-				}
-
-				// Apply attribute mapping
-				if len(p.attributeMapping) > 0 {
-					claims = applyAttributeMapping(claims, p.attributeMapping)
-				}
-
-				// Extract emails
-				emails := []Email{}
-				if claims.Email != "" {
-					emails = append(emails, Email{
-						Email:    claims.Email,
-						Verified: claims.EmailVerified,
-						Primary:  true,
-					})
-				}
-
-				return &UserProvidedData{
-					Emails:   emails,
-					Metadata: &claims,
-				}, nil
-			}
-			return nil, fmt.Errorf("failed to verify ID token and no userinfo endpoint available: %w", err)
+			return nil, fmt.Errorf("failed to verify ID token: %w", err)
 		}
 
 		// Validate audience claim against acceptable client IDs
