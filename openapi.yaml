@@ -648,6 +648,13 @@ paths:
                 $ref: "#/components/schemas/UserSchema"
     put:
       summary: Update certain properties of the current user account.
+      description: |
+            **Important:**
+            If the user has MFA enabled (TOTP or SMS), this endpoint requires
+            an Authenticator Assurance Level (AAL) of 2.
+            Sessions obtained from password recovery links are AAL1 by default
+            and will be rejected when attempting to update email or password
+            unless MFA verification is completed.
       tags:
         - user
       security:
@@ -687,6 +694,11 @@ paths:
                 $ref: "#/components/schemas/UserSchema"
         400:
           $ref: "#/components/responses/BadRequestResponse"
+        401:
+          description: |
+              Unauthorized.
+              A session with Authenticator Assurance Level 2 (AAL2) is required
+              to update email or password when MFA is enabled.
         429:
           $ref: "#/components/responses/RateLimitResponse"
 
