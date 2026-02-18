@@ -75,6 +75,10 @@ func check(e *Error) error {
 
 	httpCode := e.HTTPCode
 	if httpCode == 0 {
+		// TODO(cstockton): this really should be a BadRequest as default and
+		// the returned code should be bounded to 4XX codes, ideally specific
+		// 4xx codes.
+		// if httpCode/100 == 4 { httpCode = http.StatusBadRequest }
 		httpCode = http.StatusInternalServerError
 	}
 

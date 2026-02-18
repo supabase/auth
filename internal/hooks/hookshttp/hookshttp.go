@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks/hookserrors"
 	"github.com/supabase/auth/internal/observability"
 
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
@@ -225,6 +226,10 @@ func (o *Dispatcher) runHTTPHook(
 					)
 				}
 			}
+			if err := hookserrors.Check(body); err != nil {
+				return nil, err
+			}
+
 			return body, nil
 		case http.StatusTooManyRequests, http.StatusServiceUnavailable:
 			retryAfterHeader := rsp.Header.Get("retry-after")
