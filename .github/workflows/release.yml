@@ -37,16 +37,16 @@ jobs:
 
       - name: Release Please (normal)
         if: ${{ github.event_name == 'push' }}
-        id: release
+        id: release_push
         uses: googleapis/release-please-action@v4
         with:
           release-type: go
           target-branch: ${{ github.ref_name }}
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Release Please test
+      - name: Release Please (test mode)
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        id: release
+        id: release_test
         uses: googleapis/release-please-action@v4
         with:
           release-type: go
@@ -54,6 +54,38 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           skip-github-pull-request: true
           skip-github-release: true
+
+      - name: Select release-please outputs
+        id: release
+        run: |
+          set -e
+
+          # Pick which step to read outputs from
+          if [ "${{ github.event_name }}" = "push" ]; then
+            RELEASE_CREATED='${{ steps.release_push.outputs.release_created }}'
+            PRS_CREATED='${{ steps.release_push.outputs.prs_created }}'
+            PR='${{ steps.release_push.outputs.pr }}'
+            PRS='${{ steps.release_push.outputs.prs }}'
+            MAJOR='${{ steps.release_push.outputs.major }}'
+            MINOR='${{ steps.release_push.outputs.minor }}'
+            PATCH='${{ steps.release_push.outputs.patch }}'
+          else
+            RELEASE_CREATED='${{ steps.release_test.outputs.release_created }}'
+            PRS_CREATED='${{ steps.release_test.outputs.prs_created }}'
+            PR='${{ steps.release_test.outputs.pr }}'
+            PRS='${{ steps.release_test.outputs.prs }}'
+            MAJOR='${{ steps.release_test.outputs.major }}'
+            MINOR='${{ steps.release_test.outputs.minor }}'
+            PATCH='${{ steps.release_test.outputs.patch }}'
+          fi
+
+          echo "release_created=$RELEASE_CREATED" >> "$GITHUB_OUTPUT"
+          echo "prs_created=$PRS_CREATED" >> "$GITHUB_OUTPUT"
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
+          echo "prs=$PRS" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+          echo "minor=$MINOR" >> "$GITHUB_OUTPUT"
+          echo "patch=$PATCH" >> "$GITHUB_OUTPUT"
 
       - name: Dump release-please outputs
         run: |
