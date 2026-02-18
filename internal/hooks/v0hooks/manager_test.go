@@ -256,14 +256,16 @@ func TestHooks(t *testing.T) {
 			},
 			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
 			res: &BeforeUserCreatedOutput{},
-			exp: &BeforeUserCreatedOutput{Decision: "reject"},
 			sql: `
 				create or replace function
 					v0hooks_test_before_user_created_reject(input jsonb)
 				returns json as $$
 				begin
-					return '{"decision": "reject"}'::jsonb;
+					return '{"error": {"message": "custom error"}}'::jsonb;
 				end; $$ language plpgsql;`,
+
+			// TODO(cstockton): These really should be 400 errors
+			errStr: "500: custom error",
 		},
 
 		{
@@ -278,14 +280,14 @@ func TestHooks(t *testing.T) {
 			},
 			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
 			res: &BeforeUserCreatedOutput{},
-			exp: &BeforeUserCreatedOutput{Decision: "reject", Message: "test case"},
 			sql: `
 				create or replace function
 					v0hooks_test_before_user_created_reject_msg(input jsonb)
 				returns json as $$
 				begin
-					return '{"decision": "reject", "message": "test case"}'::jsonb;
+					return '{"error": {"message": "custom error", "http_code": 403}}'::jsonb;
 				end; $$ language plpgsql;`,
+			errStr: "403: custom error",
 		},
 
 		{

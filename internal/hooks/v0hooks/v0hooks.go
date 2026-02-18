@@ -70,8 +70,6 @@ func NewBeforeUserCreatedInput(
 }
 
 type BeforeUserCreatedOutput struct {
-	Decision string `json:"decision"`
-	Message  string `json:"message"`
 }
 
 type AfterUserCreatedInput struct {
