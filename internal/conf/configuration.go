@@ -351,11 +351,16 @@ type GlobalConfiguration struct {
 	Sessions        SessionsConfiguration    `json:"sessions"`
 	MFA             MFAConfiguration         `json:"MFA"`
 	SAML            SAMLConfiguration        `json:"saml"`
+	SCIM            SCIMConfiguration        `json:"scim"`
 	CORS            CORSConfiguration        `json:"cors"`
 	IndexWorker     IndexWorkerConfiguration `json:"index_worker" split_words:"true"`
 
 	Experimental ExperimentalConfiguration `json:"experimental"`
 	Reloading    ReloadingConfiguration    `json:"reloading"`
+}
+
+type SCIMConfiguration struct {
+	Enabled bool `json:"enabled" default:"false"`
 }
 
 type CORSConfiguration struct {

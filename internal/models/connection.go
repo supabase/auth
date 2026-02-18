@@ -50,6 +50,8 @@ func TruncateAll(conn *storage.Connection) error {
 			(&pop.Model{Value: FlowState{}}).TableName(),
 			(&pop.Model{Value: OneTimeToken{}}).TableName(),
 			(&pop.Model{Value: OAuthServerClient{}}).TableName(),
+			(&pop.Model{Value: SCIMGroup{}}).TableName(),
+			(&pop.Model{Value: SCIMGroupMember{}}).TableName(),
 		}
 
 		for _, tableName := range tables {
