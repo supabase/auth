@@ -12,6 +12,9 @@ type Pagination struct {
 }
 
 func (p *Pagination) Offset() uint64 {
+	if p == nil || p.Page == 0 {
+		return 0
+	}
 	return (p.Page - 1) * p.PerPage
 }
 
@@ -53,7 +56,8 @@ func TruncateAll(conn *storage.Connection) error {
 		}
 
 		for _, tableName := range tables {
-			if err := tx.RawQuery("DELETE FROM " + tableName + " CASCADE").Exec(); err != nil {
+			// Use TRUNCATE TABLE ... CASCADE for test teardown to remove dependent rows as well.
+			if err := tx.RawQuery("TRUNCATE TABLE " + tableName + " CASCADE").Exec(); err != nil {
 				return err
 			}
 		}
