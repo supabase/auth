@@ -828,7 +828,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 			customProvider.PKCEEnabled,
 			customProvider.AcceptableClientIDs,
 			customProvider.AttributeMapping,
-			customProvider.AuthorizationParams,
+			slicesMapToStringMap(customProvider.AuthorizationParams),
 		)
 
 		// Build provider configuration
@@ -861,7 +861,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		customProvider.PKCEEnabled,
 		customProvider.AcceptableClientIDs,
 		customProvider.AttributeMapping,
-		customProvider.AuthorizationParams,
+		slicesMapToStringMap(customProvider.AuthorizationParams),
 	)
 	if err != nil {
 		return nil, pConfig, fmt.Errorf("error creating OIDC provider: %w", err)

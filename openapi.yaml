@@ -2354,8 +2354,9 @@ paths:
                     name: "full_name"
                 authorization_params:
                   type: object
-                  description: Additional authorization request parameters (cannot override reserved OAuth parameters)
-                  additionalProperties: true
+                  description: Additional authorization request parameters as key-value string pairs (cannot override reserved OAuth parameters)
+                  additionalProperties:
+                    type: string
                   example:
                     prompt: "consent"
                 enabled:
@@ -2562,8 +2563,9 @@ paths:
                   additionalProperties: true
                 authorization_params:
                   type: object
-                  description: Additional authorization request parameters
-                  additionalProperties: true
+                  description: Additional authorization request parameters as key-value string pairs
+                  additionalProperties:
+                    type: string
                 enabled:
                   type: boolean
                   description: Whether the provider is enabled
@@ -3757,8 +3759,9 @@ components:
             name: "full_name"
         authorization_params:
           type: object
-          description: Additional parameters to include in authorization requests (cannot override reserved OAuth parameters)
-          additionalProperties: true
+          description: Additional parameters to include in authorization requests as key-value string pairs (cannot override reserved OAuth parameters)
+          additionalProperties:
+            type: string
           example:
             prompt: "consent"
         enabled:

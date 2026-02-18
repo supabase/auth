@@ -26,7 +26,7 @@ func TestNewCustomOAuthProvider(t *testing.T) {
 		map[string]interface{}{
 			"email": "user_email",
 		},
-		map[string]interface{}{
+		map[string]string{
 			"prompt": "consent",
 		},
 	)
@@ -58,7 +58,7 @@ func TestCustomOAuthProvider_AuthCodeURL(t *testing.T) {
 			false,
 			nil,
 			nil,
-			map[string]interface{}{
+			map[string]string{
 				"prompt":       "consent",
 				"access_type":  "offline",
 				"custom_param": "custom_value",
@@ -76,30 +76,6 @@ func TestCustomOAuthProvider_AuthCodeURL(t *testing.T) {
 		assert.Contains(t, authURL, "custom_param=custom_value")
 	})
 
-	t.Run("Auth URL with complex authorization params (JSON serialization)", func(t *testing.T) {
-		provider := NewCustomOAuthProvider(
-			"client-id",
-			"client-secret",
-			"https://example.com/authorize",
-			"https://example.com/token",
-			"https://example.com/userinfo",
-			"https://myapp.com/callback",
-			[]string{"openid"},
-			false,
-			nil,
-			nil,
-			map[string]interface{}{
-				"complex_param": map[string]interface{}{
-					"key": "value",
-				},
-			},
-		)
-
-		authURL := provider.AuthCodeURL("test-state")
-
-		// Complex params should be JSON serialized
-		assert.Contains(t, authURL, "complex_param=")
-	})
 }
 
 func TestCustomOAuthProvider_GetUserData(t *testing.T) {
@@ -301,7 +277,7 @@ func TestNewCustomOIDCProvider(t *testing.T) {
 		true, // PKCE enabled
 		[]string{"ios-client", "android-client"},
 		map[string]interface{}{"email": "user_email"},
-		map[string]interface{}{"prompt": "consent"},
+		map[string]string{"prompt": "consent"},
 	)
 
 	require.NoError(t, err)
@@ -429,11 +405,11 @@ func TestCustomOIDCProvider_AuthCodeURL(t *testing.T) {
 		false,
 		nil,
 		nil,
-		map[string]interface{}{
-			"prompt":      "consent",
-			"max_age":     "3600",
-			"ui_locales":  "en",
-			"login_hint":  "user@example.com",
+		map[string]string{
+			"prompt":     "consent",
+			"max_age":    "3600",
+			"ui_locales": "en",
+			"login_hint": "user@example.com",
 		},
 	)
 

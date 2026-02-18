@@ -235,10 +235,9 @@ func (ts *CustomOAuthProviderTestSuite) TestAttributeMappingSerialization() {
 
 func (ts *CustomOAuthProviderTestSuite) TestAuthorizationParamsSerialization() {
 	params := slices.Map{
-		"prompt":        "consent",
-		"access_type":   "offline",
-		"custom_param":  "value",
-		"complex_param": []string{"val1", "val2"},
+		"prompt":       "consent",
+		"access_type":  "offline",
+		"custom_param": "value",
 	}
 
 	provider := &CustomOAuthProvider{
