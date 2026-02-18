@@ -777,14 +777,10 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	// Build the redirect URL
 	redirectURL := config.API.ExternalURL + "/callback"
 
-	// Parse scopes
+	// Parse scopes (space-separated per RFC 6749)
 	var scopeList []string
 	if scopes != "" {
-		scopeList = strings.Split(scopes, ",")
-		// Trim whitespace
-		for i := range scopeList {
-			scopeList[i] = strings.TrimSpace(scopeList[i])
-		}
+		scopeList = strings.Fields(scopes)
 	}
 
 	// Find the custom provider by identifier (which now includes 'custom:' prefix)
