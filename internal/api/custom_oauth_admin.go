@@ -111,9 +111,8 @@ func (a *API) adminCustomOAuthProviderGet(w http.ResponseWriter, r *http.Request
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier is required")
 	}
 
-	// Validate identifier starts with 'custom:' prefix
 	if !strings.HasPrefix(identifier, "custom:") {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier must start with 'custom:' prefix")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier must start with 'custom:' prefix, e.g. 'custom:%s'", identifier)
 	}
 
 	observability.LogEntrySetField(r, "identifier", identifier)
@@ -242,9 +241,8 @@ func (a *API) adminCustomOAuthProviderUpdate(w http.ResponseWriter, r *http.Requ
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier is required")
 	}
 
-	// Validate identifier starts with 'custom:' prefix
 	if !strings.HasPrefix(identifier, "custom:") {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier must start with 'custom:' prefix")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier must start with 'custom:' prefix, e.g. 'custom:%s'", identifier)
 	}
 
 	observability.LogEntrySetField(r, "identifier", identifier)
@@ -318,9 +316,8 @@ func (a *API) adminCustomOAuthProviderDelete(w http.ResponseWriter, r *http.Requ
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier is required")
 	}
 
-	// Validate identifier starts with 'custom:' prefix
 	if !strings.HasPrefix(identifier, "custom:") {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier must start with 'custom:' prefix")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier must start with 'custom:' prefix, e.g. 'custom:%s'", identifier)
 	}
 
 	observability.LogEntrySetField(r, "identifier", identifier)
@@ -358,7 +355,6 @@ func validateProviderParams(params *AdminCustomOAuthProviderParams, providerType
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier is required")
 	}
 
-	// Require identifier to start with 'custom:' prefix
 	if !strings.HasPrefix(params.Identifier, "custom:") {
 		return apierrors.NewBadRequestError(
 			apierrors.ErrorCodeValidationFailed,
