@@ -4,10 +4,9 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
-	"strings"
 	"time"
 
+	"github.com/gobuffalo/pop/v6/slices"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/conf"
@@ -29,30 +28,15 @@ type CustomOAuthProvider struct {
 	ProviderType ProviderType `db:"provider_type" json:"provider_type"`
 
 	// Common fields for both OAuth2 and OIDC
-	Identifier string `db:"identifier" json:"identifier"`
-	Name       string `db:"name" json:"name"`
-	ClientID   string `db:"client_id" json:"client_id"`
-	// TODO: Implement client_secret encryption
-	//
-	// Current state: Client secrets are stored as plaintext in the database.
-	//
-	// Security concern: OAuth client secrets are sensitive credentials that should be
-	// encrypted at rest. If the database is compromised, attackers could use these
-	// secrets to impersonate the auth server to external OAuth providers.
-	//
-	// What's needed:
-	// 1. Choose encryption approach:
-	//    - Application-level encryption using a master key (stored in env/secrets manager)
-	//    - Database-level encryption (PostgreSQL pgcrypto extension)
-	// 2. Implement encryption when storing (CreateCustomOAuthProvider, UpdateCustomOAuthProvider)
-	// 3. Implement decryption when retrieving (all Find* functions)
-	// 4. Consider key rotation strategy
-	ClientSecret        string                   `db:"client_secret" json:"-"` // Never expose in JSON
-	AcceptableClientIDs StringSlice              `db:"acceptable_client_ids" json:"acceptable_client_ids"`
-	Scopes              StringSlice              `db:"scopes" json:"scopes"`
+	Identifier          string                   `db:"identifier" json:"identifier"`
+	Name                string                   `db:"name" json:"name"`
+	ClientID            string                   `db:"client_id" json:"client_id"`
+	ClientSecret        string                   `db:"client_secret" json:"-"` // Encrypted via EncryptedString, never expose in JSON
+	AcceptableClientIDs slices.String             `db:"acceptable_client_ids" json:"acceptable_client_ids"`
+	Scopes              slices.String             `db:"scopes" json:"scopes"`
 	PKCEEnabled         bool                     `db:"pkce_enabled" json:"pkce_enabled"`
-	AttributeMapping    OAuthAttributeMapping    `db:"attribute_mapping" json:"attribute_mapping"`
-	AuthorizationParams OAuthAuthorizationParams `db:"authorization_params" json:"authorization_params"`
+	AttributeMapping    slices.Map `db:"attribute_mapping" json:"attribute_mapping"`
+	AuthorizationParams slices.Map `db:"authorization_params" json:"authorization_params"`
 	Enabled             bool                     `db:"enabled" json:"enabled"`
 	EmailOptional       bool                     `db:"email_optional" json:"email_optional"`
 
@@ -60,7 +44,7 @@ type CustomOAuthProvider struct {
 	Issuer            *string        `db:"issuer" json:"issuer,omitempty"`
 	DiscoveryURL      *string        `db:"discovery_url" json:"discovery_url,omitempty"`
 	SkipNonceCheck    bool           `db:"skip_nonce_check" json:"skip_nonce_check"`
-	CachedDiscovery   *OIDCDiscovery `db:"cached_discovery" json:"-"` // Internal caching, not exposed in API
+	CachedDiscovery   *OIDCDiscovery `db:"cached_discovery" json:"-"`    // Internal caching, not exposed in API
 	DiscoveryCachedAt *time.Time     `db:"discovery_cached_at" json:"-"` // Internal caching, not exposed in API
 
 	// OAuth2-specific fields (null for OIDC providers)
@@ -86,10 +70,6 @@ func (p *CustomOAuthProvider) SetClientSecret(secret string, dbEncryption conf.D
 		// Fallback: store in plaintext when encryption is not enabled.
 		p.ClientSecret = secret
 		return nil
-	}
-
-	if dbEncryption.EncryptionKeyID == "" || dbEncryption.EncryptionKey == "" {
-		return errors.New("database encryption key configuration is invalid")
 	}
 
 	es, err := crypto.NewEncryptedString(p.ID.String(), []byte(secret), dbEncryption.EncryptionKeyID, dbEncryption.EncryptionKey)
@@ -155,129 +135,6 @@ func (p *CustomOAuthProvider) GetDiscoveryURL() string {
 	}
 
 	return *p.Issuer + "/.well-known/openid-configuration"
-}
-
-// StringSlice handles JSON-encoded string arrays stored as jsonb
-type StringSlice []string
-
-func (s *StringSlice) Scan(src interface{}) error {
-	if src == nil {
-		*s = []string{}
-		return nil
-	}
-
-	var b []byte
-	switch v := src.(type) {
-	case []byte:
-		b = v
-	case string:
-		b = []byte(v)
-	default:
-		return fmt.Errorf("cannot scan %T into StringSlice", src)
-	}
-
-	// Handle empty/null JSON values
-	b = []byte(strings.TrimSpace(string(b)))
-	if len(b) == 0 || string(b) == "null" || string(b) == "[]" {
-		*s = []string{}
-		return nil
-	}
-
-	var tmp []string
-	if err := json.Unmarshal(b, &tmp); err != nil {
-		return errors.Wrap(err, "error unmarshaling StringSlice")
-	}
-
-	*s = StringSlice(tmp)
-	return nil
-}
-
-func (s StringSlice) Value() (driver.Value, error) {
-	if len(s) == 0 {
-		return []byte("[]"), nil
-	}
-
-	b, err := json.Marshal([]string(s))
-	if err != nil {
-		return nil, errors.Wrap(err, "error marshaling StringSlice")
-	}
-	return b, nil
-}
-
-// OAuthAttributeMapping defines how to map provider attributes to user fields
-type OAuthAttributeMapping map[string]interface{}
-
-func (m *OAuthAttributeMapping) Scan(src interface{}) error {
-	if src == nil {
-		*m = make(OAuthAttributeMapping)
-		return nil
-	}
-
-	b, ok := src.([]byte)
-	if !ok {
-		str, ok := src.(string)
-		if !ok {
-			return errors.New("scan source was not []byte or string")
-		}
-		b = []byte(str)
-	}
-
-	if err := json.Unmarshal(b, m); err != nil {
-		return errors.Wrap(err, "error unmarshaling attribute mapping")
-	}
-
-	return nil
-}
-
-func (m OAuthAttributeMapping) Value() (driver.Value, error) {
-	if m == nil {
-		return []byte("{}"), nil
-	}
-
-	b, err := json.Marshal(m)
-	if err != nil {
-		return nil, errors.Wrap(err, "error marshaling attribute mapping")
-	}
-
-	return b, nil
-}
-
-// OAuthAuthorizationParams holds additional parameters for authorization requests
-type OAuthAuthorizationParams map[string]interface{}
-
-func (p *OAuthAuthorizationParams) Scan(src interface{}) error {
-	if src == nil {
-		*p = make(OAuthAuthorizationParams)
-		return nil
-	}
-
-	b, ok := src.([]byte)
-	if !ok {
-		str, ok := src.(string)
-		if !ok {
-			return errors.New("scan source was not []byte or string")
-		}
-		b = []byte(str)
-	}
-
-	if err := json.Unmarshal(b, p); err != nil {
-		return errors.Wrap(err, "error unmarshaling authorization params")
-	}
-
-	return nil
-}
-
-func (p OAuthAuthorizationParams) Value() (driver.Value, error) {
-	if p == nil {
-		return []byte("{}"), nil
-	}
-
-	b, err := json.Marshal(p)
-	if err != nil {
-		return nil, errors.Wrap(err, "error marshaling authorization params")
-	}
-
-	return b, nil
 }
 
 // OIDCDiscovery represents cached OIDC discovery document
@@ -402,6 +259,14 @@ func CreateCustomOAuthProvider(tx *storage.Connection, provider *CustomOAuthProv
 			return errors.Wrap(err, "error generating custom OAuth provider ID")
 		}
 		provider.ID = id
+	}
+
+	// Ensure text[] fields are never nil (Postgres NOT NULL constraint)
+	if provider.Scopes == nil {
+		provider.Scopes = slices.String{}
+	}
+	if provider.AcceptableClientIDs == nil {
+		provider.AcceptableClientIDs = slices.String{}
 	}
 
 	if err := tx.Create(provider); err != nil {

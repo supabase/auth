@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	popslices "github.com/gobuffalo/pop/v6/slices"
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
@@ -65,10 +67,6 @@ type AdminCustomOAuthProviderParams struct {
 	UserinfoURL      string  `json:"userinfo_url,omitempty"`
 	JwksURI          *string `json:"jwks_uri,omitempty"`
 }
-
-// ===================================
-// Provider Admin Endpoints
-// ===================================
 
 // adminCustomOAuthProvidersList returns all custom OAuth/OIDC providers
 func (a *API) adminCustomOAuthProvidersList(w http.ResponseWriter, r *http.Request) error {
@@ -353,10 +351,6 @@ func (a *API) adminCustomOAuthProviderDelete(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
-// ===================================
-// Helper Functions
-// ===================================
-
 // validateProviderParams validates type-specific required fields
 func validateProviderParams(params *AdminCustomOAuthProviderParams, providerType models.ProviderType) error {
 	// Common validations
@@ -364,26 +358,12 @@ func validateProviderParams(params *AdminCustomOAuthProviderParams, providerType
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier is required")
 	}
 
-	// Ensure identifier starts with 'custom:' prefix
+	// Require identifier to start with 'custom:' prefix
 	if !strings.HasPrefix(params.Identifier, "custom:") {
-		params.Identifier = "custom:" + params.Identifier
-	}
-
-	// Check for reserved provider names (built-in OAuth providers)
-	// These are already handled by Supabase Auth and shouldn't be overridden with custom providers
-	reservedProviderNames := []string{
-		"apple", "azure", "bitbucket", "discord", "facebook", "figma", "fly", "github", "gitlab",
-		"google", "kakao", "keycloak", "linkedin_oidc", "linkedin", "notion", "slack_oidc",
-		"slack", "spotify", "twitch", "twitter", "workos", "x", "zoom",
-	}
-
-	// Extract the base identifier without the "custom:" prefix for checking
-	baseIdentifier := strings.TrimPrefix(params.Identifier, "custom:")
-	if slices.Contains(reservedProviderNames, strings.ToLower(baseIdentifier)) {
 		return apierrors.NewBadRequestError(
 			apierrors.ErrorCodeValidationFailed,
-			"Cannot use reserved provider name: %s. This provider is already built into Supabase Auth.",
-			baseIdentifier,
+			"identifier must start with 'custom:' prefix, e.g. 'custom:%s'",
+			params.Identifier,
 		)
 	}
 
@@ -450,16 +430,19 @@ func validateProviderURLs(params *AdminCustomOAuthProviderParams, providerType m
 
 // buildProviderFromParams creates a provider model from params
 func buildProviderFromParams(params *AdminCustomOAuthProviderParams, providerType models.ProviderType) *models.CustomOAuthProvider {
+	// Generate ID upfront so it's available for client secret encryption (used as AAD)
+	id, _ := uuid.NewV4()
 	provider := &models.CustomOAuthProvider{
+		ID:                  id,
 		ProviderType:        providerType,
 		Identifier:          params.Identifier,
 		Name:                params.Name,
 		ClientID:            params.ClientID,
-		AcceptableClientIDs: models.StringSlice(params.AcceptableClientIDs),
-		Scopes:              models.StringSlice(params.Scopes),
+		AcceptableClientIDs: popslices.String(params.AcceptableClientIDs),
+		Scopes:              popslices.String(params.Scopes),
 		PKCEEnabled:         getBoolOrDefault(params.PKCEEnabled, true),
-		AttributeMapping:    models.OAuthAttributeMapping(params.AttributeMapping),
-		AuthorizationParams: models.OAuthAuthorizationParams(params.AuthorizationParams),
+		AttributeMapping:    popslices.Map(params.AttributeMapping),
+		AuthorizationParams: popslices.Map(params.AuthorizationParams),
 		Enabled:             getBoolOrDefault(params.Enabled, true),
 		EmailOptional:       getBoolOrDefault(params.EmailOptional, false),
 	}
@@ -479,7 +462,7 @@ func buildProviderFromParams(params *AdminCustomOAuthProviderParams, providerTyp
 			}
 		}
 		if !hasOpenID {
-			provider.Scopes = append(models.StringSlice{"openid"}, provider.Scopes...)
+			provider.Scopes = append(popslices.String{"openid"}, provider.Scopes...)
 		}
 	} else if providerType == models.ProviderTypeOAuth2 {
 		provider.AuthorizationURL = &params.AuthorizationURL
@@ -490,10 +473,10 @@ func buildProviderFromParams(params *AdminCustomOAuthProviderParams, providerTyp
 
 	// Initialize empty maps if nil
 	if provider.AttributeMapping == nil {
-		provider.AttributeMapping = make(models.OAuthAttributeMapping)
+		provider.AttributeMapping = make(popslices.Map)
 	}
 	if provider.AuthorizationParams == nil {
-		provider.AuthorizationParams = make(models.OAuthAuthorizationParams)
+		provider.AuthorizationParams = make(popslices.Map)
 	}
 
 	return provider
@@ -509,10 +492,10 @@ func updateProviderFromParams(provider *models.CustomOAuthProvider, params *Admi
 		provider.ClientID = params.ClientID
 	}
 	if params.AcceptableClientIDs != nil {
-		provider.AcceptableClientIDs = models.StringSlice(params.AcceptableClientIDs)
+		provider.AcceptableClientIDs = popslices.String(params.AcceptableClientIDs)
 	}
 	if params.Scopes != nil {
-		provider.Scopes = models.StringSlice(params.Scopes)
+		provider.Scopes = popslices.String(params.Scopes)
 		// Ensure openid scope for OIDC
 		if provider.IsOIDC() {
 			hasOpenID := false
@@ -523,7 +506,7 @@ func updateProviderFromParams(provider *models.CustomOAuthProvider, params *Admi
 				}
 			}
 			if !hasOpenID {
-				provider.Scopes = append(models.StringSlice{"openid"}, provider.Scopes...)
+				provider.Scopes = append(popslices.String{"openid"}, provider.Scopes...)
 			}
 		}
 	}
@@ -531,10 +514,10 @@ func updateProviderFromParams(provider *models.CustomOAuthProvider, params *Admi
 		provider.PKCEEnabled = *params.PKCEEnabled
 	}
 	if params.AttributeMapping != nil {
-		provider.AttributeMapping = models.OAuthAttributeMapping(params.AttributeMapping)
+		provider.AttributeMapping = popslices.Map(params.AttributeMapping)
 	}
 	if params.AuthorizationParams != nil {
-		provider.AuthorizationParams = models.OAuthAuthorizationParams(params.AuthorizationParams)
+		provider.AuthorizationParams = popslices.Map(params.AuthorizationParams)
 	}
 	if params.Enabled != nil {
 		provider.Enabled = *params.Enabled

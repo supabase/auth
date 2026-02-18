@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	popslices "github.com/gobuffalo/pop/v6/slices"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,7 +71,7 @@ func (ts *CustomOAuthAdminTestSuite) SetupTest() {
 func (ts *CustomOAuthAdminTestSuite) TestCreateOAuth2Provider() {
 	payload := map[string]interface{}{
 		"provider_type":     "oauth2",
-		"identifier":        "github-enterprise",
+		"identifier":        "custom:github-enterprise",
 		"name":              "GitHub Enterprise",
 		"client_id":         "test-client-id",
 		"client_secret":     "test-client-secret",
@@ -97,7 +98,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateOAuth2Provider() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&provider))
 
 	assert.Equal(ts.T(), models.ProviderTypeOAuth2, provider.ProviderType)
-	assert.Equal(ts.T(), "custom:github-enterprise", provider.Identifier) // Prefix added
+	assert.Equal(ts.T(), "custom:github-enterprise", provider.Identifier)
 	assert.Equal(ts.T(), "GitHub Enterprise", provider.Name)
 	assert.True(ts.T(), provider.PKCEEnabled)
 	assert.True(ts.T(), provider.Enabled)
@@ -109,7 +110,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateOAuth2Provider() {
 func (ts *CustomOAuthAdminTestSuite) TestCreateOIDCProvider() {
 	payload := map[string]interface{}{
 		"provider_type": "oidc",
-		"identifier":    "self-keycloak",
+		"identifier":    "custom:self-keycloak",
 		"name":          "Keycloak",
 		"client_id":     "test-client-id",
 		"client_secret": "test-client-secret",
@@ -152,7 +153,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 		{
 			name: "Missing provider_type",
 			payload: map[string]interface{}{
-				"identifier":    "test",
+				"identifier":    "custom:test",
 				"name":          "Test",
 				"client_id":     "id",
 				"client_secret": "secret",
@@ -164,7 +165,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 			name: "Invalid provider_type",
 			payload: map[string]interface{}{
 				"provider_type": "invalid",
-				"identifier":    "test",
+				"identifier":    "custom:test",
 				"name":          "Test",
 				"client_id":     "id",
 				"client_secret": "secret",
@@ -176,7 +177,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 			name: "Missing OAuth2 required fields",
 			payload: map[string]interface{}{
 				"provider_type": "oauth2",
-				"identifier":    "test",
+				"identifier":    "custom:test",
 				"name":          "Test",
 				"client_id":     "id",
 				"client_secret": "secret",
@@ -189,7 +190,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 			name: "Missing OIDC issuer",
 			payload: map[string]interface{}{
 				"provider_type": "oidc",
-				"identifier":    "test",
+				"identifier":    "custom:test",
 				"name":          "Test",
 				"client_id":     "id",
 				"client_secret": "secret",
@@ -199,11 +200,11 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 			errMsg:     "issuer is required",
 		},
 		{
-			name: "Reserved provider name",
+			name: "Missing custom: prefix",
 			payload: map[string]interface{}{
 				"provider_type":     "oauth2",
-				"identifier":        "google",
-				"name":              "Google",
+				"identifier":        "my-provider",
+				"name":              "My Provider",
 				"client_id":         "id",
 				"client_secret":     "secret",
 				"authorization_url": "https://example.com/authorize",
@@ -211,12 +212,13 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 				"userinfo_url":      "https://example.com/userinfo",
 			},
 			wantStatus: http.StatusBadRequest,
+			errMsg:     "must start with 'custom:' prefix",
 		},
 		{
 			name: "HTTP URL not allowed",
 			payload: map[string]interface{}{
 				"provider_type":     "oauth2",
-				"identifier":        "test",
+				"identifier":        "custom:test",
 				"name":              "Test",
 				"client_id":         "id",
 				"client_secret":     "secret",
@@ -231,7 +233,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 			name: "Localhost blocked (SSRF)",
 			payload: map[string]interface{}{
 				"provider_type":     "oauth2",
-				"identifier":        "test",
+				"identifier":        "custom:test",
 				"name":              "Test",
 				"client_id":         "id",
 				"client_secret":     "secret",
@@ -246,7 +248,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 			name: "Private IP blocked (SSRF)",
 			payload: map[string]interface{}{
 				"provider_type":     "oauth2",
-				"identifier":        "test",
+				"identifier":        "custom:test",
 				"name":              "Test",
 				"client_id":         "id",
 				"client_secret":     "secret",
@@ -261,7 +263,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 			name: "Reserved OAuth param (client_id)",
 			payload: map[string]interface{}{
 				"provider_type":     "oauth2",
-				"identifier":        "test",
+				"identifier":        "custom:test",
 				"name":              "Test",
 				"client_id":         "id",
 				"client_secret":     "secret",
@@ -279,7 +281,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 			name: "Reserved OAuth param (state)",
 			payload: map[string]interface{}{
 				"provider_type":     "oauth2",
-				"identifier":        "test",
+				"identifier":        "custom:test",
 				"name":              "Test",
 				"client_id":         "id",
 				"client_secret":     "secret",
@@ -297,7 +299,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 			name: "Protected system field in attribute mapping (id)",
 			payload: map[string]interface{}{
 				"provider_type":     "oauth2",
-				"identifier":        "test",
+				"identifier":        "custom:test",
 				"name":              "Test",
 				"client_id":         "id",
 				"client_secret":     "secret",
@@ -315,7 +317,7 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
 			name: "Protected system field in attribute mapping (role)",
 			payload: map[string]interface{}{
 				"provider_type":     "oauth2",
-				"identifier":        "test",
+				"identifier":        "custom:test",
 				"name":              "Test",
 				"client_id":         "id",
 				"client_secret":     "secret",
@@ -406,26 +408,19 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderDuplicateIdentifier() {
 	assert.Contains(ts.T(), apiErr.Message, "identifier")
 }
 
-func (ts *CustomOAuthAdminTestSuite) TestCreateProviderDuplicateIdentifierWithCustomPrefix() {
-	// Test that identifier normalization works correctly
-	// User provides "custom:test" and we should still detect duplicates
-	identifier := "custom:duplicate-prefix-test"
-
-	// Create first provider with explicit custom: prefix
-	payload1 := ts.createTestOAuth2Payload(identifier)
-	w := ts.createProvider(payload1, http.StatusCreated)
-	require.Equal(ts.T(), http.StatusCreated, w.Code)
-
-	// Try to create another provider with the same identifier (without prefix)
-	payload2 := ts.createTestOAuth2Payload("duplicate-prefix-test")
-	w = ts.createProvider(payload2, http.StatusBadRequest)
+func (ts *CustomOAuthAdminTestSuite) TestCreateProviderWithoutCustomPrefix() {
+	// Test that identifiers without "custom:" prefix are rejected with a helpful error
+	payload := ts.createTestOAuth2Payload("my-provider")
+	// Override the identifier to not have the custom: prefix
+	payload["identifier"] = "my-provider"
+	w := ts.createProvider(payload, http.StatusBadRequest)
 
 	require.Equal(ts.T(), http.StatusBadRequest, w.Code)
 
 	var apiErr apierrors.HTTPError
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&apiErr))
-	assert.Equal(ts.T(), apierrors.ErrorCodeConflict, apiErr.ErrorCode)
-	assert.Contains(ts.T(), apiErr.Message, "already exists")
+	assert.Contains(ts.T(), apiErr.Message, "must start with 'custom:' prefix")
+	assert.Contains(ts.T(), apiErr.Message, "custom:my-provider")
 }
 
 // Test GET /admin/custom-providers (List)
@@ -555,7 +550,7 @@ func (ts *CustomOAuthAdminTestSuite) TestUpdateProvider() {
 	assert.Equal(ts.T(), "Updated Name", updated.Name)
 	assert.Equal(ts.T(), "new-client-id", updated.ClientID)
 	assert.False(ts.T(), updated.Enabled)
-	assert.Equal(ts.T(), models.StringSlice{"openid", "profile", "email"}, updated.Scopes)
+	assert.Equal(ts.T(), popslices.String{"openid", "profile", "email"}, updated.Scopes)
 }
 
 // Test DELETE /admin/custom-providers/:id (Delete)
@@ -590,6 +585,9 @@ func (ts *CustomOAuthAdminTestSuite) TestDeleteProvider() {
 // Helper methods
 
 func (ts *CustomOAuthAdminTestSuite) createTestOAuth2Payload(identifier string) map[string]interface{} {
+	if !strings.HasPrefix(identifier, "custom:") {
+		identifier = "custom:" + identifier
+	}
 	return map[string]interface{}{
 		"provider_type":     "oauth2",
 		"identifier":        identifier,
@@ -606,6 +604,9 @@ func (ts *CustomOAuthAdminTestSuite) createTestOAuth2Payload(identifier string) 
 }
 
 func (ts *CustomOAuthAdminTestSuite) createTestOIDCPayload(identifier, issuer string) map[string]interface{} {
+	if !strings.HasPrefix(identifier, "custom:") {
+		identifier = "custom:" + identifier
+	}
 	// If issuer is not provided or uses non-resolvable domain, use example.com
 	if issuer == "" || strings.Contains(issuer, "oidc1.example.com") || strings.Contains(issuer, "oidc2.example.com") {
 		issuer = "https://example.com/realms/" + identifier

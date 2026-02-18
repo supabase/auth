@@ -14,8 +14,8 @@ create table if not exists {{ index .Options "Namespace" }}.custom_oauth_provide
     client_id text not null,
     client_secret text not null, -- Encrypted at application level
     -- Store JSON-encoded string slices in jsonb columns
-    acceptable_client_ids jsonb not null default '[]'::jsonb, -- Additional client IDs for multi-platform apps
-    scopes jsonb not null default '[]'::jsonb,
+    acceptable_client_ids text[] not null default '{}', -- Additional client IDs for multi-platform apps
+    scopes text[] not null default '{}',
     pkce_enabled boolean not null default true,
     attribute_mapping jsonb not null default '{}',
     authorization_params jsonb not null default '{}',
@@ -62,14 +62,23 @@ create table if not exists {{ index .Options "Namespace" }}.custom_oauth_provide
             userinfo_url is not null
         )
     ),
+    constraint custom_oauth_providers_authorization_url_https check (
+        authorization_url is null or authorization_url like 'https://%'
+    ),
+    constraint custom_oauth_providers_token_url_https check (
+        token_url is null or token_url like 'https://%'
+    ),
+    constraint custom_oauth_providers_userinfo_url_https check (
+        userinfo_url is null or userinfo_url like 'https://%'
+    ),
+    constraint custom_oauth_providers_jwks_uri_https check (
+        jwks_uri is null or jwks_uri like 'https://%'
+    ),
 
     -- Format and length constraints
     -- Identifier must be alphanumeric with optional hyphens (no leading/trailing hyphens)
     constraint custom_oauth_providers_identifier_format check (
         identifier ~ '^[a-z0-9][a-z0-9:-]{0,48}[a-z0-9]$'
-    ),
-    constraint custom_oauth_providers_identifier_length check (
-        char_length(identifier) >= 1 and char_length(identifier) <= 50
     ),
     constraint custom_oauth_providers_name_length check (
         char_length(name) >= 1 and char_length(name) <= 100

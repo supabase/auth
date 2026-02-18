@@ -3,6 +3,7 @@ package models
 import (
 	"testing"
 
+	"github.com/gobuffalo/pop/v6/slices"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,7 +137,7 @@ func (ts *CustomOAuthProviderTestSuite) TestUpdateCustomOAuthProvider() {
 	// Update name
 	provider.Name = "Updated Name"
 	provider.ClientID = "new-client-id"
-	provider.Scopes = StringSlice{"openid", "profile", "email"}
+	provider.Scopes = slices.String{"openid", "profile", "email"}
 
 	err := UpdateCustomOAuthProvider(ts.db, provider)
 	require.NoError(ts.T(), err)
@@ -146,7 +147,7 @@ func (ts *CustomOAuthProviderTestSuite) TestUpdateCustomOAuthProvider() {
 	require.NoError(ts.T(), err)
 	assert.Equal(ts.T(), "Updated Name", updated.Name)
 	assert.Equal(ts.T(), "new-client-id", updated.ClientID)
-	assert.Equal(ts.T(), StringSlice{"openid", "profile", "email"}, updated.Scopes)
+	assert.Equal(ts.T(), slices.String{"openid", "profile", "email"}, updated.Scopes)
 }
 
 func (ts *CustomOAuthProviderTestSuite) TestDeleteCustomOAuthProvider() {
@@ -163,14 +164,14 @@ func (ts *CustomOAuthProviderTestSuite) TestDeleteCustomOAuthProvider() {
 
 // Test Custom Types
 
-func (ts *CustomOAuthProviderTestSuite) TestStringSliceSerialisation() {
+func (ts *CustomOAuthProviderTestSuite) TestStringSliceSerialization() {
 	provider := &CustomOAuthProvider{
 		ProviderType:        ProviderTypeOAuth2,
 		Identifier:          "custom:string-slice-test",
 		Name:                "String Slice Test",
 		ClientID:            "client-id",
-		Scopes:              StringSlice{"openid", "profile", "email"},
-		AcceptableClientIDs: StringSlice{"ios-client", "android-client", "web-client"},
+		Scopes:              slices.String{"openid", "profile", "email"},
+		AcceptableClientIDs: slices.String{"ios-client", "android-client", "web-client"},
 		AuthorizationURL:    stringPtr("https://example.com/authorize"),
 		TokenURL:            stringPtr("https://example.com/token"),
 		UserinfoURL:         stringPtr("https://example.com/userinfo"),
@@ -184,11 +185,11 @@ func (ts *CustomOAuthProviderTestSuite) TestStringSliceSerialisation() {
 	// Retrieve and verify
 	found, err := FindCustomOAuthProviderByID(ts.db, provider.ID)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), StringSlice{"openid", "profile", "email"}, found.Scopes)
-	assert.Equal(ts.T(), StringSlice{"ios-client", "android-client", "web-client"}, found.AcceptableClientIDs)
+	assert.Equal(ts.T(), slices.String{"openid", "profile", "email"}, found.Scopes)
+	assert.Equal(ts.T(), slices.String{"ios-client", "android-client", "web-client"}, found.AcceptableClientIDs)
 
 	// Test empty slice
-	provider.Scopes = StringSlice{}
+	provider.Scopes = slices.String{}
 	err = UpdateCustomOAuthProvider(ts.db, provider)
 	require.NoError(ts.T(), err)
 
@@ -197,8 +198,8 @@ func (ts *CustomOAuthProviderTestSuite) TestStringSliceSerialisation() {
 	assert.Empty(ts.T(), found.Scopes)
 }
 
-func (ts *CustomOAuthProviderTestSuite) TestOAuthAttributeMappingSerialization() {
-	mapping := OAuthAttributeMapping{
+func (ts *CustomOAuthProviderTestSuite) TestAttributeMappingSerialization() {
+	mapping := slices.Map{
 		"email":      "user_email",
 		"name":       "full_name",
 		"avatar_url": "picture",
@@ -232,8 +233,8 @@ func (ts *CustomOAuthProviderTestSuite) TestOAuthAttributeMappingSerialization()
 	assert.NotNil(ts.T(), found.AttributeMapping["custom_field"])
 }
 
-func (ts *CustomOAuthProviderTestSuite) TestOAuthAuthorizationParamsSerialization() {
-	params := OAuthAuthorizationParams{
+func (ts *CustomOAuthProviderTestSuite) TestAuthorizationParamsSerialization() {
+	params := slices.Map{
 		"prompt":        "consent",
 		"access_type":   "offline",
 		"custom_param":  "value",
@@ -364,6 +365,92 @@ func (ts *CustomOAuthProviderTestSuite) TestGetDiscoveryURL() {
 	assert.Empty(ts.T(), oauth2Provider.GetDiscoveryURL())
 }
 
+// Test Client Secret Encryption/Decryption
+
+func (ts *CustomOAuthProviderTestSuite) TestSetClientSecretEncrypts() {
+	provider := &CustomOAuthProvider{
+		ProviderType:     ProviderTypeOAuth2,
+		Identifier:       "custom:encrypt-test",
+		Name:             "Encrypt Test",
+		ClientID:         "client-id",
+		AuthorizationURL: stringPtr("https://example.com/authorize"),
+		TokenURL:         stringPtr("https://example.com/token"),
+		UserinfoURL:      stringPtr("https://example.com/userinfo"),
+		PKCEEnabled:      true,
+		Enabled:          true,
+	}
+
+	secret := "my-super-secret-client-secret"
+	err := provider.SetClientSecret(secret, ts.config.Security.DBEncryption)
+	require.NoError(ts.T(), err)
+
+	// The stored value should NOT be the plaintext secret
+	assert.NotEqual(ts.T(), secret, provider.ClientSecret)
+	assert.NotEmpty(ts.T(), provider.ClientSecret)
+}
+
+func (ts *CustomOAuthProviderTestSuite) TestGetClientSecretDecrypts() {
+	provider := &CustomOAuthProvider{
+		ProviderType:     ProviderTypeOAuth2,
+		Identifier:       "custom:decrypt-test",
+		Name:             "Decrypt Test",
+		ClientID:         "client-id",
+		AuthorizationURL: stringPtr("https://example.com/authorize"),
+		TokenURL:         stringPtr("https://example.com/token"),
+		UserinfoURL:      stringPtr("https://example.com/userinfo"),
+		PKCEEnabled:      true,
+		Enabled:          true,
+	}
+
+	secret := "my-super-secret-client-secret"
+	err := provider.SetClientSecret(secret, ts.config.Security.DBEncryption)
+	require.NoError(ts.T(), err)
+
+	// Decrypt and verify we get the original secret back
+	decrypted, err := provider.GetClientSecret(ts.config.Security.DBEncryption)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), secret, decrypted)
+}
+
+func (ts *CustomOAuthProviderTestSuite) TestClientSecretRoundTripThroughDB() {
+	secret := "my-super-secret-client-secret"
+
+	// Generate ID upfront so encryption AAD matches what's stored in DB
+	id, err := uuid.NewV4()
+	require.NoError(ts.T(), err)
+
+	provider := &CustomOAuthProvider{
+		ID:               id,
+		ProviderType:     ProviderTypeOAuth2,
+		Identifier:       "custom:roundtrip-test",
+		Name:             "Roundtrip Test",
+		ClientID:         "client-id",
+		AuthorizationURL: stringPtr("https://example.com/authorize"),
+		TokenURL:         stringPtr("https://example.com/token"),
+		UserinfoURL:      stringPtr("https://example.com/userinfo"),
+		PKCEEnabled:      true,
+		Enabled:          true,
+	}
+
+	err = provider.SetClientSecret(secret, ts.config.Security.DBEncryption)
+	require.NoError(ts.T(), err)
+
+	err = CreateCustomOAuthProvider(ts.db, provider)
+	require.NoError(ts.T(), err)
+
+	// Retrieve from DB and decrypt
+	found, err := FindCustomOAuthProviderByID(ts.db, provider.ID)
+	require.NoError(ts.T(), err)
+
+	// Raw value in DB should be encrypted, not plaintext
+	assert.NotEqual(ts.T(), secret, found.ClientSecret)
+
+	// Decrypted value should match original
+	decrypted, err := found.GetClientSecret(ts.config.Security.DBEncryption)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), secret, decrypted)
+}
+
 // Helper functions
 
 func (ts *CustomOAuthProviderTestSuite) createTestProvider(providerType ProviderType, identifier string) *CustomOAuthProvider {
@@ -372,7 +459,7 @@ func (ts *CustomOAuthProviderTestSuite) createTestProvider(providerType Provider
 		Identifier:   identifier,
 		Name:         "Test Provider",
 		ClientID:     "test-client-id",
-		Scopes:       StringSlice{"openid", "profile"},
+		Scopes:       slices.String{"openid", "profile"},
 		PKCEEnabled:  true,
 		Enabled:      true,
 	}
@@ -408,7 +495,7 @@ func (ts *CustomOAuthProviderTestSuite) createTestOIDCProvider(identifier, issue
 		Name:         "Test OIDC Provider",
 		ClientID:     "test-client-id",
 		Issuer:       &issuer,
-		Scopes:       StringSlice{"openid", "profile"},
+		Scopes:       slices.String{"openid", "profile"},
 		PKCEEnabled:  true,
 		Enabled:      true,
 	}
