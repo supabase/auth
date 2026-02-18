@@ -679,6 +679,9 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 
 	// Check if this is a custom provider (format: custom:identifier)
 	if strings.HasPrefix(name, "custom:") {
+		if !config.CustomOAuth.Enabled {
+			return nil, conf.OAuthProviderConfiguration{}, fmt.Errorf("custom OAuth providers are disabled")
+		}
 		return a.loadCustomProvider(ctx, db, name, scopes)
 	}
 

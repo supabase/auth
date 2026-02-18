@@ -124,6 +124,9 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Snapchat.ClientID...)
 
 	case strings.HasPrefix(p.Provider, "custom:"):
+		if !config.CustomOAuth.Enabled {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Custom OAuth providers are disabled")
+		}
 		// Custom OIDC provider - identifier already includes 'custom:' prefix
 		customProvider, err := models.FindCustomOAuthProviderByIdentifier(db, p.Provider)
 		if err != nil {
