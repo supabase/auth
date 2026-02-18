@@ -626,6 +626,9 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	case "notion":
 		pConfig = config.External.Notion
 		p, err = provider.NewNotionProvider(pConfig)
+	case "nhs_cis2":
+		pConfig = config.External.NHSCIS2
+		p, err = provider.NewNHSCIS2Provider(pConfig, scopes)
 	case "snapchat":
 		pConfig = config.External.Snapchat
 		p, err = provider.NewSnapchatProvider(pConfig, scopes)
