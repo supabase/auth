@@ -138,9 +138,8 @@ type RefreshTokenGrantParams struct {
 	ClientID     *uuid.UUID // OAuth2 server client ID if applicable
 }
 
-// AsRedirectURL encodes the AccessTokenResponse as a redirect URL that
-// includes the access token response data in a URL fragment.
 func (r *AccessTokenResponse) AsRedirectURL(redirectURL string, extraParams url.Values) string {
+	// Add Supabase’s internal params
 	extraParams.Set("access_token", r.Token)
 	extraParams.Set("token_type", r.TokenType)
 	extraParams.Set("expires_in", strconv.Itoa(r.ExpiresIn))
@@ -149,7 +148,28 @@ func (r *AccessTokenResponse) AsRedirectURL(redirectURL string, extraParams url.
 	// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
 	extraParams.Set("sb", "")
 
-	return redirectURL + "#" + extraParams.Encode()
+	// Parse original redirect URL
+	u, err := url.Parse(redirectURL)
+	if err != nil {
+		// fallback to previous behavior for malformed URLs
+		return redirectURL + "#" + extraParams.Encode()
+	}
+
+	// Get existing query params from the original URL
+	origQuery := u.Query()
+
+	// Merge user-provided params with Supabase-added params
+	for key, vals := range extraParams {
+		for _, v := range vals {
+			origQuery.Set(key, v) // overwrite if exists to avoid duplicates
+		}
+	}
+
+	// Update the query params in the URL
+	u.RawQuery = origQuery.Encode()
+
+	// Return the updated full URL
+	return u.String()
 }
 
 // HookManager interface for access token hooks
