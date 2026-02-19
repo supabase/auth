@@ -48,6 +48,10 @@ func (a *audience) UnmarshalJSON(b []byte) error {
 // - string: RFC3339 timestamp
 type UnixTimeOrString time.Time
 
+func (t UnixTimeOrString) MarshalJSON() ([]byte, error) {
+	return time.Time(t).MarshalJSON()
+}
+
 func (t *UnixTimeOrString) UnmarshalJSON(b []byte) error {
 	// null
 	if bytes.Equal(b, []byte("null")) {
