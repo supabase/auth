@@ -28,17 +28,17 @@ type CustomOAuthProvider struct {
 	ProviderType ProviderType `db:"provider_type" json:"provider_type"`
 
 	// Common fields for both OAuth2 and OIDC
-	Identifier          string                   `db:"identifier" json:"identifier"`
-	Name                string                   `db:"name" json:"name"`
-	ClientID            string                   `db:"client_id" json:"client_id"`
-	ClientSecret        string                   `db:"client_secret" json:"-"` // Encrypted via EncryptedString, never expose in JSON
-	AcceptableClientIDs slices.String             `db:"acceptable_client_ids" json:"acceptable_client_ids"`
-	Scopes              slices.String             `db:"scopes" json:"scopes"`
-	PKCEEnabled         bool                     `db:"pkce_enabled" json:"pkce_enabled"`
-	AttributeMapping    slices.Map `db:"attribute_mapping" json:"attribute_mapping"`
-	AuthorizationParams slices.Map `db:"authorization_params" json:"authorization_params"`
-	Enabled             bool                     `db:"enabled" json:"enabled"`
-	EmailOptional       bool                     `db:"email_optional" json:"email_optional"`
+	Identifier          string        `db:"identifier" json:"identifier"`
+	Name                string        `db:"name" json:"name"`
+	ClientID            string        `db:"client_id" json:"client_id"`
+	ClientSecret        string        `db:"client_secret" json:"-"` // Encrypted via EncryptedString, never expose in JSON
+	AcceptableClientIDs slices.String `db:"acceptable_client_ids" json:"acceptable_client_ids"`
+	Scopes              slices.String `db:"scopes" json:"scopes"`
+	PKCEEnabled         bool          `db:"pkce_enabled" json:"pkce_enabled"`
+	AttributeMapping    slices.Map    `db:"attribute_mapping" json:"attribute_mapping"`
+	AuthorizationParams slices.Map    `db:"authorization_params" json:"authorization_params"`
+	Enabled             bool          `db:"enabled" json:"enabled"`
+	EmailOptional       bool          `db:"email_optional" json:"email_optional"`
 
 	// OIDC-specific fields (null for OAuth2 providers)
 	Issuer            *string        `db:"issuer" json:"issuer,omitempty"`
@@ -232,7 +232,7 @@ func FindAllCustomOAuthProviders(tx *storage.Connection) ([]*CustomOAuthProvider
 func FindAllCustomOAuthProvidersByType(tx *storage.Connection, providerType ProviderType) ([]*CustomOAuthProvider, error) {
 	var providers []*CustomOAuthProvider
 
-	if err := tx.Q().Where("provider_type = ?", providerType).Order("created_at desc").All(&providers); err != nil {
+	if err := tx.Q().Where("provider_type = ?", providerType).Order("provider_type desc").All(&providers); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return []*CustomOAuthProvider{}, nil
 		}
