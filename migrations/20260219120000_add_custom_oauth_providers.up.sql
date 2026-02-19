@@ -1,7 +1,7 @@
 -- Create unified custom OAuth/OIDC providers table
 -- This table stores both OAuth2 and OIDC providers with type discrimination
 
-/* auth_migration: 20260128120000 */
+/* auth_migration: 20260219120000 */
 create table if not exists {{ index .Options "Namespace" }}.custom_oauth_providers (
     id uuid not null default gen_random_uuid(),
 
@@ -106,18 +106,18 @@ create table if not exists {{ index .Options "Namespace" }}.custom_oauth_provide
     )
 );
 
-/* auth_migration: 20260128120000 */
+/* auth_migration: 20260219120000 */
 create index if not exists custom_oauth_providers_identifier_idx
     on {{ index .Options "Namespace" }}.custom_oauth_providers (identifier);
 
-/* auth_migration: 20260128120000 */
+/* auth_migration: 20260219120000 */
 create index if not exists custom_oauth_providers_provider_type_idx
     on {{ index .Options "Namespace" }}.custom_oauth_providers (provider_type);
 
-/* auth_migration: 20260128120000 */
+/* auth_migration: 20260219120000 */
 create index if not exists custom_oauth_providers_enabled_idx
     on {{ index .Options "Namespace" }}.custom_oauth_providers (enabled);
 
-/* auth_migration: 20260128120000 */
+/* auth_migration: 20260219120000 */
 create index if not exists custom_oauth_providers_created_at_idx
     on {{ index .Options "Namespace" }}.custom_oauth_providers (created_at);
