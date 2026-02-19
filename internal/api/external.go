@@ -574,11 +574,20 @@ func (a *API) loadExternalStateFromUUID(ctx context.Context, db *storage.Connect
 // Provider returns a Provider interface for the given name.
 func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, conf.OAuthProviderConfiguration, error) {
 	config := a.config
+	db := a.db.WithContext(ctx)
 	name = strings.ToLower(name)
 
 	var err error
 	var p provider.Provider
 	var pConfig conf.OAuthProviderConfiguration
+
+	// Check if this is a custom provider (format: custom:identifier)
+	if strings.HasPrefix(name, "custom:") {
+		if !config.CustomOAuth.Enabled {
+			return nil, conf.OAuthProviderConfiguration{}, fmt.Errorf("custom OAuth providers are disabled")
+		}
+		return a.loadCustomProvider(ctx, db, name, scopes)
+	}
 
 	switch name {
 	case "apple":
@@ -661,6 +670,117 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	}
 
 	return p, pConfig, err
+}
+
+// loadCustomProvider loads a custom OAuth or OIDC provider from the database
+// identifier should be the full provider name with 'custom:' prefix (e.g., 'custom:github-enterprise')
+func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, identifier string, scopes string) (provider.Provider, conf.OAuthProviderConfiguration, error) {
+	config := a.config
+	var pConfig conf.OAuthProviderConfiguration
+
+	// Build the redirect URL
+	redirectURL := config.API.ExternalURL + "/callback"
+
+	// Parse scopes (space-separated per RFC 6749)
+	var scopeList []string
+	if scopes != "" {
+		scopeList = strings.Fields(scopes)
+	}
+
+	// Find the custom provider by identifier (which now includes 'custom:' prefix)
+	customProvider, err := models.FindCustomOAuthProviderByIdentifier(db, identifier)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, pConfig, fmt.Errorf("custom provider %s not found", identifier)
+		}
+		return nil, pConfig, fmt.Errorf("error finding custom provider: %w", err)
+	}
+
+	// Check if provider is enabled
+	if !customProvider.Enabled {
+		return nil, pConfig, fmt.Errorf("custom provider %s is disabled", identifier)
+	}
+
+	// Use provider scopes if not overridden
+	if len(scopeList) == 0 {
+		scopeList = customProvider.Scopes
+	}
+
+	// Decrypt client secret for runtime use
+	clientSecret, err := customProvider.GetClientSecret(config.Security.DBEncryption)
+	if err != nil {
+		return nil, pConfig, fmt.Errorf("error decrypting client secret for provider %s: %w", identifier, err)
+	}
+
+	// Handle based on provider type
+	if customProvider.IsOAuth2() {
+		// OAuth2 provider
+		if customProvider.AuthorizationURL == nil || customProvider.TokenURL == nil || customProvider.UserinfoURL == nil {
+			return nil, pConfig, fmt.Errorf("OAuth2 provider %s missing required endpoints", identifier)
+		}
+
+		// Create custom OAuth provider instance
+		p := provider.NewCustomOAuthProvider(
+			customProvider.ClientID,
+			clientSecret,
+			*customProvider.AuthorizationURL,
+			*customProvider.TokenURL,
+			*customProvider.UserinfoURL,
+			redirectURL,
+			scopeList,
+			customProvider.PKCEEnabled,
+			customProvider.AcceptableClientIDs,
+			customProvider.AttributeMapping,
+			customProvider.AuthorizationParams,
+		)
+
+		// Build provider configuration
+		pConfig = conf.OAuthProviderConfiguration{
+			Enabled:       true,
+			ClientID:      []string{customProvider.ClientID},
+			Secret:        clientSecret,
+			RedirectURI:   redirectURL,
+			URL:           *customProvider.AuthorizationURL,
+			EmailOptional: customProvider.EmailOptional,
+		}
+
+		return p, pConfig, nil
+	}
+
+	// OIDC provider
+	if customProvider.Issuer == nil {
+		return nil, pConfig, fmt.Errorf("OIDC provider %s missing issuer", identifier)
+	}
+
+	// Create custom OIDC provider instance
+	// oidc.NewProvider() will automatically fetch discovery document
+	p, err := provider.NewCustomOIDCProvider(
+		ctx,
+		customProvider.ClientID,
+		clientSecret,
+		redirectURL,
+		scopeList,
+		*customProvider.Issuer,
+		customProvider.PKCEEnabled,
+		customProvider.AcceptableClientIDs,
+		customProvider.AttributeMapping,
+		customProvider.AuthorizationParams,
+	)
+	if err != nil {
+		return nil, pConfig, fmt.Errorf("error creating OIDC provider: %w", err)
+	}
+
+	// Build provider configuration
+	pConfig = conf.OAuthProviderConfiguration{
+		Enabled:       true,
+		ClientID:      []string{customProvider.ClientID},
+		Secret:        clientSecret,
+		RedirectURI:   redirectURL,
+		URL:           p.Config().Endpoint.AuthURL,
+		EmailOptional: customProvider.EmailOptional,
+	}
+
+	return p, pConfig, nil
 }
 
 func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
