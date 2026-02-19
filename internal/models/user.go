@@ -450,9 +450,24 @@ func (u *User) Confirm(tx *storage.Connection) error {
 		return err
 	}
 
-	if err := u.UpdateUserMetaData(tx, map[string]interface{}{
-		"email_verified": true,
-	}); err != nil {
+	// 1. Reload the user state from the database to get the most recent
+	// metadata, including any changes made by database triggers.
+	latestUser, err := FindUserByID(tx, u.ID)
+	if err != nil {
+		return err
+	}
+
+	// 2. Prepare the metadata for update. Start with the fresh data from the database.
+	metaDataToUpdate := latestUser.UserMetaData
+	if metaDataToUpdate == nil {
+		metaDataToUpdate = make(map[string]interface{})
+	}
+	metaDataToUpdate["email_verified"] = true
+
+	// 3. Now, call the existing UpdateUserMetaData function.
+	// This will correctly update the user's metadata without data loss,
+	// and it also updates the in-memory user object 'u' for consistency.
+	if err := u.UpdateUserMetaData(tx, metaDataToUpdate); err != nil {
 		return err
 	}
 
