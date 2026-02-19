@@ -96,6 +96,10 @@ func (a *API) adminCustomOAuthProvidersList(w http.ResponseWriter, r *http.Reque
 		return apierrors.NewInternalServerError("Error retrieving custom OAuth providers").WithInternalError(err)
 	}
 
+	if providers == nil {
+		providers = []*models.CustomOAuthProvider{}
+	}
+
 	return sendJSON(w, http.StatusOK, map[string]interface{}{
 		"providers": providers,
 	})

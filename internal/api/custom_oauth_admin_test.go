@@ -446,6 +446,20 @@ func (ts *CustomOAuthAdminTestSuite) TestListProviders() {
 	assert.Len(ts.T(), providers, 3)
 }
 
+func (ts *CustomOAuthAdminTestSuite) TestListProvidersEmptyReturnsArray() {
+	// Without any providers created, the response should be an empty array, not null
+	req := httptest.NewRequest(http.MethodGet, "/admin/custom-providers", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// Verify raw JSON contains empty array, not null
+	assert.Contains(ts.T(), w.Body.String(), `"providers":[]`)
+}
+
 func (ts *CustomOAuthAdminTestSuite) TestListProvidersWithTypeFilter() {
 	// Create mixed providers
 	ts.createProvider(ts.createTestOAuth2Payload("oauth2-1"), http.StatusCreated)
