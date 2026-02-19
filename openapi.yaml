@@ -2447,9 +2447,9 @@ paths:
                     error_code: conflict
                     msg: "A custom OAuth provider with this identifier already exists"
                 quota_exceeded:
-                  summary: over_quota
+                  summary: over_custom_provider_quota
                   value:
-                    error_code: over_quota
+                    error_code: over_custom_provider_quota
                     msg: "Maximum number of custom OIDC/OAuth providers reached"
                 reserved_name:
                   summary: validation_failed
@@ -2513,9 +2513,9 @@ paths:
                 $ref: "#/components/schemas/ErrorSchema"
               examples:
                 not_found:
-                  summary: provider_not_found
+                  summary: custom_provider_not_found
                   value:
-                    error_code: provider_not_found
+                    error_code: custom_provider_not_found
                     msg: "Custom OAuth provider not found"
     put:
       summary: Update custom OIDC/OAuth provider
@@ -2669,9 +2669,9 @@ paths:
                 $ref: "#/components/schemas/ErrorSchema"
               examples:
                 not_found:
-                  summary: provider_not_found
+                  summary: custom_provider_not_found
                   value:
-                    error_code: provider_not_found
+                    error_code: custom_provider_not_found
                     msg: "Custom OAuth provider not found"
 
   /oauth/clients/register:

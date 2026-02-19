@@ -100,13 +100,12 @@ const (
 	ErrorCodeWeb3UnsupportedChain                   ErrorCode = "web3_unsupported_chain"
 	ErrorCodeOAuthDynamicClientRegistrationDisabled ErrorCode = "oauth_dynamic_client_registration_disabled"
 	ErrorCodeEmailAddressNotProvided                ErrorCode = "email_address_not_provided"
+	ErrorCodeFeatureDisabled                        ErrorCode = "feature_disabled"
 
 	ErrorCodeOAuthClientNotFound        ErrorCode = "oauth_client_not_found"
 	ErrorCodeOAuthAuthorizationNotFound ErrorCode = "oauth_authorization_not_found"
 	ErrorCodeOAuthConsentNotFound       ErrorCode = "oauth_consent_not_found"
 
-	// Custom OAuth/OIDC provider error codes
-	ErrorCodeProviderNotFound ErrorCode = "provider_not_found"
-	ErrorCodeFeatureDisabled  ErrorCode = "feature_disabled"
-	ErrorCodeOverQuota        ErrorCode = "over_quota"
+	ErrorCodeCustomProviderNotFound  ErrorCode = "custom_provider_not_found"
+	ErrorCodeOverCustomProviderQuota ErrorCode = "over_custom_provider_quota"
 )

@@ -124,7 +124,7 @@ func (a *API) adminCustomOAuthProviderGet(w http.ResponseWriter, r *http.Request
 	provider, err := models.FindCustomOAuthProviderByIdentifier(db, identifier)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return apierrors.NewNotFoundError(apierrors.ErrorCodeProviderNotFound, "Custom OAuth provider not found")
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeCustomProviderNotFound, "Custom OAuth provider not found")
 		}
 		return apierrors.NewInternalServerError("Error retrieving custom OAuth provider").WithInternalError(err)
 	}
@@ -182,7 +182,7 @@ func (a *API) adminCustomOAuthProviderCreate(w http.ResponseWriter, r *http.Requ
 		}
 		if totalCount >= config.CustomOAuth.MaxProviders {
 			return apierrors.NewBadRequestError(
-				apierrors.ErrorCodeOverQuota,
+				apierrors.ErrorCodeOverCustomProviderQuota,
 				"Maximum number of custom OAuth/OIDC providers reached",
 			)
 		}
@@ -277,7 +277,7 @@ func (a *API) adminCustomOAuthProviderUpdate(w http.ResponseWriter, r *http.Requ
 		provider, terr = models.FindCustomOAuthProviderByIdentifier(tx, identifier)
 		if terr != nil {
 			if models.IsNotFoundError(terr) {
-				return apierrors.NewNotFoundError(apierrors.ErrorCodeProviderNotFound, "Custom OAuth provider not found")
+				return apierrors.NewNotFoundError(apierrors.ErrorCodeCustomProviderNotFound, "Custom OAuth provider not found")
 			}
 			return apierrors.NewInternalServerError("Error retrieving custom OAuth provider").WithInternalError(terr)
 		}
@@ -330,7 +330,7 @@ func (a *API) adminCustomOAuthProviderDelete(w http.ResponseWriter, r *http.Requ
 		provider, terr := models.FindCustomOAuthProviderByIdentifier(tx, identifier)
 		if terr != nil {
 			if models.IsNotFoundError(terr) {
-				return apierrors.NewNotFoundError(apierrors.ErrorCodeProviderNotFound, "Custom OAuth provider not found")
+				return apierrors.NewNotFoundError(apierrors.ErrorCodeCustomProviderNotFound, "Custom OAuth provider not found")
 			}
 			return apierrors.NewInternalServerError("Error retrieving custom OAuth provider").WithInternalError(terr)
 		}
