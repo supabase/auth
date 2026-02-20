@@ -111,10 +111,9 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		return a.verifyPost(w, r, params)
-	default:
-		// this should have been handled by Chi
-		panic("Only GET and POST methods allowed")
 	}
+	//chi handles by sending a 405 Method Not Allowed response returning nil to compile
+	return nil
 }
 
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyParams) error {
