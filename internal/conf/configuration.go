@@ -742,6 +742,12 @@ type SecurityConfiguration struct {
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
 	SbForwardedForEnabled                 bool                 `json:"sb_forwarded_for_enabled" split_words:"true" default:"false"`
 
+	// DangerousSSOAutoLinking enables automatic identity linking for SSO providers.
+	// When enabled, SSO identities will be linked to existing accounts based on email
+	// matching, just like OAuth providers. WARNING: Only enable if you trust your SSO
+	// IdP to verify email ownership, as a malicious IdP could claim any email.
+	DangerousSSOAutoLinking bool `json:"dangerous_sso_auto_linking" split_words:"true" default:"false"`
+
 	DBEncryption DatabaseEncryptionConfiguration `json:"database_encryption" split_words:"true"`
 }
 
