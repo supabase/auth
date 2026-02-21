@@ -60,6 +60,7 @@ type AdminCustomOAuthProviderParams struct {
 	Issuer         string  `json:"issuer,omitempty"`
 	DiscoveryURL   *string `json:"discovery_url,omitempty"`
 	SkipNonceCheck *bool   `json:"skip_nonce_check,omitempty"`
+	FetchUserinfo  *bool   `json:"fetch_userinfo,omitempty"`
 
 	// OAuth2-specific fields
 	AuthorizationURL string  `json:"authorization_url,omitempty"`
@@ -452,6 +453,7 @@ func buildProviderFromParams(params *AdminCustomOAuthProviderParams, providerTyp
 		provider.Issuer = &params.Issuer
 		provider.DiscoveryURL = params.DiscoveryURL
 		provider.SkipNonceCheck = getBoolOrDefault(params.SkipNonceCheck, false)
+		provider.FetchUserinfo = getBoolOrDefault(params.FetchUserinfo, false)
 
 		// Ensure openid scope is present for OIDC
 		hasOpenID := false
@@ -542,6 +544,9 @@ func updateProviderFromParams(provider *models.CustomOAuthProvider, params *Admi
 		}
 		if params.SkipNonceCheck != nil {
 			provider.SkipNonceCheck = *params.SkipNonceCheck
+		}
+		if params.FetchUserinfo != nil {
+			provider.FetchUserinfo = *params.FetchUserinfo
 		}
 	} else if provider.IsOAuth2() {
 		if params.AuthorizationURL != "" {

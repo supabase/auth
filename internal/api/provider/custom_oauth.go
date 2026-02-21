@@ -105,6 +105,7 @@ type CustomOIDCProvider struct {
 	oidcProvider        *oidc.Provider
 	userinfoEndpoint    string
 	pkceEnabled         bool
+	fetchUserinfo       bool
 	acceptableClientIDs []string
 	attributeMapping    map[string]interface{}
 	authorizationParams map[string]interface{}
@@ -117,6 +118,7 @@ func NewCustomOIDCProvider(
 	scopes []string,
 	issuer string,
 	pkceEnabled bool,
+	fetchUserinfo bool,
 	acceptableClientIDs []string,
 	attributeMapping, authorizationParams map[string]interface{},
 ) (*CustomOIDCProvider, error) {
@@ -155,6 +157,7 @@ func NewCustomOIDCProvider(
 		oidcProvider:        oidcProvider,
 		userinfoEndpoint:    userinfoEndpoint,
 		pkceEnabled:         pkceEnabled,
+		fetchUserinfo:       fetchUserinfo,
 		acceptableClientIDs: acceptableClientIDs,
 		attributeMapping:    attributeMapping,
 		authorizationParams: authorizationParams,
@@ -197,7 +200,30 @@ func (p *CustomOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token)
 			return nil, err
 		}
 
-		// Apply attribute mapping to the metadata from ID token
+		// If fetch_userinfo is enabled, also call UserInfo and merge claims
+		// This is needed for providers like NHS CIS2 where profile/role data
+		// is only available via UserInfo, not in the ID token
+		if p.fetchUserinfo && p.userinfoEndpoint != "" {
+			var userinfoClaims Claims
+			if uiErr := makeRequest(ctx, tok, p.config, p.userinfoEndpoint, &userinfoClaims); uiErr == nil {
+				if userData.Metadata != nil {
+					*userData.Metadata = mergeClaims(*userData.Metadata, userinfoClaims)
+				} else {
+					userData.Metadata = &userinfoClaims
+				}
+				// Re-extract emails from merged claims if none from ID token
+				if len(userData.Emails) == 0 && userData.Metadata.Email != "" {
+					userData.Emails = append(userData.Emails, Email{
+						Email:    userData.Metadata.Email,
+						Verified: userData.Metadata.EmailVerified,
+						Primary:  true,
+					})
+				}
+			}
+			// If UserInfo fails, proceed with ID token data only (non-fatal)
+		}
+
+		// Apply attribute mapping to the (possibly merged) metadata
 		if len(p.attributeMapping) > 0 && userData.Metadata != nil {
 			*userData.Metadata = applyAttributeMapping(*userData.Metadata, p.attributeMapping)
 		}
@@ -262,6 +288,40 @@ func (p *CustomOIDCProvider) validateAudience(audiences []string) error {
 
 	// No valid audience found
 	return fmt.Errorf("token audience %v does not match any acceptable client ID", audiences)
+}
+
+// mergeClaims merges UserInfo claims into ID token claims.
+// UserInfo values take precedence for non-empty fields, but ID token claims
+// are preserved if the UserInfo field is empty/zero.
+func mergeClaims(idTokenClaims, userinfoClaims Claims) Claims {
+	// Marshal both to maps for merging
+	baseMap := make(map[string]interface{})
+	overlayMap := make(map[string]interface{})
+
+	baseBytes, _ := json.Marshal(idTokenClaims)
+	json.Unmarshal(baseBytes, &baseMap)
+
+	overlayBytes, _ := json.Marshal(userinfoClaims)
+	json.Unmarshal(overlayBytes, &overlayMap)
+
+	// Merge: UserInfo values win, but skip empty/nil values
+	for k, v := range overlayMap {
+		if v == nil {
+			continue
+		}
+		// Skip empty strings
+		if s, ok := v.(string); ok && s == "" {
+			continue
+		}
+		baseMap[k] = v
+	}
+
+	// Convert back to Claims
+	var merged Claims
+	mergedBytes, _ := json.Marshal(baseMap)
+	json.Unmarshal(mergedBytes, &merged)
+
+	return merged
 }
 
 // applyAttributeMapping applies custom attribute mapping to claims
