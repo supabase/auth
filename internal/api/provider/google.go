@@ -55,7 +55,8 @@ func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration,
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, internalIssuerGoogle)
+	// Use cached OIDC provider to avoid redundant HTTP calls to discovery endpoint
+	oidcProvider, err := defaultOIDCProviderCache.Get(ctx, internalIssuerGoogle)
 	if err != nil {
 		return nil, err
 	}
