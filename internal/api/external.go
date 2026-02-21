@@ -762,6 +762,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		scopeList,
 		*customProvider.Issuer,
 		customProvider.PKCEEnabled,
+		customProvider.FetchUserinfo,
 		customProvider.AcceptableClientIDs,
 		customProvider.AttributeMapping,
 		customProvider.AuthorizationParams,

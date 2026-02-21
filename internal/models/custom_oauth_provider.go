@@ -39,6 +39,7 @@ type CustomOAuthProvider struct {
 	AuthorizationParams slices.Map    `db:"authorization_params" json:"authorization_params"`
 	Enabled             bool          `db:"enabled" json:"enabled"`
 	EmailOptional       bool          `db:"email_optional" json:"email_optional"`
+	FetchUserinfo       bool          `db:"fetch_userinfo" json:"fetch_userinfo"`
 
 	// OIDC-specific fields (null for OAuth2 providers)
 	Issuer            *string        `db:"issuer" json:"issuer,omitempty"`

@@ -274,7 +274,8 @@ func TestNewCustomOIDCProvider(t *testing.T) {
 		"https://myapp.com/callback",
 		[]string{"profile", "email"}, // Without openid
 		server.URL, // issuer
-		true, // PKCE enabled
+		true,  // PKCE enabled
+		false, // fetchUserinfo
 		[]string{"ios-client", "android-client"},
 		map[string]interface{}{"email": "user_email"},
 		map[string]interface{}{"prompt": "consent"},
@@ -289,6 +290,7 @@ func TestNewCustomOIDCProvider(t *testing.T) {
 	assert.Contains(t, provider.config.Scopes, "email")
 
 	assert.True(t, provider.RequiresPKCE())
+	assert.False(t, provider.fetchUserinfo)
 	assert.Equal(t, []string{"ios-client", "android-client"}, provider.acceptableClientIDs)
 }
 
@@ -402,7 +404,8 @@ func TestCustomOIDCProvider_AuthCodeURL(t *testing.T) {
 		"https://myapp.com/callback",
 		[]string{"openid", "profile"},
 		server.URL, // issuer
-		false,
+		false, // PKCE
+		false, // fetchUserinfo
 		nil,
 		nil,
 		map[string]interface{}{
@@ -451,7 +454,6 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 	defer server.Close()
 
 	t.Run("PKCE enabled", func(t *testing.T) {
-		// Pass issuer URL directly - oidc.NewProvider will fetch discovery automatically
 		provider, err := NewCustomOIDCProvider(
 			context.Background(),
 			"client-id",
@@ -459,7 +461,8 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 			"https://myapp.com/callback",
 			[]string{"openid"},
 			server.URL, // issuer
-			true, // PKCE enabled
+			true,  // PKCE enabled
+			false, // fetchUserinfo
 			nil,
 			nil,
 			nil,
@@ -470,7 +473,6 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 	})
 
 	t.Run("PKCE disabled", func(t *testing.T) {
-		// Pass issuer URL directly - oidc.NewProvider will fetch discovery automatically
 		provider, err := NewCustomOIDCProvider(
 			context.Background(),
 			"client-id",
@@ -479,6 +481,7 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 			[]string{"openid"},
 			server.URL, // issuer
 			false, // PKCE disabled
+			false, // fetchUserinfo
 			nil,
 			nil,
 			nil,
@@ -486,5 +489,205 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.False(t, provider.RequiresPKCE())
+	})
+}
+
+func TestMergeClaims(t *testing.T) {
+	tests := []struct {
+		name            string
+		idTokenClaims   Claims
+		userinfoClaims  Claims
+		expectedSubject string
+		expectedEmail   string
+		expectedName    string
+		check           func(t *testing.T, result Claims)
+	}{
+		{
+			name: "UserInfo fills in missing fields",
+			idTokenClaims: Claims{
+				Subject: "user-123",
+				Email:   "user@example.com",
+			},
+			userinfoClaims: Claims{
+				Subject:  "user-123",
+				Name:     "John Doe",
+				FullName: "John Doe",
+			},
+			expectedSubject: "user-123",
+			expectedEmail:   "user@example.com",
+			expectedName:    "John Doe",
+		},
+		{
+			name: "UserInfo overrides non-empty fields",
+			idTokenClaims: Claims{
+				Subject: "user-123",
+				Name:    "ID Token Name",
+			},
+			userinfoClaims: Claims{
+				Subject: "user-123",
+				Name:    "UserInfo Name",
+			},
+			expectedSubject: "user-123",
+			expectedName:    "UserInfo Name",
+		},
+		{
+			name: "UserInfo empty strings do not override",
+			idTokenClaims: Claims{
+				Subject: "user-123",
+				Email:   "user@example.com",
+				Name:    "Original Name",
+			},
+			userinfoClaims: Claims{
+				Subject: "user-123",
+				Email:   "",
+				Name:    "",
+			},
+			expectedSubject: "user-123",
+			expectedEmail:   "user@example.com",
+			expectedName:    "Original Name",
+		},
+		{
+			name: "Both empty returns empty",
+			idTokenClaims:   Claims{},
+			userinfoClaims:  Claims{},
+			expectedSubject: "",
+			expectedEmail:   "",
+			expectedName:    "",
+		},
+		{
+			name: "UserInfo adds custom claims from provider",
+			idTokenClaims: Claims{
+				Subject: "user-123",
+				Email:   "user@nhs.net",
+			},
+			userinfoClaims: Claims{
+				Subject: "user-123",
+				CustomClaims: map[string]interface{}{
+					"nhsid_nrbac_roles": []interface{}{
+						map[string]interface{}{
+							"role_code": "R8000",
+							"role_name": "Clinical",
+						},
+					},
+					"uid": "NHS-UID-12345",
+				},
+			},
+			expectedSubject: "user-123",
+			expectedEmail:   "user@nhs.net",
+			check: func(t *testing.T, result Claims) {
+				require.NotNil(t, result.CustomClaims)
+				assert.Contains(t, result.CustomClaims, "nhsid_nrbac_roles")
+				assert.Equal(t, "NHS-UID-12345", result.CustomClaims["uid"])
+			},
+		},
+		{
+			name: "ID token custom claims preserved when UserInfo has none",
+			idTokenClaims: Claims{
+				Subject: "user-123",
+				CustomClaims: map[string]interface{}{
+					"existing_claim": "value",
+				},
+			},
+			userinfoClaims: Claims{
+				Subject: "user-123",
+			},
+			expectedSubject: "user-123",
+			check: func(t *testing.T, result Claims) {
+				require.NotNil(t, result.CustomClaims)
+				assert.Equal(t, "value", result.CustomClaims["existing_claim"])
+			},
+		},
+		{
+			name: "Email verified from UserInfo overrides ID token",
+			idTokenClaims: Claims{
+				Subject:       "user-123",
+				Email:         "user@example.com",
+				EmailVerified: false,
+			},
+			userinfoClaims: Claims{
+				Subject:       "user-123",
+				EmailVerified: true,
+			},
+			expectedSubject: "user-123",
+			expectedEmail:   "user@example.com",
+			check: func(t *testing.T, result Claims) {
+				assert.True(t, result.EmailVerified)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeClaims(tt.idTokenClaims, tt.userinfoClaims)
+
+			assert.Equal(t, tt.expectedSubject, result.Subject)
+			assert.Equal(t, tt.expectedEmail, result.Email)
+			assert.Equal(t, tt.expectedName, result.Name)
+
+			if tt.check != nil {
+				tt.check(t, result)
+			}
+		})
+	}
+}
+
+func TestNewCustomOIDCProvider_FetchUserinfo(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/openid-configuration" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"issuer":                 server.URL,
+				"authorization_endpoint": server.URL + "/authorize",
+				"token_endpoint":         server.URL + "/token",
+				"userinfo_endpoint":      server.URL + "/userinfo",
+				"jwks_uri":               server.URL + "/jwks",
+			})
+		} else if r.URL.Path == "/jwks" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"keys": []interface{}{},
+			})
+		}
+	}))
+	defer server.Close()
+
+	t.Run("fetchUserinfo enabled", func(t *testing.T) {
+		provider, err := NewCustomOIDCProvider(
+			context.Background(),
+			"client-id",
+			"client-secret",
+			"https://myapp.com/callback",
+			[]string{"openid"},
+			server.URL,
+			false, // PKCE
+			true,  // fetchUserinfo
+			nil,
+			nil,
+			nil,
+		)
+
+		require.NoError(t, err)
+		assert.True(t, provider.fetchUserinfo)
+		assert.NotEmpty(t, provider.userinfoEndpoint)
+	})
+
+	t.Run("fetchUserinfo disabled", func(t *testing.T) {
+		provider, err := NewCustomOIDCProvider(
+			context.Background(),
+			"client-id",
+			"client-secret",
+			"https://myapp.com/callback",
+			[]string{"openid"},
+			server.URL,
+			false, // PKCE
+			false, // fetchUserinfo
+			nil,
+			nil,
+			nil,
+		)
+
+		require.NoError(t, err)
+		assert.False(t, provider.fetchUserinfo)
 	})
 }
