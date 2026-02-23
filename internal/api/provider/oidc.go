@@ -38,7 +38,7 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 		config = &clonedConfig
 	}
 
-	verifier := provider.VerifierContext(ctx, config)
+	verifier := provider.Verifier(config)
 	overrideVerifier, ok := OverrideVerifiers[provider.Endpoint().AuthURL]
 	if ok && overrideVerifier != nil {
 		verifier = overrideVerifier(ctx, config)
