@@ -21,7 +21,7 @@ type linkedinOIDCProvider struct {
 }
 
 // NewLinkedinOIDCProvider creates a Linkedin account provider via OIDC.
-func NewLinkedinOIDCProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewLinkedinOIDCProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string, cache *OIDCProviderCache) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func NewLinkedinOIDCProvider(ctx context.Context, ext conf.OAuthProviderConfigur
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, IssuerLinkedin)
+	oidcProvider, err := cache.GetProvider(ctx, IssuerLinkedin)
 	if err != nil {
 		return nil, err
 	}

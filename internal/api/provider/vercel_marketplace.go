@@ -22,7 +22,7 @@ type vercelMarketplaceProvider struct {
 }
 
 // NewVercelMarketplaceProvider creates a VercelMarketplace account provider via OIDC.
-func NewVercelMarketplaceProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewVercelMarketplaceProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string, cache *OIDCProviderCache) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func NewVercelMarketplaceProvider(ctx context.Context, ext conf.OAuthProviderCon
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, IssuerVercelMarketplace)
+	oidcProvider, err := cache.GetProvider(ctx, IssuerVercelMarketplace)
 	if err != nil {
 		return nil, err
 	}

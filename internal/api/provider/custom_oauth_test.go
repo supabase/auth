@@ -278,6 +278,7 @@ func TestNewCustomOIDCProvider(t *testing.T) {
 		[]string{"ios-client", "android-client"},
 		map[string]interface{}{"email": "user_email"},
 		map[string]interface{}{"prompt": "consent"},
+		NewOIDCProviderCache(0),
 	)
 
 	require.NoError(t, err)
@@ -411,6 +412,7 @@ func TestCustomOIDCProvider_AuthCodeURL(t *testing.T) {
 			"ui_locales": "en",
 			"login_hint": "user@example.com",
 		},
+		NewOIDCProviderCache(0),
 	)
 
 	require.NoError(t, err)
@@ -463,6 +465,7 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			NewOIDCProviderCache(0),
 		)
 
 		require.NoError(t, err)
@@ -482,6 +485,7 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			NewOIDCProviderCache(0),
 		)
 
 		require.NoError(t, err)

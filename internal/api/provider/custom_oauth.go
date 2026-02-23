@@ -119,6 +119,7 @@ func NewCustomOIDCProvider(
 	pkceEnabled bool,
 	acceptableClientIDs []string,
 	attributeMapping, authorizationParams map[string]interface{},
+	cache *OIDCProviderCache,
 ) (*CustomOIDCProvider, error) {
 	// Ensure 'openid' scope is always present for OIDC
 	hasOpenID := false
@@ -132,8 +133,8 @@ func NewCustomOIDCProvider(
 		scopes = append([]string{"openid"}, scopes...)
 	}
 
-	// Create OIDC provider - this automatically fetches discovery document
-	oidcProvider, err := oidc.NewProvider(ctx, issuer)
+	// Create OIDC provider - uses cache to avoid redundant discovery fetches
+	oidcProvider, err := cache.GetProvider(ctx, issuer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OIDC provider: %w", err)
 	}

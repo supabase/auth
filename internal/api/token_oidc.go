@@ -29,7 +29,7 @@ type IdTokenGrantParams struct {
 	LinkIdentity bool   `json:"link_identity"`
 }
 
-func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connection, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, bool, string, []string, bool, error) {
+func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connection, config *conf.GlobalConfiguration, r *http.Request, cache *provider.OIDCProviderCache) (*oidc.Provider, bool, string, []string, bool, error) {
 	log := observability.GetLogEntry(r).Entry
 
 	var cfg *conf.OAuthProviderConfiguration
@@ -190,7 +190,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 		oidcCtx = oidc.InsecureIssuerURLContext(ctx, issuer)
 	}
 
-	oidcProvider, err := oidc.NewProvider(oidcCtx, issuer)
+	oidcProvider, err := cache.GetProvider(oidcCtx, issuer)
 	if err != nil {
 		return nil, false, "", nil, cfg.EmailOptional, err
 	}
@@ -237,7 +237,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		ctx = withTargetUser(ctx, targetUser)
 	}
 
-	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, emailOptional, err := params.getProvider(ctx, db, config, r)
+	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, emailOptional, err := params.getProvider(ctx, db, config, r, a.oidcCache)
 	if err != nil {
 		return err
 	}
