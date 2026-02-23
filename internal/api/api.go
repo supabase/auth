@@ -31,7 +31,7 @@ const (
 	defaultVersion = "unknown version"
 )
 
-var bearerRegexp = regexp.MustCompile(`^(?:B|b)earer (\S+$)`)
+var bearerRegexp = regexp.MustCompile(`(?i)^bearer (\S+$)`)
 
 // API is the main REST API
 type API struct {
