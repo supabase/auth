@@ -23,10 +23,9 @@ import (
 
 type CustomOAuthAdminTestSuite struct {
 	suite.Suite
-	API             *API
-	Config          *conf.GlobalConfiguration
-	token           string
-	discoveryServer *httptest.Server // mock OIDC discovery endpoint
+	API    *API
+	Config *conf.GlobalConfiguration
+	token  string
 }
 
 func TestCustomOAuthAdmin(t *testing.T) {
