@@ -209,6 +209,33 @@ func TestOIDCProviderCache_ErrorNotCached(t *testing.T) {
 	cache.mu.RUnlock()
 }
 
+func TestOIDCProviderCache_StaleOnError(t *testing.T) {
+	var fetchCount atomic.Int64
+	server := newTestOIDCServer(&fetchCount)
+	defer server.Close()
+
+	now := time.Now()
+	cache := NewOIDCProviderCache(time.Hour)
+	cache.now = func() time.Time { return now }
+
+	// Prime the cache
+	p1, err := cache.GetProvider(context.Background(), server.URL)
+	require.NoError(t, err)
+	require.NotNil(t, p1)
+	assert.Equal(t, int64(1), fetchCount.Load())
+
+	// Advance time past TTL so the entry is stale
+	now = now.Add(2 * time.Hour)
+
+	// Shut down the server to simulate a network failure
+	server.Close()
+
+	// Should return the stale cached entry instead of an error
+	p2, err := cache.GetProvider(context.Background(), server.URL)
+	require.NoError(t, err)
+	assert.Equal(t, p1, p2)
+}
+
 func TestOIDCProviderCache_TTLPassedThrough(t *testing.T) {
 	cache := NewOIDCProviderCache(30 * time.Minute)
 	assert.Equal(t, 30*time.Minute, cache.ttl)

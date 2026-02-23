@@ -67,6 +67,14 @@ func (c *OIDCProviderCache) GetProvider(ctx context.Context, issuer string) (*oi
 		return p, nil
 	})
 	if err != nil {
+		// Serve stale entry if available — keeps auth working during
+		// transient network failures or issuer outages.
+		c.mu.RLock()
+		if entry, ok := c.cache[issuer]; ok {
+			c.mu.RUnlock()
+			return entry.provider, nil
+		}
+		c.mu.RUnlock()
 		return nil, err
 	}
 
