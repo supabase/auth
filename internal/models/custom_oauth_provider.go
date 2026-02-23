@@ -137,6 +137,19 @@ func (p *CustomOAuthProvider) GetDiscoveryURL() string {
 	return *p.Issuer + "/.well-known/openid-configuration"
 }
 
+// SetDiscoveryCache stores a validated OIDC discovery document and records the cache time.
+func (p *CustomOAuthProvider) SetDiscoveryCache(discovery *OIDCDiscovery) {
+	p.CachedDiscovery = discovery
+	now := time.Now()
+	p.DiscoveryCachedAt = &now
+}
+
+// ClearDiscoveryCache removes the cached discovery document.
+func (p *CustomOAuthProvider) ClearDiscoveryCache() {
+	p.CachedDiscovery = nil
+	p.DiscoveryCachedAt = nil
+}
+
 // OIDCDiscovery represents cached OIDC discovery document
 type OIDCDiscovery struct {
 	Issuer                 string   `json:"issuer"`

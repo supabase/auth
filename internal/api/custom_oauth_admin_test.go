@@ -11,6 +11,7 @@ import (
 
 	popslices "github.com/gobuffalo/pop/v6/slices"
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -22,9 +23,10 @@ import (
 
 type CustomOAuthAdminTestSuite struct {
 	suite.Suite
-	API    *API
-	Config *conf.GlobalConfiguration
-	token  string
+	API             *API
+	Config          *conf.GlobalConfiguration
+	token           string
+	discoveryServer *httptest.Server // mock OIDC discovery endpoint
 }
 
 func TestCustomOAuthAdmin(t *testing.T) {
@@ -107,40 +109,68 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateOAuth2Provider() {
 	assert.Empty(ts.T(), provider.ClientSecret)
 }
 
-func (ts *CustomOAuthAdminTestSuite) TestCreateOIDCProvider() {
-	payload := map[string]interface{}{
-		"provider_type": "oidc",
-		"identifier":    "custom:self-keycloak",
-		"name":          "Keycloak",
-		"client_id":     "test-client-id",
-		"client_secret": "test-client-secret",
-		"issuer":        "https://example.com/realms/myrealm",
-		"scopes":        []string{"profile", "email"},
-		"pkce_enabled":  true,
-		"enabled":       true,
-	}
+func (ts *CustomOAuthAdminTestSuite) TestCreateOIDCProviderValidatesDiscovery() {
+	ts.Run("Unreachable issuer rejected", func() {
+		// An OIDC provider with an unresolvable issuer is caught by URL validation
+		payload := map[string]interface{}{
+			"provider_type": "oidc",
+			"identifier":    "custom:bad-issuer",
+			"name":          "Bad Issuer",
+			"client_id":     "test-client-id",
+			"client_secret": "test-client-secret",
+			"issuer":        "https://unreachable.example.com/realms/myrealm",
+			"scopes":        []string{"profile", "email"},
+		}
 
-	var body bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&body).Encode(payload))
+		var body bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&body).Encode(payload))
 
-	req := httptest.NewRequest(http.MethodPost, "/admin/custom-providers", &body)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		req := httptest.NewRequest(http.MethodPost, "/admin/custom-providers", &body)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
 
-	require.Equal(ts.T(), http.StatusCreated, w.Code)
+		require.Equal(ts.T(), http.StatusBadRequest, w.Code)
 
-	var provider models.CustomOAuthProvider
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&provider))
+		var apiErr apierrors.HTTPError
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&apiErr))
+		assert.Equal(ts.T(), apierrors.ErrorCodeValidationFailed, apiErr.ErrorCode)
+	})
 
-	assert.Equal(ts.T(), models.ProviderTypeOIDC, provider.ProviderType)
-	assert.Equal(ts.T(), "custom:self-keycloak", provider.Identifier)
-	assert.Contains(ts.T(), provider.Scopes, "openid") // Auto-added for OIDC
-	assert.Contains(ts.T(), provider.Scopes, "profile")
+	ts.Run("Invalid discovery document rejected", func() {
+		// Use a real resolvable domain whose discovery endpoint returns non-JSON.
+		// This passes URL validation but fails at discovery fetch/parse.
+		payload := map[string]interface{}{
+			"provider_type": "oidc",
+			"identifier":    "custom:bad-discovery",
+			"name":          "Bad Discovery",
+			"client_id":     "test-client-id",
+			"client_secret": "test-client-secret",
+			"issuer":        "https://example.com",
+			"scopes":        []string{"profile", "email"},
+		}
 
-	// Ensure client secret is not exposed in JSON
-	assert.Empty(ts.T(), provider.ClientSecret)
+		var body bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&body).Encode(payload))
+
+		req := httptest.NewRequest(http.MethodPost, "/admin/custom-providers", &body)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+
+		var apiErr apierrors.HTTPError
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&apiErr))
+		assert.Equal(ts.T(), apierrors.ErrorCodeValidationFailed, apiErr.ErrorCode)
+		// Should fail at discovery fetch or parse stage
+		assert.True(ts.T(),
+			strings.Contains(apiErr.Message, "OIDC discovery") ||
+				strings.Contains(apiErr.Message, "Failed to fetch"),
+			"Expected discovery-related error, got: %s", apiErr.Message)
+	})
 }
 
 func (ts *CustomOAuthAdminTestSuite) TestCreateProviderValidation() {
@@ -429,7 +459,7 @@ func (ts *CustomOAuthAdminTestSuite) TestListProviders() {
 	// Create some providers
 	ts.createProvider(ts.createTestOAuth2Payload("oauth2-1"), http.StatusCreated)
 	ts.createProvider(ts.createTestOAuth2Payload("oauth2-2"), http.StatusCreated)
-	ts.createProvider(ts.createTestOIDCPayload("oidc-1", "https://oidc1.example.com"), http.StatusCreated)
+	ts.createOIDCProviderInDB("oidc-1", "https://oidc1.example.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/custom-providers", nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
@@ -463,8 +493,8 @@ func (ts *CustomOAuthAdminTestSuite) TestListProvidersEmptyReturnsArray() {
 func (ts *CustomOAuthAdminTestSuite) TestListProvidersWithTypeFilter() {
 	// Create mixed providers
 	ts.createProvider(ts.createTestOAuth2Payload("oauth2-1"), http.StatusCreated)
-	ts.createProvider(ts.createTestOIDCPayload("oidc-1", "https://oidc1.example.com"), http.StatusCreated)
-	ts.createProvider(ts.createTestOIDCPayload("oidc-2", "https://oidc2.example.com"), http.StatusCreated)
+	ts.createOIDCProviderInDB("oidc-1", "https://oidc1.example.com")
+	ts.createOIDCProviderInDB("oidc-2", "https://oidc2.example.com")
 
 	// Filter by OAuth2
 	req := httptest.NewRequest(http.MethodGet, "/admin/custom-providers?type=oauth2", nil)
@@ -617,25 +647,31 @@ func (ts *CustomOAuthAdminTestSuite) createTestOAuth2Payload(identifier string) 
 	}
 }
 
-func (ts *CustomOAuthAdminTestSuite) createTestOIDCPayload(identifier, issuer string) map[string]interface{} {
+// createOIDCProviderInDB inserts an OIDC provider directly into the database,
+// bypassing the admin handler (and its discovery validation). Use this for tests
+// that need an OIDC provider to exist but aren't testing the create flow.
+func (ts *CustomOAuthAdminTestSuite) createOIDCProviderInDB(identifier, issuer string) *models.CustomOAuthProvider {
 	if !strings.HasPrefix(identifier, "custom:") {
 		identifier = "custom:" + identifier
 	}
-	// If issuer is not provided or uses non-resolvable domain, use example.com
-	if issuer == "" || strings.Contains(issuer, "oidc1.example.com") || strings.Contains(issuer, "oidc2.example.com") {
-		issuer = "https://example.com/realms/" + identifier
+	id, err := uuid.NewV4()
+	require.NoError(ts.T(), err)
+
+	provider := &models.CustomOAuthProvider{
+		ID:           id,
+		ProviderType: models.ProviderTypeOIDC,
+		Identifier:   identifier,
+		Name:         "Test OIDC Provider",
+		ClientID:     "test-client-id",
+		ClientSecret: "test-client-secret",
+		Issuer:       &issuer,
+		Scopes:       []string{"openid", "profile", "email"},
+		PKCEEnabled:  true,
+		Enabled:      true,
 	}
-	return map[string]interface{}{
-		"provider_type": "oidc",
-		"identifier":    identifier,
-		"name":          "Test OIDC Provider",
-		"client_id":     "test-client-id",
-		"client_secret": "test-client-secret",
-		"issuer":        issuer,
-		"scopes":        []string{"profile", "email"},
-		"pkce_enabled":  true,
-		"enabled":       true,
-	}
+
+	require.NoError(ts.T(), models.CreateCustomOAuthProvider(ts.API.db, provider))
+	return provider
 }
 
 func (ts *CustomOAuthAdminTestSuite) createProvider(payload map[string]interface{}, expectedStatus int) *httptest.ResponseRecorder {
