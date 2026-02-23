@@ -15,6 +15,9 @@ type oidcCacheEntry struct {
 }
 
 // OIDCProviderCache caches *oidc.Provider objects keyed by issuer URL.
+// This avoids re-fetching the OIDC discovery document on every request.
+// JWKS fetching/caching is handled separately by the oidc library itself,
+// it lazy-loads the key set on the first call to Verify and manages its own cache.
 // It uses singleflight to deduplicate concurrent fetches for the same issuer.
 type OIDCProviderCache struct {
 	mu    sync.RWMutex
