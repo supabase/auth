@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.187.0](https://github.com/supabase/auth/compare/v2.186.0...v2.187.0) (2026-02-23)
+
+
+### Features
+
+* add metadata field to all hooks ([#2365](https://github.com/supabase/auth/issues/2365)) ([c675749](https://github.com/supabase/auth/commit/c67574946d1e11c7986d2c868336df0cefbe3452))
+* check current password on change ([#2364](https://github.com/supabase/auth/issues/2364)) ([33b87ae](https://github.com/supabase/auth/commit/33b87ae0671aba2e9b4df0ef1d5d1e7906c32129))
+* **indexworker:** add max users threshold for rollout ([#2374](https://github.com/supabase/auth/issues/2374)) ([a2066c6](https://github.com/supabase/auth/commit/a2066c6a340fd3ebcaa0a816ab06ee3d6b1afad7))
+* **metrics:** added a gauge with version information ([#2375](https://github.com/supabase/auth/issues/2375)) ([911ad0b](https://github.com/supabase/auth/commit/911ad0bae0b65b878acd05208e733f480c76b22f))
+* support custom oauth & oidc providers ([#2357](https://github.com/supabase/auth/issues/2357)) ([53021f6](https://github.com/supabase/auth/commit/53021f66597439c14ebb869e567ab4742afd0142))
+
+
+### Bug Fixes
+
+* case-insensitive Bearer token scheme matching ([#2387](https://github.com/supabase/auth/issues/2387)) ([36d712d](https://github.com/supabase/auth/commit/36d712d27f66721adf58a93ffb9e43d5cc915eca))
+* correctly parse JWT ValidMethods from env by enabling split_words ([#2334](https://github.com/supabase/auth/issues/2334)) ([a6076bc](https://github.com/supabase/auth/commit/a6076bc39f63cfca94e2330957031d4f63a4b68e))
+* flaky index worker test ([#2366](https://github.com/supabase/auth/issues/2366)) ([961a7e6](https://github.com/supabase/auth/commit/961a7e620109d554ae81ca8227a5107671679982))
+* **hooks:** propagate error objects from hook calls ([#2380](https://github.com/supabase/auth/issues/2380)) ([3ca1e88](https://github.com/supabase/auth/commit/3ca1e88df06e7096c8ebb3e1bedf291654f4c66e))
+* session upgrade percentage should be based on session, not request ([#2371](https://github.com/supabase/auth/issues/2371)) ([510e68b](https://github.com/supabase/auth/commit/510e68b803ba9110df969c7548ccad85c84f0eb6))
+
 ## [2.186.0](https://github.com/supabase/auth/compare/v2.185.0...v2.186.0) (2026-01-28)
 
 
