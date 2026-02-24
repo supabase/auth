@@ -2,6 +2,7 @@ package apierrors
 
 type ErrorCode = string
 
+// All error codes the auth server returns are defined here.
 const (
 	// ErrorCodeUnknown should not be used directly, it only indicates a failure in the error handling system in such a way that an error code was not assigned properly.
 	ErrorCodeUnknown ErrorCode = "unknown"

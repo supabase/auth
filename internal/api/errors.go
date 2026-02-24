@@ -46,6 +46,8 @@ type (
 func recoverer(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
+			apierrors.RecordPostgresCode(r.Context(), "25005")
+			apierrors.RecordErrorCode(r.Context(), apierrors.ErrorCodeUserSSOManaged)
 			if rvr := recover(); rvr != nil {
 				logEntry := observability.GetLogEntry(r)
 				if logEntry != nil {
@@ -103,6 +105,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			output.Message = e.Message
 			output.Payload.Reasons = e.Reasons
 
+			apierrors.RecordErrorCode(r.Context(), output.Code)
 			if jsonErr := sendJSON(w, http.StatusUnprocessableEntity, output); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
@@ -122,6 +125,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 
 			w.Header().Set("x-sb-error-code", output.ErrorCode)
 
+			apierrors.RecordErrorCode(r.Context(), output.ErrorCode)
 			if jsonErr := sendJSON(w, output.HTTPStatus, output); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
@@ -157,6 +161,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
+			apierrors.RecordErrorCode(r.Context(), resp.Code)
 			if jsonErr := sendJSON(w, e.HTTPStatus, resp); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
@@ -171,12 +176,14 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 
 			// Provide better error messages for certain user-triggered Postgres errors.
 			if pgErr := utilities.NewPostgresError(e.InternalError); pgErr != nil {
+				apierrors.RecordPostgresCode(r.Context(), pgErr.Code)
 				if jsonErr := sendJSON(w, pgErr.HttpStatusCode, pgErr); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 					log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 				}
 				return
 			}
 
+			apierrors.RecordErrorCode(r.Context(), e.ErrorCode)
 			if jsonErr := sendJSON(w, e.HTTPStatus, e); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
@@ -184,6 +191,18 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 
 	case *OAuthError:
 		log.WithError(e.Cause()).Info(e.Error())
+
+		// TODO(cstockton): We could either log oauth errors under a new type
+		// using the e.Code or try to unwrap an internal error if it exists.
+		// We could also add ErrorCodeBadRequest for these few edge cases as
+		// the visibility into oauth specific errors (user triggered errors)
+		// may not be useful for discovering auth server issues. Though the
+		// same argument could be made for most error codes. You could also
+		// argue some class of auth server issues might only surface through
+		// codes such as these.
+		//
+		// The reality here is it's about capturing as many failure modes as
+		// you can afford to so you have baselines to detect anomolies.
 		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 			log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 		}
@@ -200,6 +219,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 				Message: "Unexpected failure, please check server logs for more information",
 			}
 
+			apierrors.RecordErrorCode(r.Context(), resp.Code)
 			if jsonErr := sendJSON(w, http.StatusInternalServerError, resp); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
@@ -210,6 +230,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 				Message:    "Unexpected failure, please check server logs for more information",
 			}
 
+			apierrors.RecordErrorCode(r.Context(), httpError.ErrorCode)
 			if jsonErr := sendJSON(w, http.StatusInternalServerError, httpError); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}

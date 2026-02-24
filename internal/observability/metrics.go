@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/utilities"
 	"github.com/supabase/auth/internal/utilities/version"
@@ -199,6 +200,9 @@ func ConfigureMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
 			return
 		}
 		if err = version.InitVersionMetrics(ctx, utilities.Version); err != nil {
+			logrus.WithError(err).Error("unable to configure version metrics")
+		}
+		if err = apierrors.InitMetrics(); err != nil {
 			logrus.WithError(err).Error("unable to configure version metrics")
 		}
 	})
