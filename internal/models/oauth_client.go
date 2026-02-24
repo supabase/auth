@@ -205,6 +205,10 @@ func (e OAuthServerClientNotFoundError) Error() string {
 	return "OAuth client not found"
 }
 
+func (e OAuthServerClientNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
+
 type InvalidRedirectURIError struct {
 	URI string
 }

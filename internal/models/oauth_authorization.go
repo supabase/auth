@@ -303,3 +303,7 @@ type OAuthServerAuthorizationNotFoundError struct{}
 func (e OAuthServerAuthorizationNotFoundError) Error() string {
 	return "OAuth authorization not found"
 }
+
+func (e OAuthServerAuthorizationNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
