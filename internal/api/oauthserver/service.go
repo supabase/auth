@@ -433,7 +433,7 @@ func (p *OAuthServerClientUpdateParams) validate() error {
 	if p.TokenEndpointAuthMethod != nil {
 		validMethods := GetAllValidAuthMethods()
 		if !slices.Contains(validMethods, *p.TokenEndpointAuthMethod) {
-			return fmt.Errorf("invalid token_endpoint_auth_method: must be one of %v", validMethods)
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid token_endpoint_auth_method: must be one of %v", validMethods)
 		}
 	}
 
