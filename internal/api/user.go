@@ -191,7 +191,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 							return err
 						}
 						if !isCurrentPasswordCorrect {
-							return apierrors.NewBadRequestError(apierrors.ErrorCodeCurrentPasswordMismatch, "Current password required when setting new password.")
+							return apierrors.NewBadRequestError(apierrors.ErrorCodeCurrentPasswordMismatch, "A valid current password required when setting new password.")
 						}
 					}
 				}
