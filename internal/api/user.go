@@ -170,12 +170,16 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if config.Security.UpdatePasswordRequireCurrentPassword {
 					// user may be in a password reset flow, where they do not have a currentPassword
 					isRecoverySession := false
-					for _, claim := range session.AMRClaims {
-						// password recovery flows can be via otp or a magic link, check if the current session
-						// was created with one of those
-						if claim.GetAuthenticationMethod() == "otp" || claim.GetAuthenticationMethod() == "magiclink" {
-							isRecoverySession = true
-							break
+
+					// it is only a recovery session if it was recently created
+					if time.Now().Before(session.CreatedAt.Add(15*time.Minute)) {
+						for _, claim := range session.AMRClaims {
+							// password recovery flows can be via otp or a magic link, check if the current session
+							// was created with one of those
+							if claim.GetAuthenticationMethod() == "otp" || claim.GetAuthenticationMethod() == "magiclink" {
+								isRecoverySession = true
+								break
+							}
 						}
 					}
 					if !isRecoverySession {
