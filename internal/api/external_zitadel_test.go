@@ -23,7 +23,7 @@ func (ts *ExternalTestSuite) TestSignupExternalZitadel() {
 	ts.Equal(ts.Config.External.Zitadel.RedirectURI, q.Get("redirect_uri"))
 	ts.Equal(ts.Config.External.Zitadel.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
-	ts.Equal("profile email", q.Get("scope"))
+	ts.Equal("openid profile email", q.Get("scope"))
 
 	assertValidOAuthState(ts, q.Get("state"), "zitadel")
 }

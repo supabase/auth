@@ -52,6 +52,7 @@ func NewZitadelProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 	}
 
 	oauthScopes := []string{
+		"openid",
 		"profile",
 		"email",
 	}
