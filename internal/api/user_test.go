@@ -289,27 +289,6 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 		notRecentlyLoggedIn.ID).Exec(),
 	)
 
-	// create a recovery session (OTP) created recently (within 15 minutes)
-	recentRecoverySession, err := models.NewSession(u.ID, nil)
-	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.API.db.Create(recentRecoverySession))
-	require.NoError(ts.T(), models.AddClaimToSession(ts.API.db, recentRecoverySession.ID, models.OTP))
-	recentRecoverySession, err = models.FindSessionByID(ts.API.db, recentRecoverySession.ID, true)
-	require.NoError(ts.T(), err)
-
-	// create a recovery session (OTP) whose created_at is older than 15 minutes
-	staleRecoverySession, err := models.NewSession(u.ID, nil)
-	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.API.db.Create(staleRecoverySession))
-	require.NoError(ts.T(), models.AddClaimToSession(ts.API.db, staleRecoverySession.ID, models.OTP))
-	require.NoError(ts.T(), ts.API.db.RawQuery(
-		"update "+staleRecoverySession.TableName()+" set created_at = ? where id = ?",
-		time.Now().Add(-20*time.Minute),
-		staleRecoverySession.ID).Exec(),
-	)
-	staleRecoverySession, err = models.FindSessionByID(ts.API.db, staleRecoverySession.ID, true)
-	require.NoError(ts.T(), err)
-
 	type expected struct {
 		code            int
 		isAuthenticated bool
@@ -386,24 +365,6 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			sessionId:               r.SessionId,
 			expected:                expected{code: http.StatusBadRequest, isAuthenticated: false},
 		},
-		{
-			desc:                    "Current password not required for recent recovery session (OTP, within 15 minutes)",
-			newPassword:             "newpassword123",
-			nonce:                   "",
-			requireReauthentication: false,
-			requireCurrentPassword:  true,
-			sessionId:               &recentRecoverySession.ID,
-			expected:                expected{code: http.StatusOK, isAuthenticated: true},
-		},
-		{
-			desc:                    "Current password required for stale recovery session (OTP, older than 15 minutes)",
-			newPassword:             "newpassword456",
-			nonce:                   "",
-			requireReauthentication: false,
-			requireCurrentPassword:  true,
-			sessionId:               &staleRecoverySession.ID,
-			expected:                expected{code: http.StatusBadRequest, isAuthenticated: false},
-		},
 	}
 
 	for _, c := range cases {
@@ -459,6 +420,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordViaRecovery() {
 		newPassword     string
 		currentPassword string
 		recoveryType    models.AuthenticationMethod
+		staleSession    bool
 		expected        expected
 	}{
 		{
@@ -479,6 +441,20 @@ func (ts *UserTestSuite) TestUserUpdatePasswordViaRecovery() {
 			recoveryType: models.EmailChange,
 			expected:     expected{code: http.StatusBadRequest, isAuthenticated: true},
 		},
+		{
+			desc:         "Current password not required for recent OTP recovery session (within 15 minutes)",
+			newPassword:  "newpassword789",
+			recoveryType: models.OTP,
+			staleSession: false,
+			expected:     expected{code: http.StatusOK, isAuthenticated: true},
+		},
+		{
+			desc:         "Current password required for stale OTP recovery session (older than 15 minutes)",
+			newPassword:  "newpassword789",
+			recoveryType: models.OTP,
+			staleSession: true,
+			expected:     expected{code: http.StatusBadRequest, isAuthenticated: true},
+		},
 	}
 
 	for _, c := range cases {
@@ -492,6 +468,14 @@ func (ts *UserTestSuite) TestUserUpdatePasswordViaRecovery() {
 
 			// Add AMR claim to session to simulate recovery flow
 			require.NoError(ts.T(), models.AddClaimToSession(ts.API.db, session.ID, c.recoveryType))
+
+			if c.staleSession {
+				require.NoError(ts.T(), ts.API.db.RawQuery(
+					"update "+session.TableName()+" set created_at = ? where id = ?",
+					time.Now().Add(-20*time.Minute),
+					session.ID).Exec(),
+				)
+			}
 
 			// Reload session with AMR claims
 			session, err = models.FindSessionByID(ts.API.db, session.ID, true)
