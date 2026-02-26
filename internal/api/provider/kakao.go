@@ -84,8 +84,9 @@ func NewKakaoProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	authHost := chooseHost(ext.URL, defaultKakaoAuthBase)
 	apiHost := chooseHost(ext.URL, defaultKakaoAPIBase)
 
+	// account_email is not requested by default because it requires
+	// Kakao Business app registration in many setups.
 	oauthScopes := []string{
-		"account_email",
 		"profile_image",
 		"profile_nickname",
 	}

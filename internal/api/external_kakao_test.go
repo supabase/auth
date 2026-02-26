@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,10 @@ func (ts *ExternalTestSuite) TestSignupExternalKakao() {
 	ts.Equal(ts.Config.External.Kakao.RedirectURI, q.Get("redirect_uri"))
 	ts.Equal(ts.Config.External.Kakao.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
+	scopes := strings.Fields(q.Get("scope"))
+	ts.Contains(scopes, "profile_image")
+	ts.Contains(scopes, "profile_nickname")
+	ts.NotContains(scopes, "account_email")
 
 	assertValidOAuthState(ts, q.Get("state"), "kakao")
 }
