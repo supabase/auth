@@ -447,6 +447,7 @@ type ProviderConfiguration struct {
 	Email                   EmailProviderConfiguration     `json:"email"`
 	Phone                   PhoneProviderConfiguration     `json:"phone"`
 	X                       OAuthProviderConfiguration     `json:"x" envconfig:"X"`
+	Zitadel                 OAuthProviderConfiguration     `json:"zitadel"`
 	Zoom                    OAuthProviderConfiguration     `json:"zoom"`
 	IosBundleId             string                         `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL             string                         `json:"redirect_url"`

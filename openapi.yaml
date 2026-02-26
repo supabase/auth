@@ -144,6 +144,7 @@ paths:
                     - azure
                     - facebook
                     - keycloak
+                    - zitadel
                 client_id:
                   type: string
                 issuer:
