@@ -44,8 +44,8 @@ type CustomOAuthProvider struct {
 	Issuer            *string        `db:"issuer" json:"issuer,omitempty"`
 	DiscoveryURL      *string        `db:"discovery_url" json:"discovery_url,omitempty"`
 	SkipNonceCheck    bool           `db:"skip_nonce_check" json:"skip_nonce_check"`
-	CachedDiscovery   *OIDCDiscovery `db:"cached_discovery" json:"-"`    // Internal caching, not exposed in API
-	DiscoveryCachedAt *time.Time     `db:"discovery_cached_at" json:"-"` // Internal caching, not exposed in API
+	CachedDiscovery   *OIDCDiscovery `db:"cached_discovery" json:"discovery_document,omitempty"` // Internal caching, not exposed in API
+	DiscoveryCachedAt *time.Time     `db:"discovery_cached_at" json:"-"`                         // Internal caching, not exposed in API
 
 	// OAuth2-specific fields (null for OIDC providers)
 	AuthorizationURL *string `db:"authorization_url" json:"authorization_url,omitempty"`
