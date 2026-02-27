@@ -35,7 +35,8 @@ func NewVercelMarketplaceProvider(ctx context.Context, ext conf.OAuthProviderCon
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, IssuerVercelMarketplace)
+	// Use cached OIDC provider to avoid redundant HTTP calls to discovery endpoint
+	oidcProvider, err := defaultOIDCProviderCache.Get(ctx, IssuerVercelMarketplace)
 	if err != nil {
 		return nil, err
 	}

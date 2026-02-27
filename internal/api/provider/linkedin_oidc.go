@@ -38,7 +38,8 @@ func NewLinkedinOIDCProvider(ctx context.Context, ext conf.OAuthProviderConfigur
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, IssuerLinkedin)
+	// Use cached OIDC provider to avoid redundant HTTP calls to discovery endpoint
+	oidcProvider, err := defaultOIDCProviderCache.Get(ctx, IssuerLinkedin)
 	if err != nil {
 		return nil, err
 	}
