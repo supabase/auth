@@ -105,6 +105,12 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 		issuer = config.External.Keycloak.URL
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Keycloak.ClientID...)
 
+	case p.Provider == "zitadel" || (config.External.Zitadel.Enabled && config.External.Zitadel.URL != "" && p.Issuer == config.External.Zitadel.URL):
+		cfg = &config.External.Zitadel
+		providerType = "zitadel"
+		issuer = config.External.Zitadel.URL
+		acceptableClientIDs = append(acceptableClientIDs, config.External.Zitadel.ClientID...)
+
 	case p.Provider == "kakao" || p.Issuer == provider.IssuerKakao:
 		cfg = &config.External.Kakao
 		providerType = "kakao"
