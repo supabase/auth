@@ -32,6 +32,7 @@ type AdminUserParams struct {
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	BanDuration  string                 `json:"ban_duration"`
+	EnforcePasswordCheck bool            `json:"enforce_password_check"`
 }
 
 type adminUserDeleteParams struct {
@@ -179,8 +180,10 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	if params.Password != nil {
 		password := *params.Password
 
-		if err := a.checkPasswordStrength(ctx, password); err != nil {
-			return err
+		if params.EnforcePasswordCheck {
+			if err := a.checkPasswordStrength(ctx, password); err != nil {
+				return err
+			}
 		}
 
 		if err := user.SetPassword(ctx, password, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
@@ -379,6 +382,14 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewInternalServerError("Error generating password").WithInternalError(err)
 		}
 		params.Password = &password
+	}
+
+	if params.Password != nil {
+		if params.EnforcePasswordCheck {
+			if err := a.checkPasswordStrength(ctx, *params.Password); err != nil {
+				return err
+			}
+		}
 	}
 
 	var user *models.User

@@ -1405,6 +1405,8 @@ paths:
                 redirect_to:
                   type: string
                   format: uri
+                enforce_password_check:
+                  type: boolean
       responses:
         200:
           description: User profile and generated link information.
@@ -1584,6 +1586,57 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
           $ref: "#/components/responses/ForbiddenResponse"
+    post:
+    summary: Create a new user .
+    tags:
+      - admin
+    security:
+      - APIKeyAuth: []
+        AdminAuth: []
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              email:
+                type: string
+                format: email
+              phone:
+                type: string
+                format: phone
+              password:
+                type: string
+              password_hash:
+                type: string
+              email_confirm:
+                type: boolean
+              phone_confirm:
+                type: boolean
+              user_metadata:
+                type: object
+              app_metadata:
+                type: object
+              ban_duration:
+                type: string
+              enforce_password_check:
+                type: boolean
+    responses:
+      200:
+        description: User was successfully created.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserSchema"
+      400:
+        $ref: "#/components/responses/BadRequestResponse"
+      401:
+        $ref: "#/components/responses/UnauthorizedResponse"
+      403:
+        $ref: "#/components/responses/ForbiddenResponse"
 
   /admin/users/{userId}:
     parameters:
@@ -1629,6 +1682,8 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UserSchema"
+              enforce_password_check:
+                type: boolean
       responses:
         200:
           description: User's account data was updated.
