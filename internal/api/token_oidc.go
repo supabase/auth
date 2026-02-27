@@ -107,6 +107,12 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 
 	case p.Provider == "zitadel" || (config.External.Zitadel.Enabled && config.External.Zitadel.URL != "" && p.Issuer == config.External.Zitadel.URL):
 		cfg = &config.External.Zitadel
+		if cfg.URL == "" {
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(
+				apierrors.ErrorCodeValidationFailed,
+				"missing OAuth URL for Zitadel provider",
+			)
+		}
 		providerType = "zitadel"
 		issuer = config.External.Zitadel.URL
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Zitadel.ClientID...)
