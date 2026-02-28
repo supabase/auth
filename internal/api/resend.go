@@ -12,16 +12,22 @@ import (
 
 // ResendConfirmationParams holds the parameters for a resend request
 type ResendConfirmationParams struct {
-	Type  string `json:"type"`
-	Email string `json:"email"`
-	Phone string `json:"phone"`
+	Type                string `json:"type"`
+	Email               string `json:"email"`
+	Phone               string `json:"phone"`
+	CodeChallenge       string `json:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method"`
 }
 
 func (p *ResendConfirmationParams) Validate(a *API) error {
 	config := a.config
 
 	switch p.Type {
-	case mail.SignupVerification, mail.EmailChangeVerification, smsVerification, phoneChangeVerification:
+	case mail.SignupVerification, mail.EmailChangeVerification:
+		if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+			return err
+		}
+	case smsVerification, phoneChangeVerification:
 		break
 	default:
 		// type does not match one of the above
@@ -121,8 +127,13 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, "", nil); terr != nil {
 				return terr
 			}
-			// PKCE not implemented yet
-			return a.sendConfirmation(r, tx, user, models.ImplicitFlow)
+			flowType := getFlowFromChallenge(params.CodeChallenge)
+			if isPKCEFlow(flowType) {
+				if _, terr := generateFlowState(tx, models.EmailSignup.String(), models.EmailSignup, params.CodeChallengeMethod, params.CodeChallenge, &user.ID); terr != nil {
+					return terr
+				}
+			}
+			return a.sendConfirmation(r, tx, user, flowType)
 		case smsVerification:
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
@@ -133,7 +144,13 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			}
 			messageID = mID
 		case mail.EmailChangeVerification:
-			return a.sendEmailChange(r, tx, user, user.EmailChange, models.ImplicitFlow)
+			flowType := getFlowFromChallenge(params.CodeChallenge)
+			if isPKCEFlow(flowType) {
+				if _, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID); terr != nil {
+					return terr
+				}
+			}
+			return a.sendEmailChange(r, tx, user, user.EmailChange, flowType)
 		case phoneChangeVerification:
 			mID, terr := a.sendPhoneConfirmation(r, tx, user, user.PhoneChange, phoneChangeVerification, sms_provider.SMSProvider)
 			if terr != nil {
