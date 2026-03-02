@@ -420,6 +420,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordViaRecovery() {
 		newPassword     string
 		currentPassword string
 		recoveryType    models.AuthenticationMethod
+		staleSession    bool
 		expected        expected
 	}{
 		{
@@ -440,6 +441,20 @@ func (ts *UserTestSuite) TestUserUpdatePasswordViaRecovery() {
 			recoveryType: models.EmailChange,
 			expected:     expected{code: http.StatusBadRequest, isAuthenticated: true},
 		},
+		{
+			desc:         "Current password not required for recent OTP recovery session (within 15 minutes)",
+			newPassword:  "newpassword789",
+			recoveryType: models.OTP,
+			staleSession: false,
+			expected:     expected{code: http.StatusOK, isAuthenticated: true},
+		},
+		{
+			desc:         "Current password required for stale OTP recovery session (older than 15 minutes)",
+			newPassword:  "newpassword789",
+			recoveryType: models.OTP,
+			staleSession: true,
+			expected:     expected{code: http.StatusBadRequest, isAuthenticated: true},
+		},
 	}
 
 	for _, c := range cases {
@@ -453,6 +468,14 @@ func (ts *UserTestSuite) TestUserUpdatePasswordViaRecovery() {
 
 			// Add AMR claim to session to simulate recovery flow
 			require.NoError(ts.T(), models.AddClaimToSession(ts.API.db, session.ID, c.recoveryType))
+
+			if c.staleSession {
+				require.NoError(ts.T(), ts.API.db.RawQuery(
+					"update "+session.TableName()+" set created_at = ? where id = ?",
+					time.Now().Add(-20*time.Minute),
+					session.ID).Exec(),
+				)
+			}
 
 			// Reload session with AMR claims
 			session, err = models.FindSessionByID(ts.API.db, session.ID, true)
