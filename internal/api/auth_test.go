@@ -57,6 +57,34 @@ func (ts *AuthTestSuite) TestExtractBearerToken() {
 	require.Equal(ts.T(), userJwt, token)
 }
 
+// TestExtractBearerTokenCaseInsensitive verifies that the Bearer scheme
+// is matched case-insensitively per RFC 7235 §2.1.
+func TestExtractBearerTokenCaseInsensitive(t *testing.T) {
+	a := &API{}
+	token := "eyJhbGciOiJIUzI1NiJ9.e30.ZRrHA1JJJW8opB1Qfp7QDnH0sWd2N_gy0lsVOKiQ28"
+
+	cases := []struct {
+		scheme string
+	}{
+		{"Bearer"},
+		{"bearer"},
+		{"BEARER"},
+		{"bEaReR"},
+		{"BeArEr"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.scheme, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+			req.Header.Set("Authorization", c.scheme+" "+token)
+
+			got, err := a.extractBearerToken(req)
+			require.NoError(t, err, "scheme %q should be accepted per RFC 7235 §2.1", c.scheme)
+			require.Equal(t, token, got)
+		})
+	}
+}
+
 func (ts *AuthTestSuite) TestParseJWTClaims() {
 	cases := []struct {
 		desc string

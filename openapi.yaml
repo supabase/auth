@@ -2145,6 +2145,16 @@ paths:
                       - authorization_code
                       - refresh_token
                   description: OAuth grant types the client is authorized to use
+                token_endpoint_auth_method:
+                  type: string
+                  enum:
+                    - none
+                    - client_secret_basic
+                    - client_secret_post
+                  description: >
+                    Authentication method for the token endpoint. Must be compatible with the client's current client_type.
+                    Confidential clients can use 'client_secret_basic' or 'client_secret_post'.
+                    Public clients can only use 'none'.
       responses:
         200:
           description: OAuth client updated successfully

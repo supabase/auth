@@ -99,6 +99,10 @@ func (e OneTimeTokenNotFoundError) Error() string {
 	return "One-time token not found"
 }
 
+func (e OneTimeTokenNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
+
 type OneTimeToken struct {
 	ID uuid.UUID `json:"id" db:"id"`
 

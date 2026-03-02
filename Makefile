@@ -1,5 +1,5 @@
-.PHONY: all build deps image migrate test vet sec format unused
-.PHONY: check-gosec check-oapi-codegen check-staticcheck
+.PHONY: all build deps image migrate test vet sec vulncheck format unused
+.PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck
 CHECK_FILES?=./...
 
 ifdef RELEASE_VERSION
@@ -58,6 +58,13 @@ sec: check-gosec # Check for security vulnerabilities
 check-gosec:
 	@command -v gosec >/dev/null 2>&1 \
 		|| go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+vulncheck: check-govulncheck # Check for known vulnerabilities
+	govulncheck $(CHECK_FILES)
+
+check-govulncheck:
+	@command -v govulncheck >/dev/null 2>&1 \
+		|| go install golang.org/x/vuln/cmd/govulncheck@latest
 
 unused: | check-staticcheck # Look for unused code
 	@echo "Unused code:"

@@ -54,6 +54,10 @@ jobs:
         run: |
           set -x
           make sec
+      - name: Run govulncheck
+        run: |
+          set -x
+          make vulncheck
       - name: Init Database
         run: psql -f hack/init_postgres.sql postgresql://postgres:root@localhost:5432/postgres
       - name: Run migrations

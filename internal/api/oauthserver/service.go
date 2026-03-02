@@ -374,11 +374,12 @@ func (s *Server) regenerateOAuthServerClientSecret(ctx context.Context, clientID
 
 // OAuthServerClientUpdateParams contains parameters for updating an OAuth client
 type OAuthServerClientUpdateParams struct {
-	RedirectURIs *[]string `json:"redirect_uris,omitempty"`
-	GrantTypes   *[]string `json:"grant_types,omitempty"`
-	ClientName   *string   `json:"client_name,omitempty"`
-	ClientURI    *string   `json:"client_uri,omitempty"`
-	LogoURI      *string   `json:"logo_uri,omitempty"`
+	RedirectURIs           *[]string `json:"redirect_uris,omitempty"`
+	GrantTypes             *[]string `json:"grant_types,omitempty"`
+	ClientName             *string   `json:"client_name,omitempty"`
+	ClientURI              *string   `json:"client_uri,omitempty"`
+	LogoURI                *string   `json:"logo_uri,omitempty"`
+	TokenEndpointAuthMethod *string  `json:"token_endpoint_auth_method,omitempty"`
 }
 
 // isEmpty returns true if no fields are set for update
@@ -387,7 +388,8 @@ func (p *OAuthServerClientUpdateParams) isEmpty() bool {
 		p.GrantTypes == nil &&
 		p.ClientName == nil &&
 		p.ClientURI == nil &&
-		p.LogoURI == nil
+		p.LogoURI == nil &&
+		p.TokenEndpointAuthMethod == nil
 }
 
 // validate validates the OAuth client update parameters
@@ -427,6 +429,14 @@ func (p *OAuthServerClientUpdateParams) validate() error {
 		}
 	}
 
+	// Validate token endpoint auth method if provided
+	if p.TokenEndpointAuthMethod != nil {
+		validMethods := GetAllValidAuthMethods()
+		if !slices.Contains(validMethods, *p.TokenEndpointAuthMethod) {
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid token_endpoint_auth_method: must be one of %v", validMethods)
+		}
+	}
+
 	return nil
 }
 
@@ -463,6 +473,17 @@ func (s *Server) updateOAuthServerClient(ctx context.Context, clientID uuid.UUID
 
 	if params.LogoURI != nil {
 		client.LogoURI = utilities.StringPtr(*params.LogoURI)
+	}
+
+	if params.TokenEndpointAuthMethod != nil {
+		if !IsValidAuthMethodForClientType(client.ClientType, *params.TokenEndpointAuthMethod) {
+			return nil, apierrors.NewBadRequestError(
+				apierrors.ErrorCodeValidationFailed,
+				"token_endpoint_auth_method '%s' is not valid for client_type '%s'; valid methods: %v",
+				*params.TokenEndpointAuthMethod, client.ClientType, GetValidAuthMethodsForClientType(client.ClientType),
+			)
+		}
+		client.TokenEndpointAuthMethod = *params.TokenEndpointAuthMethod
 	}
 
 	if err := models.UpdateOAuthServerClient(db, client); err != nil {
