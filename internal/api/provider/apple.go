@@ -88,7 +88,7 @@ type appleUser struct {
 }
 
 // NewAppleProvider creates a Apple account provider.
-func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
+func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, cache *OIDCProviderCache) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration) 
 		logrus.Warn("Apple OAuth provider has URL config set which is ignored (check GOTRUE_EXTERNAL_APPLE_URL)")
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, DefaultAppleIssuer)
+	oidcProvider, err := cache.GetProvider(ctx, DefaultAppleIssuer)
 	if err != nil {
 		return nil, err
 	}

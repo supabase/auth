@@ -592,10 +592,10 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	switch name {
 	case "apple":
 		pConfig = config.External.Apple
-		p, err = provider.NewAppleProvider(ctx, pConfig)
+		p, err = provider.NewAppleProvider(ctx, pConfig, a.oidcCache)
 	case "azure":
 		pConfig = config.External.Azure
-		p, err = provider.NewAzureProvider(pConfig, scopes)
+		p, err = provider.NewAzureProvider(pConfig, scopes, a.oidcCache)
 	case "bitbucket":
 		pConfig = config.External.Bitbucket
 		p, err = provider.NewBitbucketProvider(pConfig)
@@ -619,7 +619,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		p, err = provider.NewGitlabProvider(pConfig, scopes)
 	case "google":
 		pConfig = config.External.Google
-		p, err = provider.NewGoogleProvider(ctx, pConfig, scopes)
+		p, err = provider.NewGoogleProvider(ctx, pConfig, scopes, a.oidcCache)
 	case "kakao":
 		pConfig = config.External.Kakao
 		p, err = provider.NewKakaoProvider(pConfig, scopes)
@@ -631,7 +631,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		p, err = provider.NewLinkedinProvider(pConfig, scopes)
 	case "linkedin_oidc":
 		pConfig = config.External.LinkedinOIDC
-		p, err = provider.NewLinkedinOIDCProvider(ctx, pConfig, scopes)
+		p, err = provider.NewLinkedinOIDCProvider(ctx, pConfig, scopes, a.oidcCache)
 	case "notion":
 		pConfig = config.External.Notion
 		p, err = provider.NewNotionProvider(pConfig)
@@ -658,7 +658,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		p, err = provider.NewXProvider(pConfig, scopes)
 	case "vercel_marketplace":
 		pConfig = config.External.VercelMarketplace
-		p, err = provider.NewVercelMarketplaceProvider(ctx, pConfig, scopes)
+		p, err = provider.NewVercelMarketplaceProvider(ctx, pConfig, scopes, a.oidcCache)
 	case "workos":
 		pConfig = config.External.WorkOS
 		p, err = provider.NewWorkOSProvider(pConfig)
@@ -765,6 +765,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		customProvider.AcceptableClientIDs,
 		customProvider.AttributeMapping,
 		customProvider.AuthorizationParams,
+		a.oidcCache,
 	)
 	if err != nil {
 		return nil, pConfig, fmt.Errorf("error creating OIDC provider: %w", err)

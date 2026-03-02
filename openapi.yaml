@@ -2300,6 +2300,9 @@ paths:
       description: >
         Creates a new custom OAuth 2.0 or OIDC provider configuration.
         Required fields differ based on provider_type. Only available when custom OIDC/OAuth providers are enabled.
+        For OIDC providers, the server fetches and validates the OpenID Connect discovery document
+        from the issuer's well-known endpoint (or the provided discovery_url) at creation time.
+        This ensures the issuer is reachable and correctly configured before the provider is stored.
       tags:
         - admin
         - oauth-client
@@ -2466,6 +2469,21 @@ paths:
                   value:
                     error_code: validation_failed
                     msg: "Cannot use reserved provider name: google. This provider is already built into Supabase Auth."
+                discovery_fetch_failed:
+                  summary: OIDC discovery fetch failed
+                  value:
+                    error_code: validation_failed
+                    msg: "Failed to fetch OIDC discovery document from \"https://example.com/.well-known/openid-configuration\""
+                discovery_invalid:
+                  summary: OIDC discovery missing required fields
+                  value:
+                    error_code: validation_failed
+                    msg: "OIDC discovery document is missing required fields: jwks_uri"
+                discovery_issuer_mismatch:
+                  summary: OIDC discovery issuer mismatch
+                  value:
+                    error_code: validation_failed
+                    msg: "OIDC discovery issuer mismatch: discovery document reports \"https://other.example.com\" but expected \"https://example.com\""
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
@@ -2532,6 +2550,8 @@ paths:
       description: >
         Updates an existing custom OIDC/OAuth provider. All fields are optional.
         Only provided fields will be updated. Only available when custom OIDC/OAuth providers are enabled.
+        When `issuer` or `discovery_url` is changed on an OIDC provider, the server re-fetches and
+        validates the discovery document before persisting.
       tags:
         - admin
         - oauth-client
@@ -2626,11 +2646,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/CustomOAuthProviderSchema"
         400:
-          description: Invalid identifier or validation failed
+          description: Invalid identifier, validation failed, or OIDC discovery validation failed
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                validation_failed:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                    msg: "identifier must start with 'custom:' prefix"
+                discovery_fetch_failed:
+                  summary: OIDC discovery fetch failed
+                  value:
+                    error_code: validation_failed
+                    msg: "Failed to fetch OIDC discovery document from \"https://example.com/.well-known/openid-configuration\""
+                discovery_issuer_mismatch:
+                  summary: OIDC discovery issuer mismatch
+                  value:
+                    error_code: validation_failed
+                    msg: "OIDC discovery issuer mismatch: discovery document reports \"https://other.example.com\" but expected \"https://example.com\""
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:

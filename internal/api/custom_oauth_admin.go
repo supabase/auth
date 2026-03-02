@@ -1,9 +1,13 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	popslices "github.com/gobuffalo/pop/v6/slices"
@@ -208,6 +212,17 @@ func (a *API) adminCustomOAuthProviderCreate(w http.ResponseWriter, r *http.Requ
 	// Create provider model
 	provider := buildProviderFromParams(params, providerType)
 
+	// For OIDC providers, fetch and validate the discovery document before persisting.
+	// This catches misconfigurations (bad issuer URL, missing endpoints) at admin time
+	// rather than failing silently at user login time.
+	if providerType == models.ProviderTypeOIDC {
+		discovery, err := fetchAndValidateDiscovery(ctx, provider.GetDiscoveryURL(), params.Issuer)
+		if err != nil {
+			return err
+		}
+		provider.SetDiscoveryCache(discovery)
+	}
+
 	// Encrypt and store client secret
 	if err := provider.SetClientSecret(params.ClientSecret, config.Security.DBEncryption); err != nil {
 		return apierrors.NewInternalServerError("Error encrypting custom OAuth provider client secret").WithInternalError(err)
@@ -271,29 +286,46 @@ func (a *API) adminCustomOAuthProviderUpdate(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	var provider *models.CustomOAuthProvider
-	err := db.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		provider, terr = models.FindCustomOAuthProviderByIdentifier(tx, identifier)
-		if terr != nil {
-			if models.IsNotFoundError(terr) {
-				return apierrors.NewNotFoundError(apierrors.ErrorCodeCustomProviderNotFound, "Custom OAuth provider not found")
-			}
-			return apierrors.NewInternalServerError("Error retrieving custom OAuth provider").WithInternalError(terr)
+	// Read the existing provider outside the write transaction so the
+	// network call (discovery fetch) doesn't hold a transaction open.
+	provider, err := models.FindCustomOAuthProviderByIdentifier(db, identifier)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeCustomProviderNotFound, "Custom OAuth provider not found")
 		}
+		return apierrors.NewInternalServerError("Error retrieving custom OAuth provider").WithInternalError(err)
+	}
 
-		// Update provider with new non-secret values
-		if terr := updateProviderFromParams(provider, params); terr != nil {
-			return terr
+	// Capture the current issuer before applying updates so we can
+	// invalidate the in-memory cache if it changes.
+	var oldIssuer string
+	if provider.IsOIDC() && provider.Issuer != nil {
+		oldIssuer = *provider.Issuer
+	}
+
+	// Update provider with new non-secret values
+	if err := updateProviderFromParams(provider, params); err != nil {
+		return err
+	}
+
+	// For OIDC providers, re-validate discovery when the issuer or discovery URL changes.
+	// This network call happens outside the transaction to avoid holding it open.
+	if provider.IsOIDC() && (params.Issuer != "" || params.DiscoveryURL != nil) {
+		discovery, err := fetchAndValidateDiscovery(ctx, provider.GetDiscoveryURL(), *provider.Issuer)
+		if err != nil {
+			return err
 		}
+		provider.SetDiscoveryCache(discovery)
+	}
 
-		// If a new client secret is provided, encrypt and store it (likely move to out of the transaction)
-		if params.ClientSecret != "" {
-			if terr := provider.SetClientSecret(params.ClientSecret, config.Security.DBEncryption); terr != nil {
-				return apierrors.NewInternalServerError("Error encrypting custom OAuth provider client secret").WithInternalError(terr)
-			}
+	// If a new client secret is provided, encrypt and store it
+	if params.ClientSecret != "" {
+		if err := provider.SetClientSecret(params.ClientSecret, config.Security.DBEncryption); err != nil {
+			return apierrors.NewInternalServerError("Error encrypting custom OAuth provider client secret").WithInternalError(err)
 		}
+	}
 
+	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.UpdateCustomOAuthProvider(tx, provider); terr != nil {
 			return apierrors.NewInternalServerError("Error updating custom OAuth provider").WithInternalError(terr)
 		}
@@ -305,6 +337,17 @@ func (a *API) adminCustomOAuthProviderUpdate(w http.ResponseWriter, r *http.Requ
 
 	if err != nil {
 		return err
+	}
+
+	// Invalidate in-memory OIDC cache if the issuer changed or discovery was refreshed,
+	// so the next auth request picks up the new configuration.
+	if provider.IsOIDC() && provider.Issuer != nil {
+		if oldIssuer != "" && oldIssuer != *provider.Issuer {
+			a.oidcCache.Invalidate(oldIssuer)
+		}
+		if params.Issuer != "" || params.DiscoveryURL != nil {
+			a.oidcCache.Invalidate(*provider.Issuer)
+		}
 	}
 
 	return sendJSON(w, http.StatusOK, provider)
@@ -326,6 +369,7 @@ func (a *API) adminCustomOAuthProviderDelete(w http.ResponseWriter, r *http.Requ
 
 	observability.LogEntrySetField(r, "identifier", identifier)
 
+	var issuerToInvalidate string
 	err := db.Transaction(func(tx *storage.Connection) error {
 		provider, terr := models.FindCustomOAuthProviderByIdentifier(tx, identifier)
 		if terr != nil {
@@ -333,6 +377,10 @@ func (a *API) adminCustomOAuthProviderDelete(w http.ResponseWriter, r *http.Requ
 				return apierrors.NewNotFoundError(apierrors.ErrorCodeCustomProviderNotFound, "Custom OAuth provider not found")
 			}
 			return apierrors.NewInternalServerError("Error retrieving custom OAuth provider").WithInternalError(terr)
+		}
+
+		if provider.IsOIDC() && provider.Issuer != nil {
+			issuerToInvalidate = *provider.Issuer
 		}
 
 		// TODO: Add admin audit logging here (see create endpoint for details)
@@ -346,6 +394,10 @@ func (a *API) adminCustomOAuthProviderDelete(w http.ResponseWriter, r *http.Requ
 
 	if err != nil {
 		return err
+	}
+
+	if issuerToInvalidate != "" {
+		a.oidcCache.Invalidate(issuerToInvalidate)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -617,6 +669,82 @@ func validateAuthorizationParams(params map[string]interface{}) error {
 	}
 
 	return nil
+}
+
+// maxDiscoveryResponseSize is the maximum size of an OIDC discovery response body (1 MB).
+const maxDiscoveryResponseSize = 1 << 20
+
+// discoveryFetchTimeout is the timeout for fetching an OIDC discovery document.
+const discoveryFetchTimeout = 10 * time.Second
+
+// fetchAndValidateDiscovery fetches the OIDC discovery document from the
+// provider's discovery URL and validates that it contains the required fields
+// per the OpenID Connect Discovery 1.0 specification. It also verifies that
+// the issuer in the discovery document matches the expected issuer.
+func fetchAndValidateDiscovery(ctx context.Context, discoveryURL, expectedIssuer string) (*models.OIDCDiscovery, error) {
+	resp, err := utilities.FetchURLWithTimeout(ctx, discoveryURL, discoveryFetchTimeout)
+	if err != nil {
+		return nil, apierrors.NewBadRequestError(
+			apierrors.ErrorCodeValidationFailed,
+			"Failed to fetch OIDC discovery document from %q: %v", discoveryURL, err,
+		)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, apierrors.NewBadRequestError(
+			apierrors.ErrorCodeValidationFailed,
+			"OIDC discovery endpoint %q returned HTTP %d, expected 200", discoveryURL, resp.StatusCode,
+		)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryResponseSize))
+	if err != nil {
+		return nil, apierrors.NewBadRequestError(
+			apierrors.ErrorCodeValidationFailed,
+			"Failed to read OIDC discovery response from %q", discoveryURL,
+		)
+	}
+
+	var discovery models.OIDCDiscovery
+	if err := json.Unmarshal(body, &discovery); err != nil {
+		return nil, apierrors.NewBadRequestError(
+			apierrors.ErrorCodeValidationFailed,
+			"OIDC discovery document from %q is not valid JSON", discoveryURL,
+		)
+	}
+
+	// Validate required fields per OpenID Connect Discovery 1.0 spec
+	var missing []string
+	if discovery.Issuer == "" {
+		missing = append(missing, "issuer")
+	}
+	if discovery.AuthorizationEndpoint == "" {
+		missing = append(missing, "authorization_endpoint")
+	}
+	if discovery.TokenEndpoint == "" {
+		missing = append(missing, "token_endpoint")
+	}
+	if discovery.JwksURI == "" {
+		missing = append(missing, "jwks_uri")
+	}
+	if len(missing) > 0 {
+		return nil, apierrors.NewBadRequestError(
+			apierrors.ErrorCodeValidationFailed,
+			"OIDC discovery document is missing required fields: %s", strings.Join(missing, ", "),
+		)
+	}
+
+	// The issuer in the discovery document MUST exactly match the expected issuer
+	// per OpenID Connect Discovery 1.0, Section 4.3.
+	if discovery.Issuer != expectedIssuer {
+		return nil, apierrors.NewBadRequestError(
+			apierrors.ErrorCodeValidationFailed,
+			"OIDC discovery issuer mismatch: discovery document reports %q but expected %q", discovery.Issuer, expectedIssuer,
+		)
+	}
+
+	return &discovery, nil
 }
 
 // validateAttributeMapping ensures no sensitive system fields are targeted

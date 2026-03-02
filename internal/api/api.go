@@ -11,6 +11,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/api/oauthserver"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
@@ -45,6 +46,7 @@ type API struct {
 	oauthServer  *oauthserver.Server
 	tokenService *tokens.Service
 	mailer       mailer.Mailer
+	oidcCache    *provider.OIDCProviderCache
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
@@ -95,6 +97,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		db:      db,
 		version: version,
 	}
+
+	api.oidcCache = provider.NewOIDCProviderCache(globalConfig.External.OIDCProviderCacheTTL)
 
 	for _, o := range opt {
 		o.apply(api)

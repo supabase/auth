@@ -37,7 +37,7 @@ type googleProvider struct {
 }
 
 // NewGoogleProvider creates a Google OAuth2 identity provider.
-func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string, cache *OIDCProviderCache) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration,
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, internalIssuerGoogle)
+	oidcProvider, err := cache.GetProvider(ctx, internalIssuerGoogle)
 	if err != nil {
 		return nil, err
 	}
