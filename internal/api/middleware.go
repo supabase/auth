@@ -454,6 +454,19 @@ func (t *timeoutResponseWriter) finallyWrite(w http.ResponseWriter) {
 	}
 }
 
+// limitRequestBody wraps the request body with http.MaxBytesReader to prevent
+// memory exhaustion from excessively large request bodies (gosec G120).
+func limitRequestBody(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil && r.Body != http.NoBody {
+				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

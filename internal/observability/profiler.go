@@ -17,7 +17,7 @@ func ConfigureProfiler(ctx context.Context, pc *conf.ProfilerConfig) error {
 		return nil
 	}
 	addr := net.JoinHostPort(pc.Host, pc.Port)
-	baseContext, cancel := context.WithCancel(context.Background())
+	baseContext, cancel := context.WithCancel(context.Background()) // #nosec G118 -- cancel() is called in the shutdown goroutine below; baseContext is for the HTTP server.
 	cleanupWaitGroup.Add(1)
 	go func() {
 		server := &http.Server{

@@ -709,6 +709,62 @@ func (ts *MiddlewareTestSuite) TestLimitHandler() {
 	require.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
 }
 
+func (ts *MiddlewareTestSuite) TestLimitRequestBodyMiddleware() {
+	const maxBytes = 1 << 10 // 1KB for testing
+
+	bodyReadHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
+	handler := limitRequestBody(maxBytes)(bodyReadHandler)
+
+	ts.Run("allows request within limit", func() {
+		body := bytes.NewReader(make([]byte, maxBytes-1))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost", body)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+		require.Equal(ts.T(), "ok", w.Body.String())
+	})
+
+	ts.Run("rejects request exceeding limit", func() {
+		body := bytes.NewReader(make([]byte, maxBytes+1))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost", body)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusRequestEntityTooLarge, w.Code)
+	})
+
+	ts.Run("allows nil body", func() {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
+
+	ts.Run("allows empty body", func() {
+		req := httptest.NewRequest(http.MethodPost, "http://localhost", http.NoBody)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
+
+	ts.Run("allows request at exact limit", func() {
+		body := bytes.NewReader(make([]byte, maxBytes))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost", body)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
+}
+
 type MockCleanup struct {
 	mock.Mock
 }
