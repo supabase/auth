@@ -151,3 +151,21 @@ func (ts *SignupTestSuite) TestVerifySignup() {
 	require.NotEmpty(ts.T(), v.Get("expires_in"))
 	require.NotEmpty(ts.T(), v.Get("refresh_token"))
 }
+
+// TestSignupRequestBodyTooLarge verifies that the MaxBytesReader middleware
+// rejects oversized request bodies with a 413 error through the full handler chain.
+func (ts *SignupTestSuite) TestSignupRequestBodyTooLarge() {
+	// Create a body that exceeds the 1MB limit (1<<20 + 1 bytes)
+	largeBody := make([]byte, (1<<20)+1)
+	req := httptest.NewRequest(http.MethodPost, "/signup", bytes.NewReader(largeBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusRequestEntityTooLarge, w.Code)
+
+	var data map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.Equal(ts.T(), "request_entity_too_large", data["error_code"])
+}

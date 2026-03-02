@@ -163,7 +163,7 @@ func serve(ctx context.Context) {
 	}
 
 	wg.Add(1)
-	go func() {
+	go func() { // #nosec G118 -- Cleanup goroutine intentionally outlives the request; context.Background() is required for shutdown after parent context is cancelled.
 		defer wg.Done()
 
 		<-ctx.Done()

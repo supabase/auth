@@ -85,6 +85,9 @@ type RequestParams interface {
 func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
 	body, err := utilities.GetBodyBytes(r)
 	if err != nil {
+		if err, ok := err.(*http.MaxBytesError); ok {
+			return apierrors.NewHTTPError(http.StatusRequestEntityTooLarge, apierrors.ErrorCodeRequestEntityTooLarge, "Request body too large (max %d bytes)", err.Limit)
+		}
 		return apierrors.NewInternalServerError("Could not read body into byte slice").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, params); err != nil {
