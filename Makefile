@@ -26,6 +26,7 @@ all: vet sec static build ## Run the tests and build the binary.
 build: deps ## Build the binary.
 	CGO_ENABLED=0 go build $(FLAGS)
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o auth-arm64
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(FLAGS) -o auth-darwin-arm64
 
 build-strip: deps ## Build a stripped binary, for which the version file needs to be rewritten.
 	echo "package utilities" > internal/utilities/version.go

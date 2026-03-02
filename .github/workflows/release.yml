@@ -107,6 +107,9 @@ jobs:
           mv auth-arm64 auth
           tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
 
+          mv auth-darwin-arm64 auth
+          tar -czvf auth-v$RELEASE_VERSION-darwin-arm64.tar.gz auth gotrue migrations/
+
           mv auth-arm64-strip auth
           tar -cf - auth gotrue migrations/ | xz -T0 -9e -C crc64 > auth-v$RELEASE_VERSION-arm64.tar.xz
 
@@ -198,7 +201,7 @@ jobs:
           FULL_NOTES=$(printf "%s\n\n%s\n" "$EXISTING_NOTES" "$CHECKSUM_CONTENT")
           GH_TOKEN='${{ github.token }}' gh release edit $RELEASE_NAME -n "$FULL_NOTES"
 
-          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.xz
+          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.xz ./auth-v$RELEASE_VERSION-darwin-arm64.tar.gz
 
           # Upload to Supabase internal bucket
           aws s3 cp ./auth-v$RELEASE_VERSION-arm64.tar.xz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/

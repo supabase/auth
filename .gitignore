@@ -6,6 +6,7 @@ gotrue.exe
 auth
 auth-arm64
 auth-arm64-strip
+auth-darwin-arm64
 auth.exe
 
 coverage.out
