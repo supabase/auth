@@ -47,9 +47,9 @@ func enablePrometheusMetrics(ctx context.Context, mc *conf.MetricsConfig) error 
 	otel.SetMeterProvider(provider)
 
 	cleanupWaitGroup.Add(1)
-	go func() {
+	go func() { // #nosec G118 -- Cleanup goroutine intentionally manages server lifecycle independent of request context.
 		addr := net.JoinHostPort(mc.PrometheusListenHost, mc.PrometheusListenPort)
-		baseContext, cancel := context.WithCancel(context.Background())
+		baseContext, cancel := context.WithCancel(context.Background()) // #nosec G118 -- cancel() is called in the shutdown goroutine below; baseContext is for the HTTP server.
 
 		server := &http.Server{
 			Addr:    addr,
@@ -100,7 +100,7 @@ func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) err
 		otel.SetMeterProvider(meterProvider)
 
 		cleanupWaitGroup.Add(1)
-		go func() {
+		go func() { // #nosec G118 -- Cleanup goroutine intentionally outlives the request; context.Background() is required for shutdown after parent context is cancelled.
 			defer cleanupWaitGroup.Done()
 
 			<-ctx.Done()
@@ -127,7 +127,7 @@ func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) err
 		otel.SetMeterProvider(meterProvider)
 
 		cleanupWaitGroup.Add(1)
-		go func() {
+		go func() { // #nosec G118 -- Cleanup goroutine intentionally outlives the request; context.Background() is required for shutdown after parent context is cancelled.
 			defer cleanupWaitGroup.Done()
 
 			<-ctx.Done()

@@ -773,7 +773,7 @@ func helpCopyEnvFile(t testing.TB, dir, name, src string) string {
 	}
 
 	dst := filepath.Join(dir, name)
-	err = os.WriteFile(dst, data, 0600)
+	err = os.WriteFile(dst, data, 0600) // #nosec G703 -- Test helper; dir and name are controlled by the test.
 	if err != nil {
 		require.Nil(t, err)
 	}

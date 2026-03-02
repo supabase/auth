@@ -108,6 +108,8 @@ const (
 	ErrorCodeOAuthAuthorizationNotFound ErrorCode = "oauth_authorization_not_found"
 	ErrorCodeOAuthConsentNotFound       ErrorCode = "oauth_consent_not_found"
 
+	ErrorCodeRequestEntityTooLarge ErrorCode = "request_entity_too_large"
+
 	ErrorCodeCustomProviderNotFound  ErrorCode = "custom_provider_not_found"
 	ErrorCodeOverCustomProviderQuota ErrorCode = "over_custom_provider_quota"
 )
