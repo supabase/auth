@@ -14,6 +14,7 @@ import (
 
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/gofrs/uuid"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/oauthserver"
@@ -500,7 +501,7 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 			case <-ctx.Done():
 				err := ctx.Err()
 
-				if err == context.DeadlineExceeded {
+				if errors.Is(err, context.DeadlineExceeded) {
 					httpError := &HTTPError{
 						HTTPStatus: http.StatusGatewayTimeout,
 						ErrorCode:  apierrors.ErrorCodeRequestTimeout,
