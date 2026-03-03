@@ -1,4 +1,5 @@
 # Auth - Authentication and User Management by Supabase
+<!-- docs updated: clarify /verify endpoint behavior -->
 
 [![Coverage Status](https://coveralls.io/repos/github/supabase/auth/badge.svg?branch=master)](https://coveralls.io/github/supabase/auth?branch=master)
 
@@ -65,7 +66,7 @@ further clarifications on backward compatibility guarantees:
 **Go API compatibility**
 
 Auth is not meant to be used as a Go library. There are no guarantees on
-backward API compatibility when used this way regardless of which version 
+backward API compatibility when used this way regardless of which version
 number changes.
 
 **Patch**
@@ -1106,17 +1107,51 @@ Returns:
 
 ### **POST /verify**
 
-Verify a registration or a password recovery. Type can be `signup`, `recovery`, `invite`, `magiclink`, `email_change`, `sms`, or `phone_change`
-and the `token` is a token returned from either `/signup` or `/recover`.
+Verify a registration, invite, magic link, SMS OTP, or password recovery.
+This endpoint supports two mutually exclusive verification methods:
+
+1. token + email or phone
+2. token_hash
 
 ```json
 {
   "type": "signup",
-  "token": "confirmation-code-delivered-in-email"
+  "token": "confirmation-code-delivered-in-email",
+  "email": "user@example.com"
 }
 ```
 
-`password` is required for signup verification if no existing password exists.
+### Verification methods
+
+#### Method 1: token + email or phone
+
+Required fields:
+
+- type
+- token
+- email OR phone
+
+If token is provided, one of email or phone must also be provided.
+Omitting them will result in a validation_failed error.
+
+#### Method 2: token_hash
+
+Required fields:
+
+- type
+- token_hash
+
+When using token_hash, the request MUST NOT include:
+
+- email
+- phone
+- redirect_to
+
+````json
+{
+  "type": "magiclink",
+  "token_hash": "hashed-token-from-magic-link"
+}
 
 Returns:
 
@@ -1128,7 +1163,7 @@ Returns:
   "refresh_token": "a-refresh-token",
   "type": "signup | recovery | invite | magiclink | email_change | sms | phone_change"
 }
-```
+````
 
 Verify a phone signup or SMS OTP. Type should be set to `sms`.
 
@@ -1136,8 +1171,7 @@ Verify a phone signup or SMS OTP. Type should be set to `sms`.
 {
   "type": "sms",
   "token": "confirmation-otp-delivered-in-sms",
-  "redirect_to": "https://supabase.io",
-  "phone": "phone-number-sms-otp-was-delivered-to"
+  "phone": "+123456789"
 }
 ```
 
@@ -1154,7 +1188,10 @@ Returns:
 
 ### **GET /verify**
 
-Verify a registration or a password recovery. Type can be `signup`, `recovery`, `magiclink`, `invite`, or `email_change`
+Verify a registration, invite, magic link, or password recovery.
+
+Note: For GET /verify, the token query parameter is treated as a token_hash internally.
+Type can be `signup`, `recovery`, `magiclink`, `invite`, or `email_change`
 and the `token` is a token returned from either `/signup` or `/recover` or `/magiclink`.
 
 query params:
