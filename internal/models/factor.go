@@ -56,6 +56,7 @@ const (
 	Anonymous
 	Web3
 	OAuthProviderAuthorizationCode
+	PasskeyLogin
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -92,6 +93,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "web3"
 	case OAuthProviderAuthorizationCode:
 		return "oauth_provider/authorization_code"
+	case PasskeyLogin:
+		return "passkey"
 	}
 	return ""
 }
@@ -131,7 +134,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return Web3, nil
 	case "oauth_provider/authorization_code":
 		return OAuthProviderAuthorizationCode, nil
-
+	case "passkey":
+		return PasskeyLogin, nil
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
