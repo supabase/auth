@@ -177,6 +177,50 @@ type MFAConfiguration struct {
 	WebAuthn                    MFAFactorTypeConfiguration   `split_words:"true"`
 }
 
+type WebAuthnConfiguration struct {
+	RPID                    string        `json:"rp_id" split_words:"true" envconfig:"WEBAUTHN_RP_ID"`
+	RPDisplayName           string        `json:"rp_display_name" split_words:"true" envconfig:"WEBAUTHN_RP_DISPLAY_NAME"`
+	RPOrigins               []string      `json:"rp_origins" split_words:"true" envconfig:"WEBAUTHN_RP_ORIGINS"`
+	ChallengeExpiryDuration time.Duration `json:"challenge_expiry_duration" split_words:"true" default:"5m"`
+}
+
+func (w *WebAuthnConfiguration) Validate() error {
+	if w.RPID == "" {
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ID is required when passkeys are enabled")
+	}
+
+	if w.RPDisplayName == "" {
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_DISPLAY_NAME is required when passkeys are enabled")
+	}
+
+	if len(w.RPOrigins) == 0 {
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ORIGINS is required when passkeys are enabled")
+	}
+
+	for _, origin := range w.RPOrigins {
+		u, err := url.Parse(origin)
+		if err != nil {
+			return fmt.Errorf("conf: invalid WebAuthn RP origin %q: %w", origin, err)
+		}
+
+		if u.Scheme == "http" {
+			host := u.Hostname()
+			if host != "localhost" && host != "127.0.0.1" {
+				return fmt.Errorf("conf: WebAuthn RP origin %q must use HTTPS (http is only allowed for localhost/127.0.0.1)", origin)
+			}
+		} else if u.Scheme != "https" {
+			return fmt.Errorf("conf: WebAuthn RP origin %q must use HTTPS", origin)
+		}
+	}
+
+	return nil
+}
+
+type PasskeyConfiguration struct {
+	Enabled            bool `json:"enabled" default:"false"`
+	MaxPasskeysPerUser int  `json:"max_passkeys_per_user" split_words:"true" default:"10"`
+}
+
 type APIConfiguration struct {
 	Host               string
 	Port               string `envconfig:"PORT" default:"8081"`
@@ -358,6 +402,8 @@ type GlobalConfiguration struct {
 	Sessions        SessionsConfiguration    `json:"sessions"`
 	MFA             MFAConfiguration         `json:"MFA"`
 	SAML            SAMLConfiguration        `json:"saml"`
+	WebAuthn        WebAuthnConfiguration    `json:"webauthn"`
+	Passkey         PasskeyConfiguration     `json:"passkey"`
 	CORS            CORSConfiguration        `json:"cors"`
 	IndexWorker     IndexWorkerConfiguration `json:"index_worker" split_words:"true"`
 
@@ -1281,6 +1327,12 @@ func (c *GlobalConfiguration) Validate() error {
 
 	for _, validatable := range validatables {
 		if err := validatable.Validate(); err != nil {
+			return err
+		}
+	}
+
+	if c.Passkey.Enabled {
+		if err := c.WebAuthn.Validate(); err != nil {
 			return err
 		}
 	}

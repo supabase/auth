@@ -355,6 +355,14 @@ func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Reque
 	return ctx, nil
 }
 
+func (a *API) requirePasskeyEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.Passkey.Enabled {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodePasskeyDisabled, "Passkeys are disabled")
+	}
+	return ctx, nil
+}
+
 func (a *API) databaseCleanup(cleanup models.Cleaner) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
