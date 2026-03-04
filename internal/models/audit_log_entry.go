@@ -45,6 +45,9 @@ const (
 	UpdateFactorAction              AuditAction = "factor_updated"
 	MFACodeLoginAction              AuditAction = "mfa_code_login"
 	IdentityUnlinkAction            AuditAction = "identity_unlinked"
+	PasskeyCreatedAction            AuditAction = "passkey_created"
+	PasskeyUpdatedAction            AuditAction = "passkey_updated"
+	PasskeyDeletedAction            AuditAction = "passkey_deleted"
 
 	account       auditLogType = "account"
 	team          auditLogType = "team"
@@ -77,6 +80,9 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	UpdateFactorAction:              factor,
 	MFACodeLoginAction:              factor,
 	DeleteRecoveryCodesAction:       recoveryCodes,
+	PasskeyCreatedAction:            user,
+	PasskeyUpdatedAction:            user,
+	PasskeyDeletedAction:            user,
 }
 
 // AuditLogEntry is the database model for audit log entries.
