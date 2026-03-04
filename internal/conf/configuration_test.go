@@ -1253,6 +1253,113 @@ func TestLoading(t *testing.T) {
 	}
 }
 
+func TestWebAuthnConfigurationValidate(t *testing.T) {
+	// Empty RPID → error
+	{
+		w := &WebAuthnConfiguration{
+			RPDisplayName: "Test",
+			RPOrigins:     []string{"https://example.com"},
+		}
+		err := w.Validate()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "GOTRUE_WEBAUTHN_RP_ID is required")
+	}
+
+	// Empty RPDisplayName → error
+	{
+		w := &WebAuthnConfiguration{
+			RPID:      "example.com",
+			RPOrigins: []string{"https://example.com"},
+		}
+		err := w.Validate()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "GOTRUE_WEBAUTHN_RP_DISPLAY_NAME is required")
+	}
+
+	// Empty RPOrigins → error
+	{
+		w := &WebAuthnConfiguration{
+			RPID:          "example.com",
+			RPDisplayName: "Example",
+		}
+		err := w.Validate()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "GOTRUE_WEBAUTHN_RP_ORIGINS is required")
+	}
+
+	// HTTP origin (not localhost) → error
+	{
+		w := &WebAuthnConfiguration{
+			RPID:          "example.com",
+			RPDisplayName: "Example",
+			RPOrigins:     []string{"http://example.com"},
+		}
+		err := w.Validate()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "must use HTTPS")
+	}
+
+	// HTTP localhost is allowed
+	{
+		w := &WebAuthnConfiguration{
+			RPID:          "localhost",
+			RPDisplayName: "Localhost",
+			RPOrigins:     []string{"http://localhost:3000"},
+		}
+		err := w.Validate()
+		require.NoError(t, err)
+	}
+
+	// HTTP 127.0.0.1 is allowed
+	{
+		w := &WebAuthnConfiguration{
+			RPID:          "localhost",
+			RPDisplayName: "Localhost",
+			RPOrigins:     []string{"http://127.0.0.1:3000"},
+		}
+		err := w.Validate()
+		require.NoError(t, err)
+	}
+
+	// Valid HTTPS origins pass
+	{
+		w := &WebAuthnConfiguration{
+			RPID:          "example.com",
+			RPDisplayName: "Example",
+			RPOrigins:     []string{"https://example.com", "https://app.example.com"},
+		}
+		err := w.Validate()
+		require.NoError(t, err)
+	}
+
+	// Conditional validation: disabled passkey skips WebAuthn validation
+	{
+		cfg := &GlobalConfiguration{
+			SiteURL: "https://example.com",
+			API:     APIConfiguration{ExternalURL: "https://example.com"},
+			JWT:     JWTConfiguration{Secret: "a"},
+		}
+		cfg.Passkey.Enabled = false
+		require.NoError(t, cfg.ApplyDefaults())
+		err := cfg.Validate()
+		require.NoError(t, err)
+	}
+
+	// Conditional validation: enabled passkey requires WebAuthn config
+	{
+		cfg := &GlobalConfiguration{
+			SiteURL: "https://example.com",
+			API:     APIConfiguration{ExternalURL: "https://example.com"},
+			JWT:     JWTConfiguration{Secret: "a"},
+		}
+		cfg.Passkey.Enabled = true
+		require.NoError(t, cfg.ApplyDefaults())
+		err := cfg.Validate()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "GOTRUE_WEBAUTHN_RP_ID is required")
+	}
+}
+
 func toPtr[T any](v T) *T {
 	return &(&([1]T{T(v)}))[0]
 }

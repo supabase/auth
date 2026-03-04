@@ -38,6 +38,7 @@ type Settings struct {
 	PhoneAutoconfirm  bool             `json:"phone_autoconfirm"`
 	SmsProvider       string           `json:"sms_provider"`
 	SAMLEnabled       bool             `json:"saml_enabled"`
+	PasskeysEnabled   bool             `json:"passkeys_enabled"`
 }
 
 func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
@@ -77,5 +78,6 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 		PhoneAutoconfirm:  config.Sms.Autoconfirm,
 		SmsProvider:       config.Sms.Provider,
 		SAMLEnabled:       config.SAML.Enabled,
+		PasskeysEnabled:   config.Passkey.Enabled,
 	})
 }

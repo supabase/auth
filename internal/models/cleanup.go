@@ -41,6 +41,7 @@ func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
 	tableMFAChallenges := Challenge{}.TableName()
 	tableMFAFactors := Factor{}.TableName()
 	tableOAuthClientStates := OAuthClientState{}.TableName()
+	tableWebAuthnChallenges := WebAuthnChallenge{}.TableName()
 
 	c := &Cleanup{}
 
@@ -60,6 +61,7 @@ func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
 		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' limit 100 for update skip locked);", tableOAuthClientStates, tableOAuthClientStates),
 		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' limit 100 for update skip locked);", tableMFAChallenges, tableMFAChallenges),
 		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' and status = 'unverified' limit 100 for update skip locked);", tableMFAFactors, tableMFAFactors),
+		fmt.Sprintf("delete from %q where id in (select id from %q where expires_at < now() limit 100 for update skip locked);", tableWebAuthnChallenges, tableWebAuthnChallenges),
 	)
 
 	if config.External.AnonymousUsers.Enabled {

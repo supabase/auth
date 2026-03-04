@@ -150,16 +150,16 @@ type Factor struct {
 	Challenge                 []Challenge                `json:"-" has_many:"challenges"`
 	Phone                     storage.NullString         `json:"phone" db:"phone"`
 	LastChallengedAt          *time.Time                 `json:"last_challenged_at" db:"last_challenged_at"`
-	WebAuthnCredential        *WebAuthnCredential        `json:"-" db:"web_authn_credential"`
+	WebAuthnCredential        *MFAWebAuthnCredential     `json:"-" db:"web_authn_credential"`
 	WebAuthnAAGUID            *uuid.UUID                 `json:"web_authn_aaguid,omitempty" db:"web_authn_aaguid"`
 	LastWebAuthnChallengeData *LastWebAuthnChallengeData `json:"last_webauthn_challenge_data,omitempty" db:"last_webauthn_challenge_data"`
 }
 
-type WebAuthnCredential struct {
+type MFAWebAuthnCredential struct {
 	webauthn.Credential
 }
 
-func (wc *WebAuthnCredential) Value() (driver.Value, error) {
+func (wc *MFAWebAuthnCredential) Value() (driver.Value, error) {
 	if wc == nil {
 		return nil, nil
 	}
@@ -200,7 +200,7 @@ func (lwcd *LastWebAuthnChallengeData) Scan(value interface{}) error {
 	return json.Unmarshal(data, lwcd)
 }
 
-func (wc *WebAuthnCredential) Scan(value interface{}) error {
+func (wc *MFAWebAuthnCredential) Scan(value interface{}) error {
 	if value == nil {
 		wc.Credential = webauthn.Credential{}
 		return nil
@@ -283,7 +283,7 @@ func (f *Factor) GetSecret(decryptionKeys map[string]string, encrypt bool, encry
 }
 
 func (f *Factor) SaveWebAuthnCredential(tx *storage.Connection, credential *webauthn.Credential) error {
-	f.WebAuthnCredential = &WebAuthnCredential{
+	f.WebAuthnCredential = &MFAWebAuthnCredential{
 		Credential: *credential,
 	}
 
