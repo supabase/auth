@@ -626,6 +626,9 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	case "keycloak":
 		pConfig = config.External.Keycloak
 		p, err = provider.NewKeycloakProvider(pConfig, scopes)
+	case "line":
+		pConfig = config.External.Line
+		p, err = provider.NewLineProvider(pConfig, scopes)
 	case "linkedin":
 		pConfig = config.External.Linkedin
 		p, err = provider.NewLinkedinProvider(pConfig, scopes)
