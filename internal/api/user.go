@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
@@ -215,6 +217,38 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			var sessionID *uuid.UUID
 			if session != nil {
 				sessionID = &session.ID
+			}
+
+			emailIdentity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
+			if terr != nil && !models.IsNotFoundError(terr) {
+				return apierrors.NewInternalServerError("Error looking up email identity for user during password change").WithInternalError(terr)
+			}
+
+			phoneIdentity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone")
+			if terr != nil && !models.IsNotFoundError(terr) {
+				return apierrors.NewInternalServerError("Error looking up phone identity for user during password change").WithInternalError(terr)
+			}
+
+			if emailIdentity == nil && user.GetEmail() != "" {
+				emailIdentity, terr = a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+					Subject:       user.ID.String(),
+					Email:         user.GetEmail(),
+					EmailVerified: user.IsConfirmed() || config.Mailer.Autoconfirm,
+				}))
+				if terr != nil {
+					return apierrors.NewInternalServerError("Error creating missing email identity during password change").WithInternalError(terr)
+				}
+			}
+
+			if phoneIdentity == nil && user.GetPhone() != "" {
+				phoneIdentity, terr = a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+					Subject:       user.ID.String(),
+					Phone:         user.GetPhone(),
+					PhoneVerified: user.IsPhoneConfirmed() || config.Sms.Autoconfirm,
+				}))
+				if terr != nil {
+					return apierrors.NewInternalServerError("Error creating missing phone identity during password change").WithInternalError(terr)
+				}
 			}
 
 			if terr = user.UpdatePassword(tx, sessionID); terr != nil {
