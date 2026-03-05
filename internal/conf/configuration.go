@@ -178,9 +178,9 @@ type MFAConfiguration struct {
 }
 
 type WebAuthnConfiguration struct {
-	RPID                    string        `json:"rp_id" split_words:"true" envconfig:"WEBAUTHN_RP_ID"`
-	RPDisplayName           string        `json:"rp_display_name" split_words:"true" envconfig:"WEBAUTHN_RP_DISPLAY_NAME"`
-	RPOrigins               []string      `json:"rp_origins" split_words:"true" envconfig:"WEBAUTHN_RP_ORIGINS"`
+	RPID                    string        `json:"rp_id" envconfig:"RP_ID"`
+	RPDisplayName           string        `json:"rp_display_name" split_words:"true"`
+	RPOrigins               []string      `json:"rp_origins" split_words:"true"`
 	ChallengeExpiryDuration time.Duration `json:"challenge_expiry_duration" split_words:"true" default:"5m"`
 }
 
