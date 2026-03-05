@@ -170,3 +170,25 @@ func (e CustomOAuthProviderNotFoundError) Error() string {
 func (e CustomOAuthProviderNotFoundError) Is(target error) bool {
 	return target == errNotFound
 }
+
+// WebAuthnCredentialNotFoundError represents when a WebAuthn credential can't be found.
+type WebAuthnCredentialNotFoundError struct{}
+
+func (e WebAuthnCredentialNotFoundError) Error() string {
+	return "WebAuthn credential not found"
+}
+
+func (e WebAuthnCredentialNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
+
+// WebAuthnChallengeNotFoundError represents when a WebAuthn challenge can't be found.
+type WebAuthnChallengeNotFoundError struct{}
+
+func (e WebAuthnChallengeNotFoundError) Error() string {
+	return "WebAuthn challenge not found"
+}
+
+func (e WebAuthnChallengeNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
