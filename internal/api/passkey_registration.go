@@ -190,6 +190,14 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 	passkeyCredential := models.NewWebAuthnCredential(user.ID, credential, "")
 
 	err = db.Transaction(func(tx *storage.Connection) error {
+		count, terr := models.CountWebAuthnCredentialsByUserID(tx, user.ID)
+		if terr != nil {
+			return terr
+		}
+		if count >= config.Passkey.MaxPasskeysPerUser {
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeTooManyPasskeys, "Maximum number of passkeys reached")
+		}
+
 		if terr := tx.Create(passkeyCredential); terr != nil {
 			if models.IsUniqueConstraintViolatedError(terr) {
 				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeWebAuthnCredentialExists, "This credential is already registered")
@@ -211,6 +219,9 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 		return nil
 	})
 	if err != nil {
+		if httpErr, ok := err.(*apierrors.HTTPError); ok {
+			return httpErr
+		}
 		return apierrors.NewInternalServerError("Database error creating passkey").WithInternalError(err)
 	}
 
