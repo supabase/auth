@@ -174,6 +174,52 @@ func (ts *PasskeyTestSuite) TestRegistrationOptionsPasskeyDisabled() {
 	ts.Equal(http.StatusNotFound, w.Code)
 }
 
+// TestRegisterVerifyCapEnforcedAtVerifyTime tests that the passkey cap is enforced during verify,
+// preventing a race where multiple challenges are issued under the cap but all verified after.
+func (ts *PasskeyTestSuite) TestRegisterVerifyCapEnforcedAtVerifyTime() {
+	ts.Config.Passkey.MaxPasskeysPerUser = 1
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	authenticator := &virtualAuthenticator{
+		rpID:   ts.Config.WebAuthn.RPID,
+		origin: ts.Config.WebAuthn.RPOrigins[0],
+	}
+
+	// Get two challenges while under the cap (0 existing, cap=1)
+	w1 := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	ts.Require().Equal(http.StatusOK, w1.Code)
+	var opts1 PasskeyRegistrationOptionsResponse
+	require.NoError(ts.T(), json.NewDecoder(w1.Body).Decode(&opts1))
+
+	w2 := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	ts.Require().Equal(http.StatusOK, w2.Code)
+	var opts2 PasskeyRegistrationOptionsResponse
+	require.NoError(ts.T(), json.NewDecoder(w2.Body).Decode(&opts2))
+
+	// Simulate authenticator responses for both challenges
+	cred1, err := authenticator.createCredential(opts1.Options)
+	require.NoError(ts.T(), err)
+	cred2, err := authenticator.createCredential(opts2.Options)
+	require.NoError(ts.T(), err)
+
+	// Verify the first challenge — should succeed
+	v1 := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+		"challenge_id":        opts1.ChallengeID,
+		"credential_response": json.RawMessage(cred1.JSON),
+	})
+	ts.Require().Equal(http.StatusOK, v1.Code)
+
+	// Verify the second challenge — should fail with too_many_passkeys
+	v2 := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+		"challenge_id":        opts2.ChallengeID,
+		"credential_response": json.RawMessage(cred2.JSON),
+	})
+	ts.Equal(http.StatusUnprocessableEntity, v2.Code)
+	var errResp map[string]any
+	require.NoError(ts.T(), json.NewDecoder(v2.Body).Decode(&errResp))
+	ts.Equal("too_many_passkeys", errResp["error_code"])
+}
+
 // TestRegisterVerifyChallengeNotFound tests that a missing challenge returns the correct error.
 func (ts *PasskeyTestSuite) TestRegisterVerifyChallengeNotFound() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
