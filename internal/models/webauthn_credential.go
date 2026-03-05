@@ -53,7 +53,7 @@ type WebAuthnCredential struct {
 	PublicKey       []byte             `json:"-" db:"public_key"`
 	AttestationType string             `json:"attestation_type" db:"attestation_type"`
 	AAGUID          *uuid.UUID         `json:"aaguid,omitempty" db:"aaguid"`
-	SignCount       int64              `json:"sign_count" db:"sign_count"`
+	SignCount       uint32             `json:"sign_count" db:"sign_count"`
 	Transports      WebAuthnTransports `json:"transports" db:"transports"`
 	BackupEligible  bool               `json:"backup_eligible" db:"backup_eligible"`
 	BackedUp        bool               `json:"backed_up" db:"backed_up"`
@@ -76,7 +76,7 @@ func NewWebAuthnCredential(userID uuid.UUID, cred *webauthn.Credential, friendly
 		CredentialID:    cred.ID,
 		PublicKey:       cred.PublicKey,
 		AttestationType: cred.AttestationType,
-		SignCount:       int64(cred.Authenticator.SignCount),
+		SignCount:       cred.Authenticator.SignCount,
 		Transports:      WebAuthnTransports(cred.Transport),
 		BackupEligible:  cred.Flags.BackupEligible,
 		BackedUp:        cred.Flags.BackupState,
@@ -105,7 +105,7 @@ func (pc *WebAuthnCredential) ToWebAuthnCredential() webauthn.Credential {
 			BackupState:    pc.BackedUp,
 		},
 		Authenticator: webauthn.Authenticator{
-			SignCount: uint32(pc.SignCount),
+			SignCount: pc.SignCount,
 		},
 	}
 
@@ -154,7 +154,7 @@ func CountWebAuthnCredentialsByUserID(conn *storage.Connection, userID uuid.UUID
 	return count, nil
 }
 
-func (pc *WebAuthnCredential) UpdateSignCount(tx *storage.Connection, signCount int64) error {
+func (pc *WebAuthnCredential) UpdateSignCount(tx *storage.Connection, signCount uint32) error {
 	pc.SignCount = signCount
 	return tx.UpdateOnly(pc, "sign_count", "updated_at")
 }

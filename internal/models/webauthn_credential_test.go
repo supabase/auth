@@ -112,11 +112,11 @@ func (ts *WebAuthnCredentialTestSuite) TestUpdateSignCount() {
 	pc := ts.createTestCredential("sign-count-test", false)
 
 	require.NoError(ts.T(), pc.UpdateSignCount(ts.db, 42))
-	require.Equal(ts.T(), int64(42), pc.SignCount)
+	require.Equal(ts.T(), uint32(42), pc.SignCount)
 
 	found, err := FindWebAuthnCredentialByID(ts.db, pc.ID)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), int64(42), found.SignCount)
+	require.Equal(ts.T(), uint32(42), found.SignCount)
 }
 
 func (ts *WebAuthnCredentialTestSuite) TestUpdateLastUsedAt() {
