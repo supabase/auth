@@ -1,0 +1,235 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/gofrs/uuid"
+	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
+)
+
+// PasskeyRegistrationOptionsParams is the request body for POST /passkeys/registration/options.
+type PasskeyRegistrationOptionsParams struct{}
+
+// PasskeyRegistrationOptionsResponse is the response body for POST /passkeys/registration/options.
+type PasskeyRegistrationOptionsResponse struct {
+	ChallengeID string                       `json:"challenge_id"`
+	Options     *protocol.CredentialCreation `json:"options"`
+	ExpiresAt   int64                        `json:"expires_at"`
+}
+
+// PasskeyRegistrationVerifyParams is the request body for POST /passkeys/registration/verify.
+type PasskeyRegistrationVerifyParams struct {
+	ChallengeID        string          `json:"challenge_id"`
+	CredentialResponse json.RawMessage `json:"credential_response"`
+}
+
+// PasskeyMetadataResponse is the response body for successful passkey creation.
+type PasskeyMetadataResponse struct {
+	ID             string                            `json:"id"`
+	FriendlyName   string                            `json:"friendly_name,omitempty"`
+	CreatedAt      time.Time                         `json:"created_at"`
+	BackupEligible bool                              `json:"backup_eligible"`
+	BackedUp       bool                              `json:"backed_up"`
+	Transports     []protocol.AuthenticatorTransport `json:"transports"`
+}
+
+// PasskeyRegistrationOptions handles POST /passkeys/registration/options.
+// Requires authentication. Generates WebAuthn registration options for adding a passkey to an existing account.
+func (a *API) PasskeyRegistrationOptions(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	config := a.config
+	user := getUser(ctx)
+	db := a.db.WithContext(ctx)
+
+	if user.IsSSOUser {
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeValidationFailed, "SSO users cannot register passkeys")
+	}
+
+	// Check passkey limit
+	count, err := models.CountWebAuthnCredentialsByUserID(db, user.ID)
+	if err != nil {
+		return apierrors.NewInternalServerError("Database error counting passkeys").WithInternalError(err)
+	}
+	if count >= config.Passkey.MaxPasskeysPerUser {
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeTooManyPasskeys, "Maximum number of passkeys reached")
+	}
+
+	// Load existing passkeys to build exclusion list
+	existingCreds, err := models.FindWebAuthnCredentialsByUserID(db, user.ID)
+	if err != nil {
+		return apierrors.NewInternalServerError("Database error loading passkeys").WithInternalError(err)
+	}
+
+	excludeList := make([]protocol.CredentialDescriptor, len(existingCreds))
+	for i, cred := range existingCreds {
+		excludeList[i] = protocol.CredentialDescriptor{
+			Type:         protocol.PublicKeyCredentialType,
+			CredentialID: cred.CredentialID,
+		}
+	}
+
+	webAuthn, err := a.getPasskeyWebAuthn()
+	if err != nil {
+		return apierrors.NewInternalServerError("Failed to initialize WebAuthn").WithInternalError(err)
+	}
+
+	webAuthnUser := newWebAuthnUser(user, existingCreds)
+	options, session, err := webAuthn.BeginRegistration(webAuthnUser, webauthn.WithExclusions(excludeList))
+	if err != nil {
+		return apierrors.NewInternalServerError("Failed to generate WebAuthn registration options").WithInternalError(err)
+	}
+
+	expiresAt := time.Now().Add(config.WebAuthn.ChallengeExpiryDuration)
+	challenge := models.NewWebAuthnChallenge(
+		&user.ID,
+		models.WebAuthnChallengeTypeRegistration,
+		&models.WebAuthnSessionData{SessionData: session},
+		expiresAt,
+	)
+
+	if err := db.Create(challenge); err != nil {
+		return apierrors.NewInternalServerError("Database error storing challenge").WithInternalError(err)
+	}
+
+	return sendJSON(w, http.StatusOK, &PasskeyRegistrationOptionsResponse{
+		ChallengeID: challenge.ID.String(),
+		Options:     options,
+		ExpiresAt:   expiresAt.Unix(),
+	})
+}
+
+// PasskeyRegistrationVerify handles POST /passkeys/registration/verify.
+// Requires authentication. Verifies the WebAuthn credential and creates a passkey for the authenticated user.
+func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	config := a.config
+	user := getUser(ctx)
+	db := a.db.WithContext(ctx)
+
+	if user.IsSSOUser {
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeValidationFailed, "SSO users cannot register passkeys")
+	}
+
+	params := &PasskeyRegistrationVerifyParams{}
+	body, err := utilities.GetBodyBytes(r)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Could not read request body")
+	}
+	if err := json.Unmarshal(body, params); err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Could not parse request body as JSON: %v", err)
+	}
+
+	if params.ChallengeID == "" {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "challenge_id is required")
+	}
+	if params.CredentialResponse == nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "credential_response is required")
+	}
+
+	challengeID, err := uuid.FromString(params.ChallengeID)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "challenge_id must be a valid UUID")
+	}
+
+	// Load and validate challenge
+	challenge, err := models.FindWebAuthnChallengeByID(db, challengeID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeNotFound, "Challenge not found")
+		}
+
+		return apierrors.NewInternalServerError("Database error loading challenge").WithInternalError(err)
+	}
+
+	if challenge.IsExpired() {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeExpired, "Challenge has expired")
+	}
+
+	if challenge.ChallengeType != models.WebAuthnChallengeTypeRegistration {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid challenge type")
+	}
+
+	// Verify the challenge belongs to the authenticated user
+	if challenge.UserID == nil || *challenge.UserID != user.ID {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeNotFound, "Challenge not found")
+	}
+
+	// Parse the credential creation response from the JSON params
+	parsedResponse, err := parseCredentialCreationResponse(params.CredentialResponse)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnVerificationFailed, "Invalid credential response").WithInternalError(err)
+	}
+
+	webAuthn, err := a.getPasskeyWebAuthn()
+	if err != nil {
+		return apierrors.NewInternalServerError("Failed to initialize WebAuthn").WithInternalError(err)
+	}
+
+	// Load existing passkeys for the user adapter
+	existingCreds, err := models.FindWebAuthnCredentialsByUserID(db, user.ID)
+	if err != nil {
+		return apierrors.NewInternalServerError("Database error loading passkeys").WithInternalError(err)
+	}
+
+	webAuthnUser := newWebAuthnUser(user, existingCreds)
+	sessionData := *challenge.SessionData.SessionData
+
+	credential, err := webAuthn.CreateCredential(webAuthnUser, sessionData, parsedResponse)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnVerificationFailed, "Credential verification failed").WithInternalError(err)
+	}
+
+	// TODO(fm): fallback to AAGUID -> UA -> "Passkey" for friendly name
+	passkeyCredential := models.NewWebAuthnCredential(user.ID, credential, "")
+
+	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Create(passkeyCredential); terr != nil {
+			if models.IsUniqueConstraintViolatedError(terr) {
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeWebAuthnCredentialExists, "This credential is already registered")
+			}
+
+			return terr
+		}
+
+		if terr := challenge.Delete(tx); terr != nil {
+			return terr
+		}
+
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.PasskeyCreatedAction, utilities.GetIPAddress(r), map[string]any{
+			"passkey_id": passkeyCredential.ID,
+		}); terr != nil {
+			return terr
+		}
+
+		return nil
+	})
+	if err != nil {
+		return apierrors.NewInternalServerError("Database error creating passkey").WithInternalError(err)
+	}
+
+	return sendJSON(w, http.StatusOK, &PasskeyMetadataResponse{
+		ID:             passkeyCredential.ID.String(),
+		FriendlyName:   passkeyCredential.FriendlyName,
+		CreatedAt:      passkeyCredential.CreatedAt,
+		BackupEligible: passkeyCredential.BackupEligible,
+		BackedUp:       passkeyCredential.BackedUp,
+		Transports:     []protocol.AuthenticatorTransport(passkeyCredential.Transports),
+	})
+}
+
+// parseCredentialCreationResponse parses a WebAuthn credential creation response from raw JSON.
+func parseCredentialCreationResponse(raw json.RawMessage) (*protocol.ParsedCredentialCreationData, error) {
+	var ccr protocol.CredentialCreationResponse
+	if err := json.Unmarshal(raw, &ccr); err != nil {
+		return nil, err
+	}
+
+	return ccr.Parse()
+}
