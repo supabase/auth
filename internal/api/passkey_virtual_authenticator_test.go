@@ -103,7 +103,7 @@ func (va *virtualAuthenticator) buildAuthData(credentialID []byte, privKey *ecds
 	// attestedCredentialData: aaguid (16) || credIdLen (2) || credId || coseKey
 	aaguid := make([]byte, 16) // all zeros
 	credIDLen := make([]byte, 2)
-	binary.BigEndian.PutUint16(credIDLen, uint16(len(credentialID)))
+	binary.BigEndian.PutUint16(credIDLen, uint16(len(credentialID))) //#nosec G115 — we control the length and ensure it's within bounds
 
 	var authData []byte
 	authData = append(authData, rpIDHash[:]...)

@@ -118,9 +118,9 @@ const (
 	ErrorCodeTooManyPasskeys ErrorCode = "too_many_passkeys"
 
 	// WebAuthn protocol-level errors (shared between passkeys and MFA WebAuthn)
-	ErrorCodeWebAuthnCredentialNotFound ErrorCode = "webauthn_credential_not_found"
+	ErrorCodeWebAuthnCredentialNotFound ErrorCode = "webauthn_credential_not_found" // #nosec G101 -- not a credential
 	ErrorCodeWebAuthnChallengeNotFound  ErrorCode = "webauthn_challenge_not_found"
 	ErrorCodeWebAuthnChallengeExpired   ErrorCode = "webauthn_challenge_expired"
 	ErrorCodeWebAuthnVerificationFailed ErrorCode = "webauthn_verification_failed"
-	ErrorCodeWebAuthnCredentialExists   ErrorCode = "webauthn_credential_exists"
+	ErrorCodeWebAuthnCredentialExists   ErrorCode = "webauthn_credential_exists" // #nosec G101 -- not a credential
 )
