@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"text/template"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -441,4 +442,27 @@ func (ts *PhoneTestSuite) TestSendSMSHook() {
 	deleteJobsTableSQL := `drop table if exists job_queue`
 	require.NoError(ts.T(), ts.API.db.RawQuery(deleteJobsTableSQL).Exec())
 
+}
+
+func TestGenerateSMSFromTemplateWithEscapedNewline(t *testing.T) {
+	tmpl, err := template.New("").Parse(`Your code is {{ .Code }}\n@app.com #{{ .Code }}`)
+	require.NoError(t, err)
+
+	message, err := generateSMSFromTemplate(tmpl, "123456")
+	require.NoError(t, err)
+
+	expected := "Your code is 123456\n@app.com #123456"
+	require.Equal(t, expected, message)
+}
+
+func TestGenerateSMSFromTemplateWithLiteralNewline(t *testing.T) {
+	tmpl, err := template.New("").Parse(`Your code is {{ .Code }}
+@app.com #{{ .Code }}`)
+	require.NoError(t, err)
+
+	message, err := generateSMSFromTemplate(tmpl, "123456")
+	require.NoError(t, err)
+
+	expected := "Your code is 123456\n@app.com #123456"
+	require.Equal(t, expected, message)
 }
