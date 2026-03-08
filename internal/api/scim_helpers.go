@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -305,6 +306,66 @@ func updateGroupExternalID(tx *storage.Connection, group *models.SCIMGroup, exte
 		return apierrors.NewSCIMInternalServerError("Error updating group external ID").WithInternalError(err)
 	}
 	return nil
+}
+
+func scimDeprovisionUser(tx *storage.Connection, user *models.User) error {
+	if err := user.Ban(tx, 200*365*24*time.Hour, &scimDeprovisionedReason); err != nil {
+		return apierrors.NewSCIMInternalServerError("Error deprovisioning user").WithInternalError(err)
+	}
+	if err := models.Logout(tx, user.ID); err != nil {
+		return apierrors.NewSCIMInternalServerError("Error invalidating sessions").WithInternalError(err)
+	}
+	return nil
+}
+
+func scimReactivateUser(tx *storage.Connection, user *models.User) error {
+	if err := user.Ban(tx, 0, nil); err != nil {
+		return apierrors.NewSCIMInternalServerError("Error reactivating user").WithInternalError(err)
+	}
+	return nil
+}
+
+func syncSCIMIdentity(tx *storage.Connection, identity *models.Identity, userName, email, externalID string) error {
+	if identity.IdentityData == nil {
+		identity.IdentityData = make(map[string]interface{})
+	}
+	identity.IdentityData["user_name"] = userName
+	if email != "" {
+		identity.IdentityData["email"] = email
+	}
+	if externalID != "" {
+		identity.ProviderID = externalID
+		identity.IdentityData["external_id"] = externalID
+		identity.IdentityData["sub"] = externalID
+	} else {
+		delete(identity.IdentityData, "external_id")
+		identity.ProviderID = userName
+		identity.IdentityData["sub"] = userName
+	}
+	if err := tx.UpdateOnly(identity, "provider_id", "identity_data"); err != nil {
+		if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+			return apierrors.NewSCIMConflictError(scimErrExternalIDConflict, "uniqueness")
+		}
+		return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
+	}
+	return nil
+}
+
+func mapGroupMemberError(err error, fallbackMsg string) error {
+	if models.IsNotFoundError(err) {
+		return apierrors.NewSCIMNotFoundError(scimErrMembersNotFound)
+	}
+	if _, ok := err.(models.UserNotInSSOProviderError); ok {
+		return apierrors.NewSCIMBadRequestError(scimErrMembersWrongProvider, "invalidValue")
+	}
+	return apierrors.NewSCIMInternalServerError(fallbackMsg).WithInternalError(err)
+}
+
+func handleSCIMUniqueViolation(err error, conflictMsg, scimType, genericMsg string) error {
+	if pgErr := utilities.NewPostgresError(err); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+		return apierrors.NewSCIMConflictError(conflictMsg, scimType)
+	}
+	return apierrors.NewSCIMInternalServerError(genericMsg).WithInternalError(err)
 }
 
 func checkSCIMEmailUniqueness(tx *storage.Connection, email, aud, providerType string, excludeUserID uuid.UUID) error {

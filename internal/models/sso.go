@@ -48,6 +48,10 @@ func (p SSOProvider) IsSCIMEnabled() bool {
 	return p.SCIMEnabled != nil && *p.SCIMEnabled
 }
 
+func (p SSOProvider) SCIMProviderType() string {
+	return "sso:" + p.ID.String()
+}
+
 func scimTokenHash(token string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(token)))
 }

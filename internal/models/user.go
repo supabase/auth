@@ -957,6 +957,12 @@ func (u *User) IsBanned() bool {
 	return time.Now().Before(*u.BannedUntil)
 }
 
+const BannedReasonSCIMDeprovisioned = "SCIM_DEPROVISIONED"
+
+func (u *User) IsSCIMDeprovisioned() bool {
+	return u.IsBanned() && u.BannedReason != nil && *u.BannedReason == BannedReasonSCIMDeprovisioned
+}
+
 func (u *User) HasMFAEnabled() bool {
 	for _, factor := range u.Factors {
 		if factor.IsVerified() {
