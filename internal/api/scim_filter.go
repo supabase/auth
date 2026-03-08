@@ -7,6 +7,7 @@ import (
 	filter "github.com/scim2/filter-parser/v2"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 var SCIMUserFilterAttrs = map[string]string{
@@ -35,7 +36,7 @@ func ParseSCIMFilterToSQL(filterStr string, allowedAttrs map[string]string) (*mo
 	expr, err := filter.ParseFilter([]byte(filterStr))
 	if err != nil {
 		return nil, apierrors.NewSCIMBadRequestError(
-			fmt.Sprintf("Invalid filter syntax: %v", err), "invalidFilter")
+			"Invalid filter syntax", "invalidFilter").WithInternalError(err)
 	}
 
 	return exprToSQL(expr, allowedAttrs)
@@ -89,7 +90,7 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 		}
 		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?) ESCAPE '\\'", dbColumn),
-			Args:  []interface{}{"%" + escapeLikePattern(val) + "%"},
+			Args:  []interface{}{"%" + utilities.EscapeLikePattern(val) + "%"},
 		}, nil
 
 	case filter.SW:
@@ -99,7 +100,7 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 		}
 		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?) ESCAPE '\\'", dbColumn),
-			Args:  []interface{}{escapeLikePattern(val) + "%"},
+			Args:  []interface{}{utilities.EscapeLikePattern(val) + "%"},
 		}, nil
 
 	case filter.EW:
@@ -109,7 +110,7 @@ func attrExprToSQL(e filter.AttributeExpression, allowedAttrs map[string]string)
 		}
 		return &models.SCIMFilterClause{
 			Where: fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER(?) ESCAPE '\\'", dbColumn),
-			Args:  []interface{}{"%" + escapeLikePattern(val)},
+			Args:  []interface{}{"%" + utilities.EscapeLikePattern(val)},
 		}, nil
 
 	case filter.PR:
@@ -193,9 +194,3 @@ func valuePathToSQL(e filter.ValuePath, allowedAttrs map[string]string) (*models
 		fmt.Sprintf("Value path filter '%s[...]' is not supported", attrName), "invalidFilter")
 }
 
-func escapeLikePattern(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "%", "\\%")
-	s = strings.ReplaceAll(s, "_", "\\_")
-	return s
-}

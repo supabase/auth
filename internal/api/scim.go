@@ -159,49 +159,65 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 
 			candidate := deprovisioned[0]
 
-			if params.Active == nil || bool(*params.Active) {
-				if err := scimReactivateUser(tx, candidate); err != nil {
-					return err
-				}
-			}
-
-			if params.Name != nil {
-				metadata := candidate.UserMetaData
-				if metadata == nil {
-					metadata = make(map[string]interface{})
-				}
-				applySCIMNameToMetadata(metadata, params.Name)
-				candidate.UserMetaData = metadata
-				if err := tx.UpdateOnly(candidate, "raw_user_meta_data"); err != nil {
-					return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
-				}
-			}
-
-			if email != candidate.GetEmail() {
-				if err := candidate.SetEmail(tx, email); err != nil {
-					return apierrors.NewSCIMInternalServerError("Error updating user email").WithInternalError(err)
-				}
-			}
-
+			// Verify externalId to prevent account takeover via email recycling.
+			// Reactivation requires positive identity correlation: both the existing
+			// identity and the incoming request must have matching externalIds.
+			// If either side lacks an externalId, we cannot safely correlate, so
+			// we skip reactivation and fall through to new user creation.
+			canReactivate := false
 			if identity := findSSOIdentity(candidate, providerType); identity != nil {
-				if err := syncSCIMIdentity(tx, identity, params.UserName, email, params.ExternalID); err != nil {
-					return err
+				existingExtID, _ := identity.IdentityData["external_id"].(string)
+				if existingExtID != "" && params.ExternalID != "" && existingExtID == params.ExternalID {
+					canReactivate = true
 				}
 			}
 
-			auditAction := "reactivated"
-			if params.Active != nil && !bool(*params.Active) {
-				auditAction = "reprovisioned_inactive"
+			if canReactivate {
+				if params.Active == nil || bool(*params.Active) {
+					if err := scimReactivateUser(tx, candidate); err != nil {
+						return err
+					}
+				}
+
+				if params.Name != nil {
+					metadata := candidate.UserMetaData
+					if metadata == nil {
+						metadata = make(map[string]interface{})
+					}
+					applySCIMNameToMetadata(metadata, params.Name)
+					candidate.UserMetaData = metadata
+					if err := tx.UpdateOnly(candidate, "raw_user_meta_data"); err != nil {
+						return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
+					}
+				}
+
+				if email != candidate.GetEmail() {
+					if err := candidate.SetEmail(tx, email); err != nil {
+						return apierrors.NewSCIMInternalServerError("Error updating user email").WithInternalError(err)
+					}
+				}
+
+				if identity := findSSOIdentity(candidate, providerType); identity != nil {
+					if err := syncSCIMIdentity(tx, identity, params.UserName, email, params.ExternalID); err != nil {
+						return err
+					}
+				}
+
+				auditAction := "reactivated"
+				if params.Active != nil && !bool(*params.Active) {
+					auditAction = "reprovisioned_inactive"
+				}
+				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, candidate, models.UserModifiedAction, utilities.GetIPAddress(r), map[string]interface{}{
+					"provider":        "scim",
+					"sso_provider_id": provider.ID,
+					"action":          auditAction,
+				}); terr != nil {
+					return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
+				}
+				user = candidate
+				return nil
 			}
-			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, candidate, models.UserModifiedAction, utilities.GetIPAddress(r), map[string]interface{}{
-				"provider":        "scim",
-				"sso_provider_id": provider.ID,
-				"action":          auditAction,
-			}); terr != nil {
-				return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
-			}
-			user = candidate
-			return nil
+			// externalId mismatch or missing — fall through to create new user
 		}
 
 		user, err = models.NewUser("", email, "", config.JWT.Aud, nil)
@@ -323,15 +339,16 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		applySCIMNameToMetadata(metadata, params.Name)
 		user.UserMetaData = metadata
 
-		if params.Active != nil {
-			if *params.Active {
-				if err := scimReactivateUser(tx, user); err != nil {
-					return err
-				}
-			} else {
-				if err := scimDeprovisionUser(tx, user); err != nil {
-					return err
-				}
+		// RFC 7644 §3.5.1: PUT replaces the entire resource; omitted
+		// boolean attributes default to true per SCIM convention.
+		active := params.Active == nil || *params.Active
+		if active {
+			if err := scimReactivateUser(tx, user); err != nil {
+				return err
+			}
+		} else {
+			if err := scimDeprovisionUser(tx, user); err != nil {
+				return err
 			}
 		}
 
@@ -503,29 +520,9 @@ func (a *API) applySCIMUserAdd(tx *storage.Connection, user *models.User, op SCI
 		return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported add path: %s", op.Path), "invalidPath")
 	}
 
-	valueMap, ok := op.Value.(map[string]interface{})
-	if !ok {
-		return apierrors.NewSCIMBadRequestError("add operation without path requires an object value", "invalidValue")
-	}
-	for key, val := range valueMap {
-		if key == "" {
-			continue
-		}
-		keyPath, err := filter.ParsePath([]byte(key))
-		if err != nil {
-			return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Invalid attribute path: %s", key), "invalidPath")
-		}
-		if strings.ToLower(keyPath.AttributePath.AttributeName) == "externalid" {
-			if externalID, ok := val.(string); ok {
-				if identity := findSSOIdentity(user, providerType); identity != nil {
-					if err := setSCIMExternalID(tx, identity, externalID); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-	return nil
+	// Per RFC 7644 Section 3.5.2.1, pathless add with a value map should
+	// set each attribute in the map. Delegate to replace which handles all attributes.
+	return a.applySCIMUserReplace(tx, user, op, nil, providerType)
 }
 
 func (a *API) applySCIMUserReplace(tx *storage.Connection, user *models.User, op SCIMPatchOperation, path *filter.Path, providerType string) error {
@@ -625,6 +622,29 @@ func (a *API) applySCIMUserReplaceWithPath(tx *storage.Connection, user *models.
 		}
 		if identity := findSSOIdentity(user, providerType); identity != nil {
 			return setSCIMExternalID(tx, identity, externalID)
+		}
+		return nil
+	case attrName == "name":
+		subAttr := strings.ToLower(path.AttributePath.SubAttributeName())
+		val, ok := op.Value.(string)
+		if !ok {
+			return apierrors.NewSCIMBadRequestError("name attribute must be a string", "invalidValue")
+		}
+		if user.UserMetaData == nil {
+			user.UserMetaData = make(map[string]interface{})
+		}
+		switch subAttr {
+		case "givenname":
+			user.UserMetaData["given_name"] = val
+		case "familyname":
+			user.UserMetaData["family_name"] = val
+		case "formatted":
+			user.UserMetaData["full_name"] = val
+		default:
+			return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported name sub-attribute: %s", subAttr), "invalidPath")
+		}
+		if err := tx.UpdateOnly(user, "raw_user_meta_data"); err != nil {
+			return apierrors.NewSCIMInternalServerError("Error updating user metadata").WithInternalError(err)
 		}
 		return nil
 	case attrName == "emails" && path.ValueExpression != nil && strings.ToLower(path.SubAttributeName()) == "value":
@@ -1001,19 +1021,60 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported add path: %s", op.Path), "invalidPath")
 			}
 		}
-		members, ok := op.Value.([]interface{})
+		// When path is "members", value is a direct array of members
+		if members, ok := op.Value.([]interface{}); ok {
+			if len(members) > SCIMMaxMembers {
+				return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d members per operation", SCIMMaxMembers))
+			}
+			memberIDs, err := parseSCIMGroupMemberIDsRaw(members)
+			if err != nil {
+				return err
+			}
+			if err := group.AddMembers(tx, memberIDs); err != nil {
+				return mapGroupMemberError(err, "Error adding group members")
+			}
+			return nil
+		}
+
+		// Pathless add with value map: handle displayName, externalId, members
+		valueMap, ok := op.Value.(map[string]interface{})
 		if !ok {
-			return apierrors.NewSCIMBadRequestError("members must be an array", "invalidValue")
+			return apierrors.NewSCIMBadRequestError("add operation value must be an array or object", "invalidValue")
 		}
-		if len(members) > SCIMMaxMembers {
-			return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d members per operation", SCIMMaxMembers))
+		columnsToUpdate := []string{}
+		for key, val := range valueMap {
+			switch strings.ToLower(key) {
+			case "displayname":
+				if displayName, ok := val.(string); ok {
+					group.DisplayName = displayName
+					columnsToUpdate = append(columnsToUpdate, "display_name")
+				}
+			case "externalid":
+				if externalID, ok := val.(string); ok {
+					group.ExternalID = storage.NullString(externalID)
+					columnsToUpdate = append(columnsToUpdate, "external_id")
+				}
+			case "members":
+				membersRaw, ok := val.([]interface{})
+				if !ok {
+					return apierrors.NewSCIMBadRequestError("members must be an array", "invalidValue")
+				}
+				if len(membersRaw) > SCIMMaxMembers {
+					return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d members per operation", SCIMMaxMembers))
+				}
+				memberIDs, err := parseSCIMGroupMemberIDsRaw(membersRaw)
+				if err != nil {
+					return err
+				}
+				if err := group.AddMembers(tx, memberIDs); err != nil {
+					return mapGroupMemberError(err, "Error adding group members")
+				}
+			}
 		}
-		memberIDs, err := parseSCIMGroupMemberIDsRaw(members)
-		if err != nil {
-			return err
-		}
-		if err := group.AddMembers(tx, memberIDs); err != nil {
-			return mapGroupMemberError(err, "Error adding group members")
+		if len(columnsToUpdate) > 0 {
+			if err := tx.UpdateOnly(group, columnsToUpdate...); err != nil {
+				return handleSCIMUniqueViolation(err, scimErrGroupDisplayNameConflict, "uniqueness", "Error updating group")
+			}
 		}
 
 	case "remove":
@@ -1109,6 +1170,21 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 				if displayName, ok := val.(string); ok {
 					group.DisplayName = displayName
 					columnsToUpdate = append(columnsToUpdate, "display_name")
+				}
+			case "members":
+				membersRaw, ok := val.([]interface{})
+				if !ok {
+					return apierrors.NewSCIMBadRequestError("members must be an array", "invalidValue")
+				}
+				if len(membersRaw) > SCIMMaxMembers {
+					return apierrors.NewSCIMRequestTooLargeError(fmt.Sprintf("Maximum %d members per operation", SCIMMaxMembers))
+				}
+				memberIDs, err := parseSCIMGroupMemberIDsRaw(membersRaw)
+				if err != nil {
+					return err
+				}
+				if err := group.SetMembers(tx, memberIDs); err != nil {
+					return mapGroupMemberError(err, "Error setting group members")
 				}
 			}
 		}

@@ -16,6 +16,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 type SSOProvider struct {
@@ -324,7 +325,7 @@ func FindAllSSOProvidersByFilter(
 	if v := queryValues.Get(resourceIDFilter); v != "" {
 		q = q.Where("resource_id = ?", v)
 	} else if v := queryValues.Get(resourceIDPrefixFilter); v != "" {
-		q = q.Where("resource_id LIKE ?", v+"%")
+		q = q.Where("resource_id LIKE ? ESCAPE '\\'", utilities.EscapeLikePattern(v)+"%")
 	}
 	if err := q.All(&ssoProviders); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
