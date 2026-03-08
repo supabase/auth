@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -767,9 +766,9 @@ func (ts *SCIMTestSuite) TestSCIMReactivateAmbiguousDeprovisioned() {
 	user2, err := models.NewUser("", testUser19.Email, "", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err)
 	user2.IsSSOUser = true
-	reason := "SCIM_DEPROVISIONED"
+	reason := models.BannedReasonSCIMDeprovisioned
 	user2.BannedReason = &reason
-	bannedUntil := time.Now().Add(time.Duration(math.MaxInt64))
+	bannedUntil := time.Now().Add(200 * 365 * 24 * time.Hour)
 	user2.BannedUntil = &bannedUntil
 	require.NoError(ts.T(), ts.API.db.Create(user2))
 

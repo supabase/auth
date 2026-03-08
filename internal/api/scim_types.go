@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/models"
 )
 
 const (
@@ -34,7 +35,7 @@ const (
 )
 
 // Must be var (not const) because it's passed by pointer to user.Ban()
-var scimDeprovisionedReason = "SCIM_DEPROVISIONED"
+var scimDeprovisionedReason = models.BannedReasonSCIMDeprovisioned
 
 // FlexBool handles both bool and string ("true"/"false") - Azure AD sends strings
 type FlexBool bool
