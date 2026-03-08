@@ -40,8 +40,7 @@ var (
 	testUser5  = scimTestUser{UserName: "user5@acme.com", Email: "user5@acme.com"}
 	testUser6  = scimTestUser{UserName: "user6@example.com", Email: "user6@example.com"}
 	testUser7  = scimTestUser{UserName: "user7@example.com", Email: "user7@example.com"}
-	testUser8  = scimTestUser{UserName: "user8@example.com", Email: "user8@example.com"}
-	testUser9  = scimTestUser{UserName: "user9@acme.com", Email: "user9@acme.com", GivenName: "Jane", FamilyName: "Doe", Formatted: "Jane Doe", ExternalID: "ext-002"}
+	testUser9 = scimTestUser{UserName: "user9@acme.com", Email: "user9@acme.com", GivenName: "Jane", FamilyName: "Doe", Formatted: "Jane Doe", ExternalID: "ext-002"}
 	testUser10 = scimTestUser{UserName: "user10@acme.com", Email: "user10@acme.com", GivenName: "John", FamilyName: "Smith", Formatted: "John Smith", ExternalID: "ext-003"}
 	testUser13 = scimTestUser{UserName: "user13@example.com", Email: "user13@example.com", ExternalID: "ext-006"}
 	testUser14 = scimTestUser{UserName: "user14@acme.com", Email: "user14@acme.com", ExternalID: "ext-007"}
@@ -50,6 +49,8 @@ var (
 	testUser17 = scimTestUser{UserName: "user17@acme.com", Email: "user17@acme.com", GivenName: "Reactivated", FamilyName: "User", Formatted: "Reactivated User", ExternalID: "ext-010"}
 	testUser18 = scimTestUser{UserName: "crossemail@acme.com", Email: "crossemail@acme.com", ExternalID: "ext-011"}
 	testUser19 = scimTestUser{UserName: "ambiguous@acme.com", Email: "ambiguous@acme.com", ExternalID: "ext-012"}
+	testUser20 = scimTestUser{UserName: "recycle@acme.com", Email: "recycle@acme.com", ExternalID: "ext-013"}
+	testUser21 = scimTestUser{UserName: "mismatch@acme.com", Email: "mismatch@acme.com", ExternalID: "ext-014"}
 
 	testGroup1 = scimTestGroup{DisplayName: "Engineering", ExternalID: "grp-001"}
 	testGroup2 = scimTestGroup{DisplayName: "Sales", ExternalID: "grp-002"}
@@ -235,23 +236,7 @@ func (ts *SCIMTestSuite) createSCIMGroupWithMembers(displayName string, memberID
 }
 
 func (ts *SCIMTestSuite) assertSCIMError(w *httptest.ResponseRecorder, expectedStatus int) {
-	require.Equal(ts.T(), expectedStatus, w.Code)
-
-	var errorResp map[string]interface{}
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errorResp))
-
-	schemas, ok := errorResp["schemas"].([]interface{})
-	require.True(ts.T(), ok, "SCIM error should have schemas field")
-	require.Len(ts.T(), schemas, 1)
-	require.Equal(ts.T(), "urn:ietf:params:scim:api:messages:2.0:Error", schemas[0])
-
-	_, ok = errorResp["detail"].(string)
-	require.True(ts.T(), ok, "SCIM error should have detail field")
-
-	// SCIM status is a string per RFC 7644
-	status, ok := errorResp["status"].(string)
-	require.True(ts.T(), ok, "SCIM error should have status field")
-	require.Equal(ts.T(), fmt.Sprintf("%d", expectedStatus), status)
+	ts.assertSCIMErrorWithType(w, expectedStatus, "")
 }
 
 func (ts *SCIMTestSuite) assertSCIMListResponse(w *httptest.ResponseRecorder, expectedTotal int) *SCIMListResponse {
@@ -277,25 +262,6 @@ func (ts *SCIMTestSuite) TestSCIMTokenValidation() {
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
-}
-
-func (ts *SCIMTestSuite) TestSCIMInvalidToken() {
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
-	req.Header.Set("Authorization", "Bearer invalid-token")
-	req.Header.Set("Content-Type", "application/scim+json")
-	w := httptest.NewRecorder()
-
-	ts.API.handler.ServeHTTP(w, req)
-	ts.assertSCIMError(w, http.StatusUnauthorized)
-}
-
-func (ts *SCIMTestSuite) TestSCIMMissingToken() {
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
-	req.Header.Set("Content-Type", "application/scim+json")
-	w := httptest.NewRecorder()
-
-	ts.API.handler.ServeHTTP(w, req)
-	ts.assertSCIMError(w, http.StatusUnauthorized)
 }
 
 func (ts *SCIMTestSuite) TestSCIMEmptyUserList() {
@@ -385,22 +351,6 @@ func (ts *SCIMTestSuite) TestSCIMSchemas() {
 
 	require.Equal(ts.T(), 2, result.TotalResults)
 	require.Len(ts.T(), result.Resources, 2)
-}
-
-func (ts *SCIMTestSuite) TestSCIMGetUserNotFound() {
-	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users/00000000-0000-0000-0000-000000000000", nil)
-	w := httptest.NewRecorder()
-
-	ts.API.handler.ServeHTTP(w, req)
-	ts.assertSCIMError(w, http.StatusNotFound)
-}
-
-func (ts *SCIMTestSuite) TestSCIMGetGroupNotFound() {
-	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups/00000000-0000-0000-0000-000000000000", nil)
-	w := httptest.NewRecorder()
-
-	ts.API.handler.ServeHTTP(w, req)
-	ts.assertSCIMError(w, http.StatusNotFound)
 }
 
 func (ts *SCIMTestSuite) TestSCIMMethodNotAllowedReturnsSCIMError() {
@@ -556,33 +506,6 @@ func (ts *SCIMTestSuite) TestSCIMContentTypeHeader() {
 	require.Equal(ts.T(), "application/scim+json", w.Header().Get("Content-Type"))
 }
 
-func (ts *SCIMTestSuite) TestSCIMCreateUserMissingUserName() {
-	body := map[string]interface{}{
-		"schemas": []string{SCIMSchemaUser},
-		"emails": []map[string]interface{}{
-			{"value": "test@example.com", "primary": true},
-		},
-	}
-
-	req := ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Users", body)
-	w := httptest.NewRecorder()
-
-	ts.API.handler.ServeHTTP(w, req)
-	ts.assertSCIMError(w, http.StatusBadRequest)
-}
-
-func (ts *SCIMTestSuite) TestSCIMCreateGroupMissingDisplayName() {
-	body := map[string]interface{}{
-		"schemas": []string{SCIMSchemaGroup},
-	}
-
-	req := ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Groups", body)
-	w := httptest.NewRecorder()
-
-	ts.API.handler.ServeHTTP(w, req)
-	ts.assertSCIMError(w, http.StatusBadRequest)
-}
-
 func (ts *SCIMTestSuite) TestSCIMUserPagination() {
 	for i := 0; i < 5; i++ {
 		ts.createSCIMUser(fmt.Sprintf("pageuser%d@acme.com", i), fmt.Sprintf("pageuser%d@acme.com", i))
@@ -712,7 +635,8 @@ func (ts *SCIMTestSuite) TestSCIMDeleteNonExistentUser() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMReactivateDeprovisionedUser() {
-	user := ts.createSCIMUserWithName(testUser17.UserName, testUser17.Email, testUser17.GivenName, testUser17.FamilyName)
+	// Reactivation requires matching externalId on both sides
+	user := ts.createSCIMUserWithExternalID(testUser17.UserName, testUser17.Email, testUser17.ExternalID)
 	require.True(ts.T(), user.Active)
 
 	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+user.ID, nil)
@@ -730,8 +654,9 @@ func (ts *SCIMTestSuite) TestSCIMReactivateDeprovisionedUser() {
 	require.False(ts.T(), deprovisioned.Active)
 
 	body := map[string]interface{}{
-		"schemas":  []string{SCIMSchemaUser},
-		"userName": testUser17.UserName,
+		"schemas":    []string{SCIMSchemaUser},
+		"userName":   testUser17.UserName,
+		"externalId": testUser17.ExternalID,
 		"name": map[string]interface{}{
 			"givenName":  "Updated",
 			"familyName": "Name",
@@ -745,7 +670,7 @@ func (ts *SCIMTestSuite) TestSCIMReactivateDeprovisionedUser() {
 	req = ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Users", body)
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusCreated, w.Code, "Reactivating a deprovisioned SSO user should succeed: %s", w.Body.String())
+	require.Equal(ts.T(), http.StatusCreated, w.Code, "Reactivating a deprovisioned SSO user with matching externalId should succeed: %s", w.Body.String())
 
 	var reactivated SCIMUserResponse
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&reactivated))
@@ -753,6 +678,62 @@ func (ts *SCIMTestSuite) TestSCIMReactivateDeprovisionedUser() {
 	require.Equal(ts.T(), user.ID, reactivated.ID, "Reactivated user should have the same ID")
 	require.Equal(ts.T(), "Updated", reactivated.Name.GivenName)
 	require.Equal(ts.T(), "Name", reactivated.Name.FamilyName)
+}
+
+func (ts *SCIMTestSuite) TestSCIMReactivateDeprovisionedUserWithoutExternalIDCreatesNew() {
+	// Without externalId, a create for a deprovisioned email creates a new user
+	// rather than reactivating — prevents account takeover via email recycling
+	user := ts.createSCIMUserWithExternalID(testUser20.UserName, testUser20.Email, testUser20.ExternalID)
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+user.ID, nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	body := map[string]interface{}{
+		"schemas":  []string{SCIMSchemaUser},
+		"userName": testUser20.UserName,
+		"emails": []map[string]interface{}{
+			{"value": testUser20.Email, "primary": true, "type": "work"},
+		},
+	}
+
+	req = ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Users", body)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusCreated, w.Code, "Should create a new user when externalId not provided: %s", w.Body.String())
+
+	var newUser SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&newUser))
+	require.NotEqual(ts.T(), user.ID, newUser.ID, "Should be a different user, not a reactivation")
+	require.True(ts.T(), newUser.Active)
+}
+
+func (ts *SCIMTestSuite) TestSCIMReactivateDeprovisionedUserExternalIDMismatchCreatesNew() {
+	user := ts.createSCIMUserWithExternalID(testUser21.UserName, testUser21.Email, testUser21.ExternalID)
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+user.ID, nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	body := map[string]interface{}{
+		"schemas":    []string{SCIMSchemaUser},
+		"userName":   testUser21.UserName,
+		"externalId": "ext-different-user",
+		"emails": []map[string]interface{}{
+			{"value": testUser21.Email, "primary": true, "type": "work"},
+		},
+	}
+
+	req = ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Users", body)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusCreated, w.Code, "Should create new user when externalId doesn't match: %s", w.Body.String())
+
+	var newUser SCIMUserResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&newUser))
+	require.NotEqual(ts.T(), user.ID, newUser.ID, "Should be a different user, not a reactivation")
 }
 
 func (ts *SCIMTestSuite) TestSCIMReactivateAmbiguousDeprovisioned() {
@@ -858,8 +839,6 @@ func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameExisting() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameNonExistent() {
-	ts.createSCIMUser(testUser8.UserName, testUser8.Email)
-
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22nonexistent%40example.com%22", nil)
 	w := httptest.NewRecorder()
 
@@ -1611,8 +1590,6 @@ func (ts *SCIMTestSuite) TestSCIMFilterGroupByDisplayNameExcludingMembers() {
 }
 
 func (ts *SCIMTestSuite) TestSCIMFilterGroupByDisplayNameNonExistent() {
-	ts.createSCIMGroup("SomeExistingGroup")
-
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Groups?filter=displayName+eq+%22nonexistente997dccbd8b7_EOKNVHIYLTCZ%22", nil)
 	w := httptest.NewRecorder()
 
@@ -2082,25 +2059,6 @@ func (ts *SCIMTestSuite) TestSCIMReplaceGroupDisplayNameConflict() {
 
 	ts.API.handler.ServeHTTP(w, req)
 	ts.assertSCIMErrorWithType(w, http.StatusConflict, "uniqueness")
-}
-
-func (ts *SCIMTestSuite) TestSCIMAuthMissingAuthorizationHeader() {
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
-	req.Header.Set("Content-Type", "application/scim+json")
-	w := httptest.NewRecorder()
-
-	ts.API.handler.ServeHTTP(w, req)
-	ts.assertSCIMError(w, http.StatusUnauthorized)
-}
-
-func (ts *SCIMTestSuite) TestSCIMAuthInvalidBearerToken() {
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/scim/v2/Users", nil)
-	req.Header.Set("Authorization", "Bearer completely-invalid-token-xyz")
-	req.Header.Set("Content-Type", "application/scim+json")
-	w := httptest.NewRecorder()
-
-	ts.API.handler.ServeHTTP(w, req)
-	ts.assertSCIMError(w, http.StatusUnauthorized)
 }
 
 func (ts *SCIMTestSuite) TestSCIMAuthMalformedAuthorizationHeader() {

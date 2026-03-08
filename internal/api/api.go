@@ -396,12 +396,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Delete("/", api.adminSSOProvidersDelete)
 
 						// SCIM management endpoints
-						r.Route("/scim", func(r *router) {
-							r.Get("/", api.adminSSOProviderGetSCIM)
-							r.Post("/", api.adminSSOProviderEnableSCIM)
-							r.Delete("/", api.adminSSOProviderDisableSCIM)
-							r.Post("/rotate", api.adminSSOProviderRotateSCIMToken)
-						})
+						if api.config.SCIM.Enabled {
+							r.Route("/scim", func(r *router) {
+								r.Get("/", api.adminSSOProviderGetSCIM)
+								r.Post("/", api.adminSSOProviderEnableSCIM)
+								r.Delete("/", api.adminSSOProviderDisableSCIM)
+								r.Post("/rotate", api.adminSSOProviderRotateSCIMToken)
+							})
+						}
 					})
 				})
 			})

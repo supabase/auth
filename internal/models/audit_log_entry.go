@@ -175,13 +175,13 @@ func FindAuditLogEntries(tx *storage.Connection, filterColumns []string, filterV
 	q := tx.Q().Order("created_at desc").Where("instance_id = ?", uuid.Nil)
 
 	if len(filterColumns) > 0 && filterValue != "" {
-		lf := "%" + filterValue + "%"
+		lf := "%" + utilities.EscapeLikePattern(filterValue) + "%"
 
 		builder := bytes.NewBufferString("(")
 		values := make([]interface{}, len(filterColumns))
 
 		for idx, col := range filterColumns {
-			builder.WriteString(fmt.Sprintf("payload->>'%s' ILIKE ?", col))
+			builder.WriteString(fmt.Sprintf("payload->>'%s' ILIKE ? ESCAPE '\\'", col))
 			values[idx] = lf
 
 			if idx+1 < len(filterColumns) {

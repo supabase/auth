@@ -16,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -851,9 +852,9 @@ func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Paginat
 	q := tx.Q().Where("instance_id = ? and aud = ?", uuid.Nil, aud)
 
 	if filter != "" {
-		lf := "%" + filter + "%"
+		lf := "%" + utilities.EscapeLikePattern(filter) + "%"
 		// we must specify the collation in order to get case insensitive search for the JSON column
-		q = q.Where("(email LIKE ? OR raw_user_meta_data->>'full_name' ILIKE ?)", lf, lf)
+		q = q.Where("(email LIKE ? ESCAPE '\\' OR raw_user_meta_data->>'full_name' ILIKE ? ESCAPE '\\')", lf, lf)
 	}
 
 	if sortParams != nil && len(sortParams.Fields) > 0 {
