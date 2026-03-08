@@ -171,6 +171,9 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 					canReactivate = true
 				}
 			}
+			// Note: findSSOIdentity nil here is not an error — the deprovisioned
+			// user may lack an identity for this provider, in which case we
+			// cannot correlate and fall through to new user creation.
 
 			if canReactivate {
 				if params.Active == nil || bool(*params.Active) {
@@ -197,10 +200,12 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 					}
 				}
 
-				if identity := findSSOIdentity(candidate, providerType); identity != nil {
-					if err := syncSCIMIdentity(tx, identity, params.UserName, email, params.ExternalID); err != nil {
-						return err
-					}
+				identity, err := requireSSOIdentity(candidate, providerType)
+				if err != nil {
+					return err
+				}
+				if err := syncSCIMIdentity(tx, identity, params.UserName, email, params.ExternalID); err != nil {
+					return err
 				}
 
 				auditAction := "reactivated"
@@ -366,10 +371,12 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		if err := tx.UpdateOnly(user, "raw_user_meta_data"); err != nil {
 			return apierrors.NewSCIMInternalServerError("Error updating user").WithInternalError(err)
 		}
-		if identity := findSSOIdentity(user, providerType); identity != nil {
-			if err := syncSCIMIdentity(tx, identity, params.UserName, email, params.ExternalID); err != nil {
-				return err
-			}
+		identity, err := requireSSOIdentity(user, providerType)
+		if err != nil {
+			return err
+		}
+		if err := syncSCIMIdentity(tx, identity, params.UserName, email, params.ExternalID); err != nil {
+			return err
 		}
 
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, utilities.GetIPAddress(r), map[string]interface{}{
@@ -485,19 +492,22 @@ func (a *API) applySCIMUserRemove(tx *storage.Connection, user *models.User, op 
 	}
 	attrName := strings.ToLower(path.AttributePath.AttributeName)
 	if attrName == "externalid" {
-		if identity := findSSOIdentity(user, providerType); identity != nil {
-			if identity.IdentityData != nil {
-				delete(identity.IdentityData, "external_id")
-			}
-			fallbackID := user.GetEmail()
-			if userName, ok := identity.IdentityData["user_name"].(string); ok && userName != "" {
-				fallbackID = userName
-			}
-			identity.ProviderID = fallbackID
-			identity.IdentityData["sub"] = fallbackID
-			if err := tx.UpdateOnly(identity, "provider_id", "identity_data"); err != nil {
-				return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
-			}
+		identity, err := requireSSOIdentity(user, providerType)
+		if err != nil {
+			return err
+		}
+		if identity.IdentityData == nil {
+			identity.IdentityData = make(map[string]interface{})
+		}
+		delete(identity.IdentityData, "external_id")
+		fallbackID := user.GetEmail()
+		if userName, ok := identity.IdentityData["user_name"].(string); ok && userName != "" {
+			fallbackID = userName
+		}
+		identity.ProviderID = fallbackID
+		identity.IdentityData["sub"] = fallbackID
+		if err := tx.UpdateOnly(identity, "provider_id", "identity_data"); err != nil {
+			return apierrors.NewSCIMInternalServerError("Error updating identity").WithInternalError(err)
 		}
 		return nil
 	}
@@ -512,10 +522,11 @@ func (a *API) applySCIMUserAdd(tx *storage.Connection, user *models.User, op SCI
 			if !ok {
 				return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
 			}
-			if identity := findSSOIdentity(user, providerType); identity != nil {
-				return setSCIMExternalID(tx, identity, externalID)
+			identity, err := requireSSOIdentity(user, providerType)
+			if err != nil {
+				return err
 			}
-			return nil
+			return setSCIMExternalID(tx, identity, externalID)
 		}
 		return apierrors.NewSCIMBadRequestError(fmt.Sprintf("Unsupported add path: %s", op.Path), "invalidPath")
 	}
@@ -551,41 +562,92 @@ func (a *API) applySCIMUserReplace(tx *storage.Connection, user *models.User, op
 
 		switch {
 		case attrName == "username":
-			if userName, ok := val.(string); ok && userName != "" {
-				if identity := findSSOIdentity(user, providerType); identity != nil {
-					if err := setSCIMUserName(tx, identity, userName); err != nil {
-						return err
-					}
+			userName, ok := val.(string)
+			if !ok {
+				return apierrors.NewSCIMBadRequestError("userName must be a string", "invalidValue")
+			}
+			if userName != "" {
+				identity, err := requireSSOIdentity(user, providerType)
+				if err != nil {
+					return err
+				}
+				if err := setSCIMUserName(tx, identity, userName); err != nil {
+					return err
 				}
 			}
-		case attrName == "name" && subAttr == "formatted":
-			if v, ok := val.(string); ok {
+		case attrName == "name" && subAttr != "":
+			v, ok := val.(string)
+			if !ok {
+				return apierrors.NewSCIMBadRequestError(fmt.Sprintf("name.%s must be a string", subAttr), "invalidValue")
+			}
+			switch subAttr {
+			case "formatted":
 				user.UserMetaData["full_name"] = v
 				metadataUpdated = true
-			}
-		case attrName == "name" && subAttr == "familyname":
-			if v, ok := val.(string); ok {
+			case "familyname":
 				user.UserMetaData["family_name"] = v
 				metadataUpdated = true
-			}
-		case attrName == "name" && subAttr == "givenname":
-			if v, ok := val.(string); ok {
+			case "givenname":
 				user.UserMetaData["given_name"] = v
 				metadataUpdated = true
 			}
-		case attrName == "externalid":
-			if externalID, ok := val.(string); ok {
-				if identity := findSSOIdentity(user, providerType); identity != nil {
-					if err := setSCIMExternalID(tx, identity, externalID); err != nil {
-						return err
-					}
+		case attrName == "name" && subAttr == "":
+			nameMap, ok := val.(map[string]interface{})
+			if !ok {
+				return apierrors.NewSCIMBadRequestError("name must be an object", "invalidValue")
+			}
+			// SCIM attribute names are case-insensitive (RFC 7643 §2.1)
+			for k, v := range nameMap {
+				str, ok := v.(string)
+				if !ok {
+					return apierrors.NewSCIMBadRequestError(fmt.Sprintf("name.%s must be a string", k), "invalidValue")
+				}
+				switch strings.ToLower(k) {
+				case "givenname":
+					user.UserMetaData["given_name"] = str
+					metadataUpdated = true
+				case "familyname":
+					user.UserMetaData["family_name"] = str
+					metadataUpdated = true
+				case "formatted":
+					user.UserMetaData["full_name"] = str
+					metadataUpdated = true
 				}
 			}
+		case attrName == "externalid":
+			externalID, ok := val.(string)
+			if !ok {
+				return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
+			}
+			identity, err := requireSSOIdentity(user, providerType)
+			if err != nil {
+				return err
+			}
+			if err := setSCIMExternalID(tx, identity, externalID); err != nil {
+				return err
+			}
 		case attrName == "emails" && keyPath.ValueExpression != nil && strings.ToLower(keyPath.SubAttributeName()) == "value":
-			if emailValue, ok := val.(string); ok {
-				if err := a.applySCIMEmailUpdate(tx, user, emailValue, providerType); err != nil {
-					return err
-				}
+			emailValue, ok := val.(string)
+			if !ok {
+				return apierrors.NewSCIMBadRequestError("email value must be a string", "invalidValue")
+			}
+			if err := a.applySCIMEmailUpdate(tx, user, emailValue, providerType); err != nil {
+				return err
+			}
+		case attrName == "emails" && keyPath.ValueExpression == nil:
+			emailArr, ok := val.([]interface{})
+			if !ok {
+				return apierrors.NewSCIMBadRequestError("emails must be an array", "invalidValue")
+			}
+			if len(emailArr) == 0 {
+				return apierrors.NewSCIMBadRequestError("emails array must not be empty", "invalidValue")
+			}
+			emailValue, err := extractPrimarySCIMEmailRaw(emailArr)
+			if err != nil {
+				return err
+			}
+			if err := a.applySCIMEmailUpdate(tx, user, emailValue, providerType); err != nil {
+				return err
 			}
 		case attrName == "active":
 			if err := a.applySCIMActiveUpdate(tx, user, val); err != nil {
@@ -611,19 +673,21 @@ func (a *API) applySCIMUserReplaceWithPath(tx *storage.Connection, user *models.
 		if !ok {
 			return apierrors.NewSCIMBadRequestError("userName must be a string", "invalidValue")
 		}
-		if identity := findSSOIdentity(user, providerType); identity != nil {
-			return setSCIMUserName(tx, identity, userName)
+		identity, err := requireSSOIdentity(user, providerType)
+		if err != nil {
+			return err
 		}
-		return nil
+		return setSCIMUserName(tx, identity, userName)
 	case attrName == "externalid":
 		externalID, ok := op.Value.(string)
 		if !ok {
 			return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
 		}
-		if identity := findSSOIdentity(user, providerType); identity != nil {
-			return setSCIMExternalID(tx, identity, externalID)
+		identity, err := requireSSOIdentity(user, providerType)
+		if err != nil {
+			return err
 		}
-		return nil
+		return setSCIMExternalID(tx, identity, externalID)
 	case attrName == "name":
 		subAttr := strings.ToLower(path.AttributePath.SubAttributeName())
 		val, ok := op.Value.(string)
@@ -669,10 +733,11 @@ func (a *API) applySCIMEmailUpdate(tx *storage.Connection, user *models.User, ne
 	if err := user.SetEmail(tx, validatedEmail); err != nil {
 		return handleSCIMUniqueViolation(err, scimErrEmailConflict, "uniqueness", "Error updating email")
 	}
-	if identity := findSSOIdentity(user, providerType); identity != nil {
-		return setSCIMIdentityField(tx, identity, "email", validatedEmail)
+	identity, err := requireSSOIdentity(user, providerType)
+	if err != nil {
+		return err
 	}
-	return nil
+	return setSCIMIdentityField(tx, identity, "email", validatedEmail)
 }
 
 func (a *API) applySCIMActiveUpdate(tx *storage.Connection, user *models.User, val interface{}) error {
@@ -1045,15 +1110,19 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 		for key, val := range valueMap {
 			switch strings.ToLower(key) {
 			case "displayname":
-				if displayName, ok := val.(string); ok {
-					group.DisplayName = displayName
-					columnsToUpdate = append(columnsToUpdate, "display_name")
+				displayName, ok := val.(string)
+				if !ok {
+					return apierrors.NewSCIMBadRequestError("displayName must be a string", "invalidValue")
 				}
+				group.DisplayName = displayName
+				columnsToUpdate = append(columnsToUpdate, "display_name")
 			case "externalid":
-				if externalID, ok := val.(string); ok {
-					group.ExternalID = storage.NullString(externalID)
-					columnsToUpdate = append(columnsToUpdate, "external_id")
+				externalID, ok := val.(string)
+				if !ok {
+					return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
 				}
+				group.ExternalID = storage.NullString(externalID)
+				columnsToUpdate = append(columnsToUpdate, "external_id")
 			case "members":
 				membersRaw, ok := val.([]interface{})
 				if !ok {
@@ -1085,6 +1154,11 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 		switch {
 		case attrName == "externalid":
 			return updateGroupExternalID(tx, group, "")
+		case attrName == "members" && path.ValueExpression == nil:
+			if err := group.SetMembers(tx, nil); err != nil {
+				return apierrors.NewSCIMInternalServerError("Error removing all group members").WithInternalError(err)
+			}
+			return nil
 		case attrName == "members" && path.ValueExpression != nil:
 			attrExpr, ok := path.ValueExpression.(*filter.AttributeExpression)
 			if !ok || attrExpr.Operator != filter.EQ || strings.ToLower(attrExpr.AttributePath.AttributeName) != "value" {
@@ -1162,15 +1236,19 @@ func (a *API) applySCIMGroupPatch(tx *storage.Connection, group *models.SCIMGrou
 			}
 			switch strings.ToLower(keyPath.AttributePath.AttributeName) {
 			case "externalid":
-				if externalID, ok := val.(string); ok {
-					group.ExternalID = storage.NullString(externalID)
-					columnsToUpdate = append(columnsToUpdate, "external_id")
+				externalID, ok := val.(string)
+				if !ok {
+					return apierrors.NewSCIMBadRequestError("externalId must be a string", "invalidValue")
 				}
+				group.ExternalID = storage.NullString(externalID)
+				columnsToUpdate = append(columnsToUpdate, "external_id")
 			case "displayname":
-				if displayName, ok := val.(string); ok {
-					group.DisplayName = displayName
-					columnsToUpdate = append(columnsToUpdate, "display_name")
+				displayName, ok := val.(string)
+				if !ok {
+					return apierrors.NewSCIMBadRequestError("displayName must be a string", "invalidValue")
 				}
+				group.DisplayName = displayName
+				columnsToUpdate = append(columnsToUpdate, "display_name")
 			case "members":
 				membersRaw, ok := val.([]interface{})
 				if !ok {

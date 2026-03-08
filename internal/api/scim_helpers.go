@@ -185,6 +185,19 @@ func findSSOIdentity(user *models.User, providerType string) *models.Identity {
 	return nil
 }
 
+// requireSSOIdentity returns the SSO identity for the given provider type,
+// or an internal server error if it doesn't exist. Use this in mutation paths
+// where the user has already been confirmed to belong to the provider — a
+// missing identity indicates data inconsistency.
+func requireSSOIdentity(user *models.User, providerType string) (*models.Identity, error) {
+	identity := findSSOIdentity(user, providerType)
+	if identity == nil {
+		return nil, apierrors.NewSCIMInternalServerError(
+			fmt.Sprintf("SSO identity not found for provider %s", providerType))
+	}
+	return identity, nil
+}
+
 func setSCIMExternalID(tx *storage.Connection, identity *models.Identity, externalID string) error {
 	if strings.TrimSpace(externalID) == "" {
 		return apierrors.NewSCIMBadRequestError("externalId must not be empty", "invalidValue")
@@ -250,6 +263,31 @@ func extractPrimarySCIMEmail(emails []SCIMEmail) (email, emailType string) {
 	return emails[0].Value, emails[0].Type
 }
 
+// extractPrimarySCIMEmailRaw finds the primary email from a raw JSON emails
+// array ([]interface{} of map[string]interface{}). Returns the primary entry's
+// value, or the first entry's value if none is marked primary. Returns an error
+// if any entry is malformed or no valid email value is found.
+func extractPrimarySCIMEmailRaw(emails []interface{}) (string, error) {
+	var firstValue string
+	for _, entry := range emails {
+		obj, ok := entry.(map[string]interface{})
+		if !ok {
+			return "", apierrors.NewSCIMBadRequestError("each email entry must be an object", "invalidValue")
+		}
+		val, _ := obj["value"].(string)
+		if val == "" {
+			return "", apierrors.NewSCIMBadRequestError("each email entry must have a string 'value'", "invalidValue")
+		}
+		if firstValue == "" {
+			firstValue = val
+		}
+		if primary, _ := obj["primary"].(bool); primary {
+			return val, nil
+		}
+	}
+	return firstValue, nil
+}
+
 func applySCIMNameToMetadata(metadata map[string]interface{}, name *SCIMName) {
 	if name == nil {
 		return
@@ -309,6 +347,9 @@ func updateGroupExternalID(tx *storage.Connection, group *models.SCIMGroup, exte
 }
 
 func scimDeprovisionUser(tx *storage.Connection, user *models.User) error {
+	if user.IsBanned() && !user.IsSCIMDeprovisioned() {
+		return apierrors.NewSCIMConflictError("User is banned by an administrator and cannot be deprovisioned via SCIM", "")
+	}
 	if err := user.Ban(tx, 200*365*24*time.Hour, &scimDeprovisionedReason); err != nil {
 		return apierrors.NewSCIMInternalServerError("Error deprovisioning user").WithInternalError(err)
 	}
@@ -319,6 +360,12 @@ func scimDeprovisionUser(tx *storage.Connection, user *models.User) error {
 }
 
 func scimReactivateUser(tx *storage.Connection, user *models.User) error {
+	if !user.IsBanned() {
+		return nil
+	}
+	if !user.IsSCIMDeprovisioned() {
+		return apierrors.NewSCIMConflictError("User is banned by an administrator and cannot be reactivated via SCIM", "")
+	}
 	if err := user.Ban(tx, 0, nil); err != nil {
 		return apierrors.NewSCIMInternalServerError("Error reactivating user").WithInternalError(err)
 	}
