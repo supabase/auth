@@ -52,9 +52,11 @@ func (ts *PasskeyTestSuite) SetupTest() {
 		ChallengeExpiryDuration: 5 * time.Minute,
 	}
 
-	// Create test user
+	// Create test user with confirmed email
 	u, err := models.NewUser("", "passkey@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err)
+	now := time.Now()
+	u.EmailConfirmedAt = &now
 	require.NoError(ts.T(), ts.API.db.Create(u))
 
 	// Create session

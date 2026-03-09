@@ -306,6 +306,11 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.Route("/passkeys", func(r *router) {
 			r.Use(api.requirePasskeyEnabled)
 
+			r.Route("/authentication", func(r *router) {
+				r.Post("/options", api.PasskeyAuthenticationOptions)
+				r.Post("/verify", api.PasskeyAuthenticationVerify)
+			})
+
 			r.With(api.requireAuthentication).With(api.requireNotAnonymous).Route("/registration", func(r *router) {
 				r.Post("/options", api.PasskeyRegistrationOptions)
 				r.Post("/verify", api.PasskeyRegistrationVerify)
