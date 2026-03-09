@@ -171,17 +171,44 @@ func (g *SCIMGroup) RemoveMember(tx *storage.Connection, userID uuid.UUID) error
 	).Exec()
 }
 
+// GetMembers loads the users belonging to this group. Uses a two-step query
+// to avoid SELECT * on users (which breaks on unmapped columns like is_super_admin).
 func (g *SCIMGroup) GetMembers(tx *storage.Connection) ([]*User, error) {
-	users := []*User{}
-	userTable := (&pop.Model{Value: User{}}).TableName()
+	// Step 1: get user IDs from the junction table
+	type idRow struct {
+		UserID uuid.UUID `db:"user_id"`
+	}
+	var idResults []idRow
 	if err := tx.RawQuery(
-		"SELECT u.* FROM "+userTable+" u INNER JOIN "+scimGroupMemberTable+" m ON u.id = m.user_id WHERE m.group_id = ? ORDER BY u.email ASC LIMIT 10000",
+		"SELECT m.user_id FROM "+scimGroupMemberTable+" m WHERE m.group_id = ? ORDER BY m.user_id ASC",
 		g.ID,
-	).All(&users); err != nil {
+	).All(&idResults); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return []*User{}, nil
 		}
-		return nil, errors.Wrap(err, "error getting SCIM group members")
+		return nil, errors.Wrap(err, "error getting SCIM group member IDs")
+	}
+	if len(idResults) == 0 {
+		return []*User{}, nil
+	}
+
+	// Step 2: load full user objects via Pop's query builder (infers column list from struct)
+	placeholders := make([]string, len(idResults))
+	loadArgs := make([]interface{}, len(idResults))
+	for i, r := range idResults {
+		placeholders[i] = "?"
+		loadArgs[i] = r.UserID
+	}
+	users := []*User{}
+	err := tx.Q().
+		Where("id IN ("+strings.Join(placeholders, ",")+") ", loadArgs...).
+		Order("email ASC").
+		All(&users)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return []*User{}, nil
+		}
+		return nil, errors.Wrap(err, "error loading SCIM group members")
 	}
 	return users, nil
 }
@@ -281,37 +308,75 @@ func (g *SCIMGroup) insertMembers(tx *storage.Connection, userIDs []uuid.UUID) e
 	return nil
 }
 
+// GetMembersForGroups loads users for each group. Uses a two-step query to
+// avoid SELECT * on users (which breaks when DB has columns not mapped in
+// the Go struct, e.g. is_super_admin).
 func GetMembersForGroups(tx *storage.Connection, groupIDs []uuid.UUID) (map[uuid.UUID][]*User, error) {
 	result := make(map[uuid.UUID][]*User)
 	if len(groupIDs) == 0 {
 		return result, nil
 	}
 
-	userTable := (&pop.Model{Value: User{}}).TableName()
-
-	type memberRow struct {
+	// Step 1: get (group_id, user_id) pairs via raw query on the junction table
+	type memberRef struct {
 		GroupID uuid.UUID `db:"group_id"`
-		User
+		UserID  uuid.UUID `db:"user_id"`
 	}
 
 	inClause, args := buildINClause(groupIDs)
 
-	rows := []memberRow{}
+	refs := []memberRef{}
 	if err := tx.RawQuery(
-		"SELECT m.group_id, u.* FROM "+userTable+" u "+
-			"INNER JOIN "+scimGroupMemberTable+" m ON u.id = m.user_id "+
-			"WHERE m.group_id IN ("+inClause+") "+
-			"ORDER BY u.email ASC",
+		"SELECT m.group_id, m.user_id FROM "+scimGroupMemberTable+" m "+
+			"WHERE m.group_id IN ("+inClause+")",
 		args...,
-	).All(&rows); err != nil {
+	).All(&refs); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return result, nil
 		}
 		return nil, errors.Wrap(err, "error batch loading SCIM group members")
 	}
 
-	for i := range rows {
-		result[rows[i].GroupID] = append(result[rows[i].GroupID], &rows[i].User)
+	if len(refs) == 0 {
+		return result, nil
+	}
+
+	// Collect unique user IDs
+	userIDSet := make(map[uuid.UUID]bool)
+	for _, ref := range refs {
+		userIDSet[ref.UserID] = true
+	}
+
+	// Step 2: load full user objects via Pop's query builder (infers column
+	// list from struct, avoids SELECT * which breaks on unmapped columns)
+	placeholders := make([]string, 0, len(userIDSet))
+	loadArgs := make([]interface{}, 0, len(userIDSet))
+	for id := range userIDSet {
+		placeholders = append(placeholders, "?")
+		loadArgs = append(loadArgs, id)
+	}
+	users := []*User{}
+	err := tx.Q().
+		Where("id IN ("+strings.Join(placeholders, ",")+") ", loadArgs...).
+		Order("email ASC").
+		All(&users)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return result, nil
+		}
+		return nil, errors.Wrap(err, "error loading users for SCIM group members")
+	}
+
+	userMap := make(map[uuid.UUID]*User, len(users))
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	// Step 3: assemble group → users map
+	for _, ref := range refs {
+		if u, ok := userMap[ref.UserID]; ok {
+			result[ref.GroupID] = append(result[ref.GroupID], u)
+		}
 	}
 	return result, nil
 }
