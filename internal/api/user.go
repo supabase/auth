@@ -149,17 +149,41 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	if params.Password != nil {
 		if config.Security.UpdatePasswordRequireCurrentPassword {
-			if params.CurrentPassword == nil || *params.CurrentPassword == "" {
-				return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Current password is required to update password")
+			// Recovery sessions (password reset flow) are exempt — the user
+			// cannot know their current password, that is why they are resetting it.
+			isRecoverySession := false
+			if session != nil {
+				amrMethods := []string{}
+				for _, claim := range session.AMRClaims {
+					amrMethods = append(amrMethods, claim.GetAuthenticationMethod())
+					if claim.GetAuthenticationMethod() == models.Recovery.String() {
+						isRecoverySession = true
+						break
+					}
+				}
+				logrus.WithFields(logrus.Fields{
+					"session_id":          session.ID,
+					"amr_methods":         amrMethods,
+					"amr_claims_count":    len(session.AMRClaims),
+					"is_recovery_session": isRecoverySession,
+				}).Info("[delos] password update: session AMR check")
+			} else {
+				logrus.Info("[delos] password update: session is nil")
 			}
 
-			if user.HasPassword() {
-				authenticated, _, err := user.Authenticate(ctx, db, *params.CurrentPassword, config.Security.DBEncryption.DecryptionKeys, false, "")
-				if err != nil {
-					return apierrors.NewInternalServerError("Error verifying current password").WithInternalError(err)
+			if !isRecoverySession {
+				if params.CurrentPassword == nil || *params.CurrentPassword == "" {
+					return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Current password is required to update password")
 				}
-				if !authenticated {
-					return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
+
+				if user.HasPassword() {
+					authenticated, _, err := user.Authenticate(ctx, db, *params.CurrentPassword, config.Security.DBEncryption.DecryptionKeys, false, "")
+					if err != nil {
+						return apierrors.NewInternalServerError("Error verifying current password").WithInternalError(err)
+					}
+					if !authenticated {
+						return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
+					}
 				}
 			}
 		}
