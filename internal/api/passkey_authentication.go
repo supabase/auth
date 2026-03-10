@@ -92,7 +92,7 @@ func (a *API) PasskeyAuthenticationVerify(w http.ResponseWriter, r *http.Request
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "challenge_id must be a valid UUID")
 	}
 
-	challenge, err := models.ConsumeWebAuthnChallengeByID(db, challengeID)
+	challenge, err := models.ConsumeWebAuthnChallengeByID(db, challengeID, models.WebAuthnChallengeTypeAuthentication, nil)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeNotFound, "Challenge not found or already used")
@@ -103,10 +103,6 @@ func (a *API) PasskeyAuthenticationVerify(w http.ResponseWriter, r *http.Request
 
 	if challenge.IsExpired() {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeExpired, "Challenge has expired")
-	}
-
-	if challenge.ChallengeType != models.WebAuthnChallengeTypeAuthentication {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid challenge type")
 	}
 
 	parsedResponse, err := parseCredentialAssertionResponse(params.CredentialResponse)

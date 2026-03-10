@@ -52,12 +52,21 @@ func FindWebAuthnChallengeByID(conn *storage.Connection, id uuid.UUID) (*WebAuth
 }
 
 // ConsumeWebAuthnChallengeByID atomically deletes and returns a challenge row
-// using DELETE ... RETURNING. If the row has already been consumed or does not
-// exist, a WebAuthnChallengeNotFoundError is returned.
-func ConsumeWebAuthnChallengeByID(conn *storage.Connection, id uuid.UUID) (*WebAuthnChallenge, error) {
+func ConsumeWebAuthnChallengeByID(conn *storage.Connection, id uuid.UUID, challengeType string, userID *uuid.UUID) (*WebAuthnChallenge, error) {
 	challenge := &WebAuthnChallenge{}
+	table := challenge.TableName()
 
-	if err := conn.RawQuery("DELETE FROM "+challenge.TableName()+" WHERE id = ? RETURNING *", id).First(challenge); err != nil {
+	var query string
+	var args []any
+	if userID != nil {
+		query = "DELETE FROM " + table + " WHERE id = ? AND challenge_type = ? AND user_id = ? RETURNING *"
+		args = []any{id, challengeType, *userID}
+	} else {
+		query = "DELETE FROM " + table + " WHERE id = ? AND challenge_type = ? RETURNING *"
+		args = []any{id, challengeType}
+	}
+
+	if err := conn.RawQuery(query, args...).First(challenge); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, WebAuthnChallengeNotFoundError{}
 		}

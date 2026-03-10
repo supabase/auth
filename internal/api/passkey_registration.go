@@ -139,7 +139,7 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Atomically consume the challenge to prevent replay/race conditions
-	challenge, err := models.ConsumeWebAuthnChallengeByID(db, challengeID)
+	challenge, err := models.ConsumeWebAuthnChallengeByID(db, challengeID, models.WebAuthnChallengeTypeRegistration, &user.ID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeNotFound, "Challenge not found or already used")
@@ -150,15 +150,6 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 
 	if challenge.IsExpired() {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeExpired, "Challenge has expired")
-	}
-
-	if challenge.ChallengeType != models.WebAuthnChallengeTypeRegistration {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid challenge type")
-	}
-
-	// Verify the challenge belongs to the authenticated user
-	if challenge.UserID == nil || *challenge.UserID != user.ID {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeNotFound, "Challenge not found")
 	}
 
 	// Parse the credential creation response from the JSON params
