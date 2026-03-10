@@ -708,9 +708,10 @@ type VonageProviderConfiguration struct {
 }
 
 type CaptchaConfiguration struct {
-	Enabled  bool   `json:"enabled" default:"false"`
-	Provider string `json:"provider" default:"hcaptcha"`
-	Secret   string `json:"provider_secret"`
+	Enabled  bool          `json:"enabled" default:"false"`
+	Provider string        `json:"provider" default:"hcaptcha"`
+	Secret   string        `json:"provider_secret"`
+	Timeout  time.Duration `json:"timeout" split_words:"true" default:"10s"`
 }
 
 func (c *CaptchaConfiguration) Validate() error {
