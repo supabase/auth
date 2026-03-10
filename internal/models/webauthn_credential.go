@@ -165,6 +165,13 @@ func (pc *WebAuthnCredential) UpdateLastUsedAt(tx *storage.Connection) error {
 	return tx.UpdateOnly(pc, "last_used_at", "updated_at")
 }
 
+func (pc *WebAuthnCredential) UpdateLastUsedWithSignCount(tx *storage.Connection, signCount uint32) error {
+	now := time.Now()
+	pc.SignCount = signCount
+	pc.LastUsedAt = &now
+	return tx.UpdateOnly(pc, "sign_count", "last_used_at", "updated_at")
+}
+
 func (pc *WebAuthnCredential) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	pc.FriendlyName = friendlyName
 	return tx.UpdateOnly(pc, "friendly_name", "updated_at")
