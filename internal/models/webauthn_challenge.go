@@ -62,7 +62,7 @@ func ConsumeWebAuthnChallengeByID(conn *storage.Connection, id uuid.UUID, challe
 		query = "DELETE FROM " + table + " WHERE id = ? AND challenge_type = ? AND user_id = ? RETURNING *"
 		args = []any{id, challengeType, *userID}
 	} else {
-		query = "DELETE FROM " + table + " WHERE id = ? AND challenge_type = ? RETURNING *"
+		query = "DELETE FROM " + table + " WHERE id = ? AND challenge_type = ? AND user_id IS NULL RETURNING *"
 		args = []any{id, challengeType}
 	}
 
