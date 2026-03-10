@@ -622,8 +622,13 @@ func (s *Server) buildErrorRedirectURL(redirectURI, errorCode, errorDescription,
 	return u.String()
 }
 
-// buildAuthorizationURL safely joins a base URL with a path, handling slashes correctly
+// buildAuthorizationURL safely joins a base URL with a path, handling slashes correctly.
+// If pathToJoin is an absolute URL, it is returned as-is.
 func (s *Server) buildAuthorizationURL(baseURL, pathToJoin string) string {
+	if parsed, err := url.Parse(pathToJoin); err == nil && parsed.IsAbs() {
+		return pathToJoin
+	}
+
 	// Trim trailing slash from baseURL
 	baseURL = strings.TrimRight(baseURL, "/")
 

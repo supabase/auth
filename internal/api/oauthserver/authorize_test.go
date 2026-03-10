@@ -122,6 +122,43 @@ func TestValidateRequestOrigin(t *testing.T) {
 	}
 }
 
+func TestBuildAuthorizationURL(t *testing.T) {
+	server := &Server{}
+
+	tests := []struct {
+		name       string
+		baseURL    string
+		pathToJoin string
+		expected   string
+	}{
+		{
+			name:       "joins relative path with leading slash",
+			baseURL:    "https://example.com",
+			pathToJoin: "/oauth/consent",
+			expected:   "https://example.com/oauth/consent",
+		},
+		{
+			name:       "joins relative path without leading slash",
+			baseURL:    "https://example.com/",
+			pathToJoin: "oauth/consent",
+			expected:   "https://example.com/oauth/consent",
+		},
+		{
+			name:       "returns absolute path unchanged",
+			baseURL:    "https://example.com",
+			pathToJoin: "https://app.example.com/custom-consent",
+			expected:   "https://app.example.com/custom-consent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := server.buildAuthorizationURL(tt.baseURL, tt.pathToJoin)
+			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
+
 func TestValidateRequestOriginEdgeCases(t *testing.T) {
 	globalConfig, err := conf.LoadGlobal(oauthServerTestConfig)
 	require.NoError(t, err)
