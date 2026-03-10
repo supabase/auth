@@ -14,7 +14,6 @@ import (
 )
 
 // PasskeyListItem is the response shape for a single passkey in the list and management endpoints.
-// Only non-sensitive, user-relevant fields are exposed.
 type PasskeyListItem struct {
 	ID           string     `json:"id"`
 	FriendlyName string     `json:"friendly_name,omitempty"`
