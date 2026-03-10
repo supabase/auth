@@ -144,13 +144,13 @@ func (a *API) PasskeyAuthenticationVerify(w http.ResponseWriter, r *http.Request
 		return newWebAuthnUser(u, creds), nil
 	}
 
-	credential, err := webAuthn.ValidateDiscoverableLogin(handler, sessionData, parsedResponse)
+	webauthnUser, credential, err := webAuthn.ValidatePasskeyLogin(handler, sessionData, parsedResponse)
 	if err != nil {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnVerificationFailed, "Credential verification failed").WithInternalError(err)
 	}
 
 	// Look up the authenticated user from the validated assertion's userHandle
-	userID, err := uuid.FromString(string(parsedResponse.Response.UserHandle))
+	userID, err := uuid.FromString(string(webauthnUser.WebAuthnID()))
 	if err != nil {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid user handle in assertion")
 	}
