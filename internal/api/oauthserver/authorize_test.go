@@ -159,6 +159,45 @@ func TestBuildAuthorizationURL(t *testing.T) {
 	}
 }
 
+
+
+func TestBuildAuthorizationRedirectURL(t *testing.T) {
+	server := &Server{}
+
+	tests := []struct {
+		name            string
+		baseURL         string
+		authorizationID string
+		expected        string
+	}{
+		{
+			name:            "adds authorization_id to URL without query",
+			baseURL:         "https://app.example.com/custom-consent",
+			authorizationID: "auth-123",
+			expected:        "https://app.example.com/custom-consent?authorization_id=auth-123",
+		},
+		{
+			name:            "preserves existing query parameters",
+			baseURL:         "https://app.example.com/custom-consent?foo=bar",
+			authorizationID: "auth-123",
+			expected:        "https://app.example.com/custom-consent?authorization_id=auth-123&foo=bar",
+		},
+		{
+			name:            "preserves fragment",
+			baseURL:         "https://app.example.com/custom-consent?foo=bar#frag",
+			authorizationID: "auth-123",
+			expected:        "https://app.example.com/custom-consent?authorization_id=auth-123&foo=bar#frag",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := server.buildAuthorizationRedirectURL(tt.baseURL, tt.authorizationID)
+			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
+
 func TestValidateRequestOriginEdgeCases(t *testing.T) {
 	globalConfig, err := conf.LoadGlobal(oauthServerTestConfig)
 	require.NoError(t, err)

@@ -167,7 +167,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	}
 
 	baseURL := s.buildAuthorizationURL(config.SiteURL, config.OAuthServer.AuthorizationPath)
-	redirectURL := fmt.Sprintf("%s?authorization_id=%s", baseURL, authorization.AuthorizationID)
+	redirectURL := s.buildAuthorizationRedirectURL(baseURL, authorization.AuthorizationID)
 
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 	return nil
@@ -626,7 +626,7 @@ func (s *Server) buildErrorRedirectURL(redirectURI, errorCode, errorDescription,
 // If pathToJoin is an absolute URL, it is returned as-is.
 func (s *Server) buildAuthorizationURL(baseURL, pathToJoin string) string {
 	if parsed, err := url.Parse(pathToJoin); err == nil && parsed.IsAbs() {
-		return pathToJoin
+		return parsed.String()
 	}
 
 	// Trim trailing slash from baseURL
@@ -638,4 +638,17 @@ func (s *Server) buildAuthorizationURL(baseURL, pathToJoin string) string {
 	}
 
 	return baseURL + pathToJoin
+}
+
+// buildAuthorizationRedirectURL appends authorization_id while preserving existing query params/fragments.
+func (s *Server) buildAuthorizationRedirectURL(baseURL, authorizationID string) string {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Sprintf("%s?authorization_id=%s", baseURL, authorizationID)
+	}
+
+	q := u.Query()
+	q.Set("authorization_id", authorizationID)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
