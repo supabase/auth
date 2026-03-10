@@ -100,6 +100,28 @@ func (ts *WebAuthnChallengeTestSuite) TestNullableUserID() {
 	require.Nil(ts.T(), found.UserID)
 }
 
+func (ts *WebAuthnChallengeTestSuite) TestConsumeByID() {
+	challenge := NewWebAuthnChallenge(&ts.user.ID, WebAuthnChallengeTypeRegistration, &WebAuthnSessionData{
+		SessionData: &webauthn.SessionData{Challenge: "consume-me"},
+	}, time.Now().Add(5*time.Minute))
+	require.NoError(ts.T(), ts.db.Create(challenge))
+
+	// First consume succeeds and returns the row
+	consumed, err := ConsumeWebAuthnChallengeByID(ts.db, challenge.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), challenge.ID, consumed.ID)
+	require.Equal(ts.T(), "consume-me", consumed.SessionData.Challenge)
+
+	// Second consume returns not-found (row already deleted)
+	_, err = ConsumeWebAuthnChallengeByID(ts.db, challenge.ID)
+	require.ErrorAs(ts.T(), err, &WebAuthnChallengeNotFoundError{})
+}
+
+func (ts *WebAuthnChallengeTestSuite) TestConsumeByIDNotFound() {
+	_, err := ConsumeWebAuthnChallengeByID(ts.db, uuid.Must(uuid.NewV4()))
+	require.ErrorAs(ts.T(), err, &WebAuthnChallengeNotFoundError{})
+}
+
 func (ts *WebAuthnChallengeTestSuite) TestSessionDataRoundTrip() {
 	sessionData := &WebAuthnSessionData{
 		SessionData: &webauthn.SessionData{

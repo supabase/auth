@@ -92,13 +92,13 @@ func (a *API) PasskeyAuthenticationVerify(w http.ResponseWriter, r *http.Request
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "challenge_id must be a valid UUID")
 	}
 
-	challenge, err := models.FindWebAuthnChallengeByID(db, challengeID)
+	challenge, err := models.ConsumeWebAuthnChallengeByID(db, challengeID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeNotFound, "Challenge not found")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeNotFound, "Challenge not found or already used")
 		}
 
-		return apierrors.NewInternalServerError("Database error loading challenge").WithInternalError(err)
+		return apierrors.NewInternalServerError("Database error consuming challenge").WithInternalError(err)
 	}
 
 	if challenge.IsExpired() {
@@ -184,10 +184,6 @@ func (a *API) PasskeyAuthenticationVerify(w http.ResponseWriter, r *http.Request
 		var terr error
 
 		if terr = passkeyCredential.UpdateLastUsedWithSignCount(tx, credential.Authenticator.SignCount); terr != nil {
-			return terr
-		}
-
-		if terr = challenge.Delete(tx); terr != nil {
 			return terr
 		}
 

@@ -138,14 +138,14 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "challenge_id must be a valid UUID")
 	}
 
-	// Load and validate challenge
-	challenge, err := models.FindWebAuthnChallengeByID(db, challengeID)
+	// Atomically consume the challenge to prevent replay/race conditions
+	challenge, err := models.ConsumeWebAuthnChallengeByID(db, challengeID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeNotFound, "Challenge not found")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeNotFound, "Challenge not found or already used")
 		}
 
-		return apierrors.NewInternalServerError("Database error loading challenge").WithInternalError(err)
+		return apierrors.NewInternalServerError("Database error consuming challenge").WithInternalError(err)
 	}
 
 	if challenge.IsExpired() {
@@ -203,10 +203,6 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeWebAuthnCredentialExists, "This credential is already registered")
 			}
 
-			return terr
-		}
-
-		if terr := challenge.Delete(tx); terr != nil {
 			return terr
 		}
 
