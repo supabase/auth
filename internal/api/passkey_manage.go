@@ -74,6 +74,9 @@ func (a *API) PasskeyUpdate(w http.ResponseWriter, r *http.Request) error {
 	if params.FriendlyName == "" {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "friendly_name is required")
 	}
+	if len(params.FriendlyName) > 120 {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "friendly_name must be 120 characters or less")
+	}
 
 	cred, err := models.FindWebAuthnCredentialByIDAndUserID(db, passkeyID, user.ID)
 	if err != nil {

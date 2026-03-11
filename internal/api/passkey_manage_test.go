@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
@@ -115,6 +116,38 @@ func (ts *PasskeyTestSuite) TestPasskeyUpdateMissingFriendlyName() {
 	w := ts.makeAuthenticatedRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), token, map[string]any{})
 
 	ts.Equal(http.StatusBadRequest, w.Code)
+}
+
+func (ts *PasskeyTestSuite) TestPasskeyUpdateFriendlyNameTooLong() {
+	cred := ts.createTestPasskey(ts.TestUser.ID, "Name")
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	w := ts.makeAuthenticatedRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), token, map[string]any{
+		"friendly_name": strings.Repeat("a", 121),
+	})
+
+	ts.Equal(http.StatusBadRequest, w.Code)
+
+	// Verify the passkey was not modified
+	unchanged, err := models.FindWebAuthnCredentialByID(ts.API.db, cred.ID)
+	require.NoError(ts.T(), err)
+	ts.Equal("Name", unchanged.FriendlyName)
+}
+
+func (ts *PasskeyTestSuite) TestPasskeyUpdateFriendlyNameAtMaxLength() {
+	cred := ts.createTestPasskey(ts.TestUser.ID, "Name")
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	longName := strings.Repeat("a", 120)
+	w := ts.makeAuthenticatedRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), token, map[string]any{
+		"friendly_name": longName,
+	})
+
+	ts.Equal(http.StatusOK, w.Code)
+
+	var item PasskeyListItem
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&item))
+	ts.Equal(longName, item.FriendlyName)
 }
 
 func (ts *PasskeyTestSuite) TestPasskeyUpdateOtherUsersPasskey() {
