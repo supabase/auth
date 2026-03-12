@@ -36,6 +36,7 @@ type LimiterOptions struct {
 	Phone ratelimit.Limiter
 
 	Signups             *limiter.Limiter
+	SignIns             *limiter.Limiter
 	AnonymousSignIns    *limiter.Limiter
 	Recover             *limiter.Limiter
 	Resend              *limiter.Limiter
@@ -106,8 +107,9 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 	o.MagicLink = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.Otp = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.User = newLimiterPer5mOver1h(gc.RateLimitOtp)
-	o.Signups = newLimiterPer5mOver1h(gc.RateLimitOtp)
-	o.OAuthClientRegister = newLimiterPer5mOver1h(gc.RateLimitOAuthDynamicClientRegister)
+	o.Signups = newLimiterPer5mOver1h(gc.RateLimitSignInSignUps)
+  o.SignIns = newLimiterPer5mOver1h(gc.RateLimitSignInSignUps)
+  o.OAuthClientRegister = newLimiterPer5mOver1h(gc.RateLimitOAuthDynamicClientRegister)
 
 	return o
 }

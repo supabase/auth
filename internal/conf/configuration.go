@@ -386,6 +386,7 @@ type GlobalConfiguration struct {
 	RateLimitSso                        float64 `split_words:"true" default:"30"`
 	RateLimitAnonymousUsers             float64 `split_words:"true" default:"30"`
 	RateLimitOtp                        float64 `split_words:"true" default:"30"`
+	RateLimitSignInSignUps              float64 `split_words:"true" default:"30"`
 	RateLimitWeb3                       float64 `split_words:"true" default:"30"`
 	RateLimitOAuthDynamicClientRegister float64 `split_words:"true" default:"10"`
 

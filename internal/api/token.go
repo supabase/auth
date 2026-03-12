@@ -42,17 +42,20 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	grantType := r.FormValue("grant_type")
 
 	handler := a.ResourceOwnerPasswordGrant
-	limiter := a.limiterOpts.Token
+	limiter := a.limiterOpts.SignIns
 
 	switch grantType {
 	case "password":
 		// set above
 	case "refresh_token":
 		handler = a.RefreshTokenGrant
+		limiter = a.limiterOpts.Token
 	case "id_token":
 		handler = a.IdTokenGrant
+		limiter = a.limiterOpts.Token
 	case "pkce":
 		handler = a.PKCE
+		limiter = a.limiterOpts.Token
 	case "web3":
 		handler = a.Web3Grant
 		limiter = a.limiterOpts.Web3
