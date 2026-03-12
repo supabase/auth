@@ -86,7 +86,7 @@ func (a *API) deprecationNotices() {
 	}
 
 	if config.JWT.DefaultGroupName != "" {
-		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_DEFAULT_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
+		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_DEFAULT_GROUP_NAME is deprecated, use GOTRUE_DB_DEFAULT_ROLE instead")
 	}
 }
 

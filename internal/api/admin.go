@@ -466,7 +466,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		role := config.JWT.DefaultGroupName
+		role := config.DB.DefaultRole
 		if params.Role != "" {
 			role = params.Role
 		}
