@@ -100,6 +100,74 @@ func (ts *WebAuthnChallengeTestSuite) TestNullableUserID() {
 	require.Nil(ts.T(), found.UserID)
 }
 
+func (ts *WebAuthnChallengeTestSuite) TestConsumeByID() {
+	challenge := NewWebAuthnChallenge(&ts.user.ID, WebAuthnChallengeTypeRegistration, &WebAuthnSessionData{
+		SessionData: &webauthn.SessionData{Challenge: "consume-me"},
+	}, time.Now().Add(5*time.Minute))
+	require.NoError(ts.T(), ts.db.Create(challenge))
+
+	// First consume with matching type and user succeeds
+	consumed, err := ConsumeWebAuthnChallengeByID(ts.db, challenge.ID, WebAuthnChallengeTypeRegistration, &ts.user.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), challenge.ID, consumed.ID)
+	require.Equal(ts.T(), "consume-me", consumed.SessionData.Challenge)
+
+	// Second consume returns not-found (row already deleted)
+	_, err = ConsumeWebAuthnChallengeByID(ts.db, challenge.ID, WebAuthnChallengeTypeRegistration, &ts.user.ID)
+	require.ErrorAs(ts.T(), err, &WebAuthnChallengeNotFoundError{})
+}
+
+func (ts *WebAuthnChallengeTestSuite) TestConsumeByIDWrongType() {
+	challenge := NewWebAuthnChallenge(&ts.user.ID, WebAuthnChallengeTypeRegistration, &WebAuthnSessionData{
+		SessionData: &webauthn.SessionData{Challenge: "type-mismatch"},
+	}, time.Now().Add(5*time.Minute))
+	require.NoError(ts.T(), ts.db.Create(challenge))
+
+	// Consume with wrong type returns not-found without deleting the row
+	_, err := ConsumeWebAuthnChallengeByID(ts.db, challenge.ID, WebAuthnChallengeTypeAuthentication, &ts.user.ID)
+	require.ErrorAs(ts.T(), err, &WebAuthnChallengeNotFoundError{})
+
+	// The row still exists
+	found, err := FindWebAuthnChallengeByID(ts.db, challenge.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), challenge.ID, found.ID)
+}
+
+func (ts *WebAuthnChallengeTestSuite) TestConsumeByIDWrongUser() {
+	challenge := NewWebAuthnChallenge(&ts.user.ID, WebAuthnChallengeTypeRegistration, &WebAuthnSessionData{
+		SessionData: &webauthn.SessionData{Challenge: "user-mismatch"},
+	}, time.Now().Add(5*time.Minute))
+	require.NoError(ts.T(), ts.db.Create(challenge))
+
+	// Consume with wrong user_id returns not-found without deleting the row
+	otherID := uuid.Must(uuid.NewV4())
+	_, err := ConsumeWebAuthnChallengeByID(ts.db, challenge.ID, WebAuthnChallengeTypeRegistration, &otherID)
+	require.ErrorAs(ts.T(), err, &WebAuthnChallengeNotFoundError{})
+
+	// The row still exists
+	found, err := FindWebAuthnChallengeByID(ts.db, challenge.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), challenge.ID, found.ID)
+}
+
+func (ts *WebAuthnChallengeTestSuite) TestConsumeByIDNilUser() {
+	// Discoverable flow — no user_id
+	challenge := NewWebAuthnChallenge(nil, WebAuthnChallengeTypeAuthentication, &WebAuthnSessionData{
+		SessionData: &webauthn.SessionData{Challenge: "discoverable"},
+	}, time.Now().Add(5*time.Minute))
+	require.NoError(ts.T(), ts.db.Create(challenge))
+
+	// Consume with nil userID and matching type succeeds
+	consumed, err := ConsumeWebAuthnChallengeByID(ts.db, challenge.ID, WebAuthnChallengeTypeAuthentication, nil)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), challenge.ID, consumed.ID)
+}
+
+func (ts *WebAuthnChallengeTestSuite) TestConsumeByIDNotFound() {
+	_, err := ConsumeWebAuthnChallengeByID(ts.db, uuid.Must(uuid.NewV4()), WebAuthnChallengeTypeRegistration, nil)
+	require.ErrorAs(ts.T(), err, &WebAuthnChallengeNotFoundError{})
+}
+
 func (ts *WebAuthnChallengeTestSuite) TestSessionDataRoundTrip() {
 	sessionData := &WebAuthnSessionData{
 		SessionData: &webauthn.SessionData{

@@ -146,6 +146,18 @@ func FindWebAuthnCredentialByID(conn *storage.Connection, id uuid.UUID) (*WebAut
 	return &cred, nil
 }
 
+func FindWebAuthnCredentialByIDAndUserID(conn *storage.Connection, id, userID uuid.UUID) (*WebAuthnCredential, error) {
+	var cred WebAuthnCredential
+	err := conn.Q().Where("id = ? AND user_id = ?", id, userID).First(&cred)
+	if err != nil && errors.Cause(err) == sql.ErrNoRows {
+		return nil, WebAuthnCredentialNotFoundError{}
+	} else if err != nil {
+		return nil, err
+	}
+
+	return &cred, nil
+}
+
 func CountWebAuthnCredentialsByUserID(conn *storage.Connection, userID uuid.UUID) (int, error) {
 	count, err := conn.Q().Where("user_id = ?", userID).Count(&WebAuthnCredential{})
 	if err != nil {
@@ -163,6 +175,13 @@ func (pc *WebAuthnCredential) UpdateLastUsedAt(tx *storage.Connection) error {
 	now := time.Now()
 	pc.LastUsedAt = &now
 	return tx.UpdateOnly(pc, "last_used_at", "updated_at")
+}
+
+func (pc *WebAuthnCredential) UpdateLastUsedWithSignCount(tx *storage.Connection, signCount uint32) error {
+	now := time.Now()
+	pc.SignCount = signCount
+	pc.LastUsedAt = &now
+	return tx.UpdateOnly(pc, "sign_count", "last_used_at", "updated_at")
 }
 
 func (pc *WebAuthnCredential) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {

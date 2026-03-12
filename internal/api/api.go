@@ -306,9 +306,20 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.Route("/passkeys", func(r *router) {
 			r.Use(api.requirePasskeyEnabled)
 
+			r.Route("/authentication", func(r *router) {
+				r.Post("/options", api.PasskeyAuthenticationOptions)
+				r.Post("/verify", api.PasskeyAuthenticationVerify)
+			})
+
 			r.With(api.requireAuthentication).With(api.requireNotAnonymous).Route("/registration", func(r *router) {
 				r.Post("/options", api.PasskeyRegistrationOptions)
 				r.Post("/verify", api.PasskeyRegistrationVerify)
+			})
+
+			r.With(api.requireAuthentication).Get("/", api.PasskeyList)
+			r.With(api.requireAuthentication).Route("/{passkey_id}", func(r *router) {
+				r.Patch("/", api.PasskeyUpdate)
+				r.Delete("/", api.PasskeyDelete)
 			})
 		})
 
@@ -428,7 +439,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	})
 
 	corsHandler := cors.New(cors.Options{
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
 		AllowedHeaders:   globalConfig.CORS.AllAllowedHeaders([]string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader, APIVersionHeaderName}),
 		ExposedHeaders:   []string{"X-Total-Count", "Link", APIVersionHeaderName},
 		AllowCredentials: true,

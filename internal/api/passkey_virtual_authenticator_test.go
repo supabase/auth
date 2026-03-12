@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/go-webauthn/webauthn/protocol"
@@ -15,15 +16,30 @@ import (
 
 // virtualAuthenticator simulates a WebAuthn authenticator for testing.
 // It generates real EC P-256 key pairs and constructs valid attestation
-// responses that pass go-webauthn library verification.
+// and assertion responses that pass go-webauthn library verification.
 type virtualAuthenticator struct {
 	rpID   string
 	origin string
+	// stored credentials from createCredential calls, keyed by base64url credential ID
+	credentials map[string]*storedCredential
+}
+
+// storedCredential holds the private key and metadata for a created credential.
+type storedCredential struct {
+	credentialID []byte
+	privKey      *ecdsa.PrivateKey
+	userHandle   []byte // the user's WebAuthnID (UUID bytes)
 }
 
 // virtualCredentialResponse is the result of creating a credential with the virtual authenticator.
 type virtualCredentialResponse struct {
 	// JSON is the raw JSON of the CredentialCreationResponse, ready to be sent as credential_response.
+	JSON json.RawMessage
+}
+
+// virtualAssertionResponse is the result of getting an assertion with the virtual authenticator.
+type virtualAssertionResponse struct {
+	// JSON is the raw JSON of the CredentialAssertionResponse, ready to be sent as credential_response.
 	JSON json.RawMessage
 }
 
@@ -84,7 +100,103 @@ func (va *virtualAuthenticator) createCredential(options *protocol.CredentialCre
 		return nil, err
 	}
 
+	// Store the credential for later assertion
+	if va.credentials == nil {
+		va.credentials = make(map[string]*storedCredential)
+	}
+	// Extract user handle from options.
+	// After JSON round-tripping, User.ID may be a string (base64url encoded)
+	// or URLEncodedBase64/[]byte if used directly from the library.
+	var userHandle []byte
+	switch v := options.Response.User.ID.(type) {
+	case protocol.URLEncodedBase64:
+		userHandle = []byte(v)
+	case []byte:
+		userHandle = v
+	case string:
+		decoded, decErr := base64.RawURLEncoding.DecodeString(v)
+		if decErr == nil {
+			userHandle = decoded
+		}
+	}
+	va.credentials[base64.RawURLEncoding.EncodeToString(credentialID)] = &storedCredential{
+		credentialID: credentialID,
+		privKey:      privKey,
+		userHandle:   userHandle,
+	}
+
 	return &virtualCredentialResponse{JSON: respJSON}, nil
+}
+
+// getAssertion builds a valid WebAuthn CredentialAssertionResponse for the given
+// authentication options. It picks the first stored credential (discoverable flow) and signs
+// the authenticator data + client data hash.
+func (va *virtualAuthenticator) getAssertion(options *protocol.CredentialAssertion) (*virtualAssertionResponse, error) {
+	if len(va.credentials) == 0 {
+		return nil, fmt.Errorf("no stored credentials")
+	}
+
+	// Pick the first stored credential (discoverable: authenticator chooses)
+	var cred *storedCredential
+	for _, c := range va.credentials {
+		cred = c
+		break
+	}
+
+	challenge := options.Response.Challenge
+
+	clientDataJSON, err := json.Marshal(map[string]string{
+		"type":      "webauthn.get",
+		"challenge": base64.RawURLEncoding.EncodeToString(challenge),
+		"origin":    va.origin,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Build authenticator data for assertion (no attested credential data)
+	rpIDHash := sha256.Sum256([]byte(va.rpID))
+	// flags: UP (bit 0) | UV (bit 2) = 0x05
+	flags := byte(0x05)
+	var authData []byte
+	authData = append(authData, rpIDHash[:]...)
+	authData = append(authData, flags)
+	authData = append(authData, 0, 0, 0, 1) // signCount = 1
+
+	// Sign: authData || SHA-256(clientDataJSON)
+	clientDataHash := sha256.Sum256(clientDataJSON)
+	signData := append(authData, clientDataHash[:]...)
+	hash := sha256.Sum256(signData)
+	sig, err := ecdsa.SignASN1(rand.Reader, cred.privKey, hash[:])
+	if err != nil {
+		return nil, err
+	}
+
+	credIDBase64 := base64.RawURLEncoding.EncodeToString(cred.credentialID)
+	resp := protocol.CredentialAssertionResponse{
+		PublicKeyCredential: protocol.PublicKeyCredential{
+			Credential: protocol.Credential{
+				ID:   credIDBase64,
+				Type: "public-key",
+			},
+			RawID: cred.credentialID,
+		},
+		AssertionResponse: protocol.AuthenticatorAssertionResponse{
+			AuthenticatorResponse: protocol.AuthenticatorResponse{
+				ClientDataJSON: clientDataJSON,
+			},
+			AuthenticatorData: authData,
+			Signature:         sig,
+			UserHandle:        cred.userHandle,
+		},
+	}
+
+	respJSON, err := json.Marshal(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &virtualAssertionResponse{JSON: respJSON}, nil
 }
 
 // buildAuthData constructs the raw authenticator data bytes.

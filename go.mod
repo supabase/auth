@@ -42,7 +42,6 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/ethereum/c-kzg-4844/v2 v2.1.5 // indirect
-	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/getkin/kin-openapi v0.131.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
@@ -100,6 +99,7 @@ require (
 	github.com/crewjam/saml v0.4.14
 	github.com/fatih/structs v1.1.0
 	github.com/fsnotify/fsnotify v1.7.0
+	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/go-chi/chi/v5 v5.2.4
 	github.com/go-webauthn/webauthn v0.11.1
 	github.com/gobuffalo/pop/v6 v6.1.1
@@ -183,4 +183,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-go 1.25.7
+go 1.25.8
