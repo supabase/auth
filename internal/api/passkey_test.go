@@ -108,6 +108,22 @@ func (ts *PasskeyTestSuite) makeRequest(method, path string, body any) *httptest
 	return w
 }
 
+// makeRequestWithHeader sends an unauthenticated HTTP request with an additional header.
+func (ts *PasskeyTestSuite) makeRequestWithHeader(method, path string, body any, headerKey, headerValue string) *httptest.ResponseRecorder {
+	var buf bytes.Buffer
+	if body != nil {
+		require.NoError(ts.T(), json.NewEncoder(&buf).Encode(body))
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(method, path, &buf)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(headerKey, headerValue)
+	ts.API.handler.ServeHTTP(w, req)
+
+	return w
+}
+
 // dummySessionData creates a minimal WebAuthnSessionData for test challenges.
 func dummySessionData() *models.WebAuthnSessionData {
 	return &models.WebAuthnSessionData{

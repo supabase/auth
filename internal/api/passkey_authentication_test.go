@@ -201,6 +201,20 @@ func (ts *PasskeyTestSuite) TestAuthenticationPasskeyDisabled() {
 	ts.Equal(http.StatusNotFound, w.Code)
 }
 
+// TestAuthenticationOptionsRateLimited tests that the passkey authentication options endpoint is rate limited.
+func (ts *PasskeyTestSuite) TestAuthenticationOptionsRateLimited() {
+	// The passkey authentication limiter has a burst of 30 (from newLimiterPer5mOver1h).
+	// Send 30 requests that consume the burst, then verify the 31st is rejected.
+	for i := 0; i < 30; i++ {
+		w := ts.makeRequestWithHeader(http.MethodPost, "http://localhost/passkeys/authentication/options", nil, ts.Config.RateLimitHeader, "1.2.3.4")
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	}
+
+	// 31st request should be rate limited
+	w := ts.makeRequestWithHeader(http.MethodPost, "http://localhost/passkeys/authentication/options", nil, ts.Config.RateLimitHeader, "1.2.3.4")
+	require.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
+}
+
 // registerPasskey is a test helper that registers a passkey for the test user
 // and returns the authenticator (with stored credential) for later assertion.
 func (ts *PasskeyTestSuite) registerPasskey() (*virtualAuthenticator, *PasskeyMetadataResponse) {
