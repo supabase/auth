@@ -31,7 +31,7 @@ func (ts *PasskeyTestSuite) createTestPasskey(userID uuid.UUID, friendlyName str
 
 func (ts *PasskeyTestSuite) TestPasskeyListEmpty() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodGet, "http://localhost/passkeys", token, nil)
+	w := ts.makeRequest(http.MethodGet, "http://localhost/passkeys", nil, withBearerToken(token))
 
 	ts.Equal(http.StatusOK, w.Code)
 
@@ -45,7 +45,7 @@ func (ts *PasskeyTestSuite) TestPasskeyListWithPasskeys() {
 	pk2 := ts.createTestPasskey(ts.TestUser.ID, "My MacBook")
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodGet, "http://localhost/passkeys", token, nil)
+	w := ts.makeRequest(http.MethodGet, "http://localhost/passkeys", nil, withBearerToken(token))
 
 	ts.Equal(http.StatusOK, w.Code)
 
@@ -74,7 +74,7 @@ func (ts *PasskeyTestSuite) TestPasskeyListDoesNotReturnOtherUsersPasskeys() {
 	ts.createTestPasskey(otherUser.ID, "Other User Passkey")
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodGet, "http://localhost/passkeys", token, nil)
+	w := ts.makeRequest(http.MethodGet, "http://localhost/passkeys", nil, withBearerToken(token))
 
 	ts.Equal(http.StatusOK, w.Code)
 
@@ -93,9 +93,9 @@ func (ts *PasskeyTestSuite) TestPasskeyUpdateFriendlyName() {
 	cred := ts.createTestPasskey(ts.TestUser.ID, "Old Name")
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), token, map[string]any{
+	w := ts.makeRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), map[string]any{
 		"friendly_name": "New Name",
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusOK, w.Code)
 
@@ -113,7 +113,7 @@ func (ts *PasskeyTestSuite) TestPasskeyUpdateMissingFriendlyName() {
 	cred := ts.createTestPasskey(ts.TestUser.ID, "Name")
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), token, map[string]any{})
+	w := ts.makeRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), map[string]any{}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
 }
@@ -122,9 +122,9 @@ func (ts *PasskeyTestSuite) TestPasskeyUpdateFriendlyNameTooLong() {
 	cred := ts.createTestPasskey(ts.TestUser.ID, "Name")
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), token, map[string]any{
+	w := ts.makeRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), map[string]any{
 		"friendly_name": strings.Repeat("a", 121),
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
 
@@ -139,9 +139,9 @@ func (ts *PasskeyTestSuite) TestPasskeyUpdateFriendlyNameAtMaxLength() {
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	longName := strings.Repeat("a", 120)
-	w := ts.makeAuthenticatedRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), token, map[string]any{
+	w := ts.makeRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), map[string]any{
 		"friendly_name": longName,
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusOK, w.Code)
 
@@ -157,9 +157,9 @@ func (ts *PasskeyTestSuite) TestPasskeyUpdateOtherUsersPasskey() {
 	otherCred := ts.createTestPasskey(otherUser.ID, "Other Passkey")
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", otherCred.ID), token, map[string]any{
+	w := ts.makeRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", otherCred.ID), map[string]any{
 		"friendly_name": "Stolen Passkey",
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusNotFound, w.Code)
 
@@ -171,18 +171,18 @@ func (ts *PasskeyTestSuite) TestPasskeyUpdateOtherUsersPasskey() {
 
 func (ts *PasskeyTestSuite) TestPasskeyUpdateNonExistent() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", uuid.Must(uuid.NewV4())), token, map[string]any{
+	w := ts.makeRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", uuid.Must(uuid.NewV4())), map[string]any{
 		"friendly_name": "New Name",
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusNotFound, w.Code)
 }
 
 func (ts *PasskeyTestSuite) TestPasskeyUpdateInvalidID() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPatch, "http://localhost/passkeys/not-a-uuid", token, map[string]any{
+	w := ts.makeRequest(http.MethodPatch, "http://localhost/passkeys/not-a-uuid", map[string]any{
 		"friendly_name": "New Name",
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusNotFound, w.Code)
 }
@@ -199,7 +199,7 @@ func (ts *PasskeyTestSuite) TestPasskeyDelete() {
 	cred := ts.createTestPasskey(ts.TestUser.ID, "To Delete")
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), token, nil)
+	w := ts.makeRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), nil, withBearerToken(token))
 
 	ts.Equal(http.StatusOK, w.Code)
 
@@ -219,7 +219,7 @@ func (ts *PasskeyTestSuite) TestPasskeyDeleteOtherUsersPasskey() {
 	otherCred := ts.createTestPasskey(otherUser.ID, "Other Passkey")
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", otherCred.ID), token, nil)
+	w := ts.makeRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", otherCred.ID), nil, withBearerToken(token))
 
 	ts.Equal(http.StatusNotFound, w.Code)
 
@@ -230,7 +230,7 @@ func (ts *PasskeyTestSuite) TestPasskeyDeleteOtherUsersPasskey() {
 
 func (ts *PasskeyTestSuite) TestPasskeyDeleteNonExistent() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", uuid.Must(uuid.NewV4())), token, nil)
+	w := ts.makeRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", uuid.Must(uuid.NewV4())), nil, withBearerToken(token))
 
 	ts.Equal(http.StatusNotFound, w.Code)
 }
@@ -246,16 +246,16 @@ func (ts *PasskeyTestSuite) TestPasskeyManageDisabled() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 
 	// List
-	w := ts.makeAuthenticatedRequest(http.MethodGet, "http://localhost/passkeys/", token, nil)
+	w := ts.makeRequest(http.MethodGet, "http://localhost/passkeys/", nil, withBearerToken(token))
 	ts.Equal(http.StatusNotFound, w.Code)
 
 	// Update
-	w = ts.makeAuthenticatedRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", uuid.Must(uuid.NewV4())), token, map[string]any{
+	w = ts.makeRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", uuid.Must(uuid.NewV4())), map[string]any{
 		"friendly_name": "Name",
-	})
+	}, withBearerToken(token))
 	ts.Equal(http.StatusNotFound, w.Code)
 
 	// Delete
-	w = ts.makeAuthenticatedRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", uuid.Must(uuid.NewV4())), token, nil)
+	w = ts.makeRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", uuid.Must(uuid.NewV4())), nil, withBearerToken(token))
 	ts.Equal(http.StatusNotFound, w.Code)
 }

@@ -206,12 +206,12 @@ func (ts *PasskeyTestSuite) TestAuthenticationOptionsRateLimited() {
 	// The passkey authentication limiter has a burst of 30 (from newLimiterPer5mOver1h).
 	// Send 30 requests that consume the burst, then verify the 31st is rejected.
 	for i := 0; i < 30; i++ {
-		w := ts.makeRequestWithHeader(http.MethodPost, "http://localhost/passkeys/authentication/options", nil, ts.Config.RateLimitHeader, "1.2.3.4")
+		w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/options", nil, withHeader(ts.Config.RateLimitHeader, "1.2.3.4"))
 		require.Equal(ts.T(), http.StatusOK, w.Code)
 	}
 
 	// 31st request should be rate limited
-	w := ts.makeRequestWithHeader(http.MethodPost, "http://localhost/passkeys/authentication/options", nil, ts.Config.RateLimitHeader, "1.2.3.4")
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/options", nil, withHeader(ts.Config.RateLimitHeader, "1.2.3.4"))
 	require.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
 }
 
@@ -224,7 +224,7 @@ func (ts *PasskeyTestSuite) registerPasskey() (*virtualAuthenticator, *PasskeyMe
 		origin: ts.Config.WebAuthn.RPOrigins[0],
 	}
 
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, w.Code)
 
 	var optionsResp PasskeyRegistrationOptionsResponse
@@ -233,10 +233,10 @@ func (ts *PasskeyTestSuite) registerPasskey() (*virtualAuthenticator, *PasskeyMe
 	credResp, err := authenticator.createCredential(optionsResp.Options)
 	require.NoError(ts.T(), err)
 
-	w = ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
 		"challenge_id":        optionsResp.ChallengeID,
 		"credential_response": json.RawMessage(credResp.JSON),
-	})
+	}, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, w.Code)
 
 	var passkeyResp PasskeyMetadataResponse
