@@ -77,24 +77,25 @@ func (ts *PasskeyTestSuite) generateToken(user *models.User, sessionID *uuid.UUI
 	return token
 }
 
-// makeAuthenticatedRequest sends an HTTP request with a Bearer token.
-func (ts *PasskeyTestSuite) makeAuthenticatedRequest(method, path, token string, body any) *httptest.ResponseRecorder {
-	var buf bytes.Buffer
-	if body != nil {
-		require.NoError(ts.T(), json.NewEncoder(&buf).Encode(body))
+// requestOption configures an HTTP request built by makeRequest.
+type requestOption func(*http.Request)
+
+// withBearerToken adds a Bearer authorization header.
+func withBearerToken(token string) requestOption {
+	return func(req *http.Request) {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	}
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(method, path, &buf)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	req.Header.Set("Content-Type", "application/json")
-	ts.API.handler.ServeHTTP(w, req)
-
-	return w
 }
 
-// makeRequest sends an unauthenticated HTTP request.
-func (ts *PasskeyTestSuite) makeRequest(method, path string, body any) *httptest.ResponseRecorder {
+// withHeader adds an arbitrary header.
+func withHeader(key, value string) requestOption {
+	return func(req *http.Request) {
+		req.Header.Set(key, value)
+	}
+}
+
+// makeRequest sends an HTTP request, applying any supplied options.
+func (ts *PasskeyTestSuite) makeRequest(method, path string, body any, opts ...requestOption) *httptest.ResponseRecorder {
 	var buf bytes.Buffer
 	if body != nil {
 		require.NoError(ts.T(), json.NewEncoder(&buf).Encode(body))
@@ -103,6 +104,9 @@ func (ts *PasskeyTestSuite) makeRequest(method, path string, body any) *httptest
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(method, path, &buf)
 	req.Header.Set("Content-Type", "application/json")
+	for _, opt := range opts {
+		opt(req)
+	}
 	ts.API.handler.ServeHTTP(w, req)
 
 	return w

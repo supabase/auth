@@ -16,7 +16,7 @@ func (ts *PasskeyTestSuite) TestRegisterPasskeyHappyPath() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 
 	// Step 1: Get registration options
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, w.Code)
 
 	var optionsResp PasskeyRegistrationOptionsResponse
@@ -34,10 +34,10 @@ func (ts *PasskeyTestSuite) TestRegisterPasskeyHappyPath() {
 	require.NoError(ts.T(), err)
 
 	// Step 3: Verify the registration
-	w = ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
 		"challenge_id":        optionsResp.ChallengeID,
 		"credential_response": json.RawMessage(credResp.JSON),
-	})
+	}, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, w.Code)
 
 	var passkeyResp PasskeyMetadataResponse
@@ -66,7 +66,7 @@ func (ts *PasskeyTestSuite) TestRegisterPasskeyHappyPath() {
 // TestRegistrationOptionsSuccess tests that an authenticated user can get registration options.
 func (ts *PasskeyTestSuite) TestRegistrationOptionsSuccess() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
 
 	ts.Equal(http.StatusOK, w.Code)
 
@@ -99,7 +99,7 @@ func (ts *PasskeyTestSuite) TestRegistrationOptionsWithExistingPasskeys() {
 	require.NoError(ts.T(), ts.API.db.Create(cred))
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
 
 	ts.Equal(http.StatusOK, w.Code)
 
@@ -128,7 +128,7 @@ func (ts *PasskeyTestSuite) TestRegistrationOptionsTooManyPasskeys() {
 	require.NoError(ts.T(), ts.API.db.Create(cred))
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
 
 	ts.Equal(http.StatusUnprocessableEntity, w.Code)
 	var errResp map[string]any
@@ -148,7 +148,7 @@ func (ts *PasskeyTestSuite) TestRegistrationOptionsAnonymousUser() {
 	require.NoError(ts.T(), ts.API.db.Update(ts.TestUser))
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
 
 	ts.Equal(http.StatusForbidden, w.Code)
 }
@@ -159,7 +159,7 @@ func (ts *PasskeyTestSuite) TestRegistrationOptionsSSOUser() {
 	require.NoError(ts.T(), ts.API.db.Update(ts.TestUser))
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
 
 	ts.Equal(http.StatusUnprocessableEntity, w.Code)
 }
@@ -169,7 +169,7 @@ func (ts *PasskeyTestSuite) TestRegistrationOptionsPasskeyDisabled() {
 	ts.Config.Passkey.Enabled = false
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
 
 	ts.Equal(http.StatusNotFound, w.Code)
 }
@@ -186,12 +186,12 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyCapEnforcedAtVerifyTime() {
 	}
 
 	// Get two challenges while under the cap (0 existing, cap=1)
-	w1 := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	w1 := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, w1.Code)
 	var opts1 PasskeyRegistrationOptionsResponse
 	require.NoError(ts.T(), json.NewDecoder(w1.Body).Decode(&opts1))
 
-	w2 := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/options", token, nil)
+	w2 := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, w2.Code)
 	var opts2 PasskeyRegistrationOptionsResponse
 	require.NoError(ts.T(), json.NewDecoder(w2.Body).Decode(&opts2))
@@ -203,17 +203,17 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyCapEnforcedAtVerifyTime() {
 	require.NoError(ts.T(), err)
 
 	// Verify the first challenge — should succeed
-	v1 := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+	v1 := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
 		"challenge_id":        opts1.ChallengeID,
 		"credential_response": json.RawMessage(cred1.JSON),
-	})
+	}, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, v1.Code)
 
 	// Verify the second challenge — should fail with too_many_passkeys
-	v2 := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+	v2 := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
 		"challenge_id":        opts2.ChallengeID,
 		"credential_response": json.RawMessage(cred2.JSON),
-	})
+	}, withBearerToken(token))
 	ts.Equal(http.StatusUnprocessableEntity, v2.Code)
 	var errResp map[string]any
 	require.NoError(ts.T(), json.NewDecoder(v2.Body).Decode(&errResp))
@@ -223,10 +223,10 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyCapEnforcedAtVerifyTime() {
 // TestRegisterVerifyChallengeNotFound tests that a missing challenge returns the correct error.
 func (ts *PasskeyTestSuite) TestRegisterVerifyChallengeNotFound() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
 		"challenge_id":        uuid.Must(uuid.NewV4()).String(),
 		"credential_response": map[string]any{},
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
 	var errResp map[string]any
@@ -245,10 +245,10 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyChallengeExpired() {
 	require.NoError(ts.T(), ts.API.db.Create(challenge))
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
 		"challenge_id":        challenge.ID.String(),
 		"credential_response": map[string]any{},
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
 	var errResp map[string]any
@@ -271,10 +271,10 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyWrongUser() {
 	require.NoError(ts.T(), ts.API.db.Create(challenge))
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
 		"challenge_id":        challenge.ID.String(),
 		"credential_response": map[string]any{},
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
 	var errResp map[string]any
@@ -306,7 +306,7 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyMissingFields() {
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, c.body)
+			w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", c.body, withBearerToken(token))
 			ts.Equal(http.StatusBadRequest, w.Code)
 		})
 	}
@@ -315,10 +315,10 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyMissingFields() {
 // TestRegisterVerifyInvalidChallengeID tests that an invalid UUID is rejected.
 func (ts *PasskeyTestSuite) TestRegisterVerifyInvalidChallengeID() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
 		"challenge_id":        "not-a-uuid",
 		"credential_response": map[string]any{},
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
 }
@@ -334,10 +334,10 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyWrongChallengeType() {
 	require.NoError(ts.T(), ts.API.db.Create(challenge))
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
 		"challenge_id":        challenge.ID.String(),
 		"credential_response": map[string]any{},
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
 }
@@ -357,10 +357,10 @@ func (ts *PasskeyTestSuite) TestRegisterVerifySSOUser() {
 	require.NoError(ts.T(), ts.API.db.Update(ts.TestUser))
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
-	w := ts.makeAuthenticatedRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", token, map[string]any{
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
 		"challenge_id":        uuid.Must(uuid.NewV4()).String(),
 		"credential_response": map[string]any{},
-	})
+	}, withBearerToken(token))
 
 	ts.Equal(http.StatusUnprocessableEntity, w.Code)
 }
