@@ -144,7 +144,8 @@ func (a *API) PasskeyDelete(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewInternalServerError("Database error deleting passkey").WithInternalError(err)
 	}
 
-	return sendJSON(w, http.StatusOK, toPasskeyListItem(cred))
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 func toPasskeyListItem(cred *models.WebAuthnCredential) PasskeyListItem {
