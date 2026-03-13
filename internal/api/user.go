@@ -225,6 +225,27 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 
+			if user.GetEmail() != "" {
+				if _, terr = models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil {
+					if !models.IsNotFoundError(terr) {
+						return apierrors.NewInternalServerError("Error finding email identity").WithInternalError(terr)
+					}
+					emailIdentity, terr := models.NewIdentity(user, "email", map[string]interface{}{
+						"sub":   user.ID.String(),
+						"email": user.GetEmail(),
+					})
+					if terr != nil {
+						return apierrors.NewInternalServerError("Error creating email identity").WithInternalError(terr)
+					}
+					if terr := tx.Create(emailIdentity); terr != nil {
+						return apierrors.NewInternalServerError("Error saving email identity").WithInternalError(terr)
+					}
+					if terr := user.UpdateAppMetaDataProviders(tx); terr != nil {
+						return apierrors.NewInternalServerError("Error updating providers").WithInternalError(terr)
+					}
+				}
+			}
+
 			// send a Password Changed email notification to the user to inform them that their password has been changed
 			if config.Mailer.Notifications.PasswordChangedEnabled && user.GetEmail() != "" {
 				if err := a.sendPasswordChangedNotification(r, tx, user); err != nil {
