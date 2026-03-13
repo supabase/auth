@@ -177,8 +177,8 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnVerificationFailed, "Credential verification failed").WithInternalError(err)
 	}
 
-	// TODO(fm): fallback to AAGUID -> UA -> "Passkey" for friendly name
-	passkeyCredential := models.NewWebAuthnCredential(user.ID, credential, "")
+	friendlyName := utilities.PasskeyFriendlyName(credential.Authenticator.AAGUID)
+	passkeyCredential := models.NewWebAuthnCredential(user.ID, credential, friendlyName)
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		count, terr := models.CountWebAuthnCredentialsByUserID(tx, user.ID)
