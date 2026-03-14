@@ -17,6 +17,7 @@ import (
 type PasskeyListItem struct {
 	ID           string     `json:"id"`
 	FriendlyName string     `json:"friendly_name,omitempty"`
+	AAGUID       *uuid.UUID `json:"aaguid,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`
 }
@@ -152,6 +153,7 @@ func toPasskeyListItem(cred *models.WebAuthnCredential) PasskeyListItem {
 	return PasskeyListItem{
 		ID:           cred.ID.String(),
 		FriendlyName: cred.FriendlyName,
+		AAGUID:       cred.AAGUID,
 		CreatedAt:    cred.CreatedAt,
 		LastUsedAt:   cred.LastUsedAt,
 	}

@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -45,6 +46,7 @@ func (ts *PasskeyTestSuite) TestRegisterPasskeyHappyPath() {
 
 	ts.NotEmpty(passkeyResp.ID)
 	ts.NotZero(passkeyResp.CreatedAt)
+	ts.NotNil(passkeyResp.AAGUID, "AAGUID should be present in registration response")
 
 	// Step 4: Verify the credential was persisted
 	passkeyID, err := uuid.FromString(passkeyResp.ID)
@@ -61,6 +63,62 @@ func (ts *PasskeyTestSuite) TestRegisterPasskeyHappyPath() {
 	require.NoError(ts.T(), err)
 	_, err = models.FindWebAuthnChallengeByID(ts.API.db, challengeID)
 	ts.True(models.IsNotFoundError(err))
+}
+
+// TestRegisterPasskeyWithCustomFriendlyName tests that providing a friendly_name during registration
+// overrides the default AAGUID-based name.
+func (ts *PasskeyTestSuite) TestRegisterPasskeyWithCustomFriendlyName() {
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+
+	// Step 1: Get registration options
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
+	ts.Require().Equal(http.StatusOK, w.Code)
+
+	var optionsResp PasskeyRegistrationOptionsResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&optionsResp))
+
+	// Step 2: Simulate the authenticator creating a credential
+	authenticator := &virtualAuthenticator{
+		rpID:   ts.Config.WebAuthn.RPID,
+		origin: ts.Config.WebAuthn.RPOrigins[0],
+	}
+
+	credResp, err := authenticator.createCredential(optionsResp.Options)
+	require.NoError(ts.T(), err)
+
+	// Step 3: Verify with a custom friendly_name
+	customName := "iCloud Keychain (Mar 13, 2026, 2:30:42 PM)"
+	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
+		"challenge_id":        optionsResp.ChallengeID,
+		"credential_response": json.RawMessage(credResp.JSON),
+		"friendly_name":       customName,
+	}, withBearerToken(token))
+	ts.Require().Equal(http.StatusOK, w.Code)
+
+	var passkeyResp PasskeyMetadataResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&passkeyResp))
+
+	ts.Equal(customName, passkeyResp.FriendlyName)
+
+	// Verify persisted in database
+	passkeyID, err := uuid.FromString(passkeyResp.ID)
+	require.NoError(ts.T(), err)
+	cred, err := models.FindWebAuthnCredentialByID(ts.API.db, passkeyID)
+	require.NoError(ts.T(), err)
+	ts.Equal(customName, cred.FriendlyName)
+}
+
+// TestRegisterPasskeyFriendlyNameTooLong tests that a friendly_name exceeding 120 chars is rejected.
+func (ts *PasskeyTestSuite) TestRegisterPasskeyFriendlyNameTooLong() {
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
+		"challenge_id":        uuid.Must(uuid.NewV4()).String(),
+		"credential_response": map[string]any{},
+		"friendly_name":       strings.Repeat("a", 121),
+	}, withBearerToken(token))
+
+	ts.Equal(http.StatusBadRequest, w.Code)
 }
 
 // TestRegistrationOptionsSuccess tests that an authenticated user can get registration options.

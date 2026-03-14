@@ -13,12 +13,14 @@ import (
 
 // createTestPasskey creates a WebAuthnCredential for the given user in the database.
 func (ts *PasskeyTestSuite) createTestPasskey(userID uuid.UUID, friendlyName string) *models.WebAuthnCredential {
+	testAAGUID := uuid.Must(uuid.NewV4())
 	cred := &models.WebAuthnCredential{
 		ID:              uuid.Must(uuid.NewV4()),
 		UserID:          userID,
 		CredentialID:    fmt.Appendf(nil, "cred-%s", uuid.Must(uuid.NewV4()).String()[:8]),
 		PublicKey:       []byte("test-public-key"),
 		AttestationType: "none",
+		AAGUID:          &testAAGUID,
 		FriendlyName:    friendlyName,
 		BackupEligible:  true,
 		BackedUp:        false,
@@ -56,10 +58,14 @@ func (ts *PasskeyTestSuite) TestPasskeyListWithPasskeys() {
 	// Results are ordered by created_at asc
 	ts.Equal(pk1.ID.String(), items[0].ID)
 	ts.Equal("My iPhone", items[0].FriendlyName)
+	ts.Require().NotNil(items[0].AAGUID, "AAGUID should be present in list response")
+	ts.Equal(pk1.AAGUID.String(), items[0].AAGUID.String())
 	ts.Nil(items[0].LastUsedAt)
 
 	ts.Equal(pk2.ID.String(), items[1].ID)
 	ts.Equal("My MacBook", items[1].FriendlyName)
+	ts.Require().NotNil(items[1].AAGUID, "AAGUID should be present in list response")
+	ts.Equal(pk2.AAGUID.String(), items[1].AAGUID.String())
 	ts.Nil(items[1].LastUsedAt)
 }
 
@@ -103,6 +109,8 @@ func (ts *PasskeyTestSuite) TestPasskeyUpdateFriendlyName() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&item))
 	ts.Equal("New Name", item.FriendlyName)
 	ts.Equal(cred.ID.String(), item.ID)
+	ts.Require().NotNil(item.AAGUID, "AAGUID should be preserved after rename")
+	ts.Equal(cred.AAGUID.String(), item.AAGUID.String())
 
 	updated, err := models.FindWebAuthnCredentialByID(ts.API.db, cred.ID)
 	require.NoError(ts.T(), err)
