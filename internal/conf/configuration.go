@@ -87,7 +87,7 @@ type AnonymousProviderConfiguration struct {
 
 // CustomOAuthConfiguration holds configuration for custom OAuth and OIDC providers
 type CustomOAuthConfiguration struct {
-	Enabled      bool `json:"enabled" split_words:"true" default:"false"`
+	Enabled      bool `json:"enabled" split_words:"true" default:"true"`
 	MaxProviders int  `json:"max_providers" split_words:"true" default:"0"`
 }
 
