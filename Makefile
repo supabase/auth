@@ -61,7 +61,9 @@ check-gosec:
 		|| go install github.com/securego/gosec/v2/cmd/gosec@latest
 
 vulncheck: check-govulncheck # Check for known vulnerabilities
-	govulncheck -format json $(CHECK_FILES) | go run ./hack/vulncheck-filter
+	govulncheck -format json $(CHECK_FILES) \
+		| jq -r '.finding | select(.osv)' \
+		| go run ./hack/vulncheck-filter
 
 check-govulncheck:
 	@command -v govulncheck >/dev/null 2>&1 \

@@ -13,9 +13,7 @@ var ignore = map[string]string{
 }
 
 type finding struct {
-	OSV *struct {
-		ID string `json:"id"`
-	} `json:"osv"`
+	OSV string `json:"osv"`
 }
 
 func main() {
@@ -30,13 +28,12 @@ func main() {
 			if err == io.EOF {
 				break
 			}
-			// govulncheck JSON stream may contain objects we don't care about; skip decode errors
 			continue
 		}
-		if f.OSV == nil {
+		if f.OSV == "" {
 			continue
 		}
-		id := f.OSV.ID
+		id := f.OSV
 		if seen[id] {
 			continue
 		}
