@@ -12,8 +12,12 @@ var ignore = map[string]string{
 	"GO-2026-4518": "pgproto3/v2 DoS, no fix available (EOL). Transitive via pgconn v1 + pop/v6.",
 }
 
-type finding struct {
-	OSV string `json:"osv"`
+type message struct {
+	Finding *struct {
+		OSV *struct {
+			ID string `json:"id"`
+		} `json:"osv"`
+	} `json:"finding"`
 }
 
 func main() {
@@ -21,19 +25,22 @@ func main() {
 
 	var unignored []string
 	seen := make(map[string]bool)
-
 	for {
-		var f finding
-		if err := dec.Decode(&f); err != nil {
+		var m message
+		if err := dec.Decode(&m); err != nil {
 			if err == io.EOF {
 				break
 			}
+			// govulncheck JSON stream may contain objects we don't care about; skip decode errors
 			continue
 		}
-		if f.OSV == "" {
+		if m.Finding == nil {
 			continue
 		}
-		id := f.OSV
+		if m.Finding.OSV == nil {
+			continue
+		}
+		id := m.Finding.OSV.ID
 		if seen[id] {
 			continue
 		}
