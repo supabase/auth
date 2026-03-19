@@ -142,7 +142,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		var peekResponse saml.Response
-		err = xml.Unmarshal(responseXML, &peekResponse)
+		err = xml.Unmarshal(responseXML, &peekResponse) // #nosec G709
 		if err != nil {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAMLResponse is not a valid XML SAML assertion").WithInternalError(err)
 		}
