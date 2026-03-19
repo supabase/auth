@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.188.1](https://github.com/supabase/auth/compare/v2.188.0...v2.188.1) (2026-03-19)
+
+
+### Bug Fixes
+
+* remove make all from release workflow ([#2433](https://github.com/supabase/auth/issues/2433)) ([036e723](https://github.com/supabase/auth/commit/036e7239fe3666cc192f77712b7648c3369bf0f8))
+
 ## [2.188.0](https://github.com/supabase/auth/compare/v2.187.0...v2.188.0) (2026-03-17)
 
 
