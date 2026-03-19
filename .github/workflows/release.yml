@@ -100,7 +100,7 @@ jobs:
           set -ex
 
           RELEASE_VERSION=$RELEASE_VERSION make deps
-          RELEASE_VERSION=$RELEASE_VERSION make all build-strip
+          RELEASE_VERSION=$RELEASE_VERSION make build build-strip
 
           ln -s auth gotrue
           tar -czvf auth-v$RELEASE_VERSION-x86.tar.gz auth gotrue migrations/
