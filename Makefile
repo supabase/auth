@@ -1,6 +1,6 @@
-.PHONY: all build deps image migrate test vet sec vulncheck format unused
+.PHONY: all build deps image migrate test vet sec vulncheck format unused release
 .PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck
-CHECK_FILES?=./...
+CHECK_FILES ?= ./...
 
 ifdef RELEASE_VERSION
 	VERSION=v$(RELEASE_VERSION)
@@ -8,36 +8,83 @@ else
 	VERSION=$(shell git describe --tags)
 endif
 
-FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=$(VERSION)" -buildvcs=false
+FLAGS = -ldflags "-X github.com/supabase/auth/internal/utilities.Version=$(VERSION)" -buildvcs=false
 
 ifneq ($(shell docker compose version 2>/dev/null),)
-  DOCKER_COMPOSE=docker compose
+  DOCKER_COMPOSE = docker compose
 else
-  DOCKER_COMPOSE=docker-compose
+  DOCKER_COMPOSE = docker-compose
 endif
 
-DEV_DOCKER_COMPOSE:=docker-compose-dev.yml
+DEV_DOCKER_COMPOSE = docker-compose-dev.yml
+
+RELEASE_TARGETS = x86 arm64 darwin-arm64 arm64-strip
+RELEASE_ARCHIVES = \
+	auth-$(VERSION)-x86.tar.gz \
+	auth-$(VERSION)-arm64.tar.gz \
+	auth-$(VERSION)-darwin-arm64.tar.gz \
+	auth-$(VERSION)-arm64.tar.xz
+
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 all: vet sec static build ## Run the tests and build the binary.
 
-build: deps ## Build the binary.
-	CGO_ENABLED=0 go build $(FLAGS)
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o auth-arm64
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(FLAGS) -o auth-darwin-arm64
+build: auth auth-arm64 auth-darwin-arm64 ## Build the binaries.
 
-build-strip: deps ## Build a stripped binary, for which the version file needs to be rewritten.
+build-strip: auth-arm64-strip ## Build a stripped binary, for which the version file needs to be rewritten.
+
+auth: deps
+	CGO_ENABLED=0 go build $(FLAGS) -o $(@)
+
+auth-x86: deps
+	CGO_ENABLED=0 GOARCH=amd64 go build $(FLAGS) -o $(@)
+
+auth-arm64: deps
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o $(@)
+
+auth-darwin-arm64: deps
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(FLAGS) -o $(@)
+
+auth-arm64-strip: deps
 	echo "package utilities" > internal/utilities/version.go
 	echo "const Version = \"$(VERSION)\"" >> internal/utilities/version.go
 
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
-		$(FLAGS) -ldflags "-s -w" -o auth-arm64-strip
+		$(FLAGS) -ldflags "-s -w" -o $(@)
 
 deps: ## Install dependencies.
 	@go mod download
 	@go mod verify
+
+
+release-test: \
+	vet \
+	static \
+	sec \
+	vulncheck \
+	test
+
+release: $(RELEASE_ARCHIVES)
+
+auth-$(VERSION)-%.tar.gz: \
+		release-%/auth \
+		release-%/gotrue | migrations
+	tar -C $(<D) -czvf $(@) auth gotrue -C ../ migrations/
+
+auth-$(VERSION)-arm64.tar.xz: \
+		release-arm64-strip/auth \
+		release-arm64-strip/gotrue | migrations
+	tar -C $(<D) -cf - auth gotrue -C ../ migrations/ \
+		| xz -T0 -9e -C crc64 > $(@)
+
+release-%/auth: auth-%
+	mkdir -p $(@D)
+	cp -a $(<) $(@)
+
+release-%/gotrue: release-%/auth
+	ln -sf $(<F) $(@)
 
 migrate_dev: ## Run database migrations for development.
 	hack/migrate.sh postgres
@@ -45,7 +92,7 @@ migrate_dev: ## Run database migrations for development.
 migrate_test: ## Run database migrations for test.
 	hack/migrate.sh postgres
 
-test: build ## Run tests.
+test: auth ## Run tests.
 	go test $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1
 	./hack/coverage.sh
 
@@ -112,3 +159,10 @@ docker-clean: ## Remove the development containers and volumes
 
 format:
 	gofmt -s -w .
+
+clean:
+	rm -rf \
+		$(addprefix release-,$(RELEASE_TARGETS)) \
+		$(addprefix auth-,$(RELEASE_TARGETS)) \
+		$(RELEASE_ARCHIVES) \
+		auth
