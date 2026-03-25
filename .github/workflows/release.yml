@@ -99,19 +99,8 @@ jobs:
         run: |
           set -ex
 
-          RELEASE_VERSION=$RELEASE_VERSION make deps
-          RELEASE_VERSION=$RELEASE_VERSION make build build-strip
-
-          ln -s auth gotrue
-          tar -czvf auth-v$RELEASE_VERSION-x86.tar.gz auth gotrue migrations/
-          mv auth-arm64 auth
-          tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
-
-          mv auth-darwin-arm64 auth
-          tar -czvf auth-v$RELEASE_VERSION-darwin-arm64.tar.gz auth gotrue migrations/
-
-          mv auth-arm64-strip auth
-          tar -cf - auth gotrue migrations/ | xz -T0 -9e -C crc64 > auth-v$RELEASE_VERSION-arm64.tar.xz
+          MAKE_JOBS="$(nproc 2>/dev/null || echo 4)"
+          RELEASE_VERSION=$RELEASE_VERSION make -j"$MAKE_JOBS" release
 
       - name: Generate checksums
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
