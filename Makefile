@@ -8,15 +8,20 @@ else
 	VERSION=$(shell git describe --tags)
 endif
 
-FLAGS = -ldflags "-X github.com/supabase/auth/internal/utilities.Version=$(VERSION)" -buildvcs=false
-
 ifneq ($(shell docker compose version 2>/dev/null),)
-  DOCKER_COMPOSE = docker compose
+	DOCKER_COMPOSE = docker compose
 else
-  DOCKER_COMPOSE = docker-compose
+	DOCKER_COMPOSE = docker-compose
 endif
 
 DEV_DOCKER_COMPOSE = docker-compose-dev.yml
+
+BUILD_VERSION_PKG = github.com/supabase/auth/internal/utilities
+BUILD_LD_FLAGS = -X $(BUILD_VERSION_PKG).Version=$(VERSION)
+BUILD_CMD = go build \
+	-o $(1) \
+	-buildvcs=false \
+	-ldflags "$(BUILD_LD_FLAGS)$(2)"
 
 RELEASE_TARGETS = x86 arm64 darwin-arm64 arm64-strip
 RELEASE_ARCHIVES = \
@@ -36,28 +41,23 @@ build: auth auth-arm64 auth-darwin-arm64 ## Build the binaries.
 build-strip: auth-arm64-strip ## Build a stripped binary, for which the version file needs to be rewritten.
 
 auth: deps
-	CGO_ENABLED=0 go build $(FLAGS) -o $(@)
+	CGO_ENABLED=0 $(call BUILD_CMD,$(@),)
 
 auth-x86: deps
-	CGO_ENABLED=0 GOARCH=amd64 go build $(FLAGS) -o $(@)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(call BUILD_CMD,$(@),)
 
 auth-arm64: deps
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o $(@)
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(call BUILD_CMD,$(@),)
 
 auth-darwin-arm64: deps
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(FLAGS) -o $(@)
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(call BUILD_CMD,$(@),)
 
 auth-arm64-strip: deps
-	echo "package utilities" > internal/utilities/version.go
-	echo "const Version = \"$(VERSION)\"" >> internal/utilities/version.go
-
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
-		$(FLAGS) -ldflags "-s -w" -o $(@)
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(call BUILD_CMD,$(@), -s)
 
 deps: ## Install dependencies.
 	@go mod download
 	@go mod verify
-
 
 release-test: \
 	vet \
