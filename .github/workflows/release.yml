@@ -33,14 +33,14 @@ jobs:
           app-id: ${{ secrets.GH_AUTOFIX_APP_ID }}
           private-key: ${{ secrets.GH_AUTOFIX_PRIVATE_KEY }}
 
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
         id: release
         with:
           release-type: go
           target-branch: ${{ github.ref_name }}
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
           fetch-depth: 0
@@ -89,7 +89,7 @@ jobs:
           echo "RELEASE_CANDIDATE=${RELEASE_CANDIDATE}" >> "${GITHUB_OUTPUT}"
           echo "RELEASE_NAME=${RELEASE_NAME}" >> "${GITHUB_OUTPUT}"
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
           go-version-file: go.mod
@@ -127,14 +127,14 @@ jobs:
 
       - name: GitHub OIDC Auth
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
-        uses: aws-actions/configure-aws-credentials@v5.1.1
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           aws-region: ap-southeast-1
           role-to-assume: arn:aws:iam::${{ secrets.SHARED_SERVICES_AWS_ACCOUNT_ID }}:role/supabase-github-oidc-role
           role-session-name: shared-services-jump
 
       - name: Assume destination role
-        uses: aws-actions/configure-aws-credentials@v5.1.1
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
           aws-region: ap-southeast-1
