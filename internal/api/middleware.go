@@ -235,6 +235,7 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	}
 
 	verificationResult, err := a.captchaVerifier.Verify(
+		ctx,
 		token,
 		utilities.GetIPAddress(req),
 	)

@@ -1,6 +1,10 @@
 package api
 
-import "github.com/supabase/auth/internal/security"
+import (
+	"context"
+
+	"github.com/supabase/auth/internal/security"
+)
 
 // MockCaptchaVerifier is a mock implementation of security.CaptchaVerifier.
 type MockCaptchaVerifier struct {
@@ -10,7 +14,7 @@ type MockCaptchaVerifier struct {
 	LastClientIP string
 }
 
-func (m *MockCaptchaVerifier) Verify(token, clientIP string) (*security.VerificationResponse, error) {
+func (m *MockCaptchaVerifier) Verify(ctx context.Context, token, clientIP string) (*security.VerificationResponse, error) {
 	m.LastToken = token
 	m.LastClientIP = clientIP
 

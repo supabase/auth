@@ -23,7 +23,7 @@ func newTestVerifier(provider, secret string) *HTTPCaptchaVerifier {
 
 func TestHCaptchaSuccess(t *testing.T) {
 	v := newTestVerifier("hcaptcha", hcaptchaTestSecret)
-	resp, err := v.Verify(testToken, "127.0.0.1")
+	resp, err := v.Verify(t.Context(), testToken, "127.0.0.1")
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 	assert.Empty(t, resp.ErrorCodes)
@@ -31,7 +31,7 @@ func TestHCaptchaSuccess(t *testing.T) {
 
 func TestHCaptchaInvalidSecret(t *testing.T) {
 	v := newTestVerifier("hcaptcha", "invalid-secret")
-	resp, err := v.Verify(testToken, "127.0.0.1")
+	resp, err := v.Verify(t.Context(), testToken, "127.0.0.1")
 	require.NoError(t, err)
 	assert.False(t, resp.Success)
 	assert.Contains(t, resp.ErrorCodes, "not-using-dummy-secret")
@@ -39,7 +39,7 @@ func TestHCaptchaInvalidSecret(t *testing.T) {
 
 func TestTurnstileSuccess(t *testing.T) {
 	v := newTestVerifier("turnstile", turnstileTestSecret)
-	resp, err := v.Verify(testToken, "127.0.0.1")
+	resp, err := v.Verify(t.Context(), testToken, "127.0.0.1")
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 	assert.Empty(t, resp.ErrorCodes)
@@ -47,7 +47,7 @@ func TestTurnstileSuccess(t *testing.T) {
 
 func TestTurnstileInvalidSecret(t *testing.T) {
 	v := newTestVerifier("turnstile", "invalid-secret")
-	resp, err := v.Verify(testToken, "127.0.0.1")
+	resp, err := v.Verify(t.Context(), testToken, "127.0.0.1")
 	require.NoError(t, err)
 	assert.False(t, resp.Success)
 	assert.Contains(t, resp.ErrorCodes, "invalid-input-secret")
@@ -55,7 +55,7 @@ func TestTurnstileInvalidSecret(t *testing.T) {
 
 func TestUnsupportedProvider(t *testing.T) {
 	v := newTestVerifier("recaptcha", "some-secret")
-	_, err := v.Verify(testToken, "127.0.0.1")
+	_, err := v.Verify(t.Context(), testToken, "127.0.0.1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "recaptcha")
 }
