@@ -29,9 +29,9 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
       - name: Check gofmt
@@ -42,28 +42,17 @@ jobs:
           then
             echo 'Make sure to run "gofmt -s -w ." before commit!' && exit 1
           fi
-      - name: Check go vet
-        run: |
-          set -x
-          go vet ./...
-      - name: Run static check
-        run: |
-          set -x
-          make static
-      - name: Check gosec
-        run: |
-          set -x
-          make sec
-      - name: Run govulncheck
-        run: |
-          set -x
-          make vulncheck
       - name: Init Database
         run: psql -f hack/init_postgres.sql postgresql://postgres:root@localhost:5432/postgres
       - name: Run migrations
         run: make migrate_dev
-      - name: Lint and test
-        run: make test
+      - name: Run linters and tests
+        run: |
+          set -x
+
+          MAKE_JOBS="$(nproc 2>/dev/null || echo 4)"
+          make -j"$MAKE_JOBS" release-test
+
       - name: Cleanup coverage
         run: |
           set -x
@@ -77,6 +66,6 @@ jobs:
           sed -i '/^github.com\/supabase\/auth\/docs/d' coverage.out
           sed -i '/^github.com\/supabase\/auth\/main/d' coverage.out
 
-      - uses: shogo82148/actions-goveralls@v1
+      - uses: shogo82148/actions-goveralls@25f5320d970fb565100cf1993ada29be1bb196a1 # v1.10.0
         with:
           path-to-profile: coverage.out

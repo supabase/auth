@@ -366,6 +366,13 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						})
 					})
 
+					r.Route("/passkeys", func(r *router) {
+						r.Get("/", api.AdminPasskeyList)
+						r.Route("/{passkey_id}", func(r *router) {
+							r.Delete("/", api.AdminPasskeyDelete)
+						})
+					})
+
 					r.Get("/", api.adminUserGet)
 					r.Put("/", api.adminUserUpdate)
 					r.Delete("/", api.adminUserDelete)

@@ -1,5 +1,40 @@
 # Changelog
 
+## [2.188.1](https://github.com/supabase/auth/compare/v2.188.0...v2.188.1) (2026-03-19)
+
+
+### Bug Fixes
+
+* remove make all from release workflow ([#2433](https://github.com/supabase/auth/issues/2433)) ([036e723](https://github.com/supabase/auth/commit/036e7239fe3666cc192f77712b7648c3369bf0f8))
+
+## [2.188.0](https://github.com/supabase/auth/compare/v2.187.0...v2.188.0) (2026-03-17)
+
+
+### Features
+
+* cache OIDC discovery documents for providers ([#2389](https://github.com/supabase/auth/issues/2389)) ([40d07b5](https://github.com/supabase/auth/commit/40d07b5f50ec4dce5c5a27e405097bc90c027000))
+* enable custom providers by default ([#2427](https://github.com/supabase/auth/issues/2427)) ([291cdad](https://github.com/supabase/auth/commit/291cdad62dd3209589324d8ce78021fe649a3521))
+* modernize IsNotFoundError handler to support errors.Is ([#2392](https://github.com/supabase/auth/issues/2392)) ([ab7c9f9](https://github.com/supabase/auth/commit/ab7c9f98a7fd98f0ff29d1f97784fc9e4dbfc87c))
+* **oauth-server:** allow updating `token_endpoint_auth_method` for OAuth clients ([#2391](https://github.com/supabase/auth/issues/2391)) ([1280dc1](https://github.com/supabase/auth/commit/1280dc1ad75fce6e69bfa15c262c4b637c0720b5))
+* **passkeys:** add admin endpoints to list and delete passkeys ([f109550](https://github.com/supabase/auth/commit/f109550fdc9a3fb227534a067e4c9b999728fdef))
+* **passkeys:** add audit, metering, webauthn primitives ([039b569](https://github.com/supabase/auth/commit/039b569cd2cb1541d9b7d1b93bfb7b4d8996e820))
+* **passkeys:** add configuration, error codes, and schemas ([0a5eb95](https://github.com/supabase/auth/commit/0a5eb957407f007099608a032e540401fc186d0f))
+* **passkeys:** add discoverable credential auth flow ([#2411](https://github.com/supabase/auth/issues/2411)) ([1bc68ea](https://github.com/supabase/auth/commit/1bc68ea59c0ac7d4f7d61b2d1888054f32459a44))
+* **passkeys:** add management endpoints ([#2413](https://github.com/supabase/auth/issues/2413)) ([5b3218e](https://github.com/supabase/auth/commit/5b3218e0993dc35df44ee7c52af67d13d6c4717e))
+* **passkeys:** add rate limiter on the `/options` endpoint for authentication ([#2422](https://github.com/supabase/auth/issues/2422)) ([30b3aeb](https://github.com/supabase/auth/commit/30b3aeb464e6728a9d95af783d8eccfce1448d0c))
+* **passkeys:** derive friendly name from AAGUID ([#2415](https://github.com/supabase/auth/issues/2415)) ([e00ff1a](https://github.com/supabase/auth/commit/e00ff1a4a644b03bc6fef86bfc93cc1356828d1e))
+* **passkeys:** progressive enrollment flow ([61ae2aa](https://github.com/supabase/auth/commit/61ae2aa17bdf9f234d61a631d71467cbf1d12f4e))
+
+
+### Bug Fixes
+
+* add MaxBytesReader middleware to limit request body size to 1MB ([#2402](https://github.com/supabase/auth/issues/2402)) ([6f0b2eb](https://github.com/supabase/auth/commit/6f0b2ebc8c7bb96735cb6432923b3618ffb81a5c))
+* bump Go to v1.25.8 ([#2412](https://github.com/supabase/auth/issues/2412)) ([a2e357f](https://github.com/supabase/auth/commit/a2e357f878805b9227002294e6d878279949b4b1))
+* **passkeys:** construct configuration env var correctly ([dba676e](https://github.com/supabase/auth/commit/dba676ef9c1087e509006c01893d9f8d9d3bbb37))
+* **passkeys:** enforce passkey cap during registration verify ([9868df6](https://github.com/supabase/auth/commit/9868df617af0cccd9f88ba71600058eeb31024ea))
+* **passkeys:** return 204 when deleting a passkey ([7d90fb8](https://github.com/supabase/auth/commit/7d90fb8f983560d6a3469725980ab999e5ed2cc1))
+* **passkeys:** sign_count should be uint32 ([e509e3a](https://github.com/supabase/auth/commit/e509e3a80e075ccb92f738000bb592f475487a3c))
+
 ## [2.187.0](https://github.com/supabase/auth/compare/v2.186.0...v2.187.0) (2026-02-23)
 
 

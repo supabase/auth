@@ -201,11 +201,8 @@ func (ts *PasskeyTestSuite) TestPasskeyDelete() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), nil, withBearerToken(token))
 
-	ts.Equal(http.StatusOK, w.Code)
-
-	var item PasskeyListItem
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&item))
-	ts.Equal(cred.ID.String(), item.ID)
+	ts.Equal(http.StatusNoContent, w.Code)
+	ts.Empty(w.Body.Bytes())
 
 	// Verify deleted from database
 	_, err := models.FindWebAuthnCredentialByID(ts.API.db, cred.ID)
