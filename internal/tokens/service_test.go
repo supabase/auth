@@ -1256,6 +1256,7 @@ func TestGenerateAccessTokenAllowLowAAL(t *testing.T) {
 		aal2 := models.AAL2.String()
 		session.AAL = &aal2
 		require.NoError(t, conn.Create(session))
+		require.NoError(t, models.AddClaimToSession(conn, session.ID, models.TOTPSignIn))
 
 		cfg := *config
 		cfg.Sessions.AllowLowAAL = &allowLowAAL
