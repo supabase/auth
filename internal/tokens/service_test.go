@@ -1237,7 +1237,7 @@ func TestGenerateAccessTokenAllowLowAAL(t *testing.T) {
 			AuthenticationMethod: models.PasswordGrant,
 		})
 		require.NoError(t, err)
-		require.Equal(t, now.Add(allowLowAAL).Unix(), expiresAt)
+		require.Equal(t, session.CreatedAt.UTC().Add(allowLowAAL).Unix(), expiresAt)
 	})
 
 	t.Run("AAL2 session for MFA user uses standard JWT expiry", func(t *testing.T) {

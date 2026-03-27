@@ -676,7 +676,7 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		// if user has mfa enabled and the session has not yet been upgraded
 		// and Limit duration of AAL1 sessions is enabled
 		// expiresAt should be set to the maximum duration for low aal sessions
-		expiresAt = issuedAt.Add(*config.Sessions.AllowLowAAL)
+		expiresAt = session.CreatedAt.UTC().Add(*config.Sessions.AllowLowAAL)
 	} else {
 		expiresAt = issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
 	}
