@@ -1192,3 +1192,113 @@ func TestAsRedirectURL(t *testing.T) {
 	require.Contains(t, fragment, "sb", "Fragment should contain Supabase Auth identifier 'sb'")
 	require.Equal(t, "", fragment.Get("sb"), "Supabase Auth identifier should have empty value")
 }
+
+func TestGenerateAccessTokenAllowLowAAL(t *testing.T) {
+	config, err := conf.LoadGlobal("../../hack/test.env")
+	require.NoError(t, err)
+
+	conn, err := test.SetupDBConnection(config)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	allowLowAAL := 5 * time.Minute
+
+	req, err := http.NewRequest("POST", "https://example.com/", nil)
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Truncate(time.Second)
+
+	t.Run("AAL1 session for MFA user uses AllowLowAAL expiry", func(t *testing.T) {
+		models.TruncateAll(conn)
+
+		u, err := models.NewUser("", "test@example.com", "password", "authenticated", nil)
+		require.NoError(t, err)
+		require.NoError(t, conn.Create(u))
+
+		// Add a verified TOTP factor so HighestPossibleAAL() returns AAL2
+		factor := models.NewFactor(u, "my-totp", models.TOTP, models.FactorStateVerified)
+		require.NoError(t, conn.Create(factor))
+		require.NoError(t, conn.Eager().Find(u, u.ID))
+
+		session, err := models.NewSession(u.ID, nil)
+		require.NoError(t, err)
+		// Session stays at AAL1 (default)
+		require.NoError(t, conn.Create(session))
+
+		cfg := *config
+		cfg.Sessions.AllowLowAAL = &allowLowAAL
+
+		srv := NewService(&cfg, &panicHookManager{})
+		srv.SetTimeFunc(func() time.Time { return now })
+
+		_, expiresAt, err := srv.GenerateAccessToken(req, conn, GenerateAccessTokenParams{
+			User:                 u,
+			SessionID:            &session.ID,
+			AuthenticationMethod: models.PasswordGrant,
+		})
+		require.NoError(t, err)
+		require.Equal(t, now.Add(allowLowAAL).Unix(), expiresAt)
+	})
+
+	t.Run("AAL2 session for MFA user uses standard JWT expiry", func(t *testing.T) {
+		models.TruncateAll(conn)
+
+		u, err := models.NewUser("", "test2@example.com", "password", "authenticated", nil)
+		require.NoError(t, err)
+		require.NoError(t, conn.Create(u))
+
+		factor := models.NewFactor(u, "my-totp", models.TOTP, models.FactorStateVerified)
+		require.NoError(t, conn.Create(factor))
+		require.NoError(t, conn.Eager().Find(u, u.ID))
+
+		session, err := models.NewSession(u.ID, &factor.ID)
+		require.NoError(t, err)
+		aal2 := models.AAL2.String()
+		session.AAL = &aal2
+		require.NoError(t, conn.Create(session))
+
+		cfg := *config
+		cfg.Sessions.AllowLowAAL = &allowLowAAL
+
+		srv := NewService(&cfg, &panicHookManager{})
+		srv.SetTimeFunc(func() time.Time { return now })
+
+		_, expiresAt, err := srv.GenerateAccessToken(req, conn, GenerateAccessTokenParams{
+			User:                 u,
+			SessionID:            &session.ID,
+			AuthenticationMethod: models.PasswordGrant,
+		})
+		require.NoError(t, err)
+		require.Equal(t, now.Add(time.Second*time.Duration(config.JWT.Exp)).Unix(), expiresAt)
+	})
+
+	t.Run("AAL1 session without AllowLowAAL uses standard JWT expiry", func(t *testing.T) {
+		models.TruncateAll(conn)
+
+		u, err := models.NewUser("", "test3@example.com", "password", "authenticated", nil)
+		require.NoError(t, err)
+		require.NoError(t, conn.Create(u))
+
+		factor := models.NewFactor(u, "my-totp", models.TOTP, models.FactorStateVerified)
+		require.NoError(t, conn.Create(factor))
+		require.NoError(t, conn.Eager().Find(u, u.ID))
+
+		session, err := models.NewSession(u.ID, nil)
+		require.NoError(t, err)
+		require.NoError(t, conn.Create(session))
+
+		cfg := *config
+		cfg.Sessions.AllowLowAAL = nil
+
+		srv := NewService(&cfg, &panicHookManager{})
+		srv.SetTimeFunc(func() time.Time { return now })
+
+		_, expiresAt, err := srv.GenerateAccessToken(req, conn, GenerateAccessTokenParams{
+			User:                 u,
+			SessionID:            &session.ID,
+			AuthenticationMethod: models.PasswordGrant,
+		})
+		require.NoError(t, err)
+		require.Equal(t, now.Add(time.Second*time.Duration(config.JWT.Exp)).Unix(), expiresAt)
+	})
+}

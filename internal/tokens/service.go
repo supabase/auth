@@ -669,8 +669,18 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		return "", 0, terr
 	}
 
+	var expiresAt time.Time
+
 	issuedAt := s.now().UTC()
-	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
+	if config.Sessions.AllowLowAAL != nil && *config.Sessions.AllowLowAAL != 0 && models.CompareAAL(aal, params.User.HighestPossibleAAL()) < 0 {
+		// if user has mfa enabled and the session has not yet been upgraded
+		// and Limit duration of AAL1 sessions is enabled
+		// expiresAt should be set to the maximum duration for low aal sessions
+		expiresAt = issuedAt.Add(*config.Sessions.AllowLowAAL)
+	} else {
+		expiresAt = issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
+	}
+
 	var clientID string
 	if params.ClientID != nil && *params.ClientID != uuid.Nil {
 		clientID = params.ClientID.String()
