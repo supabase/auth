@@ -20,28 +20,28 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/sbff"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/storage"
 )
 
-const (
-	HCaptchaSecret         string = "0x0000000000000000000000000000000000000000"
-	CaptchaResponse        string = "10000000-aaaa-bbbb-cccc-000000000001"
-	TurnstileCaptchaSecret string = "1x0000000000000000000000000000000AA"
-)
+const captchaResponse string = "10000000-aaaa-bbbb-cccc-000000000001"
 
 type MiddlewareTestSuite struct {
 	suite.Suite
-	API    *API
-	Config *conf.GlobalConfiguration
+	API             *API
+	Config          *conf.GlobalConfiguration
+	CaptchaVerifier *MockCaptchaVerifier
 }
 
 func TestMiddlewareFunctions(t *testing.T) {
-	api, config, err := setupAPIForTest()
+	mockCaptcha := &MockCaptchaVerifier{}
+	api, config, err := setupAPIForTest(WithCaptchaVerifier(mockCaptcha))
 	require.NoError(t, err)
 
 	ts := &MiddlewareTestSuite{
-		API:    api,
-		Config: config,
+		API:             api,
+		Config:          config,
+		CaptchaVerifier: mockCaptcha,
 	}
 	defer api.db.Close()
 
@@ -50,6 +50,12 @@ func TestMiddlewareFunctions(t *testing.T) {
 
 func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	ts.Config.Security.Captcha.Enabled = true
+	ts.Config.Security.Captcha.Provider = "hcaptcha"
+	ts.Config.Security.Captcha.Secret = "test-secret"
+
+	// Configure mock to return success
+	ts.CaptchaVerifier.Result = &security.VerificationResponse{Success: true}
+	ts.CaptchaVerifier.Err = nil
 
 	adminClaims := &AccessTokenClaims{
 		Role: "supabase_admin",
@@ -57,43 +63,28 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	adminJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, adminClaims).SignedString([]byte(ts.Config.JWT.Secret))
 	require.NoError(ts.T(), err)
 	cases := []struct {
-		desc             string
-		adminJwt         string
-		captcha_token    string
-		captcha_provider string
+		desc          string
+		adminJwt      string
+		captcha_token string
+		expectVerify  bool
 	}{
 		{
 			"Valid captcha response",
 			"",
-			CaptchaResponse,
-			"hcaptcha",
-		},
-		{
-			"Valid captcha response",
-			"",
-			CaptchaResponse,
-			"turnstile",
+			captchaResponse,
+			true,
 		},
 		{
 			"Ignore captcha if admin role is present",
 			adminJwt,
 			"",
-			"hcaptcha",
-		},
-		{
-			"Ignore captcha if admin role is present",
-			adminJwt,
-			"",
-			"turnstile",
+			false,
 		},
 	}
 	for _, c := range cases {
-		ts.Config.Security.Captcha.Provider = c.captcha_provider
-		if c.captcha_provider == "turnstile" {
-			ts.Config.Security.Captcha.Secret = TurnstileCaptchaSecret
-		} else if c.captcha_provider == "hcaptcha" {
-			ts.Config.Security.Captcha.Secret = HCaptchaSecret
-		}
+		// Reset mock state between cases
+		ts.CaptchaVerifier.LastToken = ""
+		ts.CaptchaVerifier.LastClientIP = ""
 
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -117,6 +108,12 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 		afterCtx, err := ts.API.verifyCaptcha(w, req)
 		require.NoError(ts.T(), err)
 
+		if c.expectVerify {
+			require.Equal(ts.T(), c.captcha_token, ts.CaptchaVerifier.LastToken)
+		} else {
+			require.Empty(ts.T(), ts.CaptchaVerifier.LastToken)
+		}
+
 		body, err := io.ReadAll(req.Body)
 		require.NoError(ts.T(), err)
 
@@ -138,40 +135,41 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 	cases := []struct {
 		desc         string
-		captchaConf  *conf.CaptchaConfiguration
+		errorCodes   []string
 		expectedCode int
 		expectedMsg  string
 	}{
 		{
 			"Captcha validation failed",
-			&conf.CaptchaConfiguration{
-				Enabled:  true,
-				Provider: "hcaptcha",
-				Secret:   "test",
-			},
+			[]string{"not-using-dummy-secret"},
 			http.StatusBadRequest,
 			"captcha protection: request disallowed (not-using-dummy-secret)",
 		},
 		{
 			"Captcha validation failed",
-			&conf.CaptchaConfiguration{
-				Enabled:  true,
-				Provider: "turnstile",
-				Secret:   "anothertest",
-			},
+			[]string{"invalid-input-secret"},
 			http.StatusBadRequest,
 			"captcha protection: request disallowed (invalid-input-secret)",
 		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			ts.Config.Security.Captcha = *c.captchaConf
+			ts.Config.Security.Captcha.Enabled = true
+			ts.Config.Security.Captcha.Provider = "hcaptcha"
+			ts.Config.Security.Captcha.Secret = "test-secret"
+
+			ts.CaptchaVerifier.Result = &security.VerificationResponse{
+				Success:    false,
+				ErrorCodes: c.errorCodes,
+			}
+			ts.CaptchaVerifier.Err = nil
+
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 				"email":    "test@example.com",
 				"password": "secret",
 				"gotrue_meta_security": map[string]interface{}{
-					"captcha_token": CaptchaResponse,
+					"captcha_token": captchaResponse,
 				},
 			}))
 			req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)

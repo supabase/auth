@@ -21,6 +21,7 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/sbff"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/utilities"
@@ -47,6 +48,8 @@ type API struct {
 	tokenService *tokens.Service
 	mailer       mailer.Mailer
 	oidcCache    *provider.OIDCProviderCache
+
+	captchaVerifier security.CaptchaVerifier
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
@@ -102,6 +105,9 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 	for _, o := range opt {
 		o.apply(api)
+	}
+	if api.captchaVerifier == nil {
+		api.captchaVerifier = security.NewCaptchaVerifier(&globalConfig.Security.Captcha)
 	}
 	if api.limiterOpts == nil {
 		api.limiterOpts = NewLimiterOptions(globalConfig)
@@ -308,6 +314,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 			r.Route("/authentication", func(r *router) {
 				r.With(api.limitHandler(api.limiterOpts.PasskeyAuthentication)).
+					With(api.verifyCaptcha).
 					Post("/options", api.PasskeyAuthenticationOptions)
 				r.Post("/verify", api.PasskeyAuthenticationVerify)
 			})

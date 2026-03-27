@@ -8,6 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/security"
 )
 
 // TestDiscoverableAuthenticationHappyPath tests the full discoverable credential authentication flow.
@@ -199,6 +200,78 @@ func (ts *PasskeyTestSuite) TestAuthenticationPasskeyDisabled() {
 
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/options", nil)
 	ts.Equal(http.StatusNotFound, w.Code)
+}
+
+// TestAuthenticationOptionsCaptchaRequired tests that CAPTCHA enabled + no token → 400.
+func (ts *PasskeyTestSuite) TestAuthenticationOptionsCaptchaRequired() {
+	ts.Config.Security.Captcha.Enabled = true
+	ts.Config.Security.Captcha.Provider = "hcaptcha"
+	ts.Config.Security.Captcha.Secret = "test-secret"
+
+	// No captcha_token in request body
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/options", map[string]any{})
+	ts.Equal(http.StatusBadRequest, w.Code)
+
+	var errResp map[string]any
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResp))
+	ts.Equal("captcha_failed", errResp["error_code"])
+}
+
+// TestAuthenticationOptionsCaptchaValid tests that CAPTCHA enabled + valid token → 200.
+func (ts *PasskeyTestSuite) TestAuthenticationOptionsCaptchaValid() {
+	ts.Config.Security.Captcha.Enabled = true
+	ts.Config.Security.Captcha.Provider = "hcaptcha"
+	ts.Config.Security.Captcha.Secret = "test-secret"
+
+	ts.CaptchaVerifier.Result = &security.VerificationResponse{Success: true}
+	ts.CaptchaVerifier.Err = nil
+
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/options", map[string]any{
+		"gotrue_meta_security": map[string]any{
+			"captcha_token": "valid-token",
+		},
+	})
+	ts.Equal(http.StatusOK, w.Code)
+
+	var optionsResp PasskeyAuthenticationOptionsResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&optionsResp))
+	ts.NotEmpty(optionsResp.ChallengeID)
+}
+
+// TestAuthenticationOptionsCaptchaInvalid tests that CAPTCHA enabled + mock failure → 400.
+func (ts *PasskeyTestSuite) TestAuthenticationOptionsCaptchaInvalid() {
+	ts.Config.Security.Captcha.Enabled = true
+	ts.Config.Security.Captcha.Provider = "hcaptcha"
+	ts.Config.Security.Captcha.Secret = "test-secret"
+
+	ts.CaptchaVerifier.Result = &security.VerificationResponse{
+		Success:    false,
+		ErrorCodes: []string{"invalid-input-response"},
+	}
+	ts.CaptchaVerifier.Err = nil
+
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/options", map[string]any{
+		"gotrue_meta_security": map[string]any{
+			"captcha_token": "bad-token",
+		},
+	})
+	ts.Equal(http.StatusBadRequest, w.Code)
+
+	var errResp map[string]any
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResp))
+	ts.Equal("captcha_failed", errResp["error_code"])
+}
+
+// TestAuthenticationOptionsCaptchaDisabled tests that CAPTCHA disabled → 200 without token.
+func (ts *PasskeyTestSuite) TestAuthenticationOptionsCaptchaDisabled() {
+	ts.Config.Security.Captcha.Enabled = false
+
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/options", nil)
+	ts.Equal(http.StatusOK, w.Code)
+
+	var optionsResp PasskeyAuthenticationOptionsResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&optionsResp))
+	ts.NotEmpty(optionsResp.ChallengeID)
 }
 
 // TestAuthenticationOptionsRateLimited tests that the passkey authentication options endpoint is rate limited.

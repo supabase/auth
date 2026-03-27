@@ -8,6 +8,7 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/ratelimit"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/tokens"
 )
 
@@ -28,6 +29,12 @@ func WithMailer(m mailer.Mailer) Option {
 func WithTokenService(service *tokens.Service) Option {
 	return optionFunc(func(a *API) {
 		a.tokenService = service
+	})
+}
+
+func WithCaptchaVerifier(v security.CaptchaVerifier) Option {
+	return optionFunc(func(a *API) {
+		a.captchaVerifier = v
 	})
 }
 

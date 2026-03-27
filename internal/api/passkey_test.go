@@ -22,18 +22,21 @@ import (
 // Flow-specific test methods live in their own files (passkey_register_test.go, etc.).
 type PasskeyTestSuite struct {
 	suite.Suite
-	API         *API
-	Config      *conf.GlobalConfiguration
-	TestUser    *models.User
-	TestSession *models.Session
+	API             *API
+	Config          *conf.GlobalConfiguration
+	TestUser        *models.User
+	TestSession     *models.Session
+	CaptchaVerifier *MockCaptchaVerifier
 }
 
 func TestPasskey(t *testing.T) {
-	api, config, err := setupAPIForTest()
+	mockCaptcha := &MockCaptchaVerifier{}
+	api, config, err := setupAPIForTest(WithCaptchaVerifier(mockCaptcha))
 	require.NoError(t, err)
 	ts := &PasskeyTestSuite{
-		API:    api,
-		Config: config,
+		API:             api,
+		Config:          config,
+		CaptchaVerifier: mockCaptcha,
 	}
 	defer api.db.Close()
 	suite.Run(t, ts)
@@ -41,6 +44,11 @@ func TestPasskey(t *testing.T) {
 
 func (ts *PasskeyTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
+
+	// Reset captcha state
+	ts.Config.Security.Captcha.Enabled = false
+	ts.CaptchaVerifier.Result = nil
+	ts.CaptchaVerifier.Err = nil
 
 	// Enable passkeys
 	ts.Config.Passkey.Enabled = true
