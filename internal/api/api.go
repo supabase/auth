@@ -161,6 +161,12 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	logger := observability.NewStructuredLogger(logrus.StandardLogger(), globalConfig)
 
 	r := newRouter()
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) error {
+		return apierrors.NewNotFoundError(apierrors.ErrorCodeRouteNotFound, "Route not found")
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) error {
+		return apierrors.NewHTTPError(http.StatusMethodNotAllowed, apierrors.ErrorCodeMethodNotAllowed, "HTTP method not allowed")
+	})
 	r.UseBypass(recoverer)
 	r.UseBypass(observability.AddRequestID(globalConfig))
 	r.UseBypass(

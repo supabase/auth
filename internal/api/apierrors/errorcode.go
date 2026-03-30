@@ -123,4 +123,7 @@ const (
 	ErrorCodeWebAuthnChallengeExpired   ErrorCode = "webauthn_challenge_expired"
 	ErrorCodeWebAuthnVerificationFailed ErrorCode = "webauthn_verification_failed"
 	ErrorCodeWebAuthnCredentialExists   ErrorCode = "webauthn_credential_exists" // #nosec G101 -- not a credential
+
+	ErrorCodeRouteNotFound      ErrorCode = "route_not_found"
+	ErrorCodeMethodNotAllowed   ErrorCode = "method_not_allowed"
 )
