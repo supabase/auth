@@ -379,9 +379,15 @@ func (ts *MiddlewareTestSuite) TestTimeoutMiddleware() {
 	timeoutHandler := timeoutMiddleware(ts.Config.API.MaxRequestDuration)
 
 	slowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Sleep for 1 second to simulate a slow handler which should trigger the timeout
-		time.Sleep(1 * time.Second)
-		ts.API.handler.ServeHTTP(w, r)
+		// Simulate a slow handler which should trigger the timeout.
+		// Use context-aware wait so the goroutine exits when the timeout fires,
+		// avoiding a data race with test cleanup.
+		select {
+		case <-time.After(1 * time.Second):
+			ts.API.handler.ServeHTTP(w, r)
+		case <-r.Context().Done():
+			return
+		}
 	})
 	timeoutHandler(slowHandler).ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusGatewayTimeout, w.Code)
