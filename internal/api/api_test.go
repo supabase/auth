@@ -1,6 +1,9 @@
 package api
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -75,6 +78,39 @@ func TestOAuthServerDisabledByDefault(t *testing.T) {
 
 	// OAuth server instance should not be initialized when disabled
 	require.Nil(t, api.oauthServer)
+}
+
+func TestNotFoundJSON(t *testing.T) {
+	api, _, err := setupAPIForTest()
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/does-not-exist", nil)
+	w := httptest.NewRecorder()
+	api.handler.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
+
+	var body map[string]interface{}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+	require.Equal(t, "route_not_found", body["error_code"])
+}
+
+func TestMethodNotAllowedJSON(t *testing.T) {
+	api, _, err := setupAPIForTest()
+	require.NoError(t, err)
+
+	// /settings only has GET registered, so PATCH should be method not allowed
+	req := httptest.NewRequest(http.MethodPatch, "http://localhost/settings", nil)
+	w := httptest.NewRecorder()
+	api.handler.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusMethodNotAllowed, w.Code)
+	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
+
+	var body map[string]interface{}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+	require.Equal(t, "method_not_allowed", body["error_code"])
 }
 
 func TestOAuthServerCanBeEnabled(t *testing.T) {
