@@ -60,7 +60,9 @@ type EncryptedString struct {
 }
 
 func (es *EncryptedString) IsValid() bool {
-	return es.KeyID != "" && len(es.Data) > 0 && len(es.Nonce) > 0 && es.Algorithm == "aes-gcm-hkdf"
+	// cipher.NewGCM() is always used, which panics on a Nonce that is not 12 bytes
+	// enforce that the nonce length and other values are correct
+	return es.KeyID != "" && len(es.Data) > 0 && len(es.Nonce) == 12 && es.Algorithm == "aes-gcm-hkdf"
 }
 
 // ShouldReEncrypt tells you if the value encrypted needs to be encrypted again with a newer key.
