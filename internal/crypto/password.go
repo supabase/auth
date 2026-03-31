@@ -193,15 +193,24 @@ func ParseArgon2Hash(hash string) (*Argon2HashInput, error) {
 	if err != nil {
 		return nil, fmt.Errorf("crypto: argon2 hash has invalid m parameter %q %w", m, err)
 	}
+	if memory > 1024*1024 { // 1 GiB in KiB
+		return nil, fmt.Errorf("crypto: argon2 hash has m parameter %d exceeds memory limit", memory)
+	}
 
 	time, err := strconv.ParseUint(t, 10, 32)
 	if err != nil {
 		return nil, fmt.Errorf("crypto: argon2 hash has invalid t parameter %q %w", t, err)
 	}
+	if time > 20 {
+		return nil, fmt.Errorf("crypto: argon2 hash has t parameter %d exceeds time limit", time)
+	}
 
 	threads, err := strconv.ParseUint(p, 10, 8)
 	if err != nil {
 		return nil, fmt.Errorf("crypto: argon2 hash has invalid p parameter %q %w", p, err)
+	}
+	if threads > 16 {
+		return nil, fmt.Errorf("crypto: argon2 hash has p parameter %d exceeds thread limit", threads)
 	}
 
 	rawHash, err := base64.RawStdEncoding.DecodeString(hashB64)
