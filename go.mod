@@ -36,6 +36,8 @@ require (
 require (
 	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
 	github.com/bits-and-blooms/bitset v1.20.0 // indirect
+	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
+	github.com/btcsuite/winsvc v1.0.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/consensys/gnark-crypto v0.18.1 // indirect
 	github.com/crate-crypto/go-eth-kzg v1.4.0 // indirect
@@ -49,10 +51,17 @@ require (
 	github.com/go-webauthn/x v0.1.12 // indirect
 	github.com/gobuffalo/nulls v0.4.2 // indirect
 	github.com/goccy/go-json v0.10.4 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/go-tpm v0.9.1 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/jackc/pgx/v4 v4.18.2 // indirect
+	github.com/jessevdk/go-flags v1.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
+	github.com/jrick/logrotate v1.0.0 // indirect
+	github.com/kaspanet/go-muhash v0.0.4 // indirect
+	github.com/kaspanet/go-secp256k1 v0.0.7 // indirect
+	github.com/kaspanet/kaspad v0.12.22 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc v1.0.5 // indirect
@@ -67,6 +76,7 @@ require (
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/speakeasy-api/openapi-overlay v0.9.0 // indirect
 	github.com/supranational/blst v0.3.16-0.20250831170142-f48500c1fdbe // indirect
+	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect

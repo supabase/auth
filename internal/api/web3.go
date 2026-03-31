@@ -73,7 +73,7 @@ func (a *API) web3GrantKaspa(ctx context.Context, w http.ResponseWriter, r *http
 
 	parsedMessage, err := siwk.ParseMessage(params.Message)
 	if err != nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "%s", err.Error())
 	}
 
 	if !parsedMessage.VerifySignature(params.Signature) {
@@ -165,7 +165,7 @@ func (a *API) web3GrantKaspa(ctx context.Context, w http.ResponseWriter, r *http
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(r, tx, user, models.Web3, grantParams)
+		token, terr = a.issueRefreshToken(r, w.Header(), tx, user, models.Web3, grantParams)
 		if terr != nil {
 			return terr
 		}
