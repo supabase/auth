@@ -75,16 +75,26 @@ func (c *SAMLConfiguration) Validate() error {
 // PopulateFields fills the configuration details based off the provided
 // parameters.
 func (c *SAMLConfiguration) PopulateFields(externalURL string) error {
+	certTemplate, err := c.populateFields(externalURL)
+	if err != nil {
+		return err
+	}
+	return c.createCertificate(certTemplate)
+}
+
+// PopulateFields fills the configuration details based off the provided
+// parameters.
+func (c *SAMLConfiguration) populateFields(externalURL string) (*x509.Certificate, error) {
 	// errors are intentionally ignored since they should have been handled
 	// within #Validate()
 	bytes, err := base64.StdEncoding.DecodeString(c.PrivateKey)
 	if err != nil {
-		return fmt.Errorf("saml: PopulateFields: invalid base64: %w", err)
+		return nil, fmt.Errorf("saml: PopulateFields: invalid base64: %w", err)
 	}
 
 	privateKey, err := x509.ParsePKCS1PrivateKey(bytes)
 	if err != nil {
-		return fmt.Errorf("saml: PopulateFields: invalid private key: %w", err)
+		return nil, fmt.Errorf("saml: PopulateFields: invalid private key: %w", err)
 	}
 
 	c.RSAPrivateKey = privateKey
@@ -92,7 +102,7 @@ func (c *SAMLConfiguration) PopulateFields(externalURL string) error {
 
 	parsedURL, err := url.ParseRequestURI(externalURL)
 	if err != nil {
-		return fmt.Errorf("saml: unable to parse external URL for SAML, check API_EXTERNAL_URL: %w", err)
+		return nil, fmt.Errorf("saml: unable to parse external URL for SAML, check API_EXTERNAL_URL: %w", err)
 	}
 
 	host := ""
@@ -125,7 +135,7 @@ func (c *SAMLConfiguration) PopulateFields(externalURL string) error {
 	if c.AllowEncryptedAssertions {
 		certTemplate.KeyUsage = certTemplate.KeyUsage | x509.KeyUsageDataEncipherment
 	}
-	return c.createCertificate(certTemplate)
+	return certTemplate, nil
 }
 
 func (c *SAMLConfiguration) createCertificate(certTemplate *x509.Certificate) error {

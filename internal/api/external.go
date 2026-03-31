@@ -10,7 +10,6 @@ import (
 
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
-	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
@@ -19,21 +18,9 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
-
-// ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
-type ExternalProviderClaims struct {
-	AuthMicroserviceClaims
-	Provider        string `json:"provider"`
-	InviteToken     string `json:"invite_token,omitempty"`
-	Referrer        string `json:"referrer,omitempty"`
-	FlowStateID     string `json:"flow_state_id"`
-	LinkingTargetID string `json:"linking_target_id,omitempty"`
-	EmailOptional   bool   `json:"email_optional,omitempty"`
-}
 
 // ExternalProviderRedirect redirects the request to the oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
@@ -79,41 +66,6 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
 		return "", err
 	}
-	flowType := getFlowFromChallenge(codeChallenge)
-
-	flowStateID := ""
-	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
-		if err != nil {
-			return "", err
-		}
-		flowStateID = flowState.ID.String()
-	}
-
-	claims := ExternalProviderClaims{
-		AuthMicroserviceClaims: AuthMicroserviceClaims{
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
-			},
-			SiteURL:    config.SiteURL,
-			InstanceID: uuid.Nil.String(),
-		},
-		Provider:      providerType,
-		InviteToken:   inviteToken,
-		Referrer:      redirectURL,
-		FlowStateID:   flowStateID,
-		EmailOptional: pConfig.EmailOptional,
-	}
-
-	if linkingTargetUser != nil {
-		// this means that the user is performing manual linking
-		claims.LinkingTargetID = linkingTargetUser.ID.String()
-	}
-
-	tokenString, err := tokens.SignJWT(&config.JWT, claims)
-	if err != nil {
-		return "", apierrors.NewInternalServerError("Error creating state").WithInternalError(err)
-	}
 
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
@@ -129,7 +81,48 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	authURL := p.AuthCodeURL(tokenString, authUrlParams...)
+	// Handle OAuthClientState for providers that require PKCE on their end
+	var oauthClientStateID *uuid.UUID
+	if oauthProvider, ok := p.(provider.OAuthProvider); ok && oauthProvider.RequiresPKCE() {
+		codeVerifier := oauth2.GenerateVerifier()
+		oauthClientState := models.NewOAuthClientState(providerType, &codeVerifier)
+		err := db.Create(oauthClientState)
+		if err != nil {
+			return "", err
+		}
+		oauthClientStateID = &oauthClientState.ID
+		authUrlParams = append(authUrlParams, oauth2.S256ChallengeOption(codeVerifier))
+	}
+
+	// Build flow state params with all context
+	flowParams := models.FlowStateParams{
+		ProviderType:         providerType,
+		AuthenticationMethod: models.OAuth,
+		CodeChallenge:        codeChallenge,
+		CodeChallengeMethod:  codeChallengeMethod,
+		InviteToken:          inviteToken,
+		Referrer:             redirectURL,
+		OAuthClientStateID:   oauthClientStateID,
+		EmailOptional:        pConfig.EmailOptional,
+	}
+
+	if linkingTargetUser != nil {
+		// this means that the user is performing manual linking
+		flowParams.LinkingTargetID = &linkingTargetUser.ID
+	}
+
+	// Always create flow state for all flows (both PKCE and implicit)
+	// The flow state ID is used as the state parameter instead of JWT
+	flowState, err := models.NewFlowState(flowParams)
+	if err != nil {
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid code_challenge_method").WithInternalError(err)
+	}
+	if err := db.Create(flowState); err != nil {
+		return "", apierrors.NewInternalServerError("Error creating flow state").WithInternalError(err)
+	}
+
+	// Use the flow state ID as the state parameter (UUID format)
+	authURL := p.AuthCodeURL(flowState.ID.String(), authUrlParams...)
 
 	return authURL, nil
 }
@@ -197,17 +190,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	providerAccessToken := data.token
 	providerRefreshToken := data.refreshToken
 
-	var flowState *models.FlowState
-	// if there's a non-empty FlowStateID we perform PKCE Flow
-	if flowStateID := getFlowStateID(ctx); flowStateID != "" {
-		flowState, err = models.FindFlowStateByID(db, flowStateID)
-		if models.IsNotFoundError(err) {
-			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeFlowStateNotFound, "Flow state not found").WithInternalError(err)
-		} else if err != nil {
-			return apierrors.NewInternalServerError("Failed to find flow state").WithInternalError(err)
-		}
-
-	}
+	flowState := getFlowState(ctx)
 
 	targetUser := getTargetUser(ctx)
 	inviteToken := getInviteToken(ctx)
@@ -237,8 +220,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		}
-		if flowState != nil {
-			// This means that the callback is using PKCE
+		if flowState != nil && flowState.IsPKCE() {
+			// PKCE flow: update flow state with user ID and tokens
 			flowState.ProviderAccessToken = providerAccessToken
 			flowState.ProviderRefreshToken = providerRefreshToken
 			flowState.UserID = &(user.ID)
@@ -247,7 +230,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 			terr = tx.Update(flowState)
 		} else {
-			token, terr = a.issueRefreshToken(r, tx, user, models.OAuth, grantParams)
+			// Implicit flow: issue tokens directly
+			token, terr = a.issueRefreshToken(r, w.Header(), tx, user, models.OAuth, grantParams)
+			if terr == nil && flowState != nil {
+				terr = tx.Destroy(flowState)
+			}
 		}
 
 		if terr != nil {
@@ -272,10 +259,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	}
 
 	rurl := a.getExternalRedirectURL(r)
-	if flowState != nil {
-		// This means that the callback is using PKCE
-		// Set the flowState.AuthCode to the query param here
-		rurl, err = a.prepPKCERedirectURL(rurl, flowState.AuthCode)
+	if flowState != nil && flowState.IsPKCE() {
+		// PKCE flow: redirect with auth code
+		rurl, err = a.prepPKCERedirectURL(rurl, *flowState.AuthCode)
 		if err != nil {
 			return err
 		}
@@ -427,10 +413,19 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 
 			if !config.Mailer.AllowUnverifiedEmailSignIns {
 				if emailConfirmationSent {
-					return 0, nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
+					err := apierrors.NewUnprocessableEntityError(
+						apierrors.ErrorCodeProviderEmailNeedsVerification,
+						"Unverified email with %v. A confirmation email has been sent to your %v email",
+						providerType, providerType,
+					)
+					return 0, nil, storage.NewCommitWithError(err)
 				}
 
-				return 0, nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)))
+				err := apierrors.NewUnprocessableEntityError(
+					apierrors.ErrorCodeProviderEmailNeedsVerification,
+					"Unverified email with %v. Verify the email with %v in order to sign in",
+					providerType, providerType)
+				return 0, nil, storage.NewCommitWithError(err)
 			}
 		}
 	} else {
@@ -523,54 +518,44 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request, db *storag
 	if state == "" {
 		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthCallback, "OAuth state parameter missing")
 	}
-	config := a.config
-	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
-	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
-		if kid, ok := token.Header["kid"]; ok {
-			if kidStr, ok := kid.(string); ok {
-				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
-				if err != nil {
-					return nil, err
-				}
 
-				if key != nil {
-					return key, nil
-				}
-
-				// otherwise try to use fallback
-			}
-		}
-		if alg, ok := token.Header["alg"]; ok {
-			if alg == jwt.SigningMethodHS256.Name {
-				// preserve backward compatibility for cases where the kid is not set or potentially invalid but the key can be decoded with the secret
-				return []byte(config.JWT.Secret), nil
-			}
-		}
-
-		return nil, fmt.Errorf("unrecognized JWT kid %v for algorithm %v", token.Header["kid"], token.Header["alg"])
-	})
+	stateUUID, err := uuid.FromString(state)
 	if err != nil {
-		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
+		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth state parameter is invalid")
 	}
-	if claims.Provider == "" {
-		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (missing provider)")
+
+	return a.loadExternalStateFromUUID(ctx, db, stateUUID)
+}
+
+// loadExternalStateFromUUID loads OAuth state from a flow_state record (new UUID format)
+func (a *API) loadExternalStateFromUUID(ctx context.Context, db *storage.Connection, stateID uuid.UUID) (context.Context, error) {
+	config := a.config
+
+	flowState, err := models.FindFlowStateByID(db, stateID.String())
+	if models.IsNotFoundError(err) {
+		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth state not found or expired")
+	} else if err != nil {
+		return ctx, apierrors.NewInternalServerError("Error loading flow state").WithInternalError(err)
 	}
-	if claims.InviteToken != "" {
-		ctx = withInviteToken(ctx, claims.InviteToken)
+
+	// Check expiration
+	if flowState.IsExpired(config.External.FlowStateExpiryDuration) {
+		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth state has expired")
 	}
-	if claims.Referrer != "" {
-		ctx = withExternalReferrer(ctx, claims.Referrer)
+
+	ctx = withExternalProviderType(ctx, flowState.ProviderType, flowState.EmailOptional)
+
+	if flowState.InviteToken != nil && *flowState.InviteToken != "" {
+		ctx = withInviteToken(ctx, *flowState.InviteToken)
 	}
-	if claims.FlowStateID != "" {
-		ctx = withFlowStateID(ctx, claims.FlowStateID)
+	if flowState.Referrer != nil && *flowState.Referrer != "" {
+		ctx = withExternalReferrer(ctx, *flowState.Referrer)
 	}
-	if claims.LinkingTargetID != "" {
-		linkingTargetUserID, err := uuid.FromString(claims.LinkingTargetID)
-		if err != nil {
-			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (linking_target_id must be UUID)")
-		}
-		u, err := models.FindUserByID(db, linkingTargetUserID)
+	if flowState.OAuthClientStateID != nil {
+		ctx = withOAuthClientStateID(ctx, *flowState.OAuthClientStateID)
+	}
+	if flowState.LinkingTargetID != nil {
+		u, err := models.FindUserByID(db, *flowState.LinkingTargetID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
 				return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeUserNotFound, "Linking target user not found")
@@ -579,26 +564,38 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request, db *storag
 		}
 		ctx = withTargetUser(ctx, u)
 	}
-	ctx = withExternalProviderType(ctx, claims.Provider, claims.EmailOptional)
-	return withSignature(ctx, state), nil
+
+	// Store the entire flow state in context for later use
+	ctx = withFlowState(ctx, flowState)
+
+	return withSignature(ctx, stateID.String()), nil
 }
 
 // Provider returns a Provider interface for the given name.
 func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, conf.OAuthProviderConfiguration, error) {
 	config := a.config
+	db := a.db.WithContext(ctx)
 	name = strings.ToLower(name)
 
 	var err error
 	var p provider.Provider
 	var pConfig conf.OAuthProviderConfiguration
 
+	// Check if this is a custom provider (format: custom:identifier)
+	if strings.HasPrefix(name, "custom:") {
+		if !config.CustomOAuth.Enabled {
+			return nil, conf.OAuthProviderConfiguration{}, fmt.Errorf("custom OAuth providers are disabled")
+		}
+		return a.loadCustomProvider(ctx, db, name, scopes)
+	}
+
 	switch name {
 	case "apple":
 		pConfig = config.External.Apple
-		p, err = provider.NewAppleProvider(ctx, pConfig)
+		p, err = provider.NewAppleProvider(ctx, pConfig, a.oidcCache)
 	case "azure":
 		pConfig = config.External.Azure
-		p, err = provider.NewAzureProvider(pConfig, scopes)
+		p, err = provider.NewAzureProvider(pConfig, scopes, a.oidcCache)
 	case "bitbucket":
 		pConfig = config.External.Bitbucket
 		p, err = provider.NewBitbucketProvider(pConfig)
@@ -622,7 +619,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		p, err = provider.NewGitlabProvider(pConfig, scopes)
 	case "google":
 		pConfig = config.External.Google
-		p, err = provider.NewGoogleProvider(ctx, pConfig, scopes)
+		p, err = provider.NewGoogleProvider(ctx, pConfig, scopes, a.oidcCache)
 	case "kakao":
 		pConfig = config.External.Kakao
 		p, err = provider.NewKakaoProvider(pConfig, scopes)
@@ -634,7 +631,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		p, err = provider.NewLinkedinProvider(pConfig, scopes)
 	case "linkedin_oidc":
 		pConfig = config.External.LinkedinOIDC
-		p, err = provider.NewLinkedinOIDCProvider(pConfig, scopes)
+		p, err = provider.NewLinkedinOIDCProvider(ctx, pConfig, scopes, a.oidcCache)
 	case "notion":
 		pConfig = config.External.Notion
 		p, err = provider.NewNotionProvider(pConfig)
@@ -656,9 +653,12 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	case "twitter":
 		pConfig = config.External.Twitter
 		p, err = provider.NewTwitterProvider(pConfig, scopes)
+	case "x":
+		pConfig = config.External.X
+		p, err = provider.NewXProvider(pConfig, scopes)
 	case "vercel_marketplace":
 		pConfig = config.External.VercelMarketplace
-		p, err = provider.NewVercelMarketplaceProvider(pConfig, scopes)
+		p, err = provider.NewVercelMarketplaceProvider(ctx, pConfig, scopes, a.oidcCache)
 	case "workos":
 		pConfig = config.External.WorkOS
 		p, err = provider.NewWorkOSProvider(pConfig)
@@ -670,6 +670,118 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	}
 
 	return p, pConfig, err
+}
+
+// loadCustomProvider loads a custom OAuth or OIDC provider from the database
+// identifier should be the full provider name with 'custom:' prefix (e.g., 'custom:github-enterprise')
+func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, identifier string, scopes string) (provider.Provider, conf.OAuthProviderConfiguration, error) {
+	config := a.config
+	var pConfig conf.OAuthProviderConfiguration
+
+	// Build the redirect URL
+	redirectURL := config.API.ExternalURL + "/callback"
+
+	// Parse scopes (space-separated per RFC 6749)
+	var scopeList []string
+	if scopes != "" {
+		scopeList = strings.Fields(scopes)
+	}
+
+	// Find the custom provider by identifier (which now includes 'custom:' prefix)
+	customProvider, err := models.FindCustomOAuthProviderByIdentifier(db, identifier)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, pConfig, fmt.Errorf("custom provider %s not found", identifier)
+		}
+		return nil, pConfig, fmt.Errorf("error finding custom provider: %w", err)
+	}
+
+	// Check if provider is enabled
+	if !customProvider.Enabled {
+		return nil, pConfig, fmt.Errorf("custom provider %s is disabled", identifier)
+	}
+
+	// Use provider scopes if not overridden
+	if len(scopeList) == 0 {
+		scopeList = customProvider.Scopes
+	}
+
+	// Decrypt client secret for runtime use
+	clientSecret, err := customProvider.GetClientSecret(config.Security.DBEncryption)
+	if err != nil {
+		return nil, pConfig, fmt.Errorf("error decrypting client secret for provider %s: %w", identifier, err)
+	}
+
+	// Handle based on provider type
+	if customProvider.IsOAuth2() {
+		// OAuth2 provider
+		if customProvider.AuthorizationURL == nil || customProvider.TokenURL == nil || customProvider.UserinfoURL == nil {
+			return nil, pConfig, fmt.Errorf("OAuth2 provider %s missing required endpoints", identifier)
+		}
+
+		// Create custom OAuth provider instance
+		p := provider.NewCustomOAuthProvider(
+			customProvider.ClientID,
+			clientSecret,
+			*customProvider.AuthorizationURL,
+			*customProvider.TokenURL,
+			*customProvider.UserinfoURL,
+			redirectURL,
+			scopeList,
+			customProvider.PKCEEnabled,
+			customProvider.AcceptableClientIDs,
+			customProvider.AttributeMapping,
+			customProvider.AuthorizationParams,
+		)
+
+		// Build provider configuration
+		pConfig = conf.OAuthProviderConfiguration{
+			Enabled:       true,
+			ClientID:      []string{customProvider.ClientID},
+			Secret:        clientSecret,
+			RedirectURI:   redirectURL,
+			URL:           *customProvider.AuthorizationURL,
+			EmailOptional: customProvider.EmailOptional,
+		}
+
+		return p, pConfig, nil
+	}
+
+	// OIDC provider
+	if customProvider.Issuer == nil {
+		return nil, pConfig, fmt.Errorf("OIDC provider %s missing issuer", identifier)
+	}
+
+	// Create custom OIDC provider instance
+	// oidc.NewProvider() will automatically fetch discovery document
+	p, err := provider.NewCustomOIDCProvider(
+		ctx,
+		customProvider.ClientID,
+		clientSecret,
+		redirectURL,
+		scopeList,
+		*customProvider.Issuer,
+		customProvider.PKCEEnabled,
+		customProvider.AcceptableClientIDs,
+		customProvider.AttributeMapping,
+		customProvider.AuthorizationParams,
+		a.oidcCache,
+	)
+	if err != nil {
+		return nil, pConfig, fmt.Errorf("error creating OIDC provider: %w", err)
+	}
+
+	// Build provider configuration
+	pConfig = conf.OAuthProviderConfiguration{
+		Enabled:       true,
+		ClientID:      []string{customProvider.ClientID},
+		Secret:        clientSecret,
+		RedirectURI:   redirectURL,
+		URL:           p.Config().Endpoint.AuthURL,
+		EmailOptional: customProvider.EmailOptional,
+	}
+
+	return p, pConfig, nil
 }
 
 func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
@@ -692,6 +804,8 @@ func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, 
 		if q.Get("error_code") != "" {
 			hq.Set("error_code", q.Get("error_code"))
 		}
+		// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
+		hq.Set("sb", "")
 		u.Fragment = hq.Encode()
 		http.Redirect(w, r, u.String(), http.StatusFound)
 	}

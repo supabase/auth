@@ -7,9 +7,69 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/sbff"
 )
 
-func TestGetIPAddress(t *tst.T) {
+func TestGetIPAddressWithSBFF(t *tst.T) {
+	testCases := []struct {
+		name       string
+		remoteAddr string
+		headerVal  string
+		expAddr    string
+	}{
+		{
+			name:       "ValidSBFF",
+			remoteAddr: "60.60.60.60",
+			headerVal:  "192.168.1.100",
+			expAddr:    "192.168.1.100",
+		},
+		{
+			name:       "MissingSBFF",
+			remoteAddr: "60.60.60.60",
+			headerVal:  "",
+			expAddr:    "60.60.60.60",
+		},
+		{
+			name:       "InvalidSBFF",
+			remoteAddr: "60.60.60.60",
+			headerVal:  "invalid",
+			expAddr:    "60.60.60.60",
+		},
+	}
+
+	config := conf.SecurityConfiguration{
+		SbForwardedForEnabled: true,
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *tst.T) {
+			var handler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
+				obsAddr := GetIPAddress(r)
+				require.Equal(t, tc.expAddr, obsAddr)
+			}
+
+			errCallback := func(r *http.Request, err error) {
+			}
+
+			middleware := sbff.Middleware(&config, errCallback)
+
+			wrappedHandler := middleware(handler)
+
+			r := httptest.NewRequest(http.MethodGet, "http://localhost/", nil)
+
+			r.RemoteAddr = tc.remoteAddr
+
+			if tc.headerVal != "" {
+				r.Header.Set(sbff.HeaderName, tc.headerVal)
+			}
+
+			wrappedHandler.ServeHTTP(nil, r)
+		})
+
+	}
+}
+
+func TestGetIPAddressWithXFF(t *tst.T) {
 	examples := []func(r *http.Request) string{
 		func(r *http.Request) string {
 			r.Header = nil

@@ -16,6 +16,7 @@ func (c ContextKey) String() string {
 // Context keys used across packages
 const (
 	UserKey              ContextKey = "user"
+	SessionKey           ContextKey = "session"
 	OAuthServerClientKey ContextKey = "oauth_server_client"
 )
 
@@ -34,6 +35,23 @@ func GetUser(ctx context.Context) *models.User {
 // WithUser adds the user to the context - shared implementation
 func WithUser(ctx context.Context, u *models.User) context.Context {
 	return context.WithValue(ctx, UserKey, u)
+}
+
+// GetSession reads the session from the context - shared implementation
+func GetSession(ctx context.Context) *models.Session {
+	if ctx == nil {
+		return nil
+	}
+	obj := ctx.Value(SessionKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*models.Session)
+}
+
+// WithSession adds the session to the context - shared implementation
+func WithSession(ctx context.Context, s *models.Session) context.Context {
+	return context.WithValue(ctx, SessionKey, s)
 }
 
 // WithOAuthServerClient adds an OAuth server client to the context

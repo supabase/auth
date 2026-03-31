@@ -390,7 +390,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 
 	if err != nil {
 		if errors.Is(err, bcrypt.ErrPasswordTooLong) {
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "%s", err.Error())
 		}
 		return apierrors.NewInternalServerError("Error creating user").WithInternalError(err)
 	}
@@ -579,7 +579,7 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	db := a.db.WithContext(ctx)
 
 	err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.DeleteFactorAction, r.RemoteAddr, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.DeleteFactorAction, utilities.GetIPAddress(r), map[string]interface{}{
 			"user_id":   user.ID,
 			"factor_id": factor.ID,
 		}); terr != nil {

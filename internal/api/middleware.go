@@ -20,13 +20,21 @@ import (
 	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/security"
+	"github.com/supabase/auth/internal/sbff"
 	"github.com/supabase/auth/internal/utilities"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
 	jwt "github.com/golang-jwt/jwt/v5"
 )
+
+type captchaRequest struct {
+	Security captchaSecurity `json:"gotrue_meta_security"`
+}
+
+type captchaSecurity struct {
+	Token string `json:"captcha_token"`
+}
 
 type FunctionHooks map[string][]string
 
@@ -61,22 +69,67 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 
 var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
-func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
-	if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
-		key := req.Header.Get(limitHeader)
+func (a *API) performRateLimitingWithHeader(lmt *limiter.Limiter, req *http.Request) error {
+	limitHeader := a.config.RateLimitHeader
 
-		if key == "" {
-			log := observability.GetLogEntry(req).Entry
-			log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
-		} else {
-			err := tollbooth.LimitByKeys(lmt, []string{key})
-			if err != nil {
-				return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
-			}
-		}
+	// If no rate limit header was set, ignore rate limiting
+	if limitHeader == "" {
+		return nil
+	}
+
+	valuesStr := req.Header.Get(limitHeader)
+
+	// If a rate limit header was set, but has no value, ignore rate limiting but warn with an error
+	if valuesStr == "" {
+		log := observability.GetLogEntry(req).Entry
+		log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
+
+		return nil
+	}
+
+	// According to RFC 7230 section 3.2.2, multiple headers with the same name are equivalent
+	// to a single header with that name where each value is separated by a comma and whitespace.
+	//
+	// Note that there is some ambiguity in RFC 7230 where section 3.2.4 states that
+	// header field values (which can contain commas) are processed independently of the header
+	// field name, and thus it is not always clear if a comma is a list delimiter or simply par
+	// of a single value.
+	//
+	// Given that this function is primarily for use with headers like X-Forwarded-For which
+	// vendors generally combine into comma-separated lists, we opt for the simpler approach
+	// here and split the header value by commas before taking the first value.
+	values := strings.SplitN(valuesStr, ",", 2)
+
+	// We will always get at least one value back, so this operation is safe
+	key := strings.TrimSpace(values[0])
+
+	// If the rate limit header has at least one value, but the first value is all whitespace, return a warning.
+	// This will happen if the header is something like "X-Foo-Bar: ,baz".
+	if key == "" {
+		log := observability.GetLogEntry(req).Entry
+		log.WithField("header", limitHeader).Warn("first rate limit header value is empty, rate limiting is not applied")
+
+		return nil
+	}
+
+	// Otherwise, apply rate limiting based on the first rate limit header value
+	if err := tollbooth.LimitByKeys(lmt, []string{key}); err != nil {
+		return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
 	}
 
 	return nil
+}
+
+func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
+	if sbffAddr, ok := sbff.GetIPAddress(req); ok {
+		if err := tollbooth.LimitByKeys(lmt, []string{sbffAddr}); err != nil {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
+		}
+
+		return nil
+	}
+
+	return a.performRateLimitingWithHeader(lmt, req)
 }
 
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
@@ -90,18 +143,18 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 
-	clientID, clientSecret, err := oauthserver.ExtractClientCredentials(r)
+	creds, err := oauthserver.ExtractClientCredentials(r)
 	if err != nil {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials: "+err.Error())
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials: %s", err.Error())
 	}
 
 	// If no client credentials provided, continue without client authentication
-	if clientID == "" {
+	if creds.ClientID == "" {
 		return ctx, nil
 	}
 
 	// Parse client_id as UUID
-	clientUUID, err := uuid.FromString(clientID)
+	clientUUID, err := uuid.FromString(creds.ClientID)
 	if err != nil {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client_id format")
 	}
@@ -116,9 +169,14 @@ func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (co
 		return nil, apierrors.NewInternalServerError("Error validating client credentials").WithInternalError(err)
 	}
 
-	// Validate authentication using centralized logic
-	if err := oauthserver.ValidateClientAuthentication(client, clientSecret); err != nil {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, err.Error())
+	// Validate that the auth method used matches the client's registered method
+	if err := oauthserver.ValidateClientAuthMethod(client, creds.AuthMethod); err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "%s", err.Error())
+	}
+
+	// Validate authentication using centralized logic (secret verification)
+	if err := oauthserver.ValidateClientAuthentication(client, creds.ClientSecret); err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "%s", err.Error())
 	}
 
 	// Add authenticated client to context
@@ -166,12 +224,21 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 		return ctx, nil
 	}
 
-	body := &security.GotrueRequest{}
+	body := &captchaRequest{}
 	if err := retrieveRequestParams(req, body); err != nil {
 		return nil, err
 	}
 
-	verificationResult, err := security.VerifyRequest(body, utilities.GetIPAddress(req), strings.TrimSpace(config.Security.Captcha.Secret), config.Security.Captcha.Provider)
+	token := strings.TrimSpace(body.Security.Token)
+	if token == "" {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeCaptchaFailed, "captcha protection: request disallowed (no captcha_token found)")
+	}
+
+	verificationResult, err := a.captchaVerifier.Verify(
+		ctx,
+		token,
+		utilities.GetIPAddress(req),
+	)
 	if err != nil {
 		return nil, apierrors.NewInternalServerError("captcha verification process failed").WithInternalError(err)
 	}
@@ -304,6 +371,14 @@ func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Reque
 	return ctx, nil
 }
 
+func (a *API) requirePasskeyEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.Passkey.Enabled {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodePasskeyDisabled, "Passkeys are disabled")
+	}
+	return ctx, nil
+}
+
 func (a *API) databaseCleanup(cleanup models.Cleaner) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -400,6 +475,19 @@ func (t *timeoutResponseWriter) finallyWrite(w http.ResponseWriter) {
 	w.WriteHeader(t.statusCode)
 	if _, err := w.Write(t.buf.Bytes()); err != nil {
 		logrus.WithError(err).Warn("Write failed")
+	}
+}
+
+// limitRequestBody wraps the request body with http.MaxBytesReader to prevent
+// memory exhaustion from excessively large request bodies (gosec G120).
+func limitRequestBody(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil && r.Body != http.NoBody {
+				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 

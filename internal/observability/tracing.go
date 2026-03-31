@@ -79,7 +79,7 @@ func enableOpenTelemetryTracing(ctx context.Context, tc *conf.TracingConfig) err
 	)
 
 	cleanupWaitGroup.Add(1)
-	go func() {
+	go func() { // #nosec G118 -- Cleanup goroutine intentionally outlives the request; context.Background() is required for shutdown after parent context is cancelled.
 		defer cleanupWaitGroup.Done()
 
 		<-ctx.Done()

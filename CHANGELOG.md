@@ -1,5 +1,126 @@
 # Changelog
 
+## [2.188.1](https://github.com/supabase/auth/compare/v2.188.0...v2.188.1) (2026-03-19)
+
+
+### Bug Fixes
+
+* remove make all from release workflow ([#2433](https://github.com/supabase/auth/issues/2433)) ([036e723](https://github.com/supabase/auth/commit/036e7239fe3666cc192f77712b7648c3369bf0f8))
+
+## [2.188.0](https://github.com/supabase/auth/compare/v2.187.0...v2.188.0) (2026-03-17)
+
+
+### Features
+
+* cache OIDC discovery documents for providers ([#2389](https://github.com/supabase/auth/issues/2389)) ([40d07b5](https://github.com/supabase/auth/commit/40d07b5f50ec4dce5c5a27e405097bc90c027000))
+* enable custom providers by default ([#2427](https://github.com/supabase/auth/issues/2427)) ([291cdad](https://github.com/supabase/auth/commit/291cdad62dd3209589324d8ce78021fe649a3521))
+* modernize IsNotFoundError handler to support errors.Is ([#2392](https://github.com/supabase/auth/issues/2392)) ([ab7c9f9](https://github.com/supabase/auth/commit/ab7c9f98a7fd98f0ff29d1f97784fc9e4dbfc87c))
+* **oauth-server:** allow updating `token_endpoint_auth_method` for OAuth clients ([#2391](https://github.com/supabase/auth/issues/2391)) ([1280dc1](https://github.com/supabase/auth/commit/1280dc1ad75fce6e69bfa15c262c4b637c0720b5))
+* **passkeys:** add admin endpoints to list and delete passkeys ([f109550](https://github.com/supabase/auth/commit/f109550fdc9a3fb227534a067e4c9b999728fdef))
+* **passkeys:** add audit, metering, webauthn primitives ([039b569](https://github.com/supabase/auth/commit/039b569cd2cb1541d9b7d1b93bfb7b4d8996e820))
+* **passkeys:** add configuration, error codes, and schemas ([0a5eb95](https://github.com/supabase/auth/commit/0a5eb957407f007099608a032e540401fc186d0f))
+* **passkeys:** add discoverable credential auth flow ([#2411](https://github.com/supabase/auth/issues/2411)) ([1bc68ea](https://github.com/supabase/auth/commit/1bc68ea59c0ac7d4f7d61b2d1888054f32459a44))
+* **passkeys:** add management endpoints ([#2413](https://github.com/supabase/auth/issues/2413)) ([5b3218e](https://github.com/supabase/auth/commit/5b3218e0993dc35df44ee7c52af67d13d6c4717e))
+* **passkeys:** add rate limiter on the `/options` endpoint for authentication ([#2422](https://github.com/supabase/auth/issues/2422)) ([30b3aeb](https://github.com/supabase/auth/commit/30b3aeb464e6728a9d95af783d8eccfce1448d0c))
+* **passkeys:** derive friendly name from AAGUID ([#2415](https://github.com/supabase/auth/issues/2415)) ([e00ff1a](https://github.com/supabase/auth/commit/e00ff1a4a644b03bc6fef86bfc93cc1356828d1e))
+* **passkeys:** progressive enrollment flow ([61ae2aa](https://github.com/supabase/auth/commit/61ae2aa17bdf9f234d61a631d71467cbf1d12f4e))
+
+
+### Bug Fixes
+
+* add MaxBytesReader middleware to limit request body size to 1MB ([#2402](https://github.com/supabase/auth/issues/2402)) ([6f0b2eb](https://github.com/supabase/auth/commit/6f0b2ebc8c7bb96735cb6432923b3618ffb81a5c))
+* bump Go to v1.25.8 ([#2412](https://github.com/supabase/auth/issues/2412)) ([a2e357f](https://github.com/supabase/auth/commit/a2e357f878805b9227002294e6d878279949b4b1))
+* **passkeys:** construct configuration env var correctly ([dba676e](https://github.com/supabase/auth/commit/dba676ef9c1087e509006c01893d9f8d9d3bbb37))
+* **passkeys:** enforce passkey cap during registration verify ([9868df6](https://github.com/supabase/auth/commit/9868df617af0cccd9f88ba71600058eeb31024ea))
+* **passkeys:** return 204 when deleting a passkey ([7d90fb8](https://github.com/supabase/auth/commit/7d90fb8f983560d6a3469725980ab999e5ed2cc1))
+* **passkeys:** sign_count should be uint32 ([e509e3a](https://github.com/supabase/auth/commit/e509e3a80e075ccb92f738000bb592f475487a3c))
+
+## [2.187.0](https://github.com/supabase/auth/compare/v2.186.0...v2.187.0) (2026-02-23)
+
+
+### Features
+
+* add metadata field to all hooks ([#2365](https://github.com/supabase/auth/issues/2365)) ([c675749](https://github.com/supabase/auth/commit/c67574946d1e11c7986d2c868336df0cefbe3452))
+* check current password on change ([#2364](https://github.com/supabase/auth/issues/2364)) ([33b87ae](https://github.com/supabase/auth/commit/33b87ae0671aba2e9b4df0ef1d5d1e7906c32129))
+* **indexworker:** add max users threshold for rollout ([#2374](https://github.com/supabase/auth/issues/2374)) ([a2066c6](https://github.com/supabase/auth/commit/a2066c6a340fd3ebcaa0a816ab06ee3d6b1afad7))
+* **metrics:** added a gauge with version information ([#2375](https://github.com/supabase/auth/issues/2375)) ([911ad0b](https://github.com/supabase/auth/commit/911ad0bae0b65b878acd05208e733f480c76b22f))
+* support custom oauth & oidc providers ([#2357](https://github.com/supabase/auth/issues/2357)) ([53021f6](https://github.com/supabase/auth/commit/53021f66597439c14ebb869e567ab4742afd0142))
+
+
+### Bug Fixes
+
+* case-insensitive Bearer token scheme matching ([#2387](https://github.com/supabase/auth/issues/2387)) ([36d712d](https://github.com/supabase/auth/commit/36d712d27f66721adf58a93ffb9e43d5cc915eca))
+* correctly parse JWT ValidMethods from env by enabling split_words ([#2334](https://github.com/supabase/auth/issues/2334)) ([a6076bc](https://github.com/supabase/auth/commit/a6076bc39f63cfca94e2330957031d4f63a4b68e))
+* flaky index worker test ([#2366](https://github.com/supabase/auth/issues/2366)) ([961a7e6](https://github.com/supabase/auth/commit/961a7e620109d554ae81ca8227a5107671679982))
+* **hooks:** propagate error objects from hook calls ([#2380](https://github.com/supabase/auth/issues/2380)) ([3ca1e88](https://github.com/supabase/auth/commit/3ca1e88df06e7096c8ebb3e1bedf291654f4c66e))
+* session upgrade percentage should be based on session, not request ([#2371](https://github.com/supabase/auth/issues/2371)) ([510e68b](https://github.com/supabase/auth/commit/510e68b803ba9110df969c7548ccad85c84f0eb6))
+
+## [2.186.0](https://github.com/supabase/auth/compare/v2.185.0...v2.186.0) (2026-01-28)
+
+
+### Features
+
+* Add email send operation metrics ([#2311](https://github.com/supabase/auth/issues/2311)) ([0096575](https://github.com/supabase/auth/commit/00965758762301875df2d7e4e552b2346bc09236))
+* add Supabase Auth identifier to OAuth redirect URLs ([#2299](https://github.com/supabase/auth/issues/2299)) ([2d3dbc6](https://github.com/supabase/auth/commit/2d3dbc652c1beb47c2eade28b45e94f6e2c56982))
+* log sb-auth-user-id, sb-auth-session-id, ... on sign in not just refresh token ([#2342](https://github.com/supabase/auth/issues/2342)) ([a486ada](https://github.com/supabase/auth/commit/a486ada3683bb078b8f396a5ba2e606826f0044b))
+* **oauth-server:** store and enforce token_endpoint_auth_method ([#2300](https://github.com/supabase/auth/issues/2300)) ([bcd6cd5](https://github.com/supabase/auth/commit/bcd6cd590a47e963b7afe615c889f62d28cb94a2))
+* replace JWT OAuth state with `flow_state.id` UUID ([#2331](https://github.com/supabase/auth/issues/2331)) ([645654d](https://github.com/supabase/auth/commit/645654df63a3da7929840659c065f6a9cdd4ba96))
+* upgrade existing sessions to v2 refresh tokens though config value ([#2356](https://github.com/supabase/auth/issues/2356)) ([6fb0e8a](https://github.com/supabase/auth/commit/6fb0e8adc104e3b9119b79506997e29bbb2ca9a2))
+
+
+### Bug Fixes
+
+* reloader unittest races on writeWg ([#2352](https://github.com/supabase/auth/issues/2352)) ([088b714](https://github.com/supabase/auth/commit/088b7149d6857cfe65e4338c1ee9e079688f8c92))
+* update migration version ([#2343](https://github.com/supabase/auth/issues/2343)) ([61ef4db](https://github.com/supabase/auth/commit/61ef4dbb5146c4379d495c2fb77c7ade753d1f3b))
+
+## [2.185.0](https://github.com/supabase/auth/compare/v2.184.0...v2.185.0) (2026-01-12)
+
+
+### Features
+
+* Add Sb-Forwarded-For header and IP-based rate limiting ([#2295](https://github.com/supabase/auth/issues/2295)) ([e8f679b](https://github.com/supabase/auth/commit/e8f679b9e8fcd8cb543ed43cd9cd6a73bbbf4fa7))
+* allow amr claim to be array of strings or objects ([#2274](https://github.com/supabase/auth/issues/2274)) ([607da43](https://github.com/supabase/auth/commit/607da43b697b0af1de0da5f966f5b63ff033fefb))
+* reset main branch to 2.185.0 ([#2325](https://github.com/supabase/auth/issues/2325)) ([b9d0500](https://github.com/supabase/auth/commit/b9d050029ce90efc083f08a1e8df629faf20e8cd))
+* Treat rate limit header value as comma-separated list ([#2282](https://github.com/supabase/auth/issues/2282)) ([5f2e279](https://github.com/supabase/auth/commit/5f2e2792560d57dd14fbf3e69c133a7ec8518c4d))
+
+
+### Bug Fixes
+
+* additional provider and issuer checks ([#2326](https://github.com/supabase/auth/issues/2326)) ([cb79a74](https://github.com/supabase/auth/commit/cb79a7414e8b2bff30113bdf2b9ec6d6e93c1146))
+* check each type independently ([#2290](https://github.com/supabase/auth/issues/2290)) ([d9de0af](https://github.com/supabase/auth/commit/d9de0af3a173ae3e9ab0219c07652675f8be1761))
+* fix the wrong error return value ([#1950](https://github.com/supabase/auth/issues/1950)) ([e2dfb5d](https://github.com/supabase/auth/commit/e2dfb5d4222e5edc569b54d057db9ed4375a19d8))
+* **indexworker:** remove pg_trgm extension ([#2301](https://github.com/supabase/auth/issues/2301)) ([c553b10](https://github.com/supabase/auth/commit/c553b10e5f3b7a8c430b20babe0e7c96178b1c91))
+* **oauth-server:** allow custom URI schemes in client redirect URIs ([#2298](https://github.com/supabase/auth/issues/2298)) ([ea72f57](https://github.com/supabase/auth/commit/ea72f57f99633b33cc7b30b4a0b74ed8314b71e6))
+* tighten email validation rules ([#2304](https://github.com/supabase/auth/issues/2304)) ([33bb372](https://github.com/supabase/auth/commit/33bb37203ae54c7ddecb6373122fae4b4fd38682))
+
+## [2.184.0](https://github.com/supabase/auth/compare/v2.183.0...v2.184.0) (2025-12-08)
+
+
+### Features
+
+* increment refresh token counter by 2 for mfa verify ([#2284](https://github.com/supabase/auth/issues/2284)) ([2a38668](https://github.com/supabase/auth/commit/2a3866854fe7cb58a6cb84e7a82ce5d07bb920ee))
+* load template cache at startup for fault tolerance ([#2261](https://github.com/supabase/auth/issues/2261)) ([511c3a4](https://github.com/supabase/auth/commit/511c3a4e12819d313840cd5342ae6a76d4708cfc))
+* **oauth:** add support for X/Twitter v2 provider ([#2275](https://github.com/supabase/auth/issues/2275)) ([7f36eb0](https://github.com/supabase/auth/commit/7f36eb053286038d01ba1650dd48a15508550ce0))
+
+## [2.183.0](https://github.com/supabase/auth/compare/v2.182.1...v2.183.0) (2025-11-20)
+
+
+### Features
+
+* async, concurrent index creation for users table ([#2239](https://github.com/supabase/auth/issues/2239)) ([a1146bf](https://github.com/supabase/auth/commit/a1146bf7eecb35e237350dda7ae62328cbb5acfe))
+* **indexworker:** use `auth_trgm` extension if available ([#2263](https://github.com/supabase/auth/issues/2263)) ([05daa43](https://github.com/supabase/auth/commit/05daa437131bd220e01a0e33df75f4b9afa72bb6))
+* **oauthserver:** add OpenID Connect support ([#2250](https://github.com/supabase/auth/issues/2250)) ([162788f](https://github.com/supabase/auth/commit/162788ff960c060318324f11f673c09c0da41d5e))
+* **oauthserver:** update oauth grant list & authorization details response structure ([#2247](https://github.com/supabase/auth/issues/2247)) ([137ea92](https://github.com/supabase/auth/commit/137ea92c00a0c1a7654fb8bcf0c1b5313901349f))
+* **oauthserver:** use `NewOAuthServerAuthorizationParams` & configurable ttl for authorization ([#2254](https://github.com/supabase/auth/issues/2254)) ([61632f8](https://github.com/supabase/auth/commit/61632f8c0401b6c816ea7427d351ec623ce5258f))
+
+
+### Bug Fixes
+
+* **indexworker:** detect which schema `pg_trgm` exists in ([#2260](https://github.com/supabase/auth/issues/2260)) ([4be12b3](https://github.com/supabase/auth/commit/4be12b3e7c0a30b1e289ab81348548f72ab32ba5))
+* look for refresh token on mfa verification only in v1 ([#2249](https://github.com/supabase/auth/issues/2249)) ([2906b24](https://github.com/supabase/auth/commit/2906b2424d0aa804031e66cf92f008289b8a9c77))
+* mfa verify now works with refresh token algorithm v2 ([#2246](https://github.com/supabase/auth/issues/2246)) ([4e8275f](https://github.com/supabase/auth/commit/4e8275f915c4d84186d17b41c86a9277055a55e4))
+* **social-auth:** default to current_user:read for Figma provider ([#2195](https://github.com/supabase/auth/issues/2195)) ([f409d11](https://github.com/supabase/auth/commit/f409d118ebb958c12f2395c0bf4fb9590ab6c0af))
+
 ## [2.182.1](https://github.com/supabase/auth/compare/v2.182.0...v2.182.1) (2025-11-05)
 
 

@@ -19,28 +19,29 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/sbff"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/storage"
 )
 
-const (
-	HCaptchaSecret         string = "0x0000000000000000000000000000000000000000"
-	CaptchaResponse        string = "10000000-aaaa-bbbb-cccc-000000000001"
-	TurnstileCaptchaSecret string = "1x0000000000000000000000000000000AA"
-)
+const captchaResponse string = "10000000-aaaa-bbbb-cccc-000000000001"
 
 type MiddlewareTestSuite struct {
 	suite.Suite
-	API    *API
-	Config *conf.GlobalConfiguration
+	API             *API
+	Config          *conf.GlobalConfiguration
+	CaptchaVerifier *MockCaptchaVerifier
 }
 
 func TestMiddlewareFunctions(t *testing.T) {
-	api, config, err := setupAPIForTest()
+	mockCaptcha := &MockCaptchaVerifier{}
+	api, config, err := setupAPIForTest(WithCaptchaVerifier(mockCaptcha))
 	require.NoError(t, err)
 
 	ts := &MiddlewareTestSuite{
-		API:    api,
-		Config: config,
+		API:             api,
+		Config:          config,
+		CaptchaVerifier: mockCaptcha,
 	}
 	defer api.db.Close()
 
@@ -49,6 +50,12 @@ func TestMiddlewareFunctions(t *testing.T) {
 
 func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	ts.Config.Security.Captcha.Enabled = true
+	ts.Config.Security.Captcha.Provider = "hcaptcha"
+	ts.Config.Security.Captcha.Secret = "test-secret"
+
+	// Configure mock to return success
+	ts.CaptchaVerifier.Result = &security.VerificationResponse{Success: true}
+	ts.CaptchaVerifier.Err = nil
 
 	adminClaims := &AccessTokenClaims{
 		Role: "supabase_admin",
@@ -56,43 +63,28 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	adminJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, adminClaims).SignedString([]byte(ts.Config.JWT.Secret))
 	require.NoError(ts.T(), err)
 	cases := []struct {
-		desc             string
-		adminJwt         string
-		captcha_token    string
-		captcha_provider string
+		desc          string
+		adminJwt      string
+		captcha_token string
+		expectVerify  bool
 	}{
 		{
 			"Valid captcha response",
 			"",
-			CaptchaResponse,
-			"hcaptcha",
-		},
-		{
-			"Valid captcha response",
-			"",
-			CaptchaResponse,
-			"turnstile",
+			captchaResponse,
+			true,
 		},
 		{
 			"Ignore captcha if admin role is present",
 			adminJwt,
 			"",
-			"hcaptcha",
-		},
-		{
-			"Ignore captcha if admin role is present",
-			adminJwt,
-			"",
-			"turnstile",
+			false,
 		},
 	}
 	for _, c := range cases {
-		ts.Config.Security.Captcha.Provider = c.captcha_provider
-		if c.captcha_provider == "turnstile" {
-			ts.Config.Security.Captcha.Secret = TurnstileCaptchaSecret
-		} else if c.captcha_provider == "hcaptcha" {
-			ts.Config.Security.Captcha.Secret = HCaptchaSecret
-		}
+		// Reset mock state between cases
+		ts.CaptchaVerifier.LastToken = ""
+		ts.CaptchaVerifier.LastClientIP = ""
 
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -116,6 +108,12 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 		afterCtx, err := ts.API.verifyCaptcha(w, req)
 		require.NoError(ts.T(), err)
 
+		if c.expectVerify {
+			require.Equal(ts.T(), c.captcha_token, ts.CaptchaVerifier.LastToken)
+		} else {
+			require.Empty(ts.T(), ts.CaptchaVerifier.LastToken)
+		}
+
 		body, err := io.ReadAll(req.Body)
 		require.NoError(ts.T(), err)
 
@@ -137,40 +135,41 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 	cases := []struct {
 		desc         string
-		captchaConf  *conf.CaptchaConfiguration
+		errorCodes   []string
 		expectedCode int
 		expectedMsg  string
 	}{
 		{
 			"Captcha validation failed",
-			&conf.CaptchaConfiguration{
-				Enabled:  true,
-				Provider: "hcaptcha",
-				Secret:   "test",
-			},
+			[]string{"not-using-dummy-secret"},
 			http.StatusBadRequest,
 			"captcha protection: request disallowed (not-using-dummy-secret)",
 		},
 		{
 			"Captcha validation failed",
-			&conf.CaptchaConfiguration{
-				Enabled:  true,
-				Provider: "turnstile",
-				Secret:   "anothertest",
-			},
+			[]string{"invalid-input-secret"},
 			http.StatusBadRequest,
 			"captcha protection: request disallowed (invalid-input-secret)",
 		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			ts.Config.Security.Captcha = *c.captchaConf
+			ts.Config.Security.Captcha.Enabled = true
+			ts.Config.Security.Captcha.Provider = "hcaptcha"
+			ts.Config.Security.Captcha.Secret = "test-secret"
+
+			ts.CaptchaVerifier.Result = &security.VerificationResponse{
+				Success:    false,
+				ErrorCodes: c.errorCodes,
+			}
+			ts.CaptchaVerifier.Err = nil
+
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 				"email":    "test@example.com",
 				"password": "secret",
 				"gotrue_meta_security": map[string]interface{}{
-					"captcha_token": CaptchaResponse,
+					"captcha_token": captchaResponse,
 				},
 			}))
 			req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
@@ -415,6 +414,267 @@ func TestTimeoutResponseWriter(t *testing.T) {
 	require.Equal(t, w1.Result(), w2.Result())
 }
 
+func (ts *MiddlewareTestSuite) TestPerformRateLimitingWithSBFF() {
+	origRateLimitHeader := ts.Config.RateLimitHeader
+	origSBFFEnabled := ts.Config.Security.SbForwardedForEnabled
+
+	defer func() {
+		ts.Config.RateLimitHeader = origRateLimitHeader
+		ts.Config.Security.SbForwardedForEnabled = origSBFFEnabled
+	}()
+
+	ts.Config.RateLimitHeader = "X-Test-Perform-Rate-Limiting"
+	ts.Config.Security.SbForwardedForEnabled = true
+
+	type headerSet struct {
+		rateLimiting   string
+		sbForwardedFor string
+	}
+
+	testCases := []struct {
+		name         string
+		headerValues []headerSet
+		expErr       error
+	}{
+		{
+			name: "multiple SBFF values, single rate limiting value",
+			headerValues: []headerSet{
+				{
+					sbForwardedFor: "192.168.1.100",
+					rateLimiting:   "60.60.60.60",
+				},
+				{
+					sbForwardedFor: "192.168.1.200",
+					rateLimiting:   "60.60.60.60",
+				},
+			},
+			expErr: nil,
+		},
+		{
+			name: "single SBFF value, multiple rate limiting values",
+			headerValues: []headerSet{
+				{
+					sbForwardedFor: "192.168.1.100",
+					rateLimiting:   "60.60.60.60",
+				},
+				{
+					sbForwardedFor: "192.168.1.100",
+					rateLimiting:   "70.70.70.70",
+				},
+			},
+			expErr: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "no SBFF value, multiple rate limiting values",
+			headerValues: []headerSet{
+				{
+					sbForwardedFor: "",
+					rateLimiting:   "60.60.60.60",
+				},
+				{
+					sbForwardedFor: "",
+					rateLimiting:   "70.70.70.70",
+				},
+			},
+			expErr: nil,
+		},
+		{
+			name: "no SBFF value, single rate limiting value",
+			headerValues: []headerSet{
+				{
+					sbForwardedFor: "",
+					rateLimiting:   "60.60.60.60",
+				},
+				{
+					sbForwardedFor: "",
+					rateLimiting:   "60.60.60.60",
+				},
+			},
+			expErr: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "invalid SBFF value, multiple rate limiting values",
+			headerValues: []headerSet{
+				{
+					sbForwardedFor: "invalid",
+					rateLimiting:   "60.60.60.60",
+				},
+				{
+					sbForwardedFor: "invalid",
+					rateLimiting:   "70.70.70.70",
+				},
+			},
+			expErr: nil,
+		},
+		{
+			name: "invalid SBFF value, single rate limiting value",
+			headerValues: []headerSet{
+				{
+					sbForwardedFor: "invalid",
+					rateLimiting:   "60.60.60.60",
+				},
+				{
+					sbForwardedFor: "invalid",
+					rateLimiting:   "60.60.60.60",
+				},
+			},
+			expErr: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+	}
+
+	// This test uses the SBFF middleware to inject the Sb-Forwarded-For IP address value, then
+	// wraps a handler that calls performRateLimiting and stores the error value.
+	for _, tc := range testCases {
+		lmt := tollbooth.NewLimiter(
+			1,
+			&limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			},
+		)
+
+		var obsErr error
+
+		var handler http.HandlerFunc = func(rw http.ResponseWriter, r *http.Request) {
+			obsErr = ts.API.performRateLimiting(lmt, r)
+		}
+
+		errCallback := func(r *http.Request, err error) {
+		}
+
+		middleware := sbff.Middleware(&ts.Config.Security, errCallback)
+
+		wrappedHandler := middleware(handler)
+
+		for _, h := range tc.headerValues {
+			r := httptest.NewRequest(http.MethodGet, "http://localhost/", nil)
+
+			if h.rateLimiting != "" {
+				r.Header.Set(ts.Config.RateLimitHeader, h.rateLimiting)
+			}
+
+			if h.sbForwardedFor != "" {
+				r.Header.Set(sbff.HeaderName, h.sbForwardedFor)
+			}
+
+			wrappedHandler.ServeHTTP(nil, r)
+		}
+
+		require.ErrorIs(ts.T(), obsErr, tc.expErr)
+	}
+
+}
+
+func (ts *MiddlewareTestSuite) TestPerformRateLimitingWithHeader() {
+	ts.Config.RateLimitHeader = "X-Test-Perform-Rate-Limiting"
+
+	tests := []struct {
+		name         string
+		headerValues []string
+		expError     error
+	}{
+		{
+			name: "no value",
+			headerValues: []string{
+				"",
+				"",
+			},
+			expError: nil,
+		},
+		{
+			name: "single end user value",
+			headerValues: []string{
+				"192.168.1.100",
+				"192.168.1.100",
+			},
+			expError: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "same end user value, multiple proxies",
+			headerValues: []string{
+				"2600:cafe:beef::1,192.168.1.100",
+				"2600:cafe:beef::1,192.168.1.200",
+			},
+			expError: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "multiple end user values, single proxy",
+			headerValues: []string{
+				"2600:cafe:beef::1,192.168.1.100",
+				"3700:dead:abcd::2,192.168.1.100",
+			},
+			expError: nil,
+		},
+		{
+			name: "same end user value, multiple proxies, with whitespace",
+			headerValues: []string{
+				"2600:cafe:beef::1     ,192.168.1.100",
+				"2600:cafe:beef::1 ,     192.168.1.200",
+			},
+			expError: apierrors.NewTooManyRequestsError(
+				apierrors.ErrorCodeOverRequestRateLimit,
+				"Request rate limit reached",
+			),
+		},
+		{
+			name: "empty header, all whitespace",
+			headerValues: []string{
+				" ",
+			},
+			expError: nil,
+		},
+		{
+			name: "empty first key, no whitespace",
+			headerValues: []string{
+				",192.168.1.100",
+			},
+			expError: nil,
+		},
+		{
+			name: "empty first key, with whitespace",
+			headerValues: []string{
+				"     ,192.168.1.100",
+			},
+			expError: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		// Trigger a rate limiting error if we see the same end-user key twice in the same
+		// test case
+		lmt := tollbooth.NewLimiter(
+			1,
+			&limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			},
+		)
+
+		var obsError error
+
+		for _, h := range tt.headerValues {
+			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+			req.Header.Add(ts.Config.RateLimitHeader, h)
+			obsError = ts.API.performRateLimiting(lmt, req)
+		}
+
+		require.ErrorIs(ts.T(), obsError, tt.expError, "error for test '%s'", tt.name)
+	}
+}
+
 func (ts *MiddlewareTestSuite) TestLimitHandler() {
 	ts.Config.RateLimitHeader = "X-Rate-Limit"
 	lmt := tollbooth.NewLimiter(5, &limiter.ExpirableOptions{
@@ -445,6 +705,62 @@ func (ts *MiddlewareTestSuite) TestLimitHandler() {
 	w := httptest.NewRecorder()
 	ts.API.limitHandler(lmt).handler(okHandler).ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
+}
+
+func (ts *MiddlewareTestSuite) TestLimitRequestBodyMiddleware() {
+	const maxBytes = 1 << 10 // 1KB for testing
+
+	bodyReadHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
+	handler := limitRequestBody(maxBytes)(bodyReadHandler)
+
+	ts.Run("allows request within limit", func() {
+		body := bytes.NewReader(make([]byte, maxBytes-1))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost", body)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+		require.Equal(ts.T(), "ok", w.Body.String())
+	})
+
+	ts.Run("rejects request exceeding limit", func() {
+		body := bytes.NewReader(make([]byte, maxBytes+1))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost", body)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusRequestEntityTooLarge, w.Code)
+	})
+
+	ts.Run("allows nil body", func() {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
+
+	ts.Run("allows empty body", func() {
+		req := httptest.NewRequest(http.MethodPost, "http://localhost", http.NoBody)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
+
+	ts.Run("allows request at exact limit", func() {
+		body := bytes.NewReader(make([]byte, maxBytes))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost", body)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
 }
 
 type MockCleanup struct {

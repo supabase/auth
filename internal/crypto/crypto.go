@@ -20,8 +20,20 @@ import (
 
 // GenerateOtp generates a random n digit otp
 func GenerateOtp(digits int) string {
+	return generateOtp(rand.Reader, digits)
+}
+
+func generateOtp(r io.Reader, digits int) string {
+	// TODO(cstockton): Change the code to be below and propagate errors so we
+	// can have non-panicing bounds checks. This is just a defensive change so
+	// if someone changes OTP length in the future we don't end up with an
+	// overflowed float64 / panic.
+	//
+	// 	upper := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(digits)), nil)
+	// 	val := must(rand.Int(r, upper))
+	//
 	upper := math.Pow10(digits)
-	val := must(rand.Int(rand.Reader, big.NewInt(int64(upper))))
+	val := must(rand.Int(r, big.NewInt(int64(upper))))
 
 	// adds a variable zero-padding to the left to ensure otp is uniformly random
 	expr := "%0" + strconv.Itoa(digits) + "v"
@@ -48,7 +60,9 @@ type EncryptedString struct {
 }
 
 func (es *EncryptedString) IsValid() bool {
-	return es.KeyID != "" && len(es.Data) > 0 && len(es.Nonce) > 0 && es.Algorithm == "aes-gcm-hkdf"
+	// cipher.NewGCM() is always used, which panics on a Nonce that is not 12 bytes
+	// enforce that the nonce length and other values are correct
+	return es.KeyID != "" && len(es.Data) > 0 && len(es.Nonce) == 12 && es.Algorithm == "aes-gcm-hkdf"
 }
 
 // ShouldReEncrypt tells you if the value encrypted needs to be encrypted again with a newer key.

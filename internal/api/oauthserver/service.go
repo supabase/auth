@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -164,13 +165,20 @@ func (p *OAuthServerClientRegisterParams) validate() error {
 
 	// Validate consistency between client_type and token_endpoint_auth_method
 	if err := ValidateClientTypeConsistency(p.ClientType, p.TokenEndpointAuthMethod); err != nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "%s", err.Error())
 	}
 
 	return nil
 }
 
-// validateRedirectURI validates OAuth 2.1 redirect URIs
+// validateRedirectURI validates OAuth 2.1 redirect URIs as specific in
+//
+// * https://tools.ietf.org/html/rfc6749#section-3.1.2
+//   - The redirection endpoint URI MUST be an absolute URI as defined by [RFC3986] Section 4.3.
+//   - The endpoint URI MUST NOT include a fragment component.
+//   - https://tools.ietf.org/html/rfc3986#section-4.3
+//     absolute-URI  = scheme ":" hier-part [ "?" query ]
+//   - https://tools.ietf.org/html/rfc6819#section-5.1.1
 func validateRedirectURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("redirect URI cannot be empty")
@@ -186,16 +194,23 @@ func validateRedirectURI(uri string) error {
 		return fmt.Errorf("must have scheme and host")
 	}
 
-	// Check scheme requirements
+	// Block dangerous URI schemes that can lead to XSS or token leakage
+	dangerousSchemes := []string{"javascript", "data", "file", "vbscript", "about", "blob"}
+	for _, dangerous := range dangerousSchemes {
+		if strings.EqualFold(parsedURL.Scheme, dangerous) {
+			return fmt.Errorf("scheme '%s' is not allowed for security reasons", parsedURL.Scheme)
+		}
+	}
+
+	// Only restrict HTTP (not HTTPS or custom schemes)
+	// HTTP is only allowed for localhost/loopback addresses
 	if parsedURL.Scheme == "http" {
-		// HTTP only allowed for localhost
 		host := parsedURL.Hostname()
-		if host != "localhost" && host != "127.0.0.1" {
+		if host != "localhost" && host != "127.0.0.1" && host != "::1" {
 			return fmt.Errorf("HTTP scheme only allowed for localhost")
 		}
-	} else if parsedURL.Scheme != "https" {
-		return fmt.Errorf("scheme must be HTTPS or HTTP (localhost only)")
 	}
+	// All other schemes (https, custom schemes like myapp://* etc.) are allowed
 
 	// Must not have fragment
 	if parsedURL.Fragment != "" {
@@ -248,15 +263,29 @@ func (s *Server) registerOAuthServerClient(ctx context.Context, params *OAuthSer
 	// Determine client type using centralized logic
 	clientType := DetermineClientType(params.ClientType, params.TokenEndpointAuthMethod)
 
+	// Determine token_endpoint_auth_method
+	// If explicitly provided, use it; otherwise set default based on client type
+	// Per RFC 7591: "If unspecified or omitted, the default is 'client_secret_basic'"
+	// For public clients, the default is 'none' since they don't have a client secret
+	tokenEndpointAuthMethod := params.TokenEndpointAuthMethod
+	if tokenEndpointAuthMethod == "" {
+		if clientType == models.OAuthServerClientTypePublic {
+			tokenEndpointAuthMethod = models.TokenEndpointAuthMethodNone
+		} else {
+			tokenEndpointAuthMethod = models.TokenEndpointAuthMethodClientSecretBasic
+		}
+	}
+
 	db := s.db.WithContext(ctx)
 
 	client := &models.OAuthServerClient{
-		ID:               uuid.Must(uuid.NewV4()),
-		RegistrationType: params.RegistrationType,
-		ClientType:       clientType,
-		ClientName:       utilities.StringPtr(params.ClientName),
-		ClientURI:        utilities.StringPtr(params.ClientURI),
-		LogoURI:          utilities.StringPtr(params.LogoURI),
+		ID:                      uuid.Must(uuid.NewV4()),
+		RegistrationType:        params.RegistrationType,
+		ClientType:              clientType,
+		TokenEndpointAuthMethod: tokenEndpointAuthMethod,
+		ClientName:              utilities.StringPtr(params.ClientName),
+		ClientURI:               utilities.StringPtr(params.ClientURI),
+		LogoURI:                 utilities.StringPtr(params.LogoURI),
 	}
 
 	client.SetRedirectURIs(params.RedirectURIs)
@@ -345,11 +374,12 @@ func (s *Server) regenerateOAuthServerClientSecret(ctx context.Context, clientID
 
 // OAuthServerClientUpdateParams contains parameters for updating an OAuth client
 type OAuthServerClientUpdateParams struct {
-	RedirectURIs *[]string `json:"redirect_uris,omitempty"`
-	GrantTypes   *[]string `json:"grant_types,omitempty"`
-	ClientName   *string   `json:"client_name,omitempty"`
-	ClientURI    *string   `json:"client_uri,omitempty"`
-	LogoURI      *string   `json:"logo_uri,omitempty"`
+	RedirectURIs           *[]string `json:"redirect_uris,omitempty"`
+	GrantTypes             *[]string `json:"grant_types,omitempty"`
+	ClientName             *string   `json:"client_name,omitempty"`
+	ClientURI              *string   `json:"client_uri,omitempty"`
+	LogoURI                *string   `json:"logo_uri,omitempty"`
+	TokenEndpointAuthMethod *string  `json:"token_endpoint_auth_method,omitempty"`
 }
 
 // isEmpty returns true if no fields are set for update
@@ -358,7 +388,8 @@ func (p *OAuthServerClientUpdateParams) isEmpty() bool {
 		p.GrantTypes == nil &&
 		p.ClientName == nil &&
 		p.ClientURI == nil &&
-		p.LogoURI == nil
+		p.LogoURI == nil &&
+		p.TokenEndpointAuthMethod == nil
 }
 
 // validate validates the OAuth client update parameters
@@ -398,6 +429,14 @@ func (p *OAuthServerClientUpdateParams) validate() error {
 		}
 	}
 
+	// Validate token endpoint auth method if provided
+	if p.TokenEndpointAuthMethod != nil {
+		validMethods := GetAllValidAuthMethods()
+		if !slices.Contains(validMethods, *p.TokenEndpointAuthMethod) {
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid token_endpoint_auth_method: must be one of %v", validMethods)
+		}
+	}
+
 	return nil
 }
 
@@ -434,6 +473,17 @@ func (s *Server) updateOAuthServerClient(ctx context.Context, clientID uuid.UUID
 
 	if params.LogoURI != nil {
 		client.LogoURI = utilities.StringPtr(*params.LogoURI)
+	}
+
+	if params.TokenEndpointAuthMethod != nil {
+		if !IsValidAuthMethodForClientType(client.ClientType, *params.TokenEndpointAuthMethod) {
+			return nil, apierrors.NewBadRequestError(
+				apierrors.ErrorCodeValidationFailed,
+				"token_endpoint_auth_method '%s' is not valid for client_type '%s'; valid methods: %v",
+				*params.TokenEndpointAuthMethod, client.ClientType, GetValidAuthMethodsForClientType(client.ClientType),
+			)
+		}
+		client.TokenEndpointAuthMethod = *params.TokenEndpointAuthMethod
 	}
 
 	if err := models.UpdateOAuthServerClient(db, client); err != nil {

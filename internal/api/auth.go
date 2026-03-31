@@ -10,6 +10,7 @@ import (
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -57,7 +58,10 @@ func (a *API) requireAdmin(ctx context.Context) (context.Context, error) {
 		return withAdminUser(ctx, &models.User{Role: claims.Role, Email: storage.NullString(claims.Role)}), nil
 	}
 
-	return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeNotAdmin, "User not allowed").WithInternalMessage(fmt.Sprintf("this token needs to have one of the following roles: %v", strings.Join(adminRoles, ", ")))
+	return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeNotAdmin, "User not allowed").
+		WithInternalMessage(
+			"this token needs to have one of the following roles: %v",
+			strings.Join(adminRoles, ", "))
 }
 
 func (a *API) extractBearerToken(r *http.Request) (string, error) {
@@ -142,11 +146,13 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 		session, err = models.FindSessionByID(db, sessionId, false)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return ctx, apierrors.NewForbiddenError(apierrors.ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(err).WithInternalMessage(fmt.Sprintf("session id (%s) doesn't exist", sessionId))
+				return ctx, apierrors.NewForbiddenError(apierrors.ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(err).WithInternalMessage("session id (%s) doesn't exist", sessionId)
 			}
 			return ctx, err
 		}
 		ctx = withSession(ctx, session)
+		// Also store in shared context for cross-package access (e.g., oauthserver package)
+		ctx = shared.WithSession(ctx, session)
 	}
 	return ctx, nil
 }

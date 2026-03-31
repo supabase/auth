@@ -20,7 +20,7 @@ func init() {
 	timeoutStr := os.Getenv("GOTRUE_INTERNAL_HTTP_TIMEOUT")
 	if timeoutStr != "" {
 		if timeout, err := time.ParseDuration(timeoutStr); err != nil {
-			log.Fatalf("error loading GOTRUE_INTERNAL_HTTP_TIMEOUT: %v", err.Error())
+			log.Fatalf("error loading GOTRUE_INTERNAL_HTTP_TIMEOUT: %v", err.Error()) // #nosec G706
 		} else if timeout != 0 {
 			defaultTimeout = timeout
 		}
@@ -41,6 +41,46 @@ func (a *audience) UnmarshalJSON(b []byte) error {
 	}
 	*a = auds
 	return nil
+}
+
+// UnixTimeOrString accepts either:
+// - number: seconds since epoch (OIDC NumericDate)
+// - string: RFC3339 timestamp
+type UnixTimeOrString time.Time
+
+func (t UnixTimeOrString) MarshalJSON() ([]byte, error) {
+	return time.Time(t).MarshalJSON()
+}
+
+func (t *UnixTimeOrString) UnmarshalJSON(b []byte) error {
+	// null
+	if bytes.Equal(b, []byte("null")) {
+		*t = UnixTimeOrString(time.Time{})
+		return nil
+	}
+
+	// number (possibly float)
+	var f float64
+	if err := json.Unmarshal(b, &f); err == nil {
+		sec := int64(f)
+		*t = UnixTimeOrString(time.Unix(sec, 0).UTC())
+		return nil
+	}
+
+	// string (RFC3339)
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	if s == "" {
+		*t = UnixTimeOrString(time.Time{})
+		return nil
+	}
+	if sec, err := time.Parse(time.RFC3339, s); err == nil {
+		*t = UnixTimeOrString(sec.UTC())
+		return nil
+	}
+	return &time.ParseError{Layout: time.RFC3339, Value: s}
 }
 
 type Claims struct {
@@ -65,7 +105,7 @@ type Claims struct {
 	Birthdate         string `json:"birthdate,omitempty" structs:"birthdate,omitempty"`
 	ZoneInfo          string `json:"zoneinfo,omitempty" structs:"zoneinfo,omitempty"`
 	Locale            string `json:"locale,omitempty" structs:"locale,omitempty"`
-	UpdatedAt         string `json:"updated_at,omitempty" structs:"updated_at,omitempty"`
+	UpdatedAt         *UnixTimeOrString `json:"updated_at,omitempty" structs:"updated_at,omitempty"`
 	Email             string `json:"email,omitempty" structs:"email,omitempty"`
 	EmailVerified     bool   `json:"email_verified,omitempty" structs:"email_verified"`
 	Phone             string `json:"phone,omitempty" structs:"phone,omitempty"`
@@ -104,7 +144,8 @@ type Provider interface {
 type OAuthProvider interface {
 	AuthCodeURL(string, ...oauth2.AuthCodeOption) string
 	GetUserData(context.Context, *oauth2.Token) (*UserProvidedData, error)
-	GetOAuthToken(string) (*oauth2.Token, error)
+	GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error)
+	RequiresPKCE() bool
 }
 
 func chooseHost(base, defaultHost string) string {
@@ -133,7 +174,7 @@ func makeRequest(ctx context.Context, tok *oauth2.Token, g *oauth2.Config, url s
 	res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return httpError(res.StatusCode, string(bodyBytes))
+		return httpError(res.StatusCode, "%s", string(bodyBytes))
 	}
 
 	if err := json.NewDecoder(res.Body).Decode(dst); err != nil {

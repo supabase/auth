@@ -36,6 +36,8 @@ type azureProvider struct {
 	// ID token received is issued by that specific issuer, and so
 	// ExpectedIssuer contains the issuer URL of that tenant.
 	ExpectedIssuer string
+
+	cache *OIDCProviderCache
 }
 
 var azureIssuerRegexp = regexp.MustCompile("^https://login[.]microsoftonline[.]com/([^/]+)/v2[.]0/?$")
@@ -50,7 +52,7 @@ func IsAzureCIAMIssuer(issuer string) bool {
 }
 
 // NewAzureProvider creates a Azure account provider.
-func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string, cache *OIDCProviderCache) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
@@ -88,11 +90,16 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 			Scopes:      oauthScopes,
 		},
 		ExpectedIssuer: expectedIssuer,
+		cache:          cache,
 	}, nil
 }
 
-func (g azureProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g azureProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(ctx, code, opts...)
+}
+
+func (g azureProvider) RequiresPKCE() bool {
+	return false
 }
 
 func DetectAzureIDTokenIssuer(ctx context.Context, idToken string) (string, error) {
@@ -141,7 +148,7 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 			return nil, fmt.Errorf("azure: ID token issuer %q does not match expected issuer %q", issuer, g.ExpectedIssuer)
 		}
 
-		provider, err := oidc.NewProvider(ctx, issuer)
+		provider, err := g.cache.GetProvider(ctx, issuer)
 		if err != nil {
 			return nil, err
 		}

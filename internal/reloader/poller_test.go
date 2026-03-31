@@ -168,6 +168,7 @@ func TestPoller(t *testing.T) {
 		defer egCancel()
 
 		writerWg := new(sync.WaitGroup)
+		writerWg.Add(1)
 		writerDoneCh := make(chan struct{})
 
 		notifyCalled := false
@@ -190,7 +191,6 @@ func TestPoller(t *testing.T) {
 			return pr.watch(egCtx, time.Millisecond*100, notifyFn, errFn)
 		})
 
-		writerWg.Add(1)
 		eg.Go(func() error {
 			defer writerWg.Done()
 

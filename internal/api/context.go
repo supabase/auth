@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 
+	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
@@ -32,7 +33,8 @@ const (
 	oauthVerifierKey    = contextKey("oauth_verifier")
 	ssoProviderKey      = contextKey("sso_provider")
 	externalHostKey     = contextKey("external_host")
-	flowStateKey        = contextKey("flow_state_id")
+	oauthClientStateKey = contextKey("oauth_client_state_id")
+	flowStateContextKey = contextKey("flow_state")
 )
 
 // withToken adds the JWT token to the context.
@@ -125,16 +127,31 @@ func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
 }
 
-func withFlowStateID(ctx context.Context, FlowStateID string) context.Context {
-	return context.WithValue(ctx, flowStateKey, FlowStateID)
+func withOAuthClientStateID(ctx context.Context, oauthClientStateID uuid.UUID) context.Context {
+	return context.WithValue(ctx, oauthClientStateKey, oauthClientStateID)
 }
 
-func getFlowStateID(ctx context.Context) string {
-	obj := ctx.Value(flowStateKey)
+func getOAuthClientStateID(ctx context.Context) uuid.UUID {
+	obj := ctx.Value(oauthClientStateKey)
 	if obj == nil {
-		return ""
+		return uuid.Nil
 	}
-	return obj.(string)
+
+	return obj.(uuid.UUID)
+}
+
+// withFlowState stores the entire FlowState object in the context
+func withFlowState(ctx context.Context, flowState *models.FlowState) context.Context {
+	return context.WithValue(ctx, flowStateContextKey, flowState)
+}
+
+// getFlowState retrieves the FlowState object from the context
+func getFlowState(ctx context.Context) *models.FlowState {
+	obj := ctx.Value(flowStateContextKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*models.FlowState)
 }
 
 func getInviteToken(ctx context.Context) string {

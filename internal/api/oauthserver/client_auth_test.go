@@ -395,6 +395,100 @@ func TestGetAllValidAuthMethods(t *testing.T) {
 	}
 }
 
+func TestValidateClientAuthMethod(t *testing.T) {
+	tests := []struct {
+		name          string
+		client        *models.OAuthServerClient
+		usedMethod    string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name: "client registered for basic should accept basic",
+			client: &models.OAuthServerClient{
+				ID:                      uuid.Must(uuid.NewV4()),
+				ClientType:              models.OAuthServerClientTypeConfidential,
+				TokenEndpointAuthMethod: models.TokenEndpointAuthMethodClientSecretBasic,
+			},
+			usedMethod:  models.TokenEndpointAuthMethodClientSecretBasic,
+			expectError: false,
+		},
+		{
+			name: "client registered for post should accept post",
+			client: &models.OAuthServerClient{
+				ID:                      uuid.Must(uuid.NewV4()),
+				ClientType:              models.OAuthServerClientTypeConfidential,
+				TokenEndpointAuthMethod: models.TokenEndpointAuthMethodClientSecretPost,
+			},
+			usedMethod:  models.TokenEndpointAuthMethodClientSecretPost,
+			expectError: false,
+		},
+		{
+			name: "client registered for basic should reject post",
+			client: &models.OAuthServerClient{
+				ID:                      uuid.Must(uuid.NewV4()),
+				ClientType:              models.OAuthServerClientTypeConfidential,
+				TokenEndpointAuthMethod: models.TokenEndpointAuthMethodClientSecretBasic,
+			},
+			usedMethod:    models.TokenEndpointAuthMethodClientSecretPost,
+			expectError:   true,
+			errorContains: "invalid authentication method",
+		},
+		{
+			name: "client registered for post should reject basic",
+			client: &models.OAuthServerClient{
+				ID:                      uuid.Must(uuid.NewV4()),
+				ClientType:              models.OAuthServerClientTypeConfidential,
+				TokenEndpointAuthMethod: models.TokenEndpointAuthMethodClientSecretPost,
+			},
+			usedMethod:    models.TokenEndpointAuthMethodClientSecretBasic,
+			expectError:   true,
+			errorContains: "invalid authentication method",
+		},
+		{
+			name: "public client registered for none should accept none",
+			client: &models.OAuthServerClient{
+				ID:                      uuid.Must(uuid.NewV4()),
+				ClientType:              models.OAuthServerClientTypePublic,
+				TokenEndpointAuthMethod: models.TokenEndpointAuthMethodNone,
+			},
+			usedMethod:  models.TokenEndpointAuthMethodNone,
+			expectError: false,
+		},
+		{
+			name: "public client registered for none should reject basic",
+			client: &models.OAuthServerClient{
+				ID:                      uuid.Must(uuid.NewV4()),
+				ClientType:              models.OAuthServerClientTypePublic,
+				TokenEndpointAuthMethod: models.TokenEndpointAuthMethodNone,
+			},
+			usedMethod:    models.TokenEndpointAuthMethodClientSecretBasic,
+			expectError:   true,
+			errorContains: "invalid authentication method",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateClientAuthMethod(tt.client, tt.usedMethod)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("ValidateClientAuthMethod() expected error but got nil")
+					return
+				}
+				if tt.errorContains != "" && !containsString(err.Error(), tt.errorContains) {
+					t.Errorf("ValidateClientAuthMethod() error = %v, expected to contain %v", err, tt.errorContains)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("ValidateClientAuthMethod() expected no error but got: %v", err)
+				}
+			}
+		})
+	}
+}
+
 // Helper function to check if a string contains a substring
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || (len(s) > len(substr) &&

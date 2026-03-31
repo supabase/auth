@@ -76,13 +76,19 @@ type OAuthServerConfiguration struct {
 	Enabled                  bool          `json:"enabled" default:"false"`
 	AllowDynamicRegistration bool          `json:"allow_dynamic_registration" split_words:"true"`
 	AuthorizationPath        string        `json:"authorization_path" split_words:"true"`
-	AuthorizationTimeout     time.Duration `json:"authorization_timeout" split_words:"true" default:"5m"`
+	AuthorizationTTL         time.Duration `json:"authorization_ttl" split_words:"true" default:"10m"`
 	// Placeholder for now, for (near) future extensibility
 	DefaultScope string `json:"default_scope" split_words:"true" default:"email"`
 }
 
 type AnonymousProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"false"`
+}
+
+// CustomOAuthConfiguration holds configuration for custom OAuth and OIDC providers
+type CustomOAuthConfiguration struct {
+	Enabled      bool `json:"enabled" split_words:"true" default:"true"`
+	MaxProviders int  `json:"max_providers" split_words:"true" default:"0"`
 }
 
 type EmailProviderConfiguration struct {
@@ -137,7 +143,7 @@ type JWTConfiguration struct {
 	Issuer           string         `json:"issuer"`
 	KeyID            string         `json:"key_id" split_words:"true"`
 	Keys             JwtKeysDecoder `json:"keys"`
-	ValidMethods     []string       `json:"-"`
+	ValidMethods     []string       `json:"-" split_words:"true"`
 }
 
 type MFAFactorTypeConfiguration struct {
@@ -169,6 +175,50 @@ type MFAConfiguration struct {
 	Phone                       PhoneFactorTypeConfiguration `split_words:"true"`
 	TOTP                        TOTPFactorTypeConfiguration  `split_words:"true"`
 	WebAuthn                    MFAFactorTypeConfiguration   `split_words:"true"`
+}
+
+type WebAuthnConfiguration struct {
+	RPID                    string        `json:"rp_id" envconfig:"RP_ID"`
+	RPDisplayName           string        `json:"rp_display_name" split_words:"true"`
+	RPOrigins               []string      `json:"rp_origins" split_words:"true"`
+	ChallengeExpiryDuration time.Duration `json:"challenge_expiry_duration" split_words:"true" default:"5m"`
+}
+
+func (w *WebAuthnConfiguration) Validate() error {
+	if w.RPID == "" {
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ID is required when passkeys are enabled")
+	}
+
+	if w.RPDisplayName == "" {
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_DISPLAY_NAME is required when passkeys are enabled")
+	}
+
+	if len(w.RPOrigins) == 0 {
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ORIGINS is required when passkeys are enabled")
+	}
+
+	for _, origin := range w.RPOrigins {
+		u, err := url.Parse(origin)
+		if err != nil {
+			return fmt.Errorf("conf: invalid WebAuthn RP origin %q: %w", origin, err)
+		}
+
+		if u.Scheme == "http" {
+			host := u.Hostname()
+			if host != "localhost" && host != "127.0.0.1" {
+				return fmt.Errorf("conf: WebAuthn RP origin %q must use HTTPS (http is only allowed for localhost/127.0.0.1)", origin)
+			}
+		} else if u.Scheme != "https" {
+			return fmt.Errorf("conf: WebAuthn RP origin %q must use HTTPS", origin)
+		}
+	}
+
+	return nil
+}
+
+type PasskeyConfiguration struct {
+	Enabled            bool `json:"enabled" default:"false"`
+	MaxPasskeysPerUser int  `json:"max_passkeys_per_user" split_words:"true" default:"10"`
 }
 
 type APIConfiguration struct {
@@ -318,6 +368,7 @@ type GlobalConfiguration struct {
 	API           APIConfiguration
 	DB            DBConfiguration
 	External      ProviderConfiguration
+	CustomOAuth   CustomOAuthConfiguration `envconfig:"CUSTOM_OAUTH"`
 	OAuthServer   OAuthServerConfiguration `envconfig:"OAUTH_SERVER"`
 	Logging       LoggingConfig            `envconfig:"LOG"`
 	Profiler      ProfilerConfig           `envconfig:"PROFILER"`
@@ -336,6 +387,7 @@ type GlobalConfiguration struct {
 	RateLimitAnonymousUsers             float64 `split_words:"true" default:"30"`
 	RateLimitOtp                        float64 `split_words:"true" default:"30"`
 	RateLimitWeb3                       float64 `split_words:"true" default:"30"`
+	RateLimitPasskey                    float64 `split_words:"true" default:"30"`
 	RateLimitOAuthDynamicClientRegister float64 `split_words:"true" default:"10"`
 
 	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
@@ -351,7 +403,10 @@ type GlobalConfiguration struct {
 	Sessions        SessionsConfiguration    `json:"sessions"`
 	MFA             MFAConfiguration         `json:"MFA"`
 	SAML            SAMLConfiguration        `json:"saml"`
+	WebAuthn        WebAuthnConfiguration    `json:"webauthn"`
+	Passkey         PasskeyConfiguration     `json:"passkey"`
 	CORS            CORSConfiguration        `json:"cors"`
+	IndexWorker     IndexWorkerConfiguration `json:"index_worker" split_words:"true"`
 
 	Experimental ExperimentalConfiguration `json:"experimental"`
 	Reloading    ReloadingConfiguration    `json:"reloading"`
@@ -438,11 +493,15 @@ type ProviderConfiguration struct {
 	WorkOS                  OAuthProviderConfiguration     `json:"workos"`
 	Email                   EmailProviderConfiguration     `json:"email"`
 	Phone                   PhoneProviderConfiguration     `json:"phone"`
+	X                       OAuthProviderConfiguration     `json:"x" envconfig:"X"`
 	Zoom                    OAuthProviderConfiguration     `json:"zoom"`
 	IosBundleId             string                         `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL             string                         `json:"redirect_url"`
 	AllowedIdTokenIssuers   []string                       `json:"allowed_id_token_issuers" split_words:"true"`
 	FlowStateExpiryDuration time.Duration                  `json:"flow_state_expiry_duration" split_words:"true"`
+
+	// OIDCProviderCacheTTL controls how long OIDC discovery documents are cached.
+	OIDCProviderCacheTTL time.Duration `json:"oidc_provider_cache_ttl" split_words:"true" default:"1h"`
 
 	Web3Solana   SolanaConfiguration   `json:"web3_solana" split_words:"true"`
 	Web3Ethereum EthereumConfiguration `json:"web3_ethereum" split_words:"true"`
@@ -656,9 +715,10 @@ type VonageProviderConfiguration struct {
 }
 
 type CaptchaConfiguration struct {
-	Enabled  bool   `json:"enabled" default:"false"`
-	Provider string `json:"provider" default:"hcaptcha"`
-	Secret   string `json:"provider_secret"`
+	Enabled  bool          `json:"enabled" default:"false"`
+	Provider string        `json:"provider" default:"hcaptcha"`
+	Secret   string        `json:"provider_secret"`
+	Timeout  time.Duration `json:"timeout" split_words:"true" default:"10s"`
 }
 
 func (c *CaptchaConfiguration) Validate() error {
@@ -729,12 +789,15 @@ func (c *DatabaseEncryptionConfiguration) Validate() error {
 
 type SecurityConfiguration struct {
 	Captcha                               CaptchaConfiguration `json:"captcha"`
+	RefreshTokenUpgradePercentage         int                  `json:"refresh_token_upgrade_percentage" split_words:"true"`
 	RefreshTokenAlgorithmVersion          int                  `json:"refresh_token_algorithm_version" split_words:"true"`
 	RefreshTokenRotationEnabled           bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
 	RefreshTokenReuseInterval             int                  `json:"refresh_token_reuse_interval" split_words:"true"`
 	RefreshTokenAllowReuse                bool                 `json:"refresh_token_allow_reuse" split_words:"true"`
 	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
+	UpdatePasswordRequireCurrentPassword  bool                 `json:"update_password_require_current_password" split_words:"true"`
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
+	SbForwardedForEnabled                 bool                 `json:"sb_forwarded_for_enabled" split_words:"true" default:"false"`
 
 	DBEncryption DatabaseEncryptionConfiguration `json:"database_encryption" split_words:"true"`
 }
@@ -746,6 +809,14 @@ func (c *SecurityConfiguration) Validate() error {
 
 	if err := c.DBEncryption.Validate(); err != nil {
 		return err
+	}
+
+	if c.RefreshTokenAlgorithmVersion < 0 || c.RefreshTokenAlgorithmVersion > 2 {
+		return fmt.Errorf("refresh token algorithm version must be 0, 1 or 2 but was %v", c.RefreshTokenAlgorithmVersion)
+	}
+
+	if c.RefreshTokenUpgradePercentage < 0 || c.RefreshTokenUpgradePercentage > 100 {
+		return fmt.Errorf("refresh token upgrade percentage must be between 0 and 100, but was %v", c.RefreshTokenUpgradePercentage)
 	}
 
 	return nil
@@ -1268,6 +1339,12 @@ func (c *GlobalConfiguration) Validate() error {
 		}
 	}
 
+	if c.Passkey.Enabled {
+		if err := c.WebAuthn.Validate(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -1348,4 +1425,13 @@ func (t *VonageProviderConfiguration) Validate() error {
 
 func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
 	return t.Provider == "twilio_verify"
+}
+
+// IndexWorkerConfiguration holds the configuration for creating database indexes on the users table.
+type IndexWorkerConfiguration struct {
+	// user opt-in — when true, always create indexes (threshold is ignored).
+	EnsureUserSearchIndexesExist bool `json:"ensure_user_search_indexes_exist" split_words:"true" default:"false"`
+	// progressive rollout — when > 0, create indexes only if user count ≤ threshold.
+	// A value of 0 means disabled. Has no effect when EnsureUserSearchIndexesExist is true.
+	MaxUsersThreshold int64 `json:"max_users_threshold" split_words:"true" default:"0"`
 }

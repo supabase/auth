@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks/hookserrors"
 	"github.com/supabase/auth/internal/observability"
 
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
@@ -157,11 +158,10 @@ func (o *Dispatcher) runHTTPHook(
 
 		rsp, err := client.Do(req)
 		if err != nil && errors.Is(err, context.DeadlineExceeded) {
-			msg := fmt.Sprintf(
+			return nil, apierrors.NewUnprocessableEntityError(
+				apierrors.ErrorCodeHookTimeout,
 				"Failed to reach hook within maximum time of %f seconds",
 				o.hookTimeout.Seconds())
-			return nil, apierrors.NewUnprocessableEntityError(
-				apierrors.ErrorCodeHookTimeout, msg)
 
 		} else if err != nil {
 			if terr, ok := err.(net.Error); ok && terr.Timeout() || i < o.hookRetries-1 {
@@ -169,11 +169,10 @@ func (o *Dispatcher) runHTTPHook(
 					"Request timed out for attempt %d with err %s", i, err)
 				select {
 				case <-ctx.Done():
-					msg := fmt.Sprintf(
+					return nil, apierrors.NewUnprocessableEntityError(
+						apierrors.ErrorCodeHookTimeout,
 						"Failed to reach hook within maximum time of %f seconds",
 						o.hookTimeout.Seconds())
-					return nil, apierrors.NewUnprocessableEntityError(
-						apierrors.ErrorCodeHookTimeout, msg)
 				case <-time.After(o.hookBackoff):
 				}
 				continue
@@ -198,14 +197,18 @@ func (o *Dispatcher) runHTTPHook(
 
 			mediaType, _, err := mime.ParseMediaType(contentType)
 			if err != nil {
-				msg := fmt.Sprintf("Invalid Content-Type header: %s", err.Error())
 				return nil, apierrors.NewBadRequestError(
-					apierrors.ErrorCodeHookPayloadInvalidContentType, msg)
+					apierrors.ErrorCodeHookPayloadInvalidContentType,
+					"Invalid Content-Type header: %s",
+					err.Error(),
+				)
 			}
 			if mediaType != "application/json" {
 				return nil, apierrors.NewBadRequestError(
 					apierrors.ErrorCodeHookPayloadInvalidContentType,
-					"Invalid JSON response. Received content-type: "+contentType)
+					"Invalid JSON response. Received content-type: %s",
+					contentType,
+				)
 			}
 
 			limitedReader := io.LimitedReader{R: rsp.Body, N: o.limitResponse}
@@ -216,13 +219,17 @@ func (o *Dispatcher) runHTTPHook(
 			if limitedReader.N <= 0 {
 				// check if the response body still has excess bytes to be read
 				if n, _ := rsp.Body.Read(make([]byte, 1)); n > 0 {
-					msg := fmt.Sprintf(
-						"Payload size exceeded size limit of %d bytes",
-						o.limitResponse)
 					return nil, apierrors.NewUnprocessableEntityError(
-						apierrors.ErrorCodeHookPayloadOverSizeLimit, msg)
+						apierrors.ErrorCodeHookPayloadOverSizeLimit,
+						"Payload size exceeded size limit of %d bytes",
+						o.limitResponse,
+					)
 				}
 			}
+			if err := hookserrors.Check(body); err != nil {
+				return nil, err
+			}
+
 			return body, nil
 		case http.StatusTooManyRequests, http.StatusServiceUnavailable:
 			retryAfterHeader := rsp.Header.Get("retry-after")

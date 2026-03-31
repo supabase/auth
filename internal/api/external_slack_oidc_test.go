@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-
-	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalSlackOIDC() {
@@ -21,13 +19,5 @@ func (ts *ExternalTestSuite) TestSignupExternalSlackOIDC() {
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("profile email openid", q.Get("scope"))
 
-	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	ts.Require().NoError(err)
-
-	ts.Equal("slack_oidc", claims.Provider)
-	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
+	assertValidOAuthState(ts, q.Get("state"), "slack_oidc")
 }

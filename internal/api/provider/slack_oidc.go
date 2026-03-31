@@ -60,8 +60,12 @@ func NewSlackOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string) (O
 	}, nil
 }
 
-func (g slackOIDCProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g slackOIDCProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(ctx, code, opts...)
+}
+
+func (g slackOIDCProvider) RequiresPKCE() bool {
+	return false
 }
 
 func (g slackOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {

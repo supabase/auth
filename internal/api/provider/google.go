@@ -37,7 +37,7 @@ type googleProvider struct {
 }
 
 // NewGoogleProvider creates a Google OAuth2 identity provider.
-func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string, cache *OIDCProviderCache) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration,
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, internalIssuerGoogle)
+	oidcProvider, err := cache.GetProvider(ctx, internalIssuerGoogle)
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +72,12 @@ func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration,
 	}, nil
 }
 
-func (g googleProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g googleProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(ctx, code, opts...)
+}
+
+func (g googleProvider) RequiresPKCE() bool {
+	return false
 }
 
 const UserInfoEndpointGoogle = "https://www.googleapis.com/userinfo/v2/me"

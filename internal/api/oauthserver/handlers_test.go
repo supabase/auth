@@ -411,6 +411,106 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientUpdateHandlerSameValues() {
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
+func (ts *OAuthClientTestSuite) TestOAuthServerClientUpdateHandlerTokenEndpointAuthMethod() {
+	// Create a confidential client (defaults to client_secret_basic)
+	client, _ := ts.createTestOAuthClient()
+
+	// Update token_endpoint_auth_method from client_secret_basic to client_secret_post
+	newMethod := "client_secret_post"
+	payload := OAuthServerClientUpdateParams{
+		TokenEndpointAuthMethod: &newMethod,
+	}
+
+	body, err := json.Marshal(payload)
+	require.NoError(ts.T(), err)
+
+	req := httptest.NewRequest(http.MethodPut, "/admin/oauth/clients/"+client.ID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err = ts.Server.OAuthServerClientUpdate(w, req)
+	require.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var response OAuthServerClientResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), "client_secret_post", response.TokenEndpointAuthMethod)
+	assert.Equal(ts.T(), "confidential", response.ClientType)
+}
+
+func (ts *OAuthClientTestSuite) TestOAuthServerClientUpdateHandlerTokenEndpointAuthMethodInvalid() {
+	// Create a confidential client
+	client, _ := ts.createTestOAuthClient()
+
+	// Attempt to set a confidential client's method to "none" (public-only method)
+	invalidMethod := "none"
+	payload := OAuthServerClientUpdateParams{
+		TokenEndpointAuthMethod: &invalidMethod,
+	}
+
+	body, err := json.Marshal(payload)
+	require.NoError(ts.T(), err)
+
+	req := httptest.NewRequest(http.MethodPut, "/admin/oauth/clients/"+client.ID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err = ts.Server.OAuthServerClientUpdate(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "not valid for client_type")
+}
+
+func (ts *OAuthClientTestSuite) TestOAuthServerClientUpdateHandlerTokenEndpointAuthMethodWithOtherFields() {
+	// Create a confidential client
+	client, _ := ts.createTestOAuthClient()
+
+	// Update token_endpoint_auth_method alongside other fields
+	newMethod := "client_secret_post"
+	newClientName := "Updated With Auth Method"
+	newRedirectURIs := []string{"https://updated.example.com/callback"}
+
+	payload := OAuthServerClientUpdateParams{
+		TokenEndpointAuthMethod: &newMethod,
+		ClientName:              &newClientName,
+		RedirectURIs:            &newRedirectURIs,
+	}
+
+	body, err := json.Marshal(payload)
+	require.NoError(ts.T(), err)
+
+	req := httptest.NewRequest(http.MethodPut, "/admin/oauth/clients/"+client.ID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err = ts.Server.OAuthServerClientUpdate(w, req)
+	require.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var response OAuthServerClientResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), "client_secret_post", response.TokenEndpointAuthMethod)
+	assert.Equal(ts.T(), "Updated With Auth Method", response.ClientName)
+	assert.Equal(ts.T(), []string{"https://updated.example.com/callback"}, response.RedirectURIs)
+}
+
 func (ts *OAuthClientTestSuite) TestHandlerValidation() {
 	// Test invalid JSON body
 	req := httptest.NewRequest(http.MethodPost, "/admin/oauth/clients", bytes.NewReader([]byte("invalid json")))
@@ -662,4 +762,215 @@ func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantNoAuth() {
 	err := ts.Server.UserRevokeOAuthGrant(w, req)
 	require.Error(ts.T(), err)
 	assert.Contains(ts.T(), err.Error(), "authentication required")
+}
+
+// Test UserInfo endpoint with different scopes
+func (ts *OAuthClientTestSuite) TestUserInfo() {
+	// Create test user
+	user := ts.createTestUser("userinfo@example.com")
+	user.Email = "userinfo@example.com"
+	user.EmailConfirmedAt = &user.CreatedAt
+	user.Phone = "1234567890"
+	user.PhoneConfirmedAt = &user.CreatedAt
+
+	// Set user metadata for profile
+	userMetadata := map[string]interface{}{
+		"full_name": "Test User",
+		"name":      "Test User",
+	}
+	user.UserMetaData = userMetadata
+
+	err := ts.DB.Update(user)
+	require.NoError(ts.T(), err)
+
+	// Create a client
+	client, _ := ts.createTestOAuthClient()
+
+	tests := []struct {
+		name          string
+		scopes        string
+		expectEmail   bool
+		expectProfile bool
+		expectPhone   bool
+	}{
+		{
+			name:          "All scopes granted",
+			scopes:        "openid email profile phone",
+			expectEmail:   true,
+			expectProfile: true,
+			expectPhone:   true,
+		},
+		{
+			name:          "Only openid scope",
+			scopes:        "openid",
+			expectEmail:   false,
+			expectProfile: false,
+			expectPhone:   false,
+		},
+		{
+			name:          "Email scope only",
+			scopes:        "openid email",
+			expectEmail:   true,
+			expectProfile: false,
+			expectPhone:   false,
+		},
+		{
+			name:          "Profile scope only",
+			scopes:        "openid profile",
+			expectEmail:   false,
+			expectProfile: true,
+			expectPhone:   false,
+		},
+		{
+			name:          "Phone scope only",
+			scopes:        "openid phone",
+			expectEmail:   false,
+			expectProfile: false,
+			expectPhone:   true,
+		},
+		{
+			name:          "Email and Profile scopes",
+			scopes:        "openid email profile",
+			expectEmail:   true,
+			expectProfile: true,
+			expectPhone:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		ts.T().Run(tt.name, func(t *testing.T) {
+			// Create a session with specific scopes
+			session, err := models.NewSession(user.ID, nil)
+			require.NoError(t, err)
+			session.OAuthClientID = &client.ID
+			scopes := tt.scopes
+			session.Scopes = &scopes
+			err = ts.DB.Create(session)
+			require.NoError(t, err)
+
+			// Create HTTP request
+			req := httptest.NewRequest(http.MethodGet, "/oauth/userinfo", nil)
+
+			// Add user and session to context
+			ctx := shared.WithUser(req.Context(), user)
+			ctx = shared.WithSession(ctx, session)
+			req = req.WithContext(ctx)
+
+			w := httptest.NewRecorder()
+
+			// Call handler
+			err = ts.Server.OAuthUserInfo(w, req)
+			require.NoError(t, err)
+
+			// Check response
+			assert.Equal(t, http.StatusOK, w.Code)
+
+			var response map[string]interface{}
+			err = json.Unmarshal(w.Body.Bytes(), &response)
+			require.NoError(t, err)
+
+			// Should always have sub
+			assert.NotEmpty(t, response["sub"])
+
+			// Check email claims
+			if tt.expectEmail {
+				assert.NotEmpty(t, response["email"], "email should be present")
+				assert.NotNil(t, response["email_verified"], "email_verified should be present")
+			} else {
+				assert.Nil(t, response["email"], "email should not be present")
+				assert.Nil(t, response["email_verified"], "email_verified should not be present")
+			}
+
+			// Check profile claims
+			if tt.expectProfile {
+				assert.NotNil(t, response["name"], "name should be present")
+				assert.NotNil(t, response["user_metadata"], "user_metadata should be present")
+			} else {
+				assert.Nil(t, response["name"], "name should not be present")
+				assert.Nil(t, response["user_metadata"], "user_metadata should not be present")
+			}
+
+			// Check phone claims
+			if tt.expectPhone {
+				assert.NotEmpty(t, response["phone"], "phone should be present")
+				assert.NotNil(t, response["phone_verified"], "phone_verified should be present")
+			} else {
+				assert.Nil(t, response["phone"], "phone should not be present")
+				assert.Nil(t, response["phone_verified"], "phone_verified should not be present")
+			}
+
+			// Clean up session for next test
+			err = models.LogoutSession(ts.DB, session.ID)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func (ts *OAuthClientTestSuite) TestUserInfoNoSession() {
+	// Create test user
+	user := ts.createTestUser("nosession@example.com")
+
+	// Create HTTP request without session
+	req := httptest.NewRequest(http.MethodGet, "/oauth/userinfo", nil)
+
+	// Add only user to context (no session)
+	ctx := shared.WithUser(req.Context(), user)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	// Call handler - should return minimal info (just sub)
+	err := ts.Server.OAuthUserInfo(w, req)
+	require.NoError(ts.T(), err)
+
+	// Check response
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(ts.T(), err)
+
+	// Should only have sub claim (minimal info without session)
+	assert.NotEmpty(ts.T(), response["sub"])
+	assert.Nil(ts.T(), response["email"])
+	assert.Nil(ts.T(), response["name"])
+	assert.Nil(ts.T(), response["phone"])
+}
+
+func (ts *OAuthClientTestSuite) TestUserInfoNoOAuthClient() {
+	// Create test user
+	user := ts.createTestUser("nooauth@example.com")
+
+	// Create a session without OAuth client
+	session, err := models.NewSession(user.ID, nil)
+	require.NoError(ts.T(), err)
+	err = ts.DB.Create(session)
+	require.NoError(ts.T(), err)
+
+	// Create HTTP request
+	req := httptest.NewRequest(http.MethodGet, "/oauth/userinfo", nil)
+
+	// Add user and session to context
+	ctx := shared.WithUser(req.Context(), user)
+	ctx = shared.WithSession(ctx, session)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	// Call handler - should return minimal info (just sub) since no scopes in session
+	err = ts.Server.OAuthUserInfo(w, req)
+	require.NoError(ts.T(), err)
+
+	// Check response
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(ts.T(), err)
+
+	// Should only have sub claim (no scopes granted)
+	assert.NotEmpty(ts.T(), response["sub"])
+	assert.Nil(ts.T(), response["email"])
+	assert.Nil(ts.T(), response["name"])
+	assert.Nil(ts.T(), response["phone"])
 }

@@ -71,7 +71,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 	// intentionally keeping this before the test OTP, so that the behavior
 	// of regular and test OTPs is similar
 	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
-		return "", apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, config.Sms.MaxFrequency))
+		return "", apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, "%s", generateFrequencyLimitErrorMessage(sentAt, config.Sms.MaxFrequency))
 	}
 
 	now := time.Now()
@@ -95,15 +95,16 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		otp = crypto.GenerateOtp(config.Sms.OtpLength)
 
 		if config.Hook.SendSMS.Enabled {
-			input := v0hooks.SendSMSInput{
-				User: user,
-				SMS: v0hooks.SMS{
+			input := v0hooks.NewSendSMSInput(
+				r,
+				user,
+				v0hooks.SMS{
 					OTP:   otp,
 					Phone: phone,
 				},
-			}
+			)
 			output := v0hooks.SendSMSOutput{}
-			err := a.hooksMgr.InvokeHook(tx, r, &input, &output)
+			err := a.hooksMgr.InvokeHook(tx, r, input, &output)
 			if err != nil {
 				return "", err
 			}

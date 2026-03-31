@@ -3,6 +3,7 @@ package validateclient
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -201,7 +202,10 @@ func TestValidateEmailExtended(t *testing.T) {
 		// valid (has mx record)
 		{email: "a@supabase.io"},
 		{email: "support@supabase.io"},
-		{email: "chris.stockton@supabase.io"},
+		{email: "abc@supabase.io"},
+
+		// valid (RFC 5321 fallback, supabase.co has no mx, but valid A)
+		{email: "invalid@supabase.co"},
 
 		// bad format
 		{email: "", err: "invalid_email_format"},
@@ -209,6 +213,25 @@ func TestValidateEmailExtended(t *testing.T) {
 		{email: "supabase.io", err: "invalid_email_format"},
 		{email: "@supabase.io", err: "invalid_email_format"},
 		{email: "test@.supabase.io", err: "invalid_email_format"},
+
+		// invalid providers check doesn't allow short gmails
+		{email: "short@gmail.com", err: "invalid_email_address"},
+		{email: "short@hotmail.com"}, // allow other providers
+
+		// ensure the mail parser does not result in mutated addr
+		{email: "Chris Stockton <chris.stockton@someaddr.test>",
+			err: "invalid_email_format"},
+
+		// Check dot suffixes are invalid (mutations)
+		{email: "a@example.org.", err: "invalid_email_format"},
+		{email: "a@", err: "invalid_email_format"},
+		{email: "a@.", err: "invalid_email_format"},
+		{email: "a@a.", err: "invalid_email_format"},
+		{email: "a@gmail.com.", err: "invalid_email_format"},
+		{email: "a@gmail.com..", err: "invalid_email_format"},
+		{email: "aaaaaaaa@.abc", err: "invalid_email_format"},
+		{email: "aaaaaaaa@.abc.", err: "invalid_email_format"},
+		{email: "aaaaaaaa@.abc.abc", err: "invalid_email_format"},
 
 		// invalid: valid mx records, but invalid and often typed
 		// (invalidEmailMap)
@@ -235,23 +258,23 @@ func TestValidateEmailExtended(t *testing.T) {
 		// valid but not actually valid and typed a lot
 		{email: "a@invalid", err: "invalid_email_dns"},
 		{email: "a@a.invalid", err: "invalid_email_dns"},
-		{email: "test@invalid", err: "invalid_email_dns"},
 
 		// various invalid emails
 		{email: "test@test.localhost", err: "invalid_email_dns"},
 		{email: "test@invalid.example.com", err: "invalid_email_dns"},
 		{email: "test@no.such.email.host.supabase.io", err: "invalid_email_dns"},
-
-		// test blocked mx records
-		{email: "test@hotmail.com", err: "invalid_email_mx"},
-
 		// this low timeout should simulate a dns timeout, which should
 		// not be treated as an invalid email.
 		{email: "validemail@probablyaaaaaaaanotarealdomain.com",
 			timeout: time.Millisecond},
 
 		// likewise for a valid email
-		{email: "support@supabase.io", timeout: time.Millisecond},
+		{email: "timeout@supabase.io", timeout: time.Millisecond},
+
+		// invalid dns
+		{email: "a@a", err: "invalid_email_dns"},
+		{email: "a@a.a", err: "invalid_email_dns"},
+		{email: "a@abcd", err: "invalid_email_dns"},
 	}
 
 	cfg := conf.MailerConfiguration{
@@ -268,6 +291,7 @@ func TestValidateEmailExtended(t *testing.T) {
 
 	ev := newEmailValidator(cfg)
 
+	seen := make(map[string]bool)
 	for idx, tc := range cases {
 		func(timeout time.Duration) {
 			if timeout == 0 {
@@ -276,6 +300,11 @@ func TestValidateEmailExtended(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
+
+			if seen[tc.email] {
+				t.Fatalf("duplicate email %v in test cases", tc.email)
+			}
+			seen[tc.email] = true
 
 			now := time.Now()
 			err := ev.Validate(ctx, tc.email)
@@ -293,5 +322,25 @@ func TestValidateEmailExtended(t *testing.T) {
 			require.NoError(t, err)
 
 		}(tc.timeout)
+	}
+
+	// test blocked mx list
+	{
+		for _, v := range []string{
+			"hotmail-com.olc.protection.outlook.com",
+			"hotmail-com.olc.protection.outlook.com.",
+		} {
+			{
+				err := ev.validateMXRecords([]*net.MX{{Host: v}}, nil)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), ErrInvalidEmailMX.Error())
+			}
+
+			{
+				err := ev.validateMXRecords(nil, []string{v})
+				require.Error(t, err)
+				require.Contains(t, err.Error(), ErrInvalidEmailMX.Error())
+			}
+		}
 	}
 }

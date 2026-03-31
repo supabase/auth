@@ -197,3 +197,49 @@ func TestHasAllScopes(t *testing.T) {
 		})
 	}
 }
+
+func TestIsSupportedScope(t *testing.T) {
+	tests := []struct {
+		name     string
+		scope    string
+		expected bool
+	}{
+		{
+			name:     "openid scope is supported",
+			scope:    ScopeOpenID,
+			expected: true,
+		},
+		{
+			name:     "email scope is supported",
+			scope:    ScopeEmail,
+			expected: true,
+		},
+		{
+			name:     "profile scope is supported",
+			scope:    ScopeProfile,
+			expected: true,
+		},
+		{
+			name:     "phone scope is supported",
+			scope:    ScopePhone,
+			expected: true,
+		},
+		{
+			name:     "unsupported scope address",
+			scope:    "address",
+			expected: false,
+		},
+		{
+			name:     "empty scope is not supported",
+			scope:    "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsSupportedScope(tt.scope)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

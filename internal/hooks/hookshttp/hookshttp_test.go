@@ -185,6 +185,28 @@ func TestDispatch(t *testing.T) {
 				io.WriteString(w, "12345")
 			}),
 		},
+
+		{
+			desc:   "fail - returning error objects",
+			errStr: "500: failed to verify ip addres",
+			hr: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+
+				io.WriteString(w, `{"error": {"message": "failed to verify ip addres"}}`)
+			}),
+		},
+
+		{
+			desc:   "fail - returning error objects with status",
+			errStr: "400: failed to verify ip addres",
+			hr: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+
+				io.WriteString(w, `{"error": {"message": "failed to verify ip addres", "http_code": 400}}`)
+			}),
+		},
 	}
 
 	// error status codes

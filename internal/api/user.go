@@ -18,6 +18,7 @@ import (
 type UserUpdateParams struct {
 	Email               string                 `json:"email"`
 	Password            *string                `json:"password"`
+	CurrentPassword     *string                `json:"current_password,omitempty"`
 	Nonce               string                 `json:"nonce"`
 	Data                map[string]interface{} `json:"data"`
 	AppData             map[string]interface{} `json:"app_metadata,omitempty"`
@@ -165,6 +166,31 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			isSamePassword := false
 
 			if user.HasPassword() {
+				// current password required when updating password
+				if config.Security.UpdatePasswordRequireCurrentPassword {
+					// user may be in a password reset flow, where they do not have a currentPassword
+					isRecoverySession := false
+					for _, claim := range session.AMRClaims {
+						// password recovery flows can be via otp or a magic link, check if the current session
+						// was created with one of those
+						if claim.GetAuthenticationMethod() == "otp" || claim.GetAuthenticationMethod() == "magiclink" {
+							isRecoverySession = true
+							break
+						}
+					}
+					if !isRecoverySession {
+						if params.CurrentPassword == nil || *params.CurrentPassword == "" {
+							return apierrors.NewBadRequestError(apierrors.ErrorCodeCurrentPasswordRequired, "Current password required when setting new password.")
+						}
+						isCurrentPasswordCorrect, _, err := user.Authenticate(ctx, db, *params.CurrentPassword, config.Security.DBEncryption.DecryptionKeys, false, "")
+						if err != nil {
+							return err
+						}
+						if !isCurrentPasswordCorrect {
+							return apierrors.NewBadRequestError(apierrors.ErrorCodeCurrentPasswordMismatch, "Current password required when setting new password.")
+						}
+					}
+				}
 				auth, _, err := user.Authenticate(ctx, db, password, config.Security.DBEncryption.DecryptionKeys, false, "")
 				if err != nil {
 					return err

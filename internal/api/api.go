@@ -11,6 +11,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/api/oauthserver"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
@@ -19,6 +20,8 @@ import (
 	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/sbff"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/utilities"
@@ -30,7 +33,7 @@ const (
 	defaultVersion = "unknown version"
 )
 
-var bearerRegexp = regexp.MustCompile(`^(?:B|b)earer (\S+$)`)
+var bearerRegexp = regexp.MustCompile(`(?i)^bearer (\S+$)`)
 
 // API is the main REST API
 type API struct {
@@ -44,6 +47,9 @@ type API struct {
 	oauthServer  *oauthserver.Server
 	tokenService *tokens.Service
 	mailer       mailer.Mailer
+	oidcCache    *provider.OIDCProviderCache
+
+	captchaVerifier security.CaptchaVerifier
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
@@ -95,8 +101,13 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		version: version,
 	}
 
+	api.oidcCache = provider.NewOIDCProviderCache(globalConfig.External.OIDCProviderCacheTTL)
+
 	for _, o := range opt {
 		o.apply(api)
+	}
+	if api.captchaVerifier == nil {
+		api.captchaVerifier = security.NewCaptchaVerifier(&globalConfig.Security.Captcha)
 	}
 	if api.limiterOpts == nil {
 		api.limiterOpts = NewLimiterOptions(globalConfig)
@@ -150,10 +161,20 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	logger := observability.NewStructuredLogger(logrus.StandardLogger(), globalConfig)
 
 	r := newRouter()
+	r.UseBypass(recoverer)
 	r.UseBypass(observability.AddRequestID(globalConfig))
+	r.UseBypass(
+		sbff.Middleware(
+			&globalConfig.Security,
+			func(r *http.Request, err error) {
+				log := observability.GetLogEntry(r).Entry
+				log.WithField("error", err.Error()).Warn("error processing Sb-Forwarded-For")
+			},
+		),
+	)
 	r.UseBypass(logger)
 	r.UseBypass(xffmw.Handler)
-	r.UseBypass(recoverer)
+	r.UseBypass(limitRequestBody(1 << 20)) // 1MB
 
 	if globalConfig.API.MaxRequestDuration > 0 {
 		r.UseBypass(timeoutMiddleware(globalConfig.API.MaxRequestDuration))
@@ -175,10 +196,12 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 	r.Get("/health", api.HealthCheck)
 	r.Get("/.well-known/jwks.json", api.WellKnownJwks)
-	r.Get("/.well-known/openid-configuration", api.WellKnownOpenID)
 
+	// Both OIDC Discovery and OAuth Authorization Server Metadata use the same unified handler
+	// OIDC Discovery is an extension of RFC 8414, so one response satisfies both specs
+	r.Get("/.well-known/openid-configuration", api.WellKnownOpenID)
 	if globalConfig.OAuthServer.Enabled {
-		r.Get("/.well-known/oauth-authorization-server", api.oauthServer.OAuthServerMetadata)
+		r.Get("/.well-known/oauth-authorization-server", api.WellKnownOpenID)
 	}
 
 	r.Route("/callback", func(r *router) {
@@ -286,6 +309,28 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			})
 		})
 
+		r.Route("/passkeys", func(r *router) {
+			r.Use(api.requirePasskeyEnabled)
+
+			r.Route("/authentication", func(r *router) {
+				r.With(api.limitHandler(api.limiterOpts.PasskeyAuthentication)).
+					With(api.verifyCaptcha).
+					Post("/options", api.PasskeyAuthenticationOptions)
+				r.Post("/verify", api.PasskeyAuthenticationVerify)
+			})
+
+			r.With(api.requireAuthentication).With(api.requireNotAnonymous).Route("/registration", func(r *router) {
+				r.Post("/options", api.PasskeyRegistrationOptions)
+				r.Post("/verify", api.PasskeyRegistrationVerify)
+			})
+
+			r.With(api.requireAuthentication).Get("/", api.PasskeyList)
+			r.With(api.requireAuthentication).Route("/{passkey_id}", func(r *router) {
+				r.Patch("/", api.PasskeyUpdate)
+				r.Delete("/", api.PasskeyDelete)
+			})
+		})
+
 		r.Route("/sso", func(r *router) {
 			r.Use(api.requireSAMLEnabled)
 			r.With(api.limitHandler(api.limiterOpts.SSO)).
@@ -318,6 +363,13 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 							r.Use(api.loadFactor)
 							r.Delete("/", api.adminUserDeleteFactor)
 							r.Put("/", api.adminUserUpdateFactor)
+						})
+					})
+
+					r.Route("/passkeys", func(r *router) {
+						r.Get("/", api.AdminPasskeyList)
+						r.Route("/{passkey_id}", func(r *router) {
+							r.Delete("/", api.AdminPasskeyDelete)
 						})
 					})
 
@@ -363,6 +415,21 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 					})
 				})
 			}
+
+			// Custom OAuth/OIDC provider management endpoints
+			if globalConfig.CustomOAuth.Enabled {
+				r.Route("/custom-providers", func(r *router) {
+					// supports both OAuth2 and OIDC via provider_type)
+					r.Get("/", api.adminCustomOAuthProvidersList)   // Optional ?type=oauth2 or ?type=oidc filter
+					r.Post("/", api.adminCustomOAuthProviderCreate) // provider_type in request body
+
+					r.Route("/{identifier}", func(r *router) {
+						r.Get("/", api.adminCustomOAuthProviderGet)
+						r.Put("/", api.adminCustomOAuthProviderUpdate)
+						r.Delete("/", api.adminCustomOAuthProviderDelete)
+					})
+				})
+			}
 		})
 
 		// OAuth Dynamic Client Registration endpoint (public, rate limited)
@@ -374,6 +441,9 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				// OAuth Token endpoint (public, with client authentication)
 				r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
 
+				// OIDC UserInfo endpoint (requires user authentication via Bearer token)
+				r.With(api.requireAuthentication).Get("/userinfo", api.oauthServer.OAuthUserInfo)
+
 				// OAuth 2.1 Authorization endpoints
 				// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider
 				r.Get("/authorize", api.oauthServer.OAuthServerAuthorize)
@@ -384,7 +454,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	})
 
 	corsHandler := cors.New(cors.Options{
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
 		AllowedHeaders:   globalConfig.CORS.AllAllowedHeaders([]string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader, APIVersionHeaderName}),
 		ExposedHeaders:   []string{"X-Total-Count", "Link", APIVersionHeaderName},
 		AllowCredentials: true,

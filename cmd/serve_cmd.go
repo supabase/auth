@@ -163,7 +163,7 @@ func serve(ctx context.Context) {
 	}
 
 	wg.Add(1)
-	go func() {
+	go func() { // #nosec G118 -- Cleanup goroutine intentionally outlives the request; context.Background() is required for shutdown after parent context is cancelled.
 		defer wg.Done()
 
 		<-ctx.Done()
@@ -185,7 +185,7 @@ func serve(ctx context.Context) {
 		Control: func(network, address string, c syscall.RawConn) error {
 			var serr error
 			if err := c.Control(func(fd uintptr) {
-				serr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
+				serr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1) // #nosec G115
 			}); err != nil {
 				return err
 			}

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"embed"
-	"fmt"
 	"net/url"
 	"os"
 
@@ -23,12 +22,12 @@ var migrateCmd = cobra.Command{
 
 func migrate(cmd *cobra.Command, args []string) {
 	globalConfig := loadGlobalConfig(cmd.Context())
+	u, err := url.Parse(globalConfig.DB.URL)
+	if err != nil {
+		logrus.Fatalf("%+v", errors.Wrap(err, "parsing db connection url"))
+	}
 
 	if globalConfig.DB.Driver == "" && globalConfig.DB.URL != "" {
-		u, err := url.Parse(globalConfig.DB.URL)
-		if err != nil {
-			logrus.Fatalf("%+v", errors.Wrap(err, "parsing db connection url"))
-		}
 		globalConfig.DB.Driver = u.Scheme
 	}
 
@@ -53,16 +52,12 @@ func migrate(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	u, _ := url.Parse(globalConfig.DB.URL)
-	processedUrl := globalConfig.DB.URL
-	if len(u.Query()) != 0 {
-		processedUrl = fmt.Sprintf("%s&application_name=gotrue_migrations", processedUrl)
-	} else {
-		processedUrl = fmt.Sprintf("%s?application_name=gotrue_migrations", processedUrl)
-	}
+	q := u.Query()
+	q.Add("application_name", "auth_migrations")
+	u.RawQuery = q.Encode()
 	deets := &pop.ConnectionDetails{
 		Dialect: globalConfig.DB.Driver,
-		URL:     processedUrl,
+		URL:     u.String(),
 	}
 	deets.Options = map[string]string{
 		"migration_table_name": "schema_migrations",

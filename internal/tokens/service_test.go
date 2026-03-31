@@ -4,13 +4,17 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
@@ -764,4 +768,427 @@ func (ts *RefreshTokenV2Suite) TestInvalidRefreshTokens() {
 	require.Nil(ts.T(), nrt)
 
 	require.Equal(ts.T(), "", responseHeaders.Get("sb-auth-session-id"))
+}
+
+// parseIDTokenClaims parses an ID token and returns the claims as a map
+func parseIDTokenClaims(idToken string, config *conf.GlobalConfiguration) (jwt.MapClaims, error) {
+	claims := jwt.MapClaims{}
+	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
+	_, err := p.ParseWithClaims(idToken, claims, func(token *jwt.Token) (interface{}, error) {
+		// Get the key ID from the token header
+		if kid, ok := token.Header["kid"]; ok {
+			if kidStr, ok := kid.(string); ok {
+				// Find the public key by kid for asymmetric verification
+				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				if err != nil {
+					return nil, err
+				}
+				return key, nil
+			}
+		}
+		// Fallback to symmetric key (HS256) - this should fail for ID tokens
+		return []byte(config.JWT.Secret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return claims, nil
+}
+
+// IDTokenTestSuite tests ID token generation with different scopes
+type IDTokenTestSuite struct {
+	suite.Suite
+	Conn   *storage.Connection
+	User   *models.User
+	Config *conf.GlobalConfiguration
+}
+
+func TestIDTokenGeneration(t *testing.T) {
+	ts := &IDTokenTestSuite{}
+
+	config, err := conf.LoadGlobal("../../hack/test_asymmetric.env")
+	require.NoError(t, err)
+
+	conn, err := test.SetupDBConnection(config)
+	require.NoError(t, err)
+
+	ts.Conn = conn
+	ts.Config = config
+	defer conn.Close()
+
+	suite.Run(t, ts)
+}
+
+func (ts *IDTokenTestSuite) SetupTest() {
+	models.TruncateAll(ts.Conn)
+	u, err := models.NewUser("", "test@example.com", "password", "authenticated", nil)
+	require.NoError(ts.T(), err)
+
+	// Set user properties for testing scope-based claims
+	u.Email = "test@example.com"
+	u.EmailConfirmedAt = &u.CreatedAt
+	u.Phone = "1234567890"
+	u.PhoneConfirmedAt = &u.CreatedAt
+
+	// Set user metadata for profile claims
+	u.UserMetaData = map[string]interface{}{
+		"full_name": "Test User",
+		"name":      "Test User",
+	}
+
+	require.NoError(ts.T(), ts.Conn.Create(u))
+	ts.User = u
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithAllScopes() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail, models.ScopeProfile, models.ScopePhone},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have email claims
+	require.NotNil(ts.T(), claims["email"], "email claim should be present with email scope")
+	require.NotNil(ts.T(), claims["email_verified"], "email_verified claim should be present with email scope")
+
+	// Should have profile claims
+	require.NotNil(ts.T(), claims["name"], "name claim should be present with profile scope")
+
+	// Should have phone claims
+	require.NotNil(ts.T(), claims["phone_number"], "phone_number claim should be present with phone scope")
+	require.NotNil(ts.T(), claims["phone_number_verified"], "phone_number_verified claim should be present with phone scope")
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithOnlyOpenIDScope() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have basic claims
+	require.NotNil(ts.T(), claims["sub"], "sub claim should always be present")
+	require.NotNil(ts.T(), claims["aud"], "aud claim should always be present")
+
+	// Should NOT have scope-specific claims
+	email, hasEmail := claims["email"]
+	require.False(ts.T(), hasEmail || (email != nil && email != ""), "email claim should not be present without email scope")
+
+	require.Nil(ts.T(), claims["name"], "name claim should not be present without profile scope")
+
+	phoneNumber, hasPhone := claims["phone_number"]
+	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithEmailScope() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have email claims
+	require.NotNil(ts.T(), claims["email"], "email claim should be present with email scope")
+	require.NotNil(ts.T(), claims["email_verified"], "email_verified claim should be present with email scope")
+
+	// Should NOT have profile/phone claims
+	require.Nil(ts.T(), claims["name"], "name claim should not be present without profile scope")
+
+	phoneNumber, hasPhone := claims["phone_number"]
+	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithProfileScope() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID, models.ScopeProfile},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have profile claims
+	require.NotNil(ts.T(), claims["name"], "name claim should be present with profile scope")
+
+	// Should NOT have email/phone claims
+	email, hasEmail := claims["email"]
+	require.False(ts.T(), hasEmail || (email != nil && email != ""), "email claim should not be present without email scope")
+
+	phoneNumber, hasPhone := claims["phone_number"]
+	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithPhoneScope() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID, models.ScopePhone},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have phone claims
+	require.NotNil(ts.T(), claims["phone_number"], "phone_number claim should be present with phone scope")
+	require.NotNil(ts.T(), claims["phone_number_verified"], "phone_number_verified claim should be present with phone scope")
+
+	// Should NOT have email/profile claims
+	email, hasEmail := claims["email"]
+	require.False(ts.T(), hasEmail || (email != nil && email != ""), "email claim should not be present without email scope")
+
+	require.Nil(ts.T(), claims["name"], "name claim should not be present without profile scope")
+}
+
+func (ts *IDTokenTestSuite) TestIDTokenWithMultipleScopes() {
+	srv := NewService(ts.Config, &panicHookManager{})
+
+	clientID := uuid.Must(uuid.NewV4())
+	params := GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Nonce:    "test-nonce",
+		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail, models.ScopeProfile},
+	}
+
+	idToken, err := srv.GenerateIDToken(params)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), idToken)
+
+	// Parse and verify claims
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+
+	// Should have email claims
+	require.NotNil(ts.T(), claims["email"], "email claim should be present with email scope")
+	require.NotNil(ts.T(), claims["email_verified"], "email_verified claim should be present with email scope")
+
+	// Should have profile claims
+	require.NotNil(ts.T(), claims["name"], "name claim should be present with profile scope")
+
+	// Should NOT have phone claims
+	phoneNumber, hasPhone := claims["phone_number"]
+	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
+}
+
+func TestAMRClaimUnmarshal(t *testing.T) {
+	t.Run("mixed string and object formats", func(t *testing.T) {
+		var claim AMRClaim
+		before := time.Now().Unix()
+
+		err := json.Unmarshal([]byte(`["password", {"method":"totp","timestamp":123,"provider":"webauthn"}]`), &claim)
+		require.NoError(t, err)
+		require.Len(t, claim, 2)
+
+		require.Equal(t, "password", claim[0].Method)
+		require.GreaterOrEqual(t, claim[0].Timestamp, before)
+		require.LessOrEqual(t, claim[0].Timestamp, time.Now().Unix())
+		require.Empty(t, claim[0].Provider, "string format should not have provider")
+
+		require.Equal(t, "totp", claim[1].Method)
+		require.Equal(t, int64(123), claim[1].Timestamp)
+		require.Equal(t, "webauthn", claim[1].Provider, "provider should be preserved from object format")
+	})
+
+	t.Run("object with provider", func(t *testing.T) {
+		var claim AMRClaim
+		err := json.Unmarshal([]byte(`[{"method":"sso","timestamp":456,"provider":"saml"}]`), &claim)
+		require.NoError(t, err)
+		require.Len(t, claim, 1)
+		require.Equal(t, "sso", claim[0].Method)
+		require.Equal(t, int64(456), claim[0].Timestamp)
+		require.Equal(t, "saml", claim[0].Provider, "provider should be preserved")
+	})
+
+	t.Run("object without provider", func(t *testing.T) {
+		var claim AMRClaim
+		err := json.Unmarshal([]byte(`[{"method":"password","timestamp":789}]`), &claim)
+		require.NoError(t, err)
+		require.Len(t, claim, 1)
+		require.Equal(t, "password", claim[0].Method)
+		require.Equal(t, int64(789), claim[0].Timestamp)
+		require.Empty(t, claim[0].Provider, "provider should be empty when not provided")
+	})
+
+	t.Run("all strings", func(t *testing.T) {
+		var claim AMRClaim
+		before := time.Now().Unix()
+		err := json.Unmarshal([]byte(`["password", "totp"]`), &claim)
+		require.NoError(t, err)
+		require.Len(t, claim, 2)
+		require.Equal(t, "password", claim[0].Method)
+		require.Equal(t, "totp", claim[1].Method)
+		require.GreaterOrEqual(t, claim[0].Timestamp, before)
+		require.Empty(t, claim[0].Provider)
+		require.Empty(t, claim[1].Provider)
+	})
+
+	t.Run("all objects", func(t *testing.T) {
+		var claim AMRClaim
+		err := json.Unmarshal([]byte(`[{"method":"password","timestamp":100},{"method":"totp","timestamp":200,"provider":"webauthn"}]`), &claim)
+		require.NoError(t, err)
+		require.Len(t, claim, 2)
+		require.Equal(t, "password", claim[0].Method)
+		require.Equal(t, int64(100), claim[0].Timestamp)
+		require.Empty(t, claim[0].Provider)
+		require.Equal(t, "totp", claim[1].Method)
+		require.Equal(t, int64(200), claim[1].Timestamp)
+		require.Equal(t, "webauthn", claim[1].Provider, "provider should be preserved")
+	})
+}
+
+func (ts *RefreshTokenV2Suite) TestRefreshTokenVersionUpgrade() {
+	config := ts.config()
+
+	require.Equal(ts.T(), 2, config.Security.RefreshTokenAlgorithmVersion)
+
+	// start out with version 1, to issue a session with the old refresh tokens
+	// which then will be upgraded to the new one
+	config.Security.RefreshTokenAlgorithmVersion = 1
+	config.Security.RefreshTokenRotationEnabled = false
+	config.Security.RefreshTokenReuseInterval = 1
+	config.Security.RefreshTokenAllowReuse = false
+
+	clock := time.Now()
+
+	srv := NewService(config, &panicHookManager{})
+	srv.SetTimeFunc(func() time.Time {
+		return clock
+	})
+
+	req, err := http.NewRequest("POST", "https://example.com/", nil)
+	require.NoError(ts.T(), err)
+
+	req = req.WithContext(context.Background())
+	responseHeaders := make(http.Header)
+
+	at, err := srv.IssueRefreshToken(
+		req,
+		responseHeaders,
+		ts.Conn,
+		ts.User,
+		models.PasswordGrant,
+		models.GrantParams{},
+	)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), at)
+
+	refreshTokenToUse := at.RefreshToken
+
+	// now set the algorithm to 2 and start upgrading
+	config.Security.RefreshTokenAlgorithmVersion = 2
+	config.Security.RefreshTokenUpgradePercentage = 100
+
+	clock = clock.Add(time.Duration(config.Security.RefreshTokenReuseInterval)*time.Second + time.Duration(100)*time.Millisecond)
+	responseHeaders = make(http.Header)
+
+	nrt, err := srv.RefreshTokenGrant(context.Background(), ts.Conn, req, responseHeaders, RefreshTokenGrantParams{
+		RefreshToken: refreshTokenToUse,
+	})
+	require.NoError(ts.T(), err)
+
+	pnrt, err := crypto.ParseRefreshToken(nrt.RefreshToken)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), pnrt)
+	require.Equal(ts.T(), int64(0), pnrt.Counter)
+
+	refreshedSession, err := models.FindSessionByID(ts.Conn, pnrt.SessionID, false)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), refreshedSession.RefreshTokenCounter)
+	require.NotNil(ts.T(), refreshedSession.RefreshTokenHmacKey)
+	require.Equal(ts.T(), int64(0), *refreshedSession.RefreshTokenCounter)
+
+	require.Equal(ts.T(), refreshedSession.UserID.String(), responseHeaders.Get("sb-auth-user-id"))
+	require.Equal(ts.T(), refreshedSession.ID.String(), responseHeaders.Get("sb-auth-session-id"))
+	require.Equal(ts.T(), "0", responseHeaders.Get("sb-auth-refresh-token-counter"))
+}
+
+// TestAsRedirectURL tests that AsRedirectURL includes the Supabase Auth identifier
+func TestAsRedirectURL(t *testing.T) {
+	response := &AccessTokenResponse{
+		Token:        "test_access_token",
+		TokenType:    "bearer",
+		ExpiresIn:    3600,
+		ExpiresAt:    1234567890,
+		RefreshToken: "test_refresh_token",
+	}
+
+	extraParams := url.Values{}
+	extraParams.Set("provider_token", "provider_access_token")
+
+	redirectURL := response.AsRedirectURL("https://example.com/callback", extraParams)
+
+	// Parse the URL
+	u, err := url.Parse(redirectURL)
+	require.NoError(t, err)
+
+	// Parse the fragment
+	fragment, err := url.ParseQuery(u.Fragment)
+	require.NoError(t, err)
+
+	// Verify all expected parameters are present
+	require.Equal(t, "test_access_token", fragment.Get("access_token"))
+	require.Equal(t, "bearer", fragment.Get("token_type"))
+	require.Equal(t, "3600", fragment.Get("expires_in"))
+	require.Equal(t, "1234567890", fragment.Get("expires_at"))
+	require.Equal(t, "test_refresh_token", fragment.Get("refresh_token"))
+	require.Equal(t, "provider_access_token", fragment.Get("provider_token"))
+
+	// Verify Supabase Auth identifier is present
+	require.Contains(t, fragment, "sb", "Fragment should contain Supabase Auth identifier 'sb'")
+	require.Equal(t, "", fragment.Get("sb"), "Supabase Auth identifier should have empty value")
 }
