@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -109,6 +110,68 @@ func (ts *ResendTestSuite) TestResendValidation() {
 
 }
 
+func (ts *ResendTestSuite) TestResendPKCEValidation() {
+	const validChallenge = "testtesttesttesttesttesttestteststeststesttesttesttest"
+	cases := []struct {
+		desc     string
+		params   map[string]interface{}
+		expected map[string]interface{}
+	}{
+		{
+			desc: "Signup with code_challenge but missing code_challenge_method",
+			params: map[string]interface{}{
+				"type":           "signup",
+				"email":          "foo@example.com",
+				"code_challenge": validChallenge,
+			},
+			expected: map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": InvalidPKCEParamsErrorMessage,
+			},
+		},
+		{
+			desc: "Signup with code_challenge_method but missing code_challenge",
+			params: map[string]interface{}{
+				"type":                  "signup",
+				"email":                 "foo@example.com",
+				"code_challenge_method": "s256",
+			},
+			expected: map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": InvalidPKCEParamsErrorMessage,
+			},
+		},
+		{
+			desc: "Email change with code_challenge but missing code_challenge_method",
+			params: map[string]interface{}{
+				"type":           "email_change",
+				"email":          "foo@example.com",
+				"code_challenge": validChallenge,
+			},
+			expected: map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": InvalidPKCEParamsErrorMessage,
+			},
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.params))
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/resend", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), c.expected["code"], w.Code)
+
+			data := make(map[string]interface{})
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			require.Equal(ts.T(), c.expected["message"], data["msg"])
+		})
+	}
+}
+
 func (ts *ResendTestSuite) TestResendSuccess() {
 	// Create user
 	u, err := models.NewUser("123456789", "foo@example.com", "password", ts.Config.JWT.Aud, nil)
@@ -150,8 +213,7 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	cases := []struct {
 		desc   string
 		params map[string]interface{}
-		// expected map[string]interface{}
-		user *models.User
+		user   *models.User
 	}{
 		{
 			desc: "Resend signup confirmation",
@@ -214,4 +276,72 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 			}
 		})
 	}
+}
+
+func (ts *ResendTestSuite) TestResendPKCESuccess() {
+	const testCodeChallenge = "testtesttesttesttesttesttestteststeststesttesttesttest"
+
+	// Avoid max freq limit error
+	now := time.Now().Add(-1 * time.Minute)
+
+	ts.Config.Mailer.SecureEmailChangeEnabled = false
+
+	// Fresh user for signup PKCE resend
+	signupUser, err := models.NewUser("", "pkce-signup@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	signupUser.ConfirmationToken = "oldtoken"
+	signupUser.ConfirmationSentAt = &now
+	require.NoError(ts.T(), ts.API.db.Create(signupUser))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, signupUser.ID, signupUser.GetEmail(), signupUser.ConfirmationToken, models.ConfirmationToken))
+
+	// Fresh user for email_change PKCE resend
+	emailChangeUser, err := models.NewUser("", "pkce-change@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	emailChangeUser.EmailChange = "pkce-change-new@example.com"
+	emailChangeUser.EmailChangeSentAt = &now
+	emailChangeUser.EmailChangeTokenNew = "oldchangetoken"
+	require.NoError(ts.T(), ts.API.db.Create(emailChangeUser))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, emailChangeUser.ID, emailChangeUser.EmailChange, emailChangeUser.EmailChangeTokenNew, models.EmailChangeTokenNew))
+
+	ts.Run("Resend signup confirmation with PKCE", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"type":                  "signup",
+			"email":                 signupUser.GetEmail(),
+			"code_challenge":        testCodeChallenge,
+			"code_challenge_method": "s256",
+		}))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/resend", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		dbUser, err := models.FindUserByID(ts.API.db, signupUser.ID)
+		require.NoError(ts.T(), err)
+		require.NotEqual(ts.T(), dbUser.ConfirmationToken, signupUser.ConfirmationToken)
+		require.True(ts.T(), strings.HasPrefix(dbUser.ConfirmationToken, PKCEPrefix), "expected pkce_ prefix on ConfirmationToken, got: %s", dbUser.ConfirmationToken)
+	})
+
+	ts.Run("Resend email change with PKCE", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"type":                  "email_change",
+			"email":                 emailChangeUser.GetEmail(),
+			"code_challenge":        testCodeChallenge,
+			"code_challenge_method": "s256",
+		}))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/resend", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		dbUser, err := models.FindUserByID(ts.API.db, emailChangeUser.ID)
+		require.NoError(ts.T(), err)
+		require.NotEqual(ts.T(), dbUser.EmailChangeTokenNew, emailChangeUser.EmailChangeTokenNew)
+		require.True(ts.T(), strings.HasPrefix(dbUser.EmailChangeTokenNew, PKCEPrefix), "expected pkce_ prefix on EmailChangeTokenNew, got: %s", dbUser.EmailChangeTokenNew)
+	})
 }
