@@ -409,11 +409,11 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateProviderFeatureDisabled() {
 	ts.Config.CustomOAuth.Enabled = false
 
 	payload := ts.createTestOAuth2Payload("test")
-	w := ts.createProvider(payload, http.StatusBadRequest)
+	w := ts.createProvider(payload, http.StatusNotFound)
 
 	var apiErr apierrors.HTTPError
 	json.NewDecoder(w.Body).Decode(&apiErr)
-	assert.Contains(ts.T(), apiErr.Message, "not enabled")
+	assert.Contains(ts.T(), apiErr.Message, "disabled")
 }
 
 func (ts *CustomOAuthAdminTestSuite) TestCreateProviderDuplicateIdentifier() {
