@@ -142,11 +142,6 @@ func (a *API) adminCustomOAuthProviderCreate(w http.ResponseWriter, r *http.Requ
 	db := a.db.WithContext(ctx)
 	config := a.config
 
-	// Check if custom OAuth is enabled
-	if !config.CustomOAuth.Enabled {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeFeatureDisabled, "Custom OAuth/OIDC providers are not enabled")
-	}
-
 	// Parse request parameters
 	params := &AdminCustomOAuthProviderParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
