@@ -371,6 +371,22 @@ func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Reque
 	return ctx, nil
 }
 
+func (a *API) requireOAuthServerEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.OAuthServer.Enabled {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeFeatureDisabled, "OAuth server is disabled")
+	}
+	return ctx, nil
+}
+
+func (a *API) requireCustomOAuthEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.CustomOAuth.Enabled {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeFeatureDisabled, "Custom OAuth providers are disabled")
+	}
+	return ctx, nil
+}
+
 func (a *API) requirePasskeyEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.Passkey.Enabled {

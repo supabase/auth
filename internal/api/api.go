@@ -161,12 +161,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	logger := observability.NewStructuredLogger(logrus.StandardLogger(), globalConfig)
 
 	r := newRouter()
-	r.NotFound(func(w http.ResponseWriter, r *http.Request) error {
-		return apierrors.NewNotFoundError(apierrors.ErrorCodeRouteNotFound, "Route not found")
-	})
-	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) error {
-		return apierrors.NewHTTPError(http.StatusMethodNotAllowed, apierrors.ErrorCodeMethodNotAllowed, "HTTP method not allowed")
-	})
 	r.UseBypass(recoverer)
 	r.UseBypass(observability.AddRequestID(globalConfig))
 	r.UseBypass(
@@ -206,9 +200,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	// Both OIDC Discovery and OAuth Authorization Server Metadata use the same unified handler
 	// OIDC Discovery is an extension of RFC 8414, so one response satisfies both specs
 	r.Get("/.well-known/openid-configuration", api.WellKnownOpenID)
-	if globalConfig.OAuthServer.Enabled {
-		r.Get("/.well-known/oauth-authorization-server", api.WellKnownOpenID)
-	}
+	r.With(api.requireOAuthServerEnabled).Get("/.well-known/oauth-authorization-server", api.WellKnownOpenID)
 
 	r.Route("/callback", func(r *router) {
 		r.Use(api.isValidExternalHost)
@@ -291,13 +283,12 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.Delete("/{identity_id}", api.DeleteIdentity)
 			})
 
-			// OAuth grant management endpoints (only if OAuth server is enabled)
-			if globalConfig.OAuthServer.Enabled {
-				r.Route("/oauth/grants", func(r *router) {
-					r.Get("/", api.oauthServer.UserListOAuthGrants)
-					r.Delete("/", api.oauthServer.UserRevokeOAuthGrant)
-				})
-			}
+			// OAuth grant management endpoints
+			r.Route("/oauth/grants", func(r *router) {
+				r.Use(api.requireOAuthServerEnabled)
+				r.Get("/", api.oauthServer.UserListOAuthGrants)
+				r.Delete("/", api.oauthServer.UserRevokeOAuthGrant)
+			})
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
@@ -403,60 +394,57 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			})
 
 			// Admin only oauth client management endpoints
-			if globalConfig.OAuthServer.Enabled {
-				r.Route("/oauth", func(r *router) {
-					r.Route("/clients", func(r *router) {
-						// Manual client registration
-						r.Post("/", api.oauthServer.AdminOAuthServerClientRegister)
+			r.Route("/oauth", func(r *router) {
+				r.Use(api.requireOAuthServerEnabled)
+				r.Route("/clients", func(r *router) {
+					// Manual client registration
+					r.Post("/", api.oauthServer.AdminOAuthServerClientRegister)
 
-						r.Get("/", api.oauthServer.OAuthServerClientList)
+					r.Get("/", api.oauthServer.OAuthServerClientList)
 
-						r.Route("/{client_id}", func(r *router) {
-							r.Use(api.oauthServer.LoadOAuthServerClient)
-							r.Get("/", api.oauthServer.OAuthServerClientGet)
-							r.Put("/", api.oauthServer.OAuthServerClientUpdate)
-							r.Delete("/", api.oauthServer.OAuthServerClientDelete)
-							r.Post("/regenerate_secret", api.oauthServer.OAuthServerClientRegenerateSecret)
-						})
+					r.Route("/{client_id}", func(r *router) {
+						r.Use(api.oauthServer.LoadOAuthServerClient)
+						r.Get("/", api.oauthServer.OAuthServerClientGet)
+						r.Put("/", api.oauthServer.OAuthServerClientUpdate)
+						r.Delete("/", api.oauthServer.OAuthServerClientDelete)
+						r.Post("/regenerate_secret", api.oauthServer.OAuthServerClientRegenerateSecret)
 					})
 				})
-			}
+			})
 
 			// Custom OAuth/OIDC provider management endpoints
-			if globalConfig.CustomOAuth.Enabled {
-				r.Route("/custom-providers", func(r *router) {
-					// supports both OAuth2 and OIDC via provider_type)
-					r.Get("/", api.adminCustomOAuthProvidersList)   // Optional ?type=oauth2 or ?type=oidc filter
-					r.Post("/", api.adminCustomOAuthProviderCreate) // provider_type in request body
+			r.Route("/custom-providers", func(r *router) {
+				r.Use(api.requireCustomOAuthEnabled)
+				// supports both OAuth2 and OIDC via provider_type)
+				r.Get("/", api.adminCustomOAuthProvidersList)   // Optional ?type=oauth2 or ?type=oidc filter
+				r.Post("/", api.adminCustomOAuthProviderCreate) // provider_type in request body
 
-					r.Route("/{identifier}", func(r *router) {
-						r.Get("/", api.adminCustomOAuthProviderGet)
-						r.Put("/", api.adminCustomOAuthProviderUpdate)
-						r.Delete("/", api.adminCustomOAuthProviderDelete)
-					})
+				r.Route("/{identifier}", func(r *router) {
+					r.Get("/", api.adminCustomOAuthProviderGet)
+					r.Put("/", api.adminCustomOAuthProviderUpdate)
+					r.Delete("/", api.adminCustomOAuthProviderDelete)
 				})
-			}
+			})
 		})
 
 		// OAuth Dynamic Client Registration endpoint (public, rate limited)
-		if globalConfig.OAuthServer.Enabled {
-			r.Route("/oauth", func(r *router) {
-				r.With(api.limitHandler(api.limiterOpts.OAuthClientRegister)).
-					Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
+		r.Route("/oauth", func(r *router) {
+			r.Use(api.requireOAuthServerEnabled)
+			r.With(api.limitHandler(api.limiterOpts.OAuthClientRegister)).
+				Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
 
-				// OAuth Token endpoint (public, with client authentication)
-				r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
+			// OAuth Token endpoint (public, with client authentication)
+			r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
 
-				// OIDC UserInfo endpoint (requires user authentication via Bearer token)
-				r.With(api.requireAuthentication).Get("/userinfo", api.oauthServer.OAuthUserInfo)
+			// OIDC UserInfo endpoint (requires user authentication via Bearer token)
+			r.With(api.requireAuthentication).Get("/userinfo", api.oauthServer.OAuthUserInfo)
 
-				// OAuth 2.1 Authorization endpoints
-				// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider
-				r.Get("/authorize", api.oauthServer.OAuthServerAuthorize)
-				r.With(api.requireAuthentication).Get("/authorizations/{authorization_id}", api.oauthServer.OAuthServerGetAuthorization)
-				r.With(api.requireAuthentication).Post("/authorizations/{authorization_id}/consent", api.oauthServer.OAuthServerConsent)
-			})
-		}
+			// OAuth 2.1 Authorization endpoints
+			// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider
+			r.Get("/authorize", api.oauthServer.OAuthServerAuthorize)
+			r.With(api.requireAuthentication).Get("/authorizations/{authorization_id}", api.oauthServer.OAuthServerGetAuthorization)
+			r.With(api.requireAuthentication).Post("/authorizations/{authorization_id}/consent", api.oauthServer.OAuthServerConsent)
+		})
 	})
 
 	corsHandler := cors.New(cors.Options{

@@ -11,6 +11,8 @@ import (
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
+
+	"github.com/supabase/auth/internal/api/apierrors"
 )
 
 const (
@@ -80,37 +82,64 @@ func TestOAuthServerDisabledByDefault(t *testing.T) {
 	require.Nil(t, api.oauthServer)
 }
 
-func TestNotFoundJSON(t *testing.T) {
-	api, _, err := setupAPIForTest()
-	require.NoError(t, err)
+func TestDisabledFeatureReturnsJSON(t *testing.T) {
+	cases := []struct {
+		name      string
+		method    string
+		path      string
+		errorCode string
+		setup     func(*conf.GlobalConfiguration)
+	}{
+		{
+			name:      "OAuthServer disabled returns JSON on /oauth/token",
+			method:    http.MethodPost,
+			path:      "http://localhost/oauth/token",
+			errorCode: apierrors.ErrorCodeFeatureDisabled,
+			setup: func(c *conf.GlobalConfiguration) {
+				c.OAuthServer.Enabled = false
+			},
+		},
+		{
+			name:      "OAuthServer disabled returns JSON on /oauth/clients/register",
+			method:    http.MethodPost,
+			path:      "http://localhost/oauth/clients/register",
+			errorCode: apierrors.ErrorCodeFeatureDisabled,
+			setup: func(c *conf.GlobalConfiguration) {
+				c.OAuthServer.Enabled = false
+			},
+		},
+		{
+			name:      "OAuthServer disabled returns JSON on /.well-known/oauth-authorization-server",
+			method:    http.MethodGet,
+			path:      "http://localhost/.well-known/oauth-authorization-server",
+			errorCode: apierrors.ErrorCodeFeatureDisabled,
+			setup: func(c *conf.GlobalConfiguration) {
+				c.OAuthServer.Enabled = false
+			},
+		},
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/does-not-exist", nil)
-	w := httptest.NewRecorder()
-	api.handler.ServeHTTP(w, req)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			api, _, err := setupAPIForTestWithCallback(func(config *conf.GlobalConfiguration, conn *storage.Connection) {
+				if config != nil {
+					tc.setup(config)
+				}
+			})
+			require.NoError(t, err)
 
-	require.Equal(t, http.StatusNotFound, w.Code)
-	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			w := httptest.NewRecorder()
+			api.handler.ServeHTTP(w, req)
 
-	var body map[string]interface{}
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
-	require.Equal(t, "route_not_found", body["error_code"])
-}
+			require.Equal(t, http.StatusNotFound, w.Code)
+			require.Contains(t, w.Header().Get("Content-Type"), "application/json")
 
-func TestMethodNotAllowedJSON(t *testing.T) {
-	api, _, err := setupAPIForTest()
-	require.NoError(t, err)
-
-	// /settings only has GET registered, so PATCH should be method not allowed
-	req := httptest.NewRequest(http.MethodPatch, "http://localhost/settings", nil)
-	w := httptest.NewRecorder()
-	api.handler.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusMethodNotAllowed, w.Code)
-	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
-
-	var body map[string]interface{}
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
-	require.Equal(t, "method_not_allowed", body["error_code"])
+			var body map[string]interface{}
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+			require.Equal(t, tc.errorCode, body["error_code"])
+		})
+	}
 }
 
 func TestOAuthServerCanBeEnabled(t *testing.T) {
