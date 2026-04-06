@@ -224,7 +224,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			// add "email" provider to identities when oauth user sets a password
-			if params.Email == "" {
+			if params.Email == "" && params.Phone == "" {
 				identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
 				if terr != nil && !models.IsNotFoundError(terr) {
 					return terr
