@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
@@ -219,6 +221,23 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 			if terr = user.UpdatePassword(tx, sessionID); terr != nil {
 				return apierrors.NewInternalServerError("Error during password storage").WithInternalError(terr)
+			}
+
+			// add "email" provider to identities when oauth user sets a password
+			if params.Email == "" {
+				identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
+				if terr != nil && !models.IsNotFoundError(terr) {
+					return terr
+				} else if identity == nil {
+					_, terr = a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+						Subject:       user.ID.String(),
+						Email:         user.GetEmail(),
+						EmailVerified: user.IsConfirmed(),
+					}))
+					if terr != nil {
+						return terr
+					}
+				}
 			}
 
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserUpdatePasswordAction, "", nil); terr != nil {
