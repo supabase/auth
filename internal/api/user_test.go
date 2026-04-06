@@ -758,3 +758,52 @@ func (ts *UserTestSuite) TestUserUpdatePasswordSendsNotificationEmail() {
 		})
 	}
 }
+
+func (ts *UserTestSuite) TestOauthUserUpdatePassword() {
+	email, providerId, name, avatar := "google@example.com", "googleTestId", "Google Test", "http://example.com/avatar"
+	newPassword := "newpassword123"
+
+	ts.Run("Add email provider to identities when oauth user sets a password", func() {
+		// Cleanup existing user, if they already exist
+		if u, _ := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud); u != nil {
+			require.NoError(ts.T(), ts.API.db.Destroy(u), "Error deleting user")
+		}
+
+		userData := map[string]any{"provider_id": providerId, "full_name": name, "avatar_url": avatar}
+		u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, userData)
+		ts.Require().NoError(err, "Error making new user")
+		ts.Require().NoError(ts.API.db.Create(u), "Error creating user")
+
+		i, err := models.NewIdentity(u, "google", map[string]any{
+			"sub": providerId,
+		})
+		ts.Require().NoError(err)
+		ts.Require().NoError(ts.API.db.Create(i), "Error creating identity")
+
+		r, err := models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
+		require.NoError(ts.T(), err)
+
+		userUpdateBody := map[string]string{"password": newPassword}
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(userUpdateBody))
+
+		req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.generateToken(u, r.SessionId)))
+
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		u, err = models.FindUserByEmailAndAudience(ts.API.db, u.GetEmail(), ts.Config.JWT.Aud)
+		require.NoError(ts.T(), err)
+
+		isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, newPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+		require.NoError(ts.T(), err)
+		require.True(ts.T(), isAuthenticated)
+
+		require.Equal(ts.T(), 2, len(u.Identities))
+		require.Equal(ts.T(), "google", u.Identities[0].Provider)
+		require.Equal(ts.T(), "email", u.Identities[1].Provider)
+	})
+}
