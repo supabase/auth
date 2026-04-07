@@ -11,7 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  test_postgres:
+    name: Test / Postgres
     runs-on: blacksmith-4vcpu-ubuntu-2404
     services:
       postgres:
@@ -69,3 +70,35 @@ jobs:
       - uses: shogo82148/actions-goveralls@25f5320d970fb565100cf1993ada29be1bb196a1 # v1.10.0
         with:
           path-to-profile: coverage.out
+
+  test_oriole:
+    name: Test / OrioleDB
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    services:
+      postgres:
+        image: orioledb/orioledb:latest-pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: postgres
+          POSTGRES_INITDB_ARGS: "--locale=C"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+      - name: Init Database
+        run: psql -f hack/init_postgres.sql postgresql://postgres:root@localhost:5432/postgres
+      - name: Run migrations
+        run: make migrate_dev
+      - name: Run tests
+        run: go test ./... -p 1 -race -v -count=1
