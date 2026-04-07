@@ -11,4 +11,6 @@ exception
     raise notice 'Unable to change data type of phone, phone_change columns due to use by a view or rule';
   when SQLSTATE '2BP01' then
     raise notice 'Unable to change data type of phone, phone_change columns due to dependent objects';
+  when SQLSTATE 'XX000' then
+    raise notice 'Unable to change data type of phone, phone_change columns due to internal error (OrioleDB)';
 end $$;
