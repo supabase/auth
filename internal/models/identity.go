@@ -103,7 +103,7 @@ func FindProvidersByUser(tx *storage.Connection, user *User) ([]string, error) {
 	identities := []Identity{}
 	providerExists := map[string]bool{}
 	providers := make([]string, 0)
-	if err := tx.Q().Select("provider").Where("user_id = ?", user.ID).All(&identities); err != nil {
+	if err := tx.Q().Select("provider").Where("user_id = ?", user.ID).Order("created_at asc").All(&identities); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return providers, nil
 		}
