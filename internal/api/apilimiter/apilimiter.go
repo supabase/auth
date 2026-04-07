@@ -51,7 +51,7 @@ const (
 
 	// GOTRUE_RATE_LIMIT_PASSKEY
 	//   -> RateLimitPasskey
-	envRateLimitPasskey        = "GOTRUE_RATE_LIMIT_PASSKEY"
+	envRateLimitPasskey        = "GOTRUE_RATE_LIMIT_PASSKEY" // #nosec G101
 	fieldPasskeyAuthentication = "PasskeyAuthentication"
 
 	// GOTRUE_SAML_RATE_LIMIT_ASSERTION
@@ -66,7 +66,7 @@ const (
 
 	// GOTRUE_RATE_LIMIT_TOKEN_REFRESH
 	//   -> RateLimitTokenRefresh
-	envRateLimitTokenRefresh = "GOTRUE_RATE_LIMIT_TOKEN_REFRESH"
+	envRateLimitTokenRefresh = "GOTRUE_RATE_LIMIT_TOKEN_REFRESH" // #nosec G101
 	fieldToken               = "Token"
 
 	// GOTRUE_RATE_LIMIT_VERIFY
