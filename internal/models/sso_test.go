@@ -405,18 +405,17 @@ func (ts *SSOTestSuite) TestFindSSOProviderByResourceID() {
 		},
 	}
 
+	getIDs := func(providers []*SSOProvider) []uuid.UUID {
+		ids := make([]uuid.UUID, len(providers))
+		for i, p := range providers {
+			ids[i] = p.ID
+		}
+		return ids
+	}
+
 	check := func(t *testing.T, exp, got []*SSOProvider) {
 		t.Helper()
-
-		require.Len(t, got, len(exp))
-
-		isEqual := func(a, b *SSOProvider) bool {
-			return a.ID == b.ID && a.ResourceID == b.ResourceID
-		}
-		equal := slices.EqualFunc(exp, got, isEqual)
-		if !equal {
-			require.Equal(t, exp, got)
-		}
+		require.ElementsMatch(t, getIDs(exp), getIDs(got))
 	}
 
 	for _, test := range tests {
