@@ -385,7 +385,7 @@ func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*model
 		if terr = tx.Create(user); terr != nil {
 			return apierrors.NewInternalServerError("Database error saving new user").WithInternalError(terr)
 		}
-		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
+		if terr = user.SetRole(tx, config.DB.DefaultRole); terr != nil {
 			return apierrors.NewInternalServerError("Database error updating user").WithInternalError(terr)
 		}
 		return nil

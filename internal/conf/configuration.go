@@ -110,6 +110,7 @@ type DBConfiguration struct {
 	Driver    string `json:"driver" required:"true"`
 	URL       string `json:"url" envconfig:"DATABASE_URL" required:"true"`
 	Namespace string `json:"namespace" envconfig:"DB_NAMESPACE" default:"auth"`
+	DefaultRole string `json:"default_role" split_words:"true"`
 
 	// Percentage of DB conns the auth server may use in
 	// integer form i.e.: [1, 100] -> [1%, 100%]
@@ -1140,6 +1141,14 @@ func populateGlobal(config *GlobalConfiguration) error {
 func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.JWT.AdminGroupName == "" {
 		config.JWT.AdminGroupName = "admin"
+	}
+
+	if config.DB.DefaultRole == "" {
+		if config.JWT.DefaultGroupName != "" {
+			config.DB.DefaultRole = config.JWT.DefaultGroupName
+		} else {
+			config.DB.DefaultRole = "authenticated"
+		}
 	}
 
 	if len(config.JWT.AdminRoles) == 0 {

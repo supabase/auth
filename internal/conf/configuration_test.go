@@ -1360,6 +1360,56 @@ func TestWebAuthnConfigurationValidate(t *testing.T) {
 	}
 }
 
+func TestDefaultRoleApplyDefaults(t *testing.T) {
+	// Case 1: GOTRUE_DB_DEFAULT_ROLE is set — should use it directly
+	{
+		val := &GlobalConfiguration{
+			JWT: JWTConfiguration{Secret: "a"},
+			DB:  DBConfiguration{DefaultRole: "custom_role"},
+		}
+		err := val.ApplyDefaults()
+		require.NoError(t, err)
+		require.Equal(t, "custom_role", val.DB.DefaultRole)
+	}
+
+	// Case 2: neither is set — should default to "authenticated"
+	{
+		val := &GlobalConfiguration{
+			JWT: JWTConfiguration{Secret: "a"},
+		}
+		err := val.ApplyDefaults()
+		require.NoError(t, err)
+		require.Equal(t, "authenticated", val.DB.DefaultRole)
+	}
+
+	// Case 3: only GOTRUE_JWT_DEFAULT_GROUP_NAME is set — backward compat
+	{
+		val := &GlobalConfiguration{
+			JWT: JWTConfiguration{
+				Secret:           "a",
+				DefaultGroupName: "legacy_role",
+			},
+		}
+		err := val.ApplyDefaults()
+		require.NoError(t, err)
+		require.Equal(t, "legacy_role", val.DB.DefaultRole)
+	}
+
+	// Case 4: both are set — DB.DefaultRole takes precedence
+	{
+		val := &GlobalConfiguration{
+			JWT: JWTConfiguration{
+				Secret:           "a",
+				DefaultGroupName: "legacy_role",
+			},
+			DB: DBConfiguration{DefaultRole: "new_role"},
+		}
+		err := val.ApplyDefaults()
+		require.NoError(t, err)
+		require.Equal(t, "new_role", val.DB.DefaultRole)
+	}
+}
+
 func toPtr[T any](v T) *T {
 	return &(&([1]T{T(v)}))[0]
 }
