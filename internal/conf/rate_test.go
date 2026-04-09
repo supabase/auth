@@ -14,15 +14,15 @@ func TestRateDecode(t *testing.T) {
 		err string
 	}{
 		{str: "1800",
-			exp: Rate{Events: 1800, OverTime: time.Hour, typ: IntervalRateType}},
+			exp: Rate{val: "1800", Events: 1800, OverTime: time.Hour, typ: IntervalRateType}},
 		{str: "1800.0",
-			exp: Rate{Events: 1800, OverTime: time.Hour, typ: IntervalRateType}},
+			exp: Rate{val: "1800.0", Events: 1800, OverTime: time.Hour, typ: IntervalRateType}},
 		{str: "3600/1h",
-			exp: Rate{Events: 3600, OverTime: time.Hour, typ: BurstRateType}},
+			exp: Rate{val: "3600/1h", Events: 3600, OverTime: time.Hour, typ: BurstRateType}},
 		{str: "3600/1h0m0s",
-			exp: Rate{Events: 3600, OverTime: time.Hour, typ: BurstRateType}},
+			exp: Rate{val: "3600/1h0m0s", Events: 3600, OverTime: time.Hour, typ: BurstRateType}},
 		{str: "100/24h",
-			exp: Rate{Events: 100, OverTime: time.Hour * 24, typ: BurstRateType}},
+			exp: Rate{val: "100/24h", Events: 100, OverTime: time.Hour * 24, typ: BurstRateType}},
 		{str: "", exp: Rate{},
 			err: `rate: value does not match`},
 		{str: "1h", exp: Rate{},
@@ -40,9 +40,9 @@ func TestRateDecode(t *testing.T) {
 
 		// zero events
 		{str: "0/1h",
-			exp: Rate{Events: 0, OverTime: time.Hour, typ: BurstRateType}},
+			exp: Rate{val: "0/1h", Events: 0, OverTime: time.Hour, typ: BurstRateType}},
 		{str: "0/24h",
-			exp: Rate{Events: 0, OverTime: time.Hour * 24, typ: BurstRateType}},
+			exp: Rate{val: "0/24h", Events: 0, OverTime: time.Hour * 24, typ: BurstRateType}},
 	}
 	for idx, tc := range cases {
 		t.Logf("test #%v - duration str %v", idx, tc.str)
