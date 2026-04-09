@@ -63,7 +63,7 @@ func TestNew(t *testing.T) {
 			if test.from == t2.from {
 				continue
 			}
-			require.NotEqual(t, Equal(rl, fromRateStr(t2.from)),
+			require.False(t, Equal(rl, fromRateStr(t2.from)),
 				"%v should not be equal to %v", test.from, t2.from)
 		}
 	}
