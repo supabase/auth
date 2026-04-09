@@ -28,12 +28,14 @@ type PasskeyRegistrationOptionsResponse struct {
 type PasskeyRegistrationVerifyParams struct {
 	ChallengeID        string          `json:"challenge_id"`
 	CredentialResponse json.RawMessage `json:"credential_response"`
+	FriendlyName       string          `json:"friendly_name,omitempty"`
 }
 
 // PasskeyMetadataResponse is the response body for successful passkey creation.
 type PasskeyMetadataResponse struct {
 	ID             string                            `json:"id"`
 	FriendlyName   string                            `json:"friendly_name,omitempty"`
+	AAGUID         *uuid.UUID                        `json:"aaguid,omitempty"`
 	CreatedAt      time.Time                         `json:"created_at"`
 	BackupEligible bool                              `json:"backup_eligible"`
 	BackedUp       bool                              `json:"backed_up"`
@@ -132,6 +134,9 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 	if params.CredentialResponse == nil {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "credential_response is required")
 	}
+	if len(params.FriendlyName) > 120 {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "friendly_name must be 120 characters or less")
+	}
 
 	challengeID, err := uuid.FromString(params.ChallengeID)
 	if err != nil {
@@ -177,7 +182,10 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnVerificationFailed, "Credential verification failed").WithInternalError(err)
 	}
 
-	friendlyName := utilities.PasskeyFriendlyName(credential.Authenticator.AAGUID)
+	friendlyName := params.FriendlyName
+	if friendlyName == "" {
+		friendlyName = utilities.PasskeyFriendlyName(credential.Authenticator.AAGUID)
+	}
 	passkeyCredential := models.NewWebAuthnCredential(user.ID, credential, friendlyName)
 
 	err = db.Transaction(func(tx *storage.Connection) error {
@@ -215,6 +223,7 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 	return sendJSON(w, http.StatusOK, &PasskeyMetadataResponse{
 		ID:             passkeyCredential.ID.String(),
 		FriendlyName:   passkeyCredential.FriendlyName,
+		AAGUID:         passkeyCredential.AAGUID,
 		CreatedAt:      passkeyCredential.CreatedAt,
 		BackupEligible: passkeyCredential.BackupEligible,
 		BackedUp:       passkeyCredential.BackedUp,
