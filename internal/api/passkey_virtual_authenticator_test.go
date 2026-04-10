@@ -33,20 +33,20 @@ type storedCredential struct {
 
 // virtualCredentialResponse is the result of creating a credential with the virtual authenticator.
 type virtualCredentialResponse struct {
-	// JSON is the raw JSON of the CredentialCreationResponse, ready to be sent as credential_response.
+	// JSON is the raw JSON of the CredentialCreationResponse, ready to be sent as credential.
 	JSON json.RawMessage
 }
 
 // virtualAssertionResponse is the result of getting an assertion with the virtual authenticator.
 type virtualAssertionResponse struct {
-	// JSON is the raw JSON of the CredentialAssertionResponse, ready to be sent as credential_response.
+	// JSON is the raw JSON of the CredentialAssertionResponse, ready to be sent as credential.
 	JSON json.RawMessage
 }
 
 // createCredential builds a valid WebAuthn CredentialCreationResponse for the given
 // registration options. It generates a fresh EC P-256 key pair and uses "none" attestation.
-func (va *virtualAuthenticator) createCredential(options *protocol.CredentialCreation) (*virtualCredentialResponse, error) {
-	challenge := options.Response.Challenge
+func (va *virtualAuthenticator) createCredential(options *protocol.PublicKeyCredentialCreationOptions) (*virtualCredentialResponse, error) {
+	challenge := options.Challenge
 
 	// Generate a fresh P-256 key pair
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -108,7 +108,7 @@ func (va *virtualAuthenticator) createCredential(options *protocol.CredentialCre
 	// After JSON round-tripping, User.ID may be a string (base64url encoded)
 	// or URLEncodedBase64/[]byte if used directly from the library.
 	var userHandle []byte
-	switch v := options.Response.User.ID.(type) {
+	switch v := options.User.ID.(type) {
 	case protocol.URLEncodedBase64:
 		userHandle = []byte(v)
 	case []byte:
@@ -131,7 +131,7 @@ func (va *virtualAuthenticator) createCredential(options *protocol.CredentialCre
 // getAssertion builds a valid WebAuthn CredentialAssertionResponse for the given
 // authentication options. It picks the first stored credential (discoverable flow) and signs
 // the authenticator data + client data hash.
-func (va *virtualAuthenticator) getAssertion(options *protocol.CredentialAssertion) (*virtualAssertionResponse, error) {
+func (va *virtualAuthenticator) getAssertion(options *protocol.PublicKeyCredentialRequestOptions) (*virtualAssertionResponse, error) {
 	if len(va.credentials) == 0 {
 		return nil, fmt.Errorf("no stored credentials")
 	}
@@ -143,7 +143,7 @@ func (va *virtualAuthenticator) getAssertion(options *protocol.CredentialAsserti
 		break
 	}
 
-	challenge := options.Response.Challenge
+	challenge := options.Challenge
 
 	clientDataJSON, err := json.Marshal(map[string]string{
 		"type":      "webauthn.get",
