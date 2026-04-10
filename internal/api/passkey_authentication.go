@@ -17,15 +17,15 @@ import (
 
 // PasskeyAuthenticationOptionsResponse is the response body for POST /passkeys/authentication/options.
 type PasskeyAuthenticationOptionsResponse struct {
-	ChallengeID string                        `json:"challenge_id"`
-	Options     *protocol.CredentialAssertion `json:"options"`
-	ExpiresAt   int64                         `json:"expires_at"`
+	ChallengeID string                                      `json:"challenge_id"`
+	Options     *protocol.PublicKeyCredentialRequestOptions `json:"options"`
+	ExpiresAt   int64                                       `json:"expires_at"`
 }
 
 // PasskeyAuthenticationVerifyParams is the request body for POST /passkeys/authentication/verify.
 type PasskeyAuthenticationVerifyParams struct {
-	ChallengeID        string          `json:"challenge_id"`
-	CredentialResponse json.RawMessage `json:"credential_response"`
+	ChallengeID string          `json:"challenge_id"`
+	Credential  json.RawMessage `json:"credential"`
 }
 
 // PasskeyAuthenticationOptions handles POST /passkeys/authentication/options.
@@ -59,7 +59,7 @@ func (a *API) PasskeyAuthenticationOptions(w http.ResponseWriter, r *http.Reques
 
 	return sendJSON(w, http.StatusOK, &PasskeyAuthenticationOptionsResponse{
 		ChallengeID: challenge.ID.String(),
-		Options:     options,
+		Options:     &options.Response,
 		ExpiresAt:   expiresAt.Unix(),
 	})
 }
@@ -83,8 +83,8 @@ func (a *API) PasskeyAuthenticationVerify(w http.ResponseWriter, r *http.Request
 	if params.ChallengeID == "" {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "challenge_id is required")
 	}
-	if params.CredentialResponse == nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "credential_response is required")
+	if params.Credential == nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "credential is required")
 	}
 
 	challengeID, err := uuid.FromString(params.ChallengeID)
@@ -105,7 +105,7 @@ func (a *API) PasskeyAuthenticationVerify(w http.ResponseWriter, r *http.Request
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnChallengeExpired, "Challenge has expired")
 	}
 
-	parsedResponse, err := parseCredentialAssertionResponse(params.CredentialResponse)
+	parsedResponse, err := parseCredentialAssertionResponse(params.Credential)
 	if err != nil {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnVerificationFailed, "Invalid credential response").WithInternalError(err)
 	}
