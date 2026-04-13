@@ -10,6 +10,69 @@ import (
 	"github.com/supabase/auth/internal/sbff"
 )
 
+func TestIsRedirectURLValidSameOrigin(t *tst.T) {
+	cases := []struct {
+		desc        string
+		siteURL     string
+		redirectURL string
+		want        bool
+	}{
+		{
+			desc:        "exact match",
+			siteURL:     "https://example.com",
+			redirectURL: "https://example.com/path",
+			want:        true,
+		},
+		{
+			desc:        "scheme downgrade https→http rejected",
+			siteURL:     "https://example.com",
+			redirectURL: "http://example.com/path",
+			want:        false,
+		},
+		{
+			desc:        "scheme upgrade http→https rejected",
+			siteURL:     "http://example.com",
+			redirectURL: "https://example.com/path",
+			want:        false,
+		},
+		{
+			desc:        "different port rejected",
+			siteURL:     "https://example.com",
+			redirectURL: "https://example.com:8443/path",
+			want:        false,
+		},
+		{
+			desc:        "explicit port matches SiteURL explicit port",
+			siteURL:     "https://example.com:9000",
+			redirectURL: "https://example.com:9000/path",
+			want:        true,
+		},
+		{
+			desc:        "no port vs explicit port rejected",
+			siteURL:     "https://example.com:9000",
+			redirectURL: "https://example.com/path",
+			want:        false,
+		},
+		{
+			desc:        "different explicit ports rejected",
+			siteURL:     "https://example.com:9000",
+			redirectURL: "https://example.com:9001/path",
+			want:        false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *tst.T) {
+			config := conf.GlobalConfiguration{
+				SiteURL: c.siteURL,
+				JWT:     conf.JWTConfiguration{Secret: "testsecret"},
+			}
+			require.NoError(t, config.ApplyDefaults())
+			require.Equal(t, c.want, IsRedirectURLValid(&config, c.redirectURL))
+		})
+	}
+}
+
 func TestGetIPAddressWithSBFF(t *tst.T) {
 	testCases := []struct {
 		name       string
@@ -216,6 +279,21 @@ func TestGetReferrer(t *tst.T) {
 			desc:        "valid loopback IPv6 address",
 			redirectURL: "http://[0:0:0:0:0:0:0:1]:12345/path",
 			expected:    "http://[0:0:0:0:0:0:0:1]:12345/path",
+		},
+		{
+			desc:        "same origin allowed",
+			redirectURL: "https://example.com/dashboard",
+			expected:    "https://example.com/dashboard",
+		},
+		{
+			desc:        "same hostname but http scheme rejected (scheme downgrade)",
+			redirectURL: "http://example.com/dashboard",
+			expected:    config.SiteURL,
+		},
+		{
+			desc:        "same hostname and scheme but explicit non-default port rejected",
+			redirectURL: "https://example.com:8443/dashboard",
+			expected:    config.SiteURL,
 		},
 	}
 

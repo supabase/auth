@@ -101,7 +101,11 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 
 	// As long as the referrer came from the site, we will redirect back there
 	if berr == nil && rerr == nil && base.Hostname() == refurl.Hostname() {
-		return true
+		// ensure schema and port haven't changed
+		// most browsers should be checking insecure protocol switching but be double check
+		if base.Scheme == refurl.Scheme && base.Port() == refurl.Port() {
+			return true
+		}
 	}
 
 	if rerr != nil {
