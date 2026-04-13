@@ -59,6 +59,37 @@ func TestIsRedirectURLValidSameOrigin(t *tst.T) {
 			redirectURL: "https://example.com:9001/path",
 			want:        false,
 		},
+		// RFC 8252 Section 7.3: variable ports must be allowed for localhost
+		{
+			desc:        "localhost with different port allowed (RFC 8252 Section 7.3)",
+			siteURL:     "http://localhost:3000",
+			redirectURL: "http://localhost:8080/callback",
+			want:        true,
+		},
+		{
+			desc:        "127.0.0.1 with different port allowed (RFC 8252 Section 7.3)",
+			siteURL:     "http://127.0.0.1:3000",
+			redirectURL: "http://127.0.0.1:8080/callback",
+			want:        true,
+		},
+		{
+			desc:        "localhost without port in redirect allowed (RFC 8252 Section 7.3)",
+			siteURL:     "http://localhost:3000",
+			redirectURL: "http://localhost/callback",
+			want:        true,
+		},
+		{
+			desc:        "localhost scheme downgrade still rejected despite RFC 8252",
+			siteURL:     "https://localhost:3000",
+			redirectURL: "http://localhost:8080/callback",
+			want:        false,
+		},
+		{
+			desc:        "non-localhost variable port still rejected",
+			siteURL:     "https://example.com:9000",
+			redirectURL: "https://example.com:9001/path",
+			want:        false,
+		},
 	}
 
 	for _, c := range cases {

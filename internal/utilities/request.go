@@ -101,10 +101,14 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 
 	// As long as the referrer came from the site, we will redirect back there
 	if berr == nil && rerr == nil && base.Hostname() == refurl.Hostname() {
-		// ensure schema and port haven't changed
-		// most browsers should be checking insecure protocol switching but be double check
-		if base.Scheme == refurl.Scheme && base.Port() == refurl.Port() {
-			return true
+		// ensure scheme hasn't changed; most browsers also check this but double check here
+		if base.Scheme == refurl.Scheme {
+			// Per RFC 8252 Section 7.3, native apps using a localhost redirect URI
+			// MUST be allowed to use variable port numbers, so skip the port check
+			// for loopback addresses.
+			if base.Port() == refurl.Port() || isLocalhost(refurl.Hostname()) {
+				return true
+			}
 		}
 	}
 
