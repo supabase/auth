@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/auth/internal/api/apilimiter"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
@@ -60,8 +61,8 @@ func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Con
 		cb(nil, conn)
 	}
 
-	limiterOpts := NewLimiterOptions(config)
-	return NewAPIWithVersion(config, conn, apiTestVersion, limiterOpts), config, nil
+	limiterOpts := apilimiter.New(config)
+	return NewAPIWithVersion(config, conn, apiTestVersion, WithLimiter(limiterOpts)), config, nil
 }
 
 func TestEmailEnabledByDefault(t *testing.T) {

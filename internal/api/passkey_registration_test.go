@@ -35,8 +35,8 @@ func (ts *PasskeyTestSuite) TestRegisterPasskeyHappyPath() {
 
 	// Step 3: Verify the registration
 	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        optionsResp.ChallengeID,
-		"credential_response": json.RawMessage(credResp.JSON),
+		"challenge_id": optionsResp.ChallengeID,
+		"credential":   json.RawMessage(credResp.JSON),
 	}, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, w.Code)
 
@@ -109,8 +109,8 @@ func (ts *PasskeyTestSuite) TestRegistrationOptionsWithExistingPasskeys() {
 
 	// The exclusion list should contain the existing credential
 	ts.Require().NotNil(resp.Options)
-	ts.Require().NotNil(resp.Options.Response.CredentialExcludeList)
-	ts.Len(resp.Options.Response.CredentialExcludeList, 1)
+	ts.Require().NotNil(resp.Options.CredentialExcludeList)
+	ts.Len(resp.Options.CredentialExcludeList, 1)
 }
 
 // TestRegistrationOptionsTooManyPasskeys tests that the limit is enforced.
@@ -204,15 +204,15 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyCapEnforcedAtVerifyTime() {
 
 	// Verify the first challenge — should succeed
 	v1 := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        opts1.ChallengeID,
-		"credential_response": json.RawMessage(cred1.JSON),
+		"challenge_id": opts1.ChallengeID,
+		"credential":   json.RawMessage(cred1.JSON),
 	}, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, v1.Code)
 
 	// Verify the second challenge — should fail with too_many_passkeys
 	v2 := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        opts2.ChallengeID,
-		"credential_response": json.RawMessage(cred2.JSON),
+		"challenge_id": opts2.ChallengeID,
+		"credential":   json.RawMessage(cred2.JSON),
 	}, withBearerToken(token))
 	ts.Equal(http.StatusUnprocessableEntity, v2.Code)
 	var errResp map[string]any
@@ -224,8 +224,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyCapEnforcedAtVerifyTime() {
 func (ts *PasskeyTestSuite) TestRegisterVerifyChallengeNotFound() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        uuid.Must(uuid.NewV4()).String(),
-		"credential_response": map[string]any{},
+		"challenge_id": uuid.Must(uuid.NewV4()).String(),
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
@@ -246,8 +246,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyChallengeExpired() {
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        challenge.ID.String(),
-		"credential_response": map[string]any{},
+		"challenge_id": challenge.ID.String(),
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
@@ -272,8 +272,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyWrongUser() {
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        challenge.ID.String(),
-		"credential_response": map[string]any{},
+		"challenge_id": challenge.ID.String(),
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
@@ -293,11 +293,11 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyMissingFields() {
 		{
 			desc: "missing challenge_id",
 			body: map[string]any{
-				"credential_response": map[string]any{},
+				"credential": map[string]any{},
 			},
 		},
 		{
-			desc: "missing credential_response",
+			desc: "missing credential",
 			body: map[string]any{
 				"challenge_id": uuid.Must(uuid.NewV4()).String(),
 			},
@@ -316,8 +316,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyMissingFields() {
 func (ts *PasskeyTestSuite) TestRegisterVerifyInvalidChallengeID() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        "not-a-uuid",
-		"credential_response": map[string]any{},
+		"challenge_id": "not-a-uuid",
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
@@ -335,8 +335,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyWrongChallengeType() {
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        challenge.ID.String(),
-		"credential_response": map[string]any{},
+		"challenge_id": challenge.ID.String(),
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
@@ -345,8 +345,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyWrongChallengeType() {
 // TestRegisterVerifyUnauthenticated tests that unauthenticated requests are rejected.
 func (ts *PasskeyTestSuite) TestRegisterVerifyUnauthenticated() {
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        uuid.Must(uuid.NewV4()).String(),
-		"credential_response": map[string]any{},
+		"challenge_id": uuid.Must(uuid.NewV4()).String(),
+		"credential":   map[string]any{},
 	})
 	ts.Equal(http.StatusUnauthorized, w.Code)
 }
@@ -358,8 +358,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifySSOUser() {
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        uuid.Must(uuid.NewV4()).String(),
-		"credential_response": map[string]any{},
+		"challenge_id": uuid.Must(uuid.NewV4()).String(),
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusUnprocessableEntity, w.Code)

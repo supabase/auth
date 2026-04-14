@@ -19,25 +19,22 @@ type PasskeyRegistrationOptionsParams struct{}
 
 // PasskeyRegistrationOptionsResponse is the response body for POST /passkeys/registration/options.
 type PasskeyRegistrationOptionsResponse struct {
-	ChallengeID string                       `json:"challenge_id"`
-	Options     *protocol.CredentialCreation `json:"options"`
-	ExpiresAt   int64                        `json:"expires_at"`
+	ChallengeID string                                       `json:"challenge_id"`
+	Options     *protocol.PublicKeyCredentialCreationOptions `json:"options"`
+	ExpiresAt   int64                                        `json:"expires_at"`
 }
 
 // PasskeyRegistrationVerifyParams is the request body for POST /passkeys/registration/verify.
 type PasskeyRegistrationVerifyParams struct {
-	ChallengeID        string          `json:"challenge_id"`
-	CredentialResponse json.RawMessage `json:"credential_response"`
+	ChallengeID string          `json:"challenge_id"`
+	Credential  json.RawMessage `json:"credential"`
 }
 
 // PasskeyMetadataResponse is the response body for successful passkey creation.
 type PasskeyMetadataResponse struct {
-	ID             string                            `json:"id"`
-	FriendlyName   string                            `json:"friendly_name,omitempty"`
-	CreatedAt      time.Time                         `json:"created_at"`
-	BackupEligible bool                              `json:"backup_eligible"`
-	BackedUp       bool                              `json:"backed_up"`
-	Transports     []protocol.AuthenticatorTransport `json:"transports"`
+	ID           string    `json:"id"`
+	FriendlyName string    `json:"friendly_name,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // PasskeyRegistrationOptions handles POST /passkeys/registration/options.
@@ -100,7 +97,7 @@ func (a *API) PasskeyRegistrationOptions(w http.ResponseWriter, r *http.Request)
 
 	return sendJSON(w, http.StatusOK, &PasskeyRegistrationOptionsResponse{
 		ChallengeID: challenge.ID.String(),
-		Options:     options,
+		Options:     &options.Response,
 		ExpiresAt:   expiresAt.Unix(),
 	})
 }
@@ -129,8 +126,8 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 	if params.ChallengeID == "" {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "challenge_id is required")
 	}
-	if params.CredentialResponse == nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "credential_response is required")
+	if params.Credential == nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "credential is required")
 	}
 
 	challengeID, err := uuid.FromString(params.ChallengeID)
@@ -153,7 +150,7 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Parse the credential creation response from the JSON params
-	parsedResponse, err := parseCredentialCreationResponse(params.CredentialResponse)
+	parsedResponse, err := parseCredentialCreationResponse(params.Credential)
 	if err != nil {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeWebAuthnVerificationFailed, "Invalid credential response").WithInternalError(err)
 	}
@@ -213,12 +210,9 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 	}
 
 	return sendJSON(w, http.StatusOK, &PasskeyMetadataResponse{
-		ID:             passkeyCredential.ID.String(),
-		FriendlyName:   passkeyCredential.FriendlyName,
-		CreatedAt:      passkeyCredential.CreatedAt,
-		BackupEligible: passkeyCredential.BackupEligible,
-		BackedUp:       passkeyCredential.BackedUp,
-		Transports:     []protocol.AuthenticatorTransport(passkeyCredential.Transports),
+		ID:           passkeyCredential.ID.String(),
+		FriendlyName: passkeyCredential.FriendlyName,
+		CreatedAt:    passkeyCredential.CreatedAt,
 	})
 }
 

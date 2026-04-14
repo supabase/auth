@@ -27,7 +27,7 @@ func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationHappyPath() {
 	ts.NotZero(optionsResp.ExpiresAt)
 
 	// Verify allowCredentials is empty (discoverable)
-	ts.Empty(optionsResp.Options.Response.AllowedCredentials)
+	ts.Empty(optionsResp.Options.AllowedCredentials)
 
 	// Step 2: Simulate the authenticator creating an assertion
 	assertionResp, err := authenticator.getAssertion(optionsResp.Options)
@@ -35,8 +35,8 @@ func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationHappyPath() {
 
 	// Step 3: Verify the authentication
 	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/verify", map[string]any{
-		"challenge_id":        optionsResp.ChallengeID,
-		"credential_response": json.RawMessage(assertionResp.JSON),
+		"challenge_id": optionsResp.ChallengeID,
+		"credential":   json.RawMessage(assertionResp.JSON),
 	})
 	ts.Require().Equal(http.StatusOK, w.Code)
 
@@ -71,8 +71,8 @@ func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationUnconfirmedEmail() {
 
 	// Verify — should fail with email_not_confirmed
 	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/verify", map[string]any{
-		"challenge_id":        optionsResp.ChallengeID,
-		"credential_response": json.RawMessage(assertionResp.JSON),
+		"challenge_id": optionsResp.ChallengeID,
+		"credential":   json.RawMessage(assertionResp.JSON),
 	})
 	ts.Equal(http.StatusForbidden, w.Code)
 	var errResp map[string]any
@@ -100,8 +100,8 @@ func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationBannedUser() {
 
 	// Verify — should fail with user_banned
 	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/verify", map[string]any{
-		"challenge_id":        optionsResp.ChallengeID,
-		"credential_response": json.RawMessage(assertionResp.JSON),
+		"challenge_id": optionsResp.ChallengeID,
+		"credential":   json.RawMessage(assertionResp.JSON),
 	})
 	ts.Equal(http.StatusForbidden, w.Code)
 	var errResp map[string]any
@@ -120,8 +120,8 @@ func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationChallengeExpired() {
 	require.NoError(ts.T(), ts.API.db.Create(challenge))
 
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/verify", map[string]any{
-		"challenge_id":        challenge.ID.String(),
-		"credential_response": map[string]any{},
+		"challenge_id": challenge.ID.String(),
+		"credential":   map[string]any{},
 	})
 	ts.Equal(http.StatusBadRequest, w.Code)
 	var errResp map[string]any
@@ -132,8 +132,8 @@ func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationChallengeExpired() {
 // TestDiscoverableAuthenticationChallengeNotFound tests that a missing challenge is rejected.
 func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationChallengeNotFound() {
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/verify", map[string]any{
-		"challenge_id":        uuid.Must(uuid.NewV4()).String(),
-		"credential_response": map[string]any{},
+		"challenge_id": uuid.Must(uuid.NewV4()).String(),
+		"credential":   map[string]any{},
 	})
 	ts.Equal(http.StatusBadRequest, w.Code)
 	var errResp map[string]any
@@ -154,8 +154,8 @@ func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationInvalidAssertion() {
 
 	// Send garbage as credential response
 	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/verify", map[string]any{
-		"challenge_id":        optionsResp.ChallengeID,
-		"credential_response": map[string]any{"garbage": true},
+		"challenge_id": optionsResp.ChallengeID,
+		"credential":   map[string]any{"garbage": true},
 	})
 	ts.Equal(http.StatusBadRequest, w.Code)
 	var errResp map[string]any
@@ -176,7 +176,7 @@ func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationUnknownCredential() {
 	// because the userHandle points to a non-existent user.
 	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/verify", map[string]any{
 		"challenge_id": optionsResp.ChallengeID,
-		"credential_response": map[string]any{
+		"credential": map[string]any{
 			"id":    "ZmFrZS1jcmVkZW50aWFsLWlk",
 			"type":  "public-key",
 			"rawId": "ZmFrZS1jcmVkZW50aWFsLWlk",
@@ -307,8 +307,8 @@ func (ts *PasskeyTestSuite) registerPasskey() (*virtualAuthenticator, *PasskeyMe
 	require.NoError(ts.T(), err)
 
 	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        optionsResp.ChallengeID,
-		"credential_response": json.RawMessage(credResp.JSON),
+		"challenge_id": optionsResp.ChallengeID,
+		"credential":   json.RawMessage(credResp.JSON),
 	}, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, w.Code)
 

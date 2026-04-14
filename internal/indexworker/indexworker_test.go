@@ -28,6 +28,7 @@ type IndexWorkerTestSuite struct {
 	logger                       *logrus.Entry
 	maxUsersThreshold            int64
 	ensureUserSearchIndexesExist bool
+	isOrioleDB                   bool
 }
 
 func (ts *IndexWorkerTestSuite) SetupSuite() {
@@ -58,6 +59,14 @@ func (ts *IndexWorkerTestSuite) SetupSuite() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), popConn.Open())
 	ts.popDB = popConn
+
+	// Detect if the users table uses OrioleDB
+	isOrioleDB, err := isOrioleDBTable(popConn, config.DB.Namespace, "users")
+	if err != nil {
+		ts.T().Logf("Failed to detect OrioleDB, assuming standard PostgreSQL: %v", err)
+	} else {
+		ts.isOrioleDB = isOrioleDB
+	}
 
 	// Ensure we have a clean state for testing
 	ts.cleanupIndexes()
@@ -90,6 +99,9 @@ func (ts *IndexWorkerTestSuite) cleanupIndexes() {
 }
 
 func (ts *IndexWorkerTestSuite) TestCreateIndexesHappyPath() {
+	if ts.isOrioleDB {
+		ts.T().Skip("OrioleDB does not support CREATE INDEX CONCURRENTLY")
+	}
 	ctx := context.Background()
 
 	err := CreateIndexes(ctx, ts.config, ts.logger)
@@ -132,6 +144,9 @@ func (ts *IndexWorkerTestSuite) TestGetIndexStatuses() {
 }
 
 func (ts *IndexWorkerTestSuite) TestIdempotency() {
+	if ts.isOrioleDB {
+		ts.T().Skip("OrioleDB does not support CREATE INDEX CONCURRENTLY")
+	}
 	ctx := context.Background()
 
 	// First run - create all indexes
@@ -188,6 +203,9 @@ func (ts *IndexWorkerTestSuite) TestIdempotency() {
 
 // If an index is removed out of band, it will be created when the method is called
 func (ts *IndexWorkerTestSuite) TestOutOfBandIndexRemoval() {
+	if ts.isOrioleDB {
+		ts.T().Skip("OrioleDB does not support CREATE INDEX CONCURRENTLY")
+	}
 	ctx := context.Background()
 
 	// First, create all indexes
@@ -235,6 +253,9 @@ func (ts *IndexWorkerTestSuite) TestOutOfBandIndexRemoval() {
 
 // Test concurrent access - workers coordinate via advisory lock
 func (ts *IndexWorkerTestSuite) TestConcurrentWorkers() {
+	if ts.isOrioleDB {
+		ts.T().Skip("OrioleDB does not support CREATE INDEX CONCURRENTLY")
+	}
 	ctx := context.Background()
 
 	numWorkers := 5
@@ -292,6 +313,9 @@ func getIndexNames(indexes []struct {
 // TestMaxUsersThresholdSkipsIndexCreation verifies when EnsureUserSearchIndexesExist=false and MaxUsersThreshold > 0,
 // index creation is skipped if user count exceeds the threshold.
 func (ts *IndexWorkerTestSuite) TestMaxUsersThresholdSkipsIndexCreation() {
+	if ts.isOrioleDB {
+		ts.T().Skip("OrioleDB does not support CREATE INDEX CONCURRENTLY")
+	}
 	ctx := context.Background()
 
 	// No explicit user opt-in - rely on threshold behavior
@@ -328,6 +352,9 @@ func (ts *IndexWorkerTestSuite) TestMaxUsersThresholdSkipsIndexCreation() {
 // TestUserOptInAlwaysCreatesIndexes verifies that when EnsureUserSearchIndexesExist=true,
 // indexes are always created regardless of user count or threshold setting.
 func (ts *IndexWorkerTestSuite) TestUserOptInAlwaysCreatesIndexes() {
+	if ts.isOrioleDB {
+		ts.T().Skip("OrioleDB does not support CREATE INDEX CONCURRENTLY")
+	}
 	ctx := context.Background()
 
 	// Insert test users so there's a non-zero user count
@@ -361,6 +388,9 @@ func (ts *IndexWorkerTestSuite) TestUserOptInAlwaysCreatesIndexes() {
 // TestUserOptInWithZeroThreshold verifies that EnsureUserSearchIndexesExist=true
 // with MaxUsersThreshold=0 (disabled) still creates indexes.
 func (ts *IndexWorkerTestSuite) TestUserOptInWithZeroThreshold() {
+	if ts.isOrioleDB {
+		ts.T().Skip("OrioleDB does not support CREATE INDEX CONCURRENTLY")
+	}
 	ctx := context.Background()
 
 	ts.config.IndexWorker.EnsureUserSearchIndexesExist = true
@@ -383,6 +413,9 @@ func (ts *IndexWorkerTestSuite) TestUserOptInWithZeroThreshold() {
 // This test simulates a scenario where indexes become invalid (e.g., from interrupted CONCURRENT creation)
 // and verifies that CreateIndexes properly handles them by dropping and recreating.
 func (ts *IndexWorkerTestSuite) TestCreateIndexesWithInvalidIndexes() {
+	if ts.isOrioleDB {
+		ts.T().Skip("OrioleDB does not support CREATE INDEX CONCURRENTLY")
+	}
 	ctx := context.Background()
 
 	// Step 1: Run CreateIndexes to create all indexes
@@ -475,6 +508,27 @@ func (ts *IndexWorkerTestSuite) TestCreateIndexesWithInvalidIndexes() {
 	}
 
 	ts.logger.Infof("Successfully recovered from %d invalid indexes", len(indexesToInvalidate))
+}
+
+func (ts *IndexWorkerTestSuite) TestIsOrioleDBTableNonExistentTable() {
+	_, err := isOrioleDBTable(ts.popDB, ts.namespace, "nonexistent_table")
+	assert.Error(ts.T(), err, "Should return error for non-existent table")
+}
+
+func (ts *IndexWorkerTestSuite) TestCreateIndexesSkipsOnOrioleDB() {
+	if !ts.isOrioleDB {
+		ts.T().Skip("Test only runs on OrioleDB")
+	}
+	ctx := context.Background()
+
+	err := CreateIndexes(ctx, ts.config, ts.logger)
+	require.ErrorIs(ts.T(), err, ErrOrioleDBUnsupported)
+
+	// Verify no indexes were created
+	indexes := getUsersIndexes(ts.namespace)
+	existingIndexes, err := getIndexStatuses(ts.popDB, ts.namespace, getIndexNames(indexes))
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), existingIndexes, "No indexes should be created when OrioleDB is detected")
 }
 
 // Run the test suite
