@@ -16,7 +16,7 @@ import (
 
 // ErrAdvisoryLockAlreadyAcquired is returned when another process already holds the advisory lock
 var ErrAdvisoryLockAlreadyAcquired = errors.New("advisory lock already acquired by another process")
-var ErrExtensionNotFound = errors.New("extension not found")
+var ErrOrioleDBUnsupported = errors.New("index worker does not support OrioleDB tables")
 
 type Outcome string
 
@@ -63,6 +63,19 @@ func CreateIndexes(ctx context.Context, config *conf.GlobalConfiguration, le *lo
 		log.Fatalf("Error checking database connection: %+v", err)
 	}
 	db = db.WithContext(ctx)
+
+	// Check if the users table uses OrioleDB, which does not support
+	// CREATE INDEX CONCURRENTLY or DROP INDEX CONCURRENTLY.
+	isOrioleDB, err := isOrioleDBTable(db, config.DB.Namespace, "users")
+	if err != nil {
+		le.WithError(err).Warn("Failed to check table access method, proceeding with index creation")
+	} else if isOrioleDB {
+		le.WithFields(logrus.Fields{
+			"outcome": OutcomeSkipped,
+			"code":    "orioledb_unsupported",
+		}).Info("Skipping index creation because auth.users uses the OrioleDB storage engine, which does not support CONCURRENTLY operations")
+		return ErrOrioleDBUnsupported
+	}
 
 	// Try to obtain advisory lock to ensure only one index worker is creating indexes at a time
 	lockName := "auth_index_worker"
@@ -304,6 +317,24 @@ func getApproximateUserCount(db *pop.Connection, namespace string) (int64, error
 	}
 
 	return userCount, nil
+}
+
+// isOrioleDBTable checks if the specified table uses the OrioleDB storage engine
+// by examining the table's access method in pg_class.
+func isOrioleDBTable(db *pop.Connection, namespace, tableName string) (bool, error) {
+	query := fmt.Sprintf(`
+		SELECT am.amname
+		FROM pg_class c
+		JOIN pg_am am ON c.relam = am.oid
+		JOIN pg_namespace n ON c.relnamespace = n.oid
+		WHERE n.nspname = '%s' AND c.relname = '%s'
+	`, namespace, tableName)
+
+	var amName string
+	if err := db.RawQuery(query).First(&amName); err != nil {
+		return false, fmt.Errorf("failed to check table access method: %w", err)
+	}
+	return amName == "orioledb", nil
 }
 
 // dropInvalidIndexes drops any invalid indexes from previous interrupted attempts
