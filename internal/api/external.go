@@ -222,6 +222,13 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 		if flowState != nil && flowState.IsPKCE() {
 			// PKCE flow: update flow state with user ID and tokens
+			// Re-fetch with FOR UPDATE lock inside the transaction to prevent concurrent claims
+			if flowState, terr = models.FindFlowStateByIDForUpdate(tx, flowState.ID.String()); terr != nil {
+				return terr
+			}
+			if flowState.UserID != nil {
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeFlowStateAlreadyUsed, "State has already been used")
+			}
 			flowState.ProviderAccessToken = providerAccessToken
 			flowState.ProviderRefreshToken = providerRefreshToken
 			flowState.UserID = &(user.ID)
@@ -541,6 +548,11 @@ func (a *API) loadExternalStateFromUUID(ctx context.Context, db *storage.Connect
 	// Check expiration
 	if flowState.IsExpired(config.External.FlowStateExpiryDuration) {
 		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth state has expired")
+	}
+
+	// UserID is nil at creation and set during callback, so non-nil means already consumed.
+	if flowState.IsPKCE() && flowState.UserID != nil {
+		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeFlowStateAlreadyUsed, "State has already been used")
 	}
 
 	ctx = withExternalProviderType(ctx, flowState.ProviderType, flowState.EmailOptional)
