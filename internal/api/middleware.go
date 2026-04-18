@@ -320,7 +320,7 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 		// host has been provided to the request, but it hasn't been
 		// added to the allow list, raise a log message
 		// in Supabase platform the X-Forwarded-Host and full request
-		// URL are likely sanitzied before they reach the server
+		// URL are likely sanitized before they reach the server
 
 		fields := make(logrus.Fields)
 
