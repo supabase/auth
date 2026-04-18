@@ -1115,6 +1115,8 @@ func populateGlobal(config *GlobalConfiguration) error {
 		if SMSTemplate == "" {
 			SMSTemplate = "Your code is {{ .Code }}"
 		}
+		// Replace literal \n with actual newlines to support WebOTP API format
+		SMSTemplate = strings.ReplaceAll(SMSTemplate, "\\n", "\n")
 		template, err := template.New("").Parse(SMSTemplate)
 		if err != nil {
 			return err
@@ -1127,6 +1129,8 @@ func populateGlobal(config *GlobalConfiguration) error {
 		if smsTemplate == "" {
 			smsTemplate = "Your code is {{ .Code }}"
 		}
+		// Replace literal \n with actual newlines to support WebOTP API format
+		smsTemplate = strings.ReplaceAll(smsTemplate, "\\n", "\n")
 		template, err := template.New("").Parse(smsTemplate)
 		if err != nil {
 			return err
