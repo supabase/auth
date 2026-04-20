@@ -23,7 +23,12 @@ func TestPreserveEmptyAuthority(t *testing.T) {
 		{"triple slash", "myapp:///callback", "myapp:///callback?code=ABC"},
 		{"host port path", "myapp://host:1234/callback", "myapp://host:1234/callback?code=ABC"},
 		{"existing query", "myapp://?x=1", "myapp://?code=ABC&x=1"},
+		{"existing code param overwrites", "myapp://?code=OLD", "myapp://?code=ABC"},
 		{"fragment", "myapp://#frag", "myapp://?code=ABC#frag"},
+		// net/url lowercases the scheme per RFC 3986 §3.1. iOS URL-scheme
+		// matching is case-sensitive in practice, so mixed-case schemes are
+		// normalized to lowercase by the time they reach the client.
+		{"mixed case scheme", "MyApp://callback", "myapp://callback?code=ABC"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -32,7 +37,7 @@ func TestPreserveEmptyAuthority(t *testing.T) {
 			q := u.Query()
 			q.Set("code", "ABC")
 			u.RawQuery = q.Encode()
-			got := PreserveEmptyAuthority(c.in, u, u.String())
+			got := PreserveEmptyAuthority(c.in, u)
 			assert.Equal(t, c.want, got)
 		})
 	}
