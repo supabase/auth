@@ -31,6 +31,9 @@ build-strip: deps ## Build a stripped binary, for which the version file needs t
 	echo "package utilities" > internal/utilities/version.go
 	echo "const Version = \"$(VERSION)\"" >> internal/utilities/version.go
 
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+		$(FLAGS) -ldflags "-s -w" -o auth-amd64-strip
+
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
 		$(FLAGS) -ldflags "-s -w" -o auth-arm64-strip
 
