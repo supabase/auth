@@ -94,6 +94,12 @@ func (ts *MFATestSuite) SetupTest() {
 
 	ts.Config.MFA.WebAuthn.EnrollEnabled = true
 	ts.Config.MFA.WebAuthn.VerifyEnabled = true
+	ts.Config.WebAuthn = conf.WebAuthnConfiguration{
+		RPID:                    "localhost",
+		RPDisplayName:           "Test App",
+		RPOrigins:               []string{"http://localhost:3000"},
+		ChallengeExpiryDuration: 5 * time.Minute,
+	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      ts.TestDomain,
@@ -721,13 +727,9 @@ func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 
 func (ts *MFATestSuite) TestChallengeWebAuthnFactor() {
 	factor := models.NewWebAuthnFactor(ts.TestUser, "WebAuthnfactor")
-	validWebAuthnConfiguration := &WebAuthnParams{
-		RPID:      "localhost",
-		RPOrigins: []string{"http://localhost:3000"},
-	}
 	require.NoError(ts.T(), ts.API.db.Create(factor), "Error saving new test factor")
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
-	w := performChallengeWebAuthnFlow(ts, factor.ID, token, validWebAuthnConfiguration)
+	w := performChallengeWebAuthnFlow(ts, factor.ID, token, &WebAuthnParams{})
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
