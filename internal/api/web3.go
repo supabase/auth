@@ -244,7 +244,7 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message becomes valid in the future")
 	}
 
-	if parsedMessage.NotBefore != nil && parsedMessage.ExpirationTime != nil && !parsedMessage.ExpirationTime.IsZero() && now.After(*parsedMessage.ExpirationTime) {
+	if parsedMessage.ExpirationTime != nil && !parsedMessage.ExpirationTime.IsZero() && now.After(*parsedMessage.ExpirationTime) {
 		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message is expired")
 	}
 
