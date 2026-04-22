@@ -168,16 +168,16 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			if user.HasPassword() {
 				// current password required when updating password
 				if config.Security.UpdatePasswordRequireCurrentPassword {
-					// user may be in a password reset flow, where they do not have a currentPassword
-					isRecoverySession := false
-					for _, claim := range session.AMRClaims {
-						// password recovery flows can be via otp or a magic link, check if the current session
-						// was created with one of those
-						if claim.GetAuthenticationMethod() == "otp" || claim.GetAuthenticationMethod() == "magiclink" {
-							isRecoverySession = true
-							break
-						}
+				// user may be in a password reset flow, where they do not have a currentPassword
+				isRecoverySession := false
+				for _, claim := range session.AMRClaims {
+					// password recovery flows can be via otp, a magic link, or the
+					// PKCE recovery flow (which sets the AMR to "recovery")
+					if claim.GetAuthenticationMethod() == "otp" || claim.GetAuthenticationMethod() == "magiclink" || claim.GetAuthenticationMethod() == "recovery" {
+						isRecoverySession = true
+						break
 					}
+				}
 					if !isRecoverySession {
 						if params.CurrentPassword == nil || *params.CurrentPassword == "" {
 							return apierrors.NewBadRequestError(apierrors.ErrorCodeCurrentPasswordRequired, "Current password required when setting new password.")
