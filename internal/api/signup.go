@@ -191,7 +191,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if user != nil {
-			if (params.Provider == "email" && user.IsConfirmed()) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
+			if params.Provider == "email" || params.Provider == "phone" {
 				return UserExistsError
 			}
 			// do not update the user because we can't be sure of their claimed identity
@@ -225,7 +225,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		user.Identities = []models.Identity{*identity}
 
-		if params.Provider == "email" && !user.IsConfirmed() {
+		if params.Provider == "email" {
 			if config.Mailer.Autoconfirm {
 				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
@@ -251,7 +251,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-		} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {
+		} else if params.Provider == "phone" {
 			if config.Sms.Autoconfirm {
 				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
