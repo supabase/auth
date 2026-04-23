@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.189.0](https://github.com/supabase/auth/compare/v2.188.1...v2.189.0) (2026-04-23)
+
+
+### Features
+
+* add PKCE support for `/resend` ([#2401](https://github.com/supabase/auth/issues/2401)) ([2af904a](https://github.com/supabase/auth/commit/2af904a2bcd78ee3b64b9e29424dfa78e9616233))
+* improve parallelization in github workflows and Makefile ([#2436](https://github.com/supabase/auth/issues/2436)) ([9d0c4b3](https://github.com/supabase/auth/commit/9d0c4b3f8859a4d1b5a48ce5962a5fa9accdae61))
+* **passkeys:** add CAPTCHA to options endpoint for authentication ([#2416](https://github.com/supabase/auth/issues/2416)) ([c7b58be](https://github.com/supabase/auth/commit/c7b58be5cc520dcc0963ec3346807561c176624b))
+* support live reloading of individual rate limits ([#2469](https://github.com/supabase/auth/issues/2469)) ([d03d796](https://github.com/supabase/auth/commit/d03d796162779d51ce58bf1b56b0991ec86700bc))
+
+
+### Bug Fixes
+
+* ensure identities are returned in a consistent order across DB engines ([#2465](https://github.com/supabase/auth/issues/2465)) ([e49a3e5](https://github.com/supabase/auth/commit/e49a3e5e5dd5a75abdaa0a52a62f644470737e3a))
+* ensure SSO providers tests are order-independent ([#2466](https://github.com/supabase/auth/issues/2466)) ([983ade6](https://github.com/supabase/auth/commit/983ade65789fce94cb632d154905d594181389a2))
+* exempt PKCE recovery sessions from require-current-password check ([#2502](https://github.com/supabase/auth/issues/2502)) ([7f88985](https://github.com/supabase/auth/commit/7f889859787c72f59ea8b820d9d0f388965252ff))
+* **indexworker:** skip index creation on OrioleDB ([#2481](https://github.com/supabase/auth/issues/2481)) ([dd56ae9](https://github.com/supabase/auth/commit/dd56ae91eb5bf64519ff650b58066338fd1a9b20))
+* **passkeys:** modify the passkeys request and response shapes ([#2475](https://github.com/supabase/auth/issues/2475)) ([2d8f2b6](https://github.com/supabase/auth/commit/2d8f2b6168cfc753f55c7bd157bfda6ef05af007))
+* prevent reuse of flow state ([#2483](https://github.com/supabase/auth/issues/2483)) ([88dcb2d](https://github.com/supabase/auth/commit/88dcb2d290a7c06cfff707ddf918b08f25ec141c))
+* return JSON response for unmatched routes instead of plain text ([#2457](https://github.com/supabase/auth/issues/2457)) ([7337e21](https://github.com/supabase/auth/commit/7337e21c288c93951cfef3b60c1988ead296c4b7))
+
 ## [2.188.1](https://github.com/supabase/auth/compare/v2.188.0...v2.188.1) (2026-03-19)
 
 
