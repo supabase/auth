@@ -59,6 +59,15 @@ const (
 	PasskeyLogin
 )
 
+func (authMethod AuthenticationMethod) IsRecovery() bool {
+	switch authMethod {
+	case OTP, MagicLink, Recovery:
+		return true
+	default:
+		return false
+	}
+}
+
 func (authMethod AuthenticationMethod) String() string {
 	switch authMethod {
 	case OAuth:

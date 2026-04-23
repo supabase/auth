@@ -444,7 +444,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordViaRecovery() {
 			desc:         "Current password required for any other claim",
 			newPassword:  "newpassword456",
 			recoveryType: models.EmailChange,
-			expected:     expected{code: http.StatusBadRequest, isAuthenticated: true},
+			expected:     expected{code: http.StatusBadRequest, isAuthenticated: false},
 		},
 	}
 
