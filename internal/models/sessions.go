@@ -105,6 +105,21 @@ func (Session) TableName() string {
 	return tableName
 }
 
+func (s *Session) IsRecovery() bool {
+	for _, claim := range s.AMRClaims {
+		amStr := claim.GetAuthenticationMethod()
+		am, err := ParseAuthenticationMethod(amStr)
+		if err != nil {
+			// We want to assert this is a recovery session, skip invalid.
+			continue
+		}
+		if am.IsRecovery() {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Session) GetRefreshTokenHmacKey(dbEncryption conf.DatabaseEncryptionConfiguration) ([]byte, bool, error) {
 	if s.RefreshTokenHmacKey == nil {
 		return nil, false, nil
