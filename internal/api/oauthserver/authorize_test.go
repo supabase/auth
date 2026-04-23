@@ -122,6 +122,82 @@ func TestValidateRequestOrigin(t *testing.T) {
 	}
 }
 
+func TestBuildAuthorizationURL(t *testing.T) {
+	server := &Server{}
+
+	tests := []struct {
+		name       string
+		baseURL    string
+		pathToJoin string
+		expected   string
+	}{
+		{
+			name:       "joins relative path with leading slash",
+			baseURL:    "https://example.com",
+			pathToJoin: "/oauth/consent",
+			expected:   "https://example.com/oauth/consent",
+		},
+		{
+			name:       "joins relative path without leading slash",
+			baseURL:    "https://example.com/",
+			pathToJoin: "oauth/consent",
+			expected:   "https://example.com/oauth/consent",
+		},
+		{
+			name:       "returns absolute path unchanged",
+			baseURL:    "https://example.com",
+			pathToJoin: "https://app.example.com/custom-consent",
+			expected:   "https://app.example.com/custom-consent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := server.buildAuthorizationURL(tt.baseURL, tt.pathToJoin)
+			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
+
+
+
+func TestBuildAuthorizationRedirectURL(t *testing.T) {
+	server := &Server{}
+
+	tests := []struct {
+		name            string
+		baseURL         string
+		authorizationID string
+		expected        string
+	}{
+		{
+			name:            "adds authorization_id to URL without query",
+			baseURL:         "https://app.example.com/custom-consent",
+			authorizationID: "auth-123",
+			expected:        "https://app.example.com/custom-consent?authorization_id=auth-123",
+		},
+		{
+			name:            "preserves existing query parameters",
+			baseURL:         "https://app.example.com/custom-consent?foo=bar",
+			authorizationID: "auth-123",
+			expected:        "https://app.example.com/custom-consent?authorization_id=auth-123&foo=bar",
+		},
+		{
+			name:            "preserves fragment",
+			baseURL:         "https://app.example.com/custom-consent?foo=bar#frag",
+			authorizationID: "auth-123",
+			expected:        "https://app.example.com/custom-consent?authorization_id=auth-123&foo=bar#frag",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := server.buildAuthorizationRedirectURL(tt.baseURL, tt.authorizationID)
+			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
+
 func TestValidateRequestOriginEdgeCases(t *testing.T) {
 	globalConfig, err := conf.LoadGlobal(oauthServerTestConfig)
 	require.NoError(t, err)
