@@ -15,11 +15,14 @@ type googleUser struct {
 	Subject       string `json:"sub"`
 	Issuer        string `json:"iss"`
 	Name          string `json:"name"`
+	GivenName     string `json:"given_name"`
+	FamilyName    string `json:"family_name"`
 	AvatarURL     string `json:"picture"`
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`
 	EmailVerified bool   `json:"email_verified"`
 	HostedDomain  string `json:"hd"`
+	Locale        string `json:"locale"`
 }
 
 func (u googleUser) IsEmailVerified() bool {
@@ -122,9 +125,12 @@ func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		Issuer:        internalUserInfoEndpointGoogle,
 		Subject:       u.ID,
 		Name:          u.Name,
+		GivenName:     u.GivenName,
+		FamilyName:    u.FamilyName,
 		Picture:       u.AvatarURL,
 		Email:         u.Email,
 		EmailVerified: u.IsEmailVerified(),
+		Locale:        u.Locale,
 
 		// To be deprecated
 		AvatarURL:  u.AvatarURL,
