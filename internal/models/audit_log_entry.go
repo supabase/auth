@@ -100,8 +100,9 @@ func (AuditLogEntry) TableName() string {
 	return tableName
 }
 
-func NewAuditLogEntry(config conf.AuditLogConfiguration, r *http.Request, tx *storage.Connection, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
+func NewAuditLogEntry(config conf.AuditLogConfiguration, r *http.Request, tx *storage.Connection, actor *User, action AuditAction, traits map[string]interface{}) error {
 	id := uuid.Must(uuid.NewV4())
+	ipAddress := utilities.GetIPAddress(r)
 
 	username := actor.GetEmail()
 

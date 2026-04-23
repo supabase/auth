@@ -53,7 +53,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 
 	provider := identityToBeDeleted.Provider
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, map[string]interface{}{
 			"identity_id": identityToBeDeleted.ID,
 			"provider":    identityToBeDeleted.Provider,
 			"provider_id": identityToBeDeleted.ProviderID,

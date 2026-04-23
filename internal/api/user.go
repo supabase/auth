@@ -221,7 +221,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				return apierrors.NewInternalServerError("Error during password storage").WithInternalError(terr)
 			}
 
-			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserUpdatePasswordAction, "", nil); terr != nil {
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserUpdatePasswordAction, nil); terr != nil {
 				return terr
 			}
 
@@ -289,7 +289,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, nil); terr != nil {
 			return apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
