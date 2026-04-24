@@ -3,14 +3,18 @@ package provider
 import (
 	"context"
 	"crypto"
+	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -312,4 +316,94 @@ func TestClaimsAudienceUnmarshal(t *testing.T) {
 			require.Equal(t, tt.expected, claims.Aud)
 		})
 	}
+}
+
+func TestParseAppleIDToken(t *testing.T) {
+	defer func() {
+		OverrideVerifiers = make(map[string]func(context.Context, *oidc.Config) *oidc.IDTokenVerifier)
+	}()
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/openid-configuration" {
+			w.Header().Set("Content-Type", "application/json")
+			require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+				"issuer":                 server.URL,
+				"authorization_endpoint": server.URL + "/authorize",
+				"token_endpoint":         server.URL + "/token",
+				"jwks_uri":               server.URL + "/jwks",
+			}))
+		}
+	}))
+	defer server.Close()
+
+	oidcProvider, err := oidc.NewProvider(context.Background(), server.URL)
+	require.NoError(t, err)
+
+	OverrideVerifiers[oidcProvider.Endpoint().AuthURL] = func(ctx context.Context, cfg *oidc.Config) *oidc.IDTokenVerifier {
+		return oidc.NewVerifier(
+			DefaultAppleIssuer,
+			&oidc.StaticKeySet{PublicKeys: []crypto.PublicKey{privateKey.Public()}},
+			cfg,
+		)
+	}
+
+	signToken := func(t *testing.T, claims jwt.MapClaims) string {
+		t.Helper()
+		tokenString, err := jwt.NewWithClaims(jwt.SigningMethodRS256, claims).SignedString(privateKey)
+		require.NoError(t, err)
+		return tokenString
+	}
+
+	baseClaims := func() jwt.MapClaims {
+		now := time.Now()
+		return jwt.MapClaims{
+			"iss": DefaultAppleIssuer,
+			"sub": "apple-user-subject",
+			"aud": "test-client-id",
+			"iat": now.Unix(),
+			"exp": now.Add(time.Hour).Unix(),
+		}
+	}
+
+	parse := func(t *testing.T, idToken string) *UserProvidedData {
+		t.Helper()
+		_, data, err := ParseIDToken(context.Background(), oidcProvider, &oidc.Config{
+			ClientID: "test-client-id",
+		}, idToken, ParseIDTokenOptions{
+			SkipAccessTokenCheck: true,
+		})
+		require.NoError(t, err)
+		return data
+	}
+
+	t.Run("with email populates Emails", func(t *testing.T) {
+		claims := baseClaims()
+		claims["email"] = "user@example.com"
+
+		data := parse(t, signToken(t, claims))
+
+		require.Len(t, data.Emails, 1)
+		require.Equal(t, "user@example.com", data.Emails[0].Email)
+		require.True(t, data.Emails[0].Verified)
+		require.True(t, data.Emails[0].Primary)
+	})
+
+	t.Run("without email claim returns no Emails", func(t *testing.T) {
+		data := parse(t, signToken(t, baseClaims()))
+
+		require.Empty(t, data.Emails)
+	})
+
+	t.Run("with empty email claim returns no Emails", func(t *testing.T) {
+		claims := baseClaims()
+		claims["email"] = ""
+
+		data := parse(t, signToken(t, claims))
+
+		require.Empty(t, data.Emails)
+	})
 }

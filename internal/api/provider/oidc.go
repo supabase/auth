@@ -182,11 +182,13 @@ func parseAppleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 
 	var data UserProvidedData
 
-	data.Emails = append(data.Emails, Email{
-		Email:    claims.Email,
-		Verified: true,
-		Primary:  true,
-	})
+	if claims.Email != "" {
+		data.Emails = append(data.Emails, Email{
+			Email:    claims.Email,
+			Verified: true,
+			Primary:  true,
+		})
+	}
 
 	data.Metadata = &Claims{
 		Issuer:       token.Issuer,
