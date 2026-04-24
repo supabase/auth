@@ -138,8 +138,10 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 	if isNewUser {
 		// User either doesn't exist or hasn't completed the signup process.
-		// Sign them up with temporary password.
-		password, err := password.Generate(64, 10, 1, false, true)
+		// Sign them up with temporary password that satisfies the configured
+		// minimum password length, clamped to the bcrypt limit.
+		passwordLen := min(max(64, config.Password.MinLength), MaxPasswordLength)
+		password, err := password.Generate(passwordLen, 10, 1, false, true)
 		if err != nil {
 			return apierrors.NewInternalServerError("error creating user").WithInternalError(err)
 		}

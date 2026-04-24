@@ -83,8 +83,10 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	}
 	if isNewUser {
 		// User either doesn't exist or hasn't completed the signup process.
-		// Sign them up with temporary password.
-		password := crypto.GeneratePassword(config.Password.RequiredCharacters, 33)
+		// Sign them up with temporary password that satisfies the configured
+		// minimum password length, clamped to the bcrypt limit.
+		passwordLen := min(max(33, config.Password.MinLength), MaxPasswordLength)
+		password := crypto.GeneratePassword(config.Password.RequiredCharacters, passwordLen)
 
 		signUpParams := &SignupParams{
 			Email:               params.Email,
