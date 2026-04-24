@@ -262,6 +262,28 @@ func (ts *OtpTestSuite) TestNoSignupsForOtp() {
 	})
 }
 
+func (ts *OtpTestSuite) TestOtpRespectsMinPasswordLength() {
+	// Regression test for https://github.com/supabase/auth/issues/2456.
+	// OTP signup internally generates a temporary password that must satisfy
+	// the configured minimum password length, otherwise the signup call fails
+	// with a 422 WeakPasswordError even though the caller never supplied a
+	// password.
+	ts.Config.Password.MinLength = 40
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": "min-length@example.com",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
 func (ts *OtpTestSuite) TestSubsequentOtp() {
 	ts.Config.SMTP.MaxFrequency = 0
 	userEmail := "foo@example.com"
