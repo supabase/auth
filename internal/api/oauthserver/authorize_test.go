@@ -136,13 +136,15 @@ func TestValidateRequestOriginEdgeCases(t *testing.T) {
 	tokenService := tokens.NewService(globalConfig, hooksMgr)
 	server := NewServer(globalConfig, conn, tokenService)
 
-	t.Run("Origin with different port should be allowed (hostname matching)", func(t *testing.T) {
+	t.Run("Origin with different port on non-localhost should be rejected", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set("Origin", "https://example.com:8080")
 
-		// Should pass because hostname matches (IsRedirectURLValid allows different ports)
+		// Must be rejected: port mismatch on a non-loopback host.
+		// RFC 8252 Section 7.3 variable-port exception only applies to localhost.
 		err := server.validateRequestOrigin(req)
-		assert.NoError(t, err)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unauthorized request origin")
 	})
 
 	t.Run("Case sensitivity in Origin header", func(t *testing.T) {
