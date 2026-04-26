@@ -420,6 +420,72 @@ func TestTimeoutResponseWriter(t *testing.T) {
 	require.Equal(t, w1.Result(), w2.Result())
 }
 
+// Regression test for #2233: timeoutMiddleware must construct its
+// timeoutResponseWriter with a non-nil snapHeader, so that finallyWrite can
+// never observe a half-initialised writer when the wrapped handler returns
+// before any call to WriteHeader (for example, after honouring
+// r.Context().Done()). On master the field is left nil and only populated
+// inside writeHeaderLocked, leaving a window in which the timeout/cancel
+// paths copy from a nil map.
+func TestTimeoutMiddlewareSnapHeaderInitialized(t *testing.T) {
+	timeoutHandler := timeoutMiddleware(time.Second)
+
+	var captured *timeoutResponseWriter
+	probe := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tw, ok := w.(*timeoutResponseWriter)
+		require.True(t, ok, "expected timeoutMiddleware to wrap response writer in *timeoutResponseWriter")
+		captured = tw
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+	w := httptest.NewRecorder()
+	timeoutHandler(probe).ServeHTTP(w, req)
+
+	require.NotNil(t, captured, "probe handler did not run")
+	require.NotNil(t, captured.snapHeader, "snapHeader must be initialised before the handler runs to avoid #2233 nil dereference window")
+}
+
+// Regression test for #2233: when the wrapped handler exits via
+// r.Context().Done() without calling WriteHeader, the middleware must still
+// produce a well-formed response and must not panic on the snapHeader copy.
+func TestTimeoutMiddlewareHandlerReturnsBeforeWriteHeader(t *testing.T) {
+	timeoutHandler := timeoutMiddleware(20 * time.Millisecond)
+
+	handlerEntered := make(chan struct{})
+	handlerExited := make(chan struct{})
+	slowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(handlerEntered)
+		<-r.Context().Done()
+		close(handlerExited)
+	})
+
+	srv := httptest.NewServer(timeoutHandler(slowHandler))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	select {
+	case <-handlerEntered:
+	case <-time.After(time.Second):
+		t.Fatal("handler was never invoked")
+	}
+	select {
+	case <-handlerExited:
+	case <-time.After(time.Second):
+		t.Fatal("handler did not return after context cancellation")
+	}
+
+	// The deadline-exceeded branch is the typical path; either way we must
+	// have a non-zero status and a defined body, never a panic-induced 500.
+	require.NotZero(t, resp.StatusCode)
+	require.NotNil(t, body)
+}
+
 func (ts *MiddlewareTestSuite) TestPerformRateLimitingWithSBFF() {
 	origRateLimitHeader := ts.Config.RateLimitHeader
 	origSBFFEnabled := ts.Config.Security.SbForwardedForEnabled

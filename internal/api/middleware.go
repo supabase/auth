@@ -514,7 +514,8 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 			defer cancel()
 
 			timeoutWriter := &timeoutResponseWriter{
-				header: make(http.Header),
+				header:     make(http.Header),
+				snapHeader: make(http.Header),
 			}
 
 			panicChan := make(chan any, 1)
