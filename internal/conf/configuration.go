@@ -159,10 +159,11 @@ type TOTPFactorTypeConfiguration struct {
 type PhoneFactorTypeConfiguration struct {
 	// Default to false in order to ensure Phone MFA is opt-in
 	MFAFactorTypeConfiguration
-	OtpLength    int                `json:"otp_length" split_words:"true"`
-	SMSTemplate  *template.Template `json:"-"`
-	MaxFrequency time.Duration      `json:"max_frequency" split_words:"true"`
-	Template     string             `json:"template"`
+	OtpLength       int                `json:"otp_length" split_words:"true"`
+	OtpAlphaNumeric bool               `json:"otp_alpha_numeric" split_words:"true"`
+	SMSTemplate     *template.Template `json:"-"`
+	MaxFrequency    time.Duration      `json:"max_frequency" split_words:"true"`
+	Template        string             `json:"template"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
@@ -572,8 +573,9 @@ type MailerConfiguration struct {
 
 	SecureEmailChangeEnabled bool `json:"secure_email_change_enabled" split_words:"true" default:"true"`
 
-	OtpExp    uint `json:"otp_exp" split_words:"true"`
-	OtpLength int  `json:"otp_length" split_words:"true"`
+	OtpExp          uint `json:"otp_exp" split_words:"true"`
+	OtpLength       int  `json:"otp_length" split_words:"true"`
+	OtpAlphaNumeric bool `json:"otp_alpha_numeric" split_words:"true"`
 
 	ExternalHosts []string `json:"external_hosts" split_words:"true"`
 
@@ -657,6 +659,7 @@ type SmsProviderConfiguration struct {
 	MaxFrequency      time.Duration      `json:"max_frequency" split_words:"true"`
 	OtpExp            uint               `json:"otp_exp" split_words:"true"`
 	OtpLength         int                `json:"otp_length" split_words:"true"`
+	OtpAlphaNumeric   bool               `json:"otp_alpha_numeric" split_words:"true"`
 	Provider          string             `json:"provider"`
 	Template          string             `json:"template"`
 	TestOTP           map[string]string  `json:"test_otp" split_words:"true"`

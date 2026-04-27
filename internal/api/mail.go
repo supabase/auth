@@ -90,9 +90,13 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	var url string
+	var url, otp string
 	now := time.Now()
-	otp := crypto.GenerateOtp(config.Mailer.OtpLength)
+	if config.Mailer.OtpAlphaNumeric {
+		otp = crypto.GenerateAlphanumericOtp(config.Mailer.OtpLength)
+	} else {
+		otp = crypto.GenerateOtp(config.Mailer.OtpLength)
+	}
 
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
 
@@ -326,7 +330,12 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 		return err
 	}
 	oldToken := u.ConfirmationToken
-	otp := crypto.GenerateOtp(otpLength)
+	var otp string
+	if config.Mailer.OtpAlphaNumeric {
+		otp = crypto.GenerateAlphanumericOtp(otpLength)
+	} else {
+		otp = crypto.GenerateOtp(otpLength)
+	}
 
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
@@ -361,7 +370,12 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 	otpLength := config.Mailer.OtpLength
 	var err error
 	oldToken := u.ConfirmationToken
-	otp := crypto.GenerateOtp(otpLength)
+	var otp string
+	if config.Mailer.OtpAlphaNumeric {
+		otp = crypto.GenerateAlphanumericOtp(otpLength)
+	} else {
+		otp = crypto.GenerateOtp(otpLength)
+	}
 
 	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
@@ -403,7 +417,12 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 	}
 
 	oldToken := u.RecoveryToken
-	otp := crypto.GenerateOtp(otpLength)
+	var otp string
+	if config.Mailer.OtpAlphaNumeric {
+		otp = crypto.GenerateAlphanumericOtp(otpLength)
+	} else {
+		otp = crypto.GenerateOtp(otpLength)
+	}
 
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
@@ -445,7 +464,12 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	}
 
 	oldToken := u.ReauthenticationToken
-	otp := crypto.GenerateOtp(otpLength)
+	var otp string
+	if config.Mailer.OtpAlphaNumeric {
+		otp = crypto.GenerateAlphanumericOtp(otpLength)
+	} else {
+		otp = crypto.GenerateOtp(otpLength)
+	}
 
 	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
@@ -488,7 +512,12 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	}
 
 	oldToken := u.RecoveryToken
-	otp := crypto.GenerateOtp(otpLength)
+	var otp string
+	if config.Mailer.OtpAlphaNumeric {
+		otp = crypto.GenerateAlphanumericOtp(otpLength)
+	} else {
+		otp = crypto.GenerateOtp(otpLength)
+	}
 
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
@@ -528,7 +557,12 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 		return err
 	}
 
-	otpNew := crypto.GenerateOtp(otpLength)
+	var otpNew string
+	if config.Mailer.OtpAlphaNumeric {
+		otpNew = crypto.GenerateAlphanumericOtp(otpLength)
+	} else {
+		otpNew = crypto.GenerateOtp(otpLength)
+	}
 
 	u.EmailChange = email
 	token := crypto.GenerateTokenHash(u.EmailChange, otpNew)
