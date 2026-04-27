@@ -40,6 +40,11 @@ func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 
 	externalURL.Path += "sso/"
 
+	entityID := ""
+	if identityProvider != nil {
+		entityID = identityProvider.EntityID
+	}
+
 	provider := samlsp.DefaultServiceProvider(samlsp.Options{
 		URL:               *externalURL,
 		Key:               a.config.SAML.RSAPrivateKey,
@@ -47,6 +52,7 @@ func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 		SignRequest:       true,
 		AllowIDPInitiated: idpInitiated,
 		IDPMetadata:       identityProvider,
+		EntityID:          entityID,
 	})
 
 	provider.AuthnNameIDFormat = saml.PersistentNameIDFormat
