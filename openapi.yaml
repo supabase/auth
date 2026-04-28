@@ -1040,21 +1040,6 @@ paths:
                   enum:
                     - sms
                     - whatsapp
-                webauthn:
-                  type: object
-                  required:
-                    - rpId
-                    - rpOrigins
-                  properties:
-                    rpId:
-                      type: string
-                      description: The relying party identifier (usually the domain)
-                    rpOrigins:
-                      type: array
-                      items:
-                        type: string
-                      minItems: 1
-                      description: List of allowed origins for WebAuthn
 
       responses:
         200:
@@ -1103,20 +1088,9 @@ paths:
                 webauthn:
                   type: object
                   required:
-                    - rpId
-                    - rpOrigins
                     - type
                     - credential_response
                   properties:
-                    rpId:
-                      type: string
-                      description: The relying party identifier
-                    rpOrigins:
-                      type: array
-                      items:
-                        type: string
-                      minItems: 1
-                      description: List of allowed origins for WebAuthn
                     type:
                       type: string
                       enum: [create, request]
