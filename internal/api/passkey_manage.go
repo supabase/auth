@@ -91,7 +91,7 @@ func (a *API) PasskeyUpdate(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.PasskeyUpdatedAction, utilities.GetIPAddress(r), map[string]any{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.PasskeyUpdatedAction, map[string]any{
 			"passkey_id": cred.ID,
 		}); terr != nil {
 			return terr
@@ -132,7 +132,7 @@ func (a *API) PasskeyDelete(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.PasskeyDeletedAction, utilities.GetIPAddress(r), map[string]any{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.PasskeyDeletedAction, map[string]any{
 			"passkey_id": cred.ID,
 		}); terr != nil {
 			return terr
