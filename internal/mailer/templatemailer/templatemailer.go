@@ -31,81 +31,81 @@ const (
 
 const defaultInviteMail = `<h2>You have been invited</h2>
 
-<p>You have been invited to create a user on {{ .SiteURL }}. Follow this link to accept the invite:</p>
-<p><a href="{{ .ConfirmationURL }}">Accept the invite</a></p>
-<p>Alternatively, enter the code: {{ .Token }}</p>`
+<p>You have been invited to create an account.</p>
+<p><a href="{{ .ConfirmationURL }}">Accept invitation</a></p>
+<p>Alternatively, enter this code: {{ .Token }}</p>`
 
-const defaultConfirmationMail = `<h2>Confirm Your Email</h2>
+const defaultConfirmationMail = `<h2>Confirm your email</h2>
 
-<p>Follow this link to confirm your email:</p>
+<p>Confirm this email address to finish setting up your account.</p>
 <p><a href="{{ .ConfirmationURL }}">Confirm your email address</a></p>
-<p>Alternatively, enter the code: {{ .Token }}</p>
+<p>Alternatively, enter this code: {{ .Token }}</p>
 `
 
 const defaultRecoveryMail = `<h2>Reset password</h2>
 
-<p>Follow this link to reset the password for your user:</p>
+<p>Use this link to choose a new password for your account.</p>
 <p><a href="{{ .ConfirmationURL }}">Reset password</a></p>
-<p>Alternatively, enter the code: {{ .Token }}</p>`
+<p>Alternatively, enter this code: {{ .Token }}</p>`
 
-const defaultMagicLinkMail = `<h2>Magic Link</h2>
+const defaultMagicLinkMail = `<h2>Sign in to your account</h2>
 
-<p>Follow this link to login:</p>
-<p><a href="{{ .ConfirmationURL }}">Log In</a></p>
-<p>Alternatively, enter the code: {{ .Token }}</p>`
+<p>Use this link to sign in to your account.</p>
+<p><a href="{{ .ConfirmationURL }}">Sign in</a></p>
+<p>Alternatively, enter this code: {{ .Token }}</p>`
 
-const defaultEmailChangeMail = `<h2>Confirm email address change</h2>
+const defaultEmailChangeMail = `<h2>Confirm your new email</h2>
 
-<p>Follow this link to confirm the update of your email address from {{ .Email }} to {{ .NewEmail }}:</p>
-<p><a href="{{ .ConfirmationURL }}">Change email address</a></p>
-<p>Alternatively, enter the code: {{ .Token }}</p>`
+<p>Confirm changing the email address for your account from {{ .Email }} to {{ .NewEmail }}.</p>
+<p><a href="{{ .ConfirmationURL }}">Confirm new email</a></p>
+<p>Alternatively, enter this code: {{ .Token }}</p>`
 
 const defaultReauthenticateMail = `<h2>Confirm reauthentication</h2>
 
-<p>Enter the code: {{ .Token }}</p>`
+<p>Enter this code to continue: {{ .Token }}</p>`
 
 // Account Changes Notifications
 
 // #nosec G101 -- No hardcoded credentials.
-const defaultPasswordChangedNotificationMail = `<h2>Your password has been changed</h2>
+const defaultPasswordChangedNotificationMail = `<h2>Your password was changed</h2>
 
-<p>This is a confirmation that the password for your account {{ .Email }} has just been changed.</p>
-<p>If you did not make this change, please contact support.</p>
+<p>The password for your account {{ .Email }} was changed.</p>
+<p>If you did not make this change, contact support for your account.</p>
 `
-const defaultEmailChangedNotificationMail = `<h2>Your email address has been changed</h2>
+const defaultEmailChangedNotificationMail = `<h2>Your email address was changed</h2>
 
-<p>The email address for your account has been changed from {{ .OldEmail }} to {{ .Email }}.</p>
-<p>If you did not make this change, please contact support.</p>
-`
-
-const defaultPhoneChangedNotificationMail = `<h2>Your phone number has been changed</h2>
-
-<p>The phone number for your account {{ .Email }} has been changed from {{ .OldPhone }} to {{ .Phone }}.</p>
-<p>If you did not make this change, please contact support immediately.</p>
+<p>The email address for your account was changed from {{ .OldEmail }} to {{ .Email }}.</p>
+<p>If you did not make this change, contact support for your account.</p>
 `
 
-const defaultIdentityLinkedNotificationMail = `<h2>A new identity has been linked</h2>
+const defaultPhoneChangedNotificationMail = `<h2>Your phone number was changed</h2>
 
-<p>A new identity ({{ .Provider }}) has been linked to your account {{ .Email }}.</p>
-<p>If you did not make this change, please contact support immediately.</p>
+<p>The phone number for your account {{ .Email }} was changed from {{ .OldPhone }} to {{ .Phone }}.</p>
+<p>If you did not make this change, contact support for your account.</p>
 `
 
-const defaultIdentityUnlinkedNotificationMail = `<h2>An identity has been unlinked</h2>
+const defaultIdentityLinkedNotificationMail = `<h2>A new identity was linked</h2>
 
-<p>An identity ({{ .Provider }}) has been unlinked from your account {{ .Email }}.</p>
-<p>If you did not make this change, please contact support immediately.</p>
+<p>A new {{ .Provider }} identity was linked to your account {{ .Email }}.</p>
+<p>If you did not make this change, contact support for your account.</p>
 `
 
-const defaultMFAFactorEnrolledNotificationMail = `<h2>A new MFA factor has been enrolled</h2>
+const defaultIdentityUnlinkedNotificationMail = `<h2>An identity was unlinked</h2>
 
-<p>A new factor ({{ .FactorType }}) has been enrolled for your account {{ .Email }}.</p>
-<p>If you did not make this change, please contact support immediately.</p>
+<p>A {{ .Provider }} identity was unlinked from your account {{ .Email }}.</p>
+<p>If you did not make this change, contact support for your account.</p>
 `
 
-const defaultMFAFactorUnenrolledNotificationMail = `<h2>An MFA factor has been unenrolled</h2>
+const defaultMFAFactorEnrolledNotificationMail = `<h2>A new MFA factor was added</h2>
 
-<p>A factor ({{ .FactorType }}) has been unenrolled for your account {{ .Email }}.</p>
-<p>If you did not make this change, please contact support immediately.</p>
+<p>A new {{ .FactorType }} MFA factor was added to your account {{ .Email }}.</p>
+<p>If you did not make this change, contact support for your account.</p>
+`
+
+const defaultMFAFactorUnenrolledNotificationMail = `<h2>An MFA factor was removed</h2>
+
+<p>A {{ .FactorType }} MFA factor was removed from your account {{ .Email }}.</p>
+<p>If you did not make this change, contact support for your account.</p>
 `
 
 var (
@@ -128,20 +128,20 @@ var (
 	}
 	defaultTemplateSubjects = &conf.EmailContentConfiguration{
 		Invite:           "You have been invited",
-		Confirmation:     "Confirm Your Email",
-		Recovery:         "Reset Your Password",
-		MagicLink:        "Your Magic Link",
-		EmailChange:      "Confirm Email Change",
+		Confirmation:     "Confirm your email",
+		Recovery:         "Reset your password",
+		MagicLink:        "Your sign-in link",
+		EmailChange:      "Confirm your new email",
 		Reauthentication: "Confirm reauthentication",
 
 		// Account Changes Notifications
-		PasswordChangedNotification:     "Your password has been changed",
-		EmailChangedNotification:        "Your email address has been changed",
-		PhoneChangedNotification:        "Your phone number has been changed",
-		IdentityLinkedNotification:      "A new identity has been linked",
-		IdentityUnlinkedNotification:    "An identity has been unlinked",
-		MFAFactorEnrolledNotification:   "A new MFA factor has been enrolled",
-		MFAFactorUnenrolledNotification: "An MFA factor has been unenrolled",
+		PasswordChangedNotification:     "Your password was changed",
+		EmailChangedNotification:        "Your email address was changed",
+		PhoneChangedNotification:        "Your phone number was changed",
+		IdentityLinkedNotification:      "A new identity was linked",
+		IdentityUnlinkedNotification:    "An identity was unlinked",
+		MFAFactorEnrolledNotification:   "A new MFA factor was added",
+		MFAFactorUnenrolledNotification: "An MFA factor was removed",
 	}
 	defaultTemplateBodies = &conf.EmailContentConfiguration{
 		Invite:           defaultInviteMail,
