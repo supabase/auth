@@ -23,11 +23,12 @@ BUILD_CMD = go build \
 	-buildvcs=false \
 	-ldflags "$(BUILD_LD_FLAGS)$(2)"
 
-RELEASE_TARGETS = x86 arm64 darwin-arm64 arm64-strip
+RELEASE_TARGETS = x86 arm64 darwin-arm64 amd64-strip arm64-strip
 RELEASE_ARCHIVES = \
 	auth-$(VERSION)-x86.tar.gz \
 	auth-$(VERSION)-arm64.tar.gz \
 	auth-$(VERSION)-darwin-arm64.tar.gz \
+	auth-$(VERSION)-amd64.tar.xz \
 	auth-$(VERSION)-arm64.tar.xz
 
 
@@ -36,9 +37,9 @@ help: ## Show this help.
 
 all: vet sec static build ## Run the tests and build the binary.
 
-build: auth auth-arm64 auth-darwin-arm64 ## Build the binaries.
+build: auth auth-amd64 auth-arm64 auth-darwin-arm64 ## Build the binaries.
 
-build-strip: auth-arm64-strip ## Build a stripped binary, for which the version file needs to be rewritten.
+build-strip: auth-amd64-strip auth-arm64-strip ## Build a stripped binary, for which the version file needs to be rewritten.
 
 auth: deps
 	CGO_ENABLED=0 $(call BUILD_CMD,$(@),)
@@ -46,11 +47,17 @@ auth: deps
 auth-x86: deps
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(call BUILD_CMD,$(@),)
 
+auth-amd64: deps
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(call BUILD_CMD,$(@),)
+
 auth-arm64: deps
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(call BUILD_CMD,$(@),)
 
 auth-darwin-arm64: deps
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(call BUILD_CMD,$(@),)
+
+auth-amd64-strip: deps
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(call BUILD_CMD,$(@), -s)
 
 auth-arm64-strip: deps
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(call BUILD_CMD,$(@), -s)
@@ -72,6 +79,12 @@ auth-$(VERSION)-%.tar.gz: \
 		release-%/auth \
 		release-%/gotrue | migrations
 	tar -C $(<D) -czvf $(@) auth gotrue -C ../ migrations/
+
+auth-$(VERSION)-amd64.tar.xz: \
+		release-amd64-strip/auth \
+		release-amd64-strip/gotrue | migrations
+	tar -C $(<D) -cf - auth gotrue -C ../ migrations/ \
+		| xz -T0 -9e -C crc64 > $(@)
 
 auth-$(VERSION)-arm64.tar.xz: \
 		release-arm64-strip/auth \
