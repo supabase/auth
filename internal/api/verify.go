@@ -337,7 +337,7 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, map[string]interface{}{
 			"provider": EmailProvider,
 		}); terr != nil {
 			return terr
@@ -376,7 +376,7 @@ func (a *API) recoverVerify(r *http.Request, conn *storage.Connection, user *mod
 			return terr
 		}
 		if !user.IsConfirmed() {
-			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, map[string]interface{}{
 				"provider": EmailProvider,
 			}); terr != nil {
 				return terr
@@ -386,7 +386,7 @@ func (a *API) recoverVerify(r *http.Request, conn *storage.Connection, user *mod
 				return terr
 			}
 		} else {
-			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, nil); terr != nil {
 				return terr
 			}
 		}
@@ -407,7 +407,7 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 	err := conn.Transaction(func(tx *storage.Connection) error {
 
 		if params.Type == smsVerification {
-			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, map[string]interface{}{
 				"provider": PhoneProvider,
 			}); terr != nil {
 				return terr
@@ -416,7 +416,7 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 				return apierrors.NewInternalServerError("Error confirming user").WithInternalError(terr)
 			}
 		} else if params.Type == phoneChangeVerification {
-			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, nil); terr != nil {
 				return terr
 			}
 			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil {
@@ -586,7 +586,7 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 	// one email is confirmed at this point if GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED is enabled
 	oldEmail := user.GetEmail()
 	err := conn.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, nil); terr != nil {
 			return terr
 		}
 
