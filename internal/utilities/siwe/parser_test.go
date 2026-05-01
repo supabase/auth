@@ -116,7 +116,10 @@ func TestParseMessage(t *testing.T) {
 
 			require.Nil(t, err)
 			require.Equal(t, "example.com", parsed.Domain)
-			require.Equal(t, "0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E", parsed.Address)
+			// Address is normalized to lowercase regardless of input casing.
+			// Ethereum addresses are protocol-level case-insensitive; EIP-55
+			// mixed-case is a visual checksum, not a distinct identifier.
+			require.Equal(t, "0x196a28d05ba75c8dc35b0f6e71dd622d1ac82b7e", parsed.Address)
 
 			if i == 0 {
 				require.Equal(t, "Sign in to Example App", *parsed.Statement)
@@ -132,5 +135,51 @@ func TestParseMessage(t *testing.T) {
 
 			require.Equal(t, true, parsed.VerifySignature((example.signature)))
 		})
+	}
+}
+
+// TestParseMessageAddressNormalization asserts that ParseMessage lowercases
+// the Ethereum address regardless of the input casing. Ethereum addresses
+// are protocol-level case-insensitive (EIP-55 mixed-case is a visual checksum
+// only), so storing them verbatim allowed the same wallet signing in with
+// different casings to create duplicate auth.identities rows. See #2264.
+func TestParseMessageAddressNormalization(t *testing.T) {
+	const lowerAddress = "0x196a28d05ba75c8dc35b0f6e71dd622d1ac82b7e"
+	const upperHexAddress = "0x196A28D05BA75C8DC35B0F6E71DD622D1AC82B7E"
+	const checksumAddress = "0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E"
+
+	makeMessage := func(addr string) string {
+		return "example.com wants you to sign in with your Ethereum account:\n" +
+			addr +
+			"\n\nURI: https://example.com\nVersion: 1\nChain ID: 1\nNonce: 12345678\nIssued At: 2025-01-01T00:00:00.000Z"
+	}
+
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{name: "lowercase", input: lowerAddress},
+		{name: "uppercase hex", input: upperHexAddress},
+		{name: "EIP-55 checksum mixed case", input: checksumAddress},
+	}
+
+	parsedAddresses := make([]string, 0, len(cases))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			parsed, err := ParseMessage(makeMessage(tc.input))
+			require.Nil(t, err)
+			require.Equal(t, lowerAddress, parsed.Address,
+				"parser must lowercase Ethereum address so case-variant sign-ins do not create duplicate identities")
+		})
+		// Re-parse outside the subtest to collect for the equality assertion below.
+		parsed, err := ParseMessage(makeMessage(tc.input))
+		require.Nil(t, err)
+		parsedAddresses = append(parsedAddresses, parsed.Address)
+	}
+
+	// All case variants of the same wallet must yield the exact same Address.
+	for i := 1; i < len(parsedAddresses); i++ {
+		require.Equal(t, parsedAddresses[0], parsedAddresses[i],
+			"all case variants of the same Ethereum address must parse to the same value")
 	}
 }
