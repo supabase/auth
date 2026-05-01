@@ -93,3 +93,77 @@ func TestContext(t *testing.T) {
 		}
 	}
 }
+
+func TestNewLogEntry(t *testing.T) {
+	le := NewLogEntry(logrus.NewEntry(logrus.StandardLogger()))
+	require.NotNil(t, le)
+	// NewLogEntry returns a chimiddleware.LogEntry; verify the underlying type
+	// is the package's *logEntry so downstream casts in GetLogEntry work.
+	_, ok := le.(*logEntry)
+	require.True(t, ok, "expected NewLogEntry to return *logEntry")
+}
+
+func TestGetLogEntryFallback(t *testing.T) {
+	// No log entry is attached to this request's context, so GetLogEntry
+	// should return a fresh fallback entry rather than panic or nil.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	got := GetLogEntry(req)
+	require.NotNil(t, got)
+	require.NotNil(t, got.Entry)
+}
+
+func TestGetLogEntryReturnsAttachedEntry(t *testing.T) {
+	want := &logEntry{Entry: logrus.NewEntry(logrus.StandardLogger())}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	ctx := SetLogEntryWithContext(req.Context(), want)
+	req = req.WithContext(ctx)
+
+	got := GetLogEntry(req)
+	require.Same(t, want, got)
+}
+
+func TestLogEntrySetField(t *testing.T) {
+	le := &logEntry{Entry: logrus.NewEntry(logrus.StandardLogger())}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = req.WithContext(SetLogEntryWithContext(req.Context(), le))
+
+	LogEntrySetField(req, "user_id", "abc-123")
+	require.Equal(t, "abc-123", le.Entry.Data["user_id"])
+}
+
+func TestLogEntrySetFieldsMerges(t *testing.T) {
+	le := &logEntry{Entry: logrus.NewEntry(logrus.StandardLogger())}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = req.WithContext(SetLogEntryWithContext(req.Context(), le))
+
+	LogEntrySetFields(req, logrus.Fields{
+		"session": "s1",
+		"trace":   "t1",
+	})
+	require.Equal(t, "s1", le.Entry.Data["session"])
+	require.Equal(t, "t1", le.Entry.Data["trace"])
+}
+
+func TestLogEntrySetFieldNoLogEntryInContextIsNoop(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	require.NotPanics(t, func() {
+		LogEntrySetField(req, "k", "v")
+		LogEntrySetFields(req, logrus.Fields{"k": "v"})
+	})
+}
+
+func TestLogEntryPanicWritesPanicAndStackFields(t *testing.T) {
+	var buf bytes.Buffer
+	logger := logrus.New()
+	logger.SetOutput(&buf)
+	logger.SetFormatter(&logrus.JSONFormatter{})
+
+	le := &logEntry{Entry: logrus.NewEntry(logger)}
+	le.Panic("boom", []byte("fake-stack-trace"))
+
+	var out map[string]interface{}
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &out))
+	require.Equal(t, "request panicked", out["msg"])
+	require.Equal(t, "fake-stack-trace", out["stack"])
+	require.Contains(t, out["panic"], "boom")
+}
