@@ -5,10 +5,71 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
+
+// standardClaimKeys is the set of JSON keys handled by the typed Claims
+// struct (OIDC standard claims plus our typed extensions, and the
+// custom_claims sink itself). Derived from the struct's json tags so it
+// can't drift when Claims changes.
+var standardClaimKeys = jsonKeysOf(reflect.TypeOf(Claims{}))
+
+// jsonKeysOf returns the set of JSON keys declared by a struct type's tags.
+func jsonKeysOf(t reflect.Type) map[string]bool {
+	keys := map[string]bool{}
+	for i := 0; i < t.NumField(); i++ {
+		tag, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if tag != "" && tag != "-" {
+			keys[tag] = true
+		}
+	}
+	return keys
+}
+
+// captureCustomClaims merges any top-level keys in raw that aren't part of
+// the typed Claims struct into c.CustomClaims, so provider-specific claims
+// (groups, roles, org_id, …) survive into identity_data downstream. Entries
+// already present in c.CustomClaims (e.g. populated by the typed decode of
+// a literal "custom_claims" object on the IdP response) win over any
+// same-named top-level key.
+func captureCustomClaims(raw map[string]interface{}, c *Claims) {
+	for k, v := range raw {
+		if standardClaimKeys[k] {
+			continue
+		}
+		if _, exists := c.CustomClaims[k]; exists {
+			continue
+		}
+		if c.CustomClaims == nil {
+			c.CustomClaims = map[string]interface{}{}
+		}
+		c.CustomClaims[k] = v
+	}
+}
+
+// customClaims is a Claims wrapper whose UnmarshalJSON also captures
+// non-standard top-level keys under CustomClaims. Scoped to custom OAuth/OIDC
+// providers — built-in providers (Google, Apple, …) decode into Claims
+// directly and keep their existing behaviour.
+type customClaims Claims
+
+func (c *customClaims) UnmarshalJSON(data []byte) error {
+	var standard Claims
+	if err := json.Unmarshal(data, &standard); err != nil {
+		return err
+	}
+	*c = customClaims(standard)
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err == nil {
+		captureCustomClaims(raw, (*Claims)(c))
+	}
+	return nil
+}
 
 // CustomOAuthProvider implements OAuthProvider for custom OAuth2 providers
 type CustomOAuthProvider struct {
@@ -68,10 +129,11 @@ func (p *CustomOAuthProvider) GetOAuthToken(ctx context.Context, code string, op
 
 // GetUserData fetches user data from the provider's userinfo endpoint
 func (p *CustomOAuthProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var claims Claims
-	if err := makeRequest(ctx, tok, p.config, p.userinfoURL, &claims); err != nil {
+	var decoded customClaims
+	if err := makeRequest(ctx, tok, p.config, p.userinfoURL, &decoded); err != nil {
 		return nil, err
 	}
+	claims := Claims(decoded)
 
 	// Apply attribute mapping if configured
 	if len(p.attributeMapping) > 0 {
@@ -198,6 +260,16 @@ func (p *CustomOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token)
 			return nil, err
 		}
 
+		// ParseIDToken decodes into the typed Claims struct and drops anything
+		// not mapped. Re-walk the raw claims to capture provider-specific
+		// custom claims (groups, roles, …) for identity_data.
+		if userData.Metadata != nil {
+			var raw map[string]interface{}
+			if err := idTokenObj.Claims(&raw); err == nil {
+				captureCustomClaims(raw, userData.Metadata)
+			}
+		}
+
 		// Apply attribute mapping to the metadata from ID token
 		if len(p.attributeMapping) > 0 && userData.Metadata != nil {
 			*userData.Metadata = applyAttributeMapping(*userData.Metadata, p.attributeMapping)
@@ -208,10 +280,11 @@ func (p *CustomOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token)
 
 	// No ID token, use userinfo endpoint
 	if p.userinfoEndpoint != "" {
-		var claims Claims
-		if err := makeRequest(ctx, tok, p.config, p.userinfoEndpoint, &claims); err != nil {
+		var decoded customClaims
+		if err := makeRequest(ctx, tok, p.config, p.userinfoEndpoint, &decoded); err != nil {
 			return nil, err
 		}
+		claims := Claims(decoded)
 
 		// Apply attribute mapping
 		if len(p.attributeMapping) > 0 {
