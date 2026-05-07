@@ -1,5 +1,6 @@
 .env*
 vendor/
+tools/bin/
 gotrue
 gotrue-arm64
 gotrue.exe
