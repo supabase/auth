@@ -118,6 +118,7 @@ test: auth ## Run tests.
 vet: # Vet the code
 	go vet $(CHECK_FILES)
 
+.NOTPARALLEL: $(TOOL_TARGETS)
 $(TOOL_TARGETS):
 	$(MAKE) -C tools
 
