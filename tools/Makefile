@@ -1,4 +1,4 @@
-BIN_DIR := $(PWD)/bin
+BIN_DIR := $(CURDIR)/bin
 
 all: \
 	$(BIN_DIR)/gosec \
