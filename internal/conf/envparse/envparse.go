@@ -1,5 +1,10 @@
 // Package envparse is a fork of the github.com/joho/godotenv parser.
 //
+// This fork is based on master which has some minor fixes[1] since the v1.5.1
+// we previously used.
+//
+// [1] https://github.com/joho/godotenv/compare/v1.5.1...main
+//
 // -------
 //
 // # Copyright (c) 2013 John Barton
@@ -30,11 +35,38 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
-	"regexp"
+	"io"
 	"strings"
 	"unicode"
 )
+
+// Parse reads an env file from io.Reader, returning a map of keys and values.
+func Parse(r io.Reader) (map[string]string, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	return ParseData(data)
+}
+
+// ParseData is like Parse but works on a string or []byte slice.
+func ParseData[T ~string | ~[]byte](data T) (map[string]string, error) {
+	buf := []byte(data)
+	if _, ok := any(data).([]byte); ok {
+		// since we use data as scratch space
+		buf = bytes.Clone(buf)
+	}
+	return parseData(buf)
+}
+
+// parseData will mutate data during parsing, use ParseData to avoid this.
+func parseData(data []byte) (map[string]string, error) {
+	out := make(map[string]string)
+	if err := parseBytes([]byte(data), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
 const (
 	charComment       = '#'
@@ -59,7 +91,7 @@ func parseBytes(src []byte, out map[string]string) error {
 			return err
 		}
 
-		value, left, err := extractVarValue(left, out)
+		value, left, err := extractVarValue(left)
 		if err != nil {
 			return err
 		}
@@ -143,8 +175,8 @@ loop:
 	return key, cutset, nil
 }
 
-// extractVarValue extracts variable value and returns rest of slice
-func extractVarValue(src []byte, vars map[string]string) (value string, rest []byte, err error) {
+// extractVarValue extracts variable value and returns rest of slice.
+func extractVarValue(src []byte) (value string, rest []byte, err error) {
 	quote, hasPrefix := hasQuotePrefix(src)
 	if !hasPrefix {
 		// unquoted value - read until end of line
@@ -168,42 +200,36 @@ func extractVarValue(src []byte, vars map[string]string) (value string, rest []b
 			return "", src[endOfLine:], nil
 		}
 
-		// Work backwards to check if the line ends in whitespace then
-		// a comment, ie: foo=bar # baz # other
-		for i := 0; i < endOfVar; i++ {
-			if line[i] == charComment && i < endOfVar {
-				if isSpace(line[i-1]) {
-					endOfVar = i
-					break
-				}
+		// Strip trailing comments only when '#' is preceded by whitespace:
+		// FOO=bar # comment => "bar"
+		// FOO=bar#baz       => "bar#baz"
+		// FOO=#bar          => "#bar"
+		for i := 1; i < endOfVar; i++ {
+			if line[i] == charComment && isSpace(line[i-1]) {
+				endOfVar = i
+				break
 			}
 		}
 
 		trimmed := strings.TrimFunc(string(line[0:endOfVar]), isSpace)
-
-		return expandVariables(trimmed, vars), src[endOfLine:], nil
+		return trimmed, src[endOfLine:], nil
 	}
 
 	// lookup quoted string terminator
 	for i := 1; i < len(src); i++ {
-		if char := src[i]; char != quote {
+		if src[i] != quote {
+			continue
+		}
+		if isEscaped(src, i) {
 			continue
 		}
 
-		// skip escaped quote symbol (\" or \', depends on quote)
-		if prevChar := src[i-1]; prevChar == '\\' {
-			continue
-		}
-
-		// trim quotes
-		trimFunc := isCharFunc(rune(quote))
-		value = string(bytes.TrimLeftFunc(bytes.TrimRightFunc(src[0:i], trimFunc), trimFunc))
+		valueBytes := src[1:i]
 		if quote == prefixDoubleQuote {
-			// unescape newlines for double quote (this is compat feature)
-			// and expand environment variables
-			value = expandVariables(expandEscapes(value), vars)
+			valueBytes = expandEscapes(valueBytes)
 		}
 
+		value = string(valueBytes)
 		return value, src[i+1:], nil
 	}
 
@@ -212,23 +238,45 @@ func extractVarValue(src []byte, vars map[string]string) (value string, rest []b
 	if valEndIndex == -1 {
 		valEndIndex = len(src)
 	}
-
 	return "", nil, fmt.Errorf("unterminated quoted value %s", src[:valEndIndex])
 }
 
-func expandEscapes(str string) string {
-	out := escapeRegex.ReplaceAllStringFunc(str, func(match string) string {
-		c := strings.TrimPrefix(match, `\`)
-		switch c {
-		case "n":
-			return "\n"
-		case "r":
-			return "\r"
-		default:
-			return match
+func isEscaped(src []byte, index int) bool {
+	var n int
+	for i := index - 1; i >= 0 && src[i] == '\\'; i-- {
+		n++
+	}
+	return n%2 == 1
+}
+
+func expandEscapes(src []byte) []byte {
+	var n int
+	for r := 0; r < len(src); r++ {
+		if src[r] != '\\' || r+1 >= len(src) {
+			src[n] = src[r]
+			n++
+			continue
 		}
-	})
-	return unescapeCharsRegex.ReplaceAllString(out, "$1")
+
+		r++
+		switch src[r] {
+		case 'n':
+			src[n] = '\n'
+		case 'r':
+			src[n] = '\r'
+		case '$':
+			// TODO(cstockton): We keep '$' here for stricter compat with todays
+			// config. If we want to be more strict (e.g. \$ -> \$) we can emit
+			// the additional \\ as well.
+			src[n] = '$'
+		default:
+			// Preserve upstream godotenv behavior for non-dollar escapes:
+			// \" => ", \\ => \, \x => x.
+			src[n] = src[r]
+		}
+		n++
+	}
+	return src[:n]
 }
 
 func indexOfNonSpaceChar(src []byte) int {
@@ -273,32 +321,4 @@ func isLineEnd(r rune) bool {
 		return true
 	}
 	return false
-}
-
-var (
-	escapeRegex        = regexp.MustCompile(`\\.`)
-	expandVarRegex     = regexp.MustCompile(`(\\)?(\$)(\()?\{?([A-Z0-9_]+)?\}?`)
-	unescapeCharsRegex = regexp.MustCompile(`\\([^$])`)
-)
-
-func expandVariables(v string, m map[string]string) string {
-	return expandVarRegex.ReplaceAllStringFunc(v, func(s string) string {
-		submatch := expandVarRegex.FindStringSubmatch(s)
-
-		if submatch == nil {
-			return s
-		}
-		if submatch[1] == "\\" || submatch[2] == "(" {
-			return submatch[0][1:]
-		} else if submatch[4] != "" {
-			if val, ok := m[submatch[4]]; ok {
-				return val
-			}
-			if val, ok := os.LookupEnv(submatch[4]); ok {
-				return val
-			}
-			return m[submatch[4]]
-		}
-		return s
-	})
 }
