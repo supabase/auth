@@ -569,39 +569,55 @@ URL path to use in the email change confirmation email. Defaults to `/verify`.
 
 `MAILER_SUBJECTS_INVITE` - `string`
 
-Email subject to use for user invite. Defaults to `You have been invited`.
+Email subject to use for user invite. Defaults to `You've been invited`.
 
 `MAILER_SUBJECTS_CONFIRMATION` - `string`
 
-Email subject to use for signup confirmation. Defaults to `Confirm Your Signup`.
+Email subject to use for signup confirmation. Defaults to `Confirm your email address`.
 
 `MAILER_SUBJECTS_RECOVERY` - `string`
 
-Email subject to use for password reset. Defaults to `Reset Your Password`.
+Email subject to use for password reset. Defaults to `Reset your password`.
 
 `MAILER_SUBJECTS_MAGIC_LINK` - `string`
 
-Email subject to use for magic link email. Defaults to `Your Magic Link`.
+Email subject to use for magic link email. Defaults to `Your sign-in link`.
 
 `MAILER_SUBJECTS_EMAIL_CHANGE` - `string`
 
-Email subject to use for email change confirmation. Defaults to `Confirm Email Change`.
+Email subject to use for email change confirmation. Defaults to `Confirm your new email address`.
+
+`MAILER_SUBJECTS_REAUTHENTICATION` - `string`
+
+Email subject to use for reauthentication. Defaults to `{{ .Token }} is your verification code`.
 
 `MAILER_SUBJECTS_PASSWORD_CHANGED_NOTIFICATION` - `string`
 
-Email subject to use for password changed notification. Defaults to `Your password has been changed`.
+Email subject to use for password changed notification. Defaults to `Your password was changed`.
 
 `MAILER_SUBJECTS_EMAIL_CHANGED_NOTIFICATION` - `string`
 
-Email subject to use for email changed notification. Defaults to `Your email address has been changed`.
+Email subject to use for email changed notification. Defaults to `Your email address was changed`.
+
+`GOTRUE_MAILER_SUBJECTS_PHONE_CHANGED_NOTIFICATION` - `string`
+
+Email subject to use for phone changed notification. Defaults to `Your phone number was changed`.
+
+`GOTRUE_MAILER_SUBJECTS_IDENTITY_LINKED_NOTIFICATION` - `string`
+
+Email subject to use for identity linked notification. Defaults to `A new sign-in method was linked to your account`.
+
+`GOTRUE_MAILER_SUBJECTS_IDENTITY_UNLINKED_NOTIFICATION` - `string`
+
+Email subject to use for identity unlinked notification. Defaults to `A sign-in method was removed from your account`.
 
 `GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
 
-Email subject to use for MFA factor enrolled notification. Defaults to `A new MFA factor has been enrolled`.
+Email subject to use for verification method added notification. Defaults to `A new verification method was added to your account`.
 
 `GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_UNENROLLED_NOTIFICATION` - `string`
 
-Email subject to use for MFA factor unenrolled notification. Defaults to `An MFA factor has been unenrolled`.
+Email subject to use for verification method removed notification. Defaults to `A verification method was removed from your account`.
 
 `MAILER_TEMPLATES_INVITE` - `string`
 
@@ -611,13 +627,10 @@ URL path to an email template to use when inviting a user. (e.g. `https://www.ex
 Default Content (if template is unavailable):
 
 ```html
-<h2>You have been invited</h2>
+<h2>You've been invited</h2>
 
-<p>
-  You have been invited to create a user on {{ .SiteURL }}. Follow this link to
-  accept the invite:
-</p>
-<p><a href="{{ .ConfirmationURL }}">Accept the invite</a></p>
+<p>You've been invited to create an account. Follow the link below to accept.</p>
+<p><a href="{{ .ConfirmationURL }}">Accept invitation</a></p>
 ```
 
 `MAILER_TEMPLATES_CONFIRMATION` - `string`
@@ -628,10 +641,10 @@ URL path to an email template to use when confirming a signup. (e.g. `https://ww
 Default Content (if template is unavailable):
 
 ```html
-<h2>Confirm your signup</h2>
+<h2>Confirm your email address</h2>
 
-<p>Follow this link to confirm your user:</p>
-<p><a href="{{ .ConfirmationURL }}">Confirm your mail</a></p>
+<p>Follow the link below to confirm this email address and finish signing up.</p>
+<p><a href="{{ .ConfirmationURL }}">Confirm email address</a></p>
 ```
 
 `MAILER_TEMPLATES_RECOVERY` - `string`
@@ -642,10 +655,11 @@ URL path to an email template to use when resetting a password. (e.g. `https://w
 Default Content (if template is unavailable):
 
 ```html
-<h2>Reset Password</h2>
+<h2>Reset your password</h2>
 
-<p>Follow this link to reset the password for your user:</p>
-<p><a href="{{ .ConfirmationURL }}">Reset Password</a></p>
+<p>We received a request to reset your password. Follow the link below to choose a new one.</p>
+<p><a href="{{ .ConfirmationURL }}">Reset password</a></p>
+<p>If you didn't request this, you can safely ignore this email.</p>
 ```
 
 `MAILER_TEMPLATES_MAGIC_LINK` - `string`
@@ -656,10 +670,10 @@ URL path to an email template to use when sending magic link. (e.g. `https://www
 Default Content (if template is unavailable):
 
 ```html
-<h2>Magic Link</h2>
+<h2>Your sign-in link</h2>
 
-<p>Follow this link to login:</p>
-<p><a href="{{ .ConfirmationURL }}">Log In</a></p>
+<p>Follow the link below to sign in. This link expires shortly and can only be used once.</p>
+<p><a href="{{ .ConfirmationURL }}">Sign in</a></p>
 ```
 
 `MAILER_TEMPLATES_EMAIL_CHANGE` - `string`
@@ -670,13 +684,25 @@ URL path to an email template to use when confirming the change of an email addr
 Default Content (if template is unavailable):
 
 ```html
-<h2>Confirm Change of Email</h2>
+<h2>Confirm your new email address</h2>
 
-<p>
-  Follow this link to confirm the update of your email from {{ .Email }} to {{
-  .NewEmail }}:
-</p>
-<p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
+<p>Follow the link below to confirm {{ .NewEmail }} as your new email address.</p>
+<p><a href="{{ .ConfirmationURL }}">Confirm new email address</a></p>
+<p>If you didn't request this change, you can safely ignore this email.</p>
+```
+
+`MAILER_TEMPLATES_REAUTHENTICATION` - `string`
+
+URL path to an email template to use when reauthenticating a user. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Token` variable is available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>Your verification code</h2>
+
+<p>Use the code below to verify your identity. It expires shortly.</p>
+<p>{{ .Token }}</p>
 ```
 
 `MAILER_TEMPLATES_PASSWORD_CHANGED_NOTIFICATION` - `string`
@@ -687,14 +713,10 @@ URL path to an email template to use when notifying a user that their password h
 Default Content (if template is unavailable):
 
 ```html
-<h2>Your password has been changed</h2>
+<h2>Your password was changed</h2>
 
-<p>
-  This is a confirmation that the password for your account {{ .Email }} has
-  just been changed. If you did not make this change, please contact support
-  immediately.
-</p>
-<p>If you did not make this change, please contact support.</p>
+<p>The password for your account was recently changed.</p>
+<p>If you didn't make this change, reset your password and contact support immediately.</p>
 ```
 
 `GOTRUE_MAILER_NOTIFICATIONS_PASSWORD_CHANGED_ENABLED` - `bool`
@@ -709,13 +731,10 @@ URL path to an email template to use when notifying a user that their email has 
 Default Content (if template is unavailable):
 
 ```html
-<h2>Your email address has been changed</h2>
+<h2>Your email address was changed</h2>
 
-<p>
-  The email address for your account has been changed from {{ .OldEmail }} to {{
-  .Email }}.
-</p>
-<p>If you did not make this change, please contact support.</p>
+<p>The email address for your account was changed from {{ .OldEmail }} to {{ .Email }}.</p>
+<p>If you didn't make this change, contact support immediately.</p>
 ```
 
 `GOTRUE_MAILER_NOTIFICATIONS_EMAIL_CHANGED_ENABLED` - `bool`
@@ -730,13 +749,10 @@ URL path to an email template to use when notifying a user that their phone numb
 Default Content (if template is unavailable):
 
 ```html
-<h2>Your phone number has been changed</h2>
+<h2>Your phone number was changed</h2>
 
-<p>
-  The phone number for your account {{ .Email }} has been changed from {{
-  .OldPhone }} to {{ .Phone }}.
-</p>
-<p>If you did not make this change, please contact support immediately.</p>
+<p>The phone number for your account was changed from {{ .OldPhone }} to {{ .Phone }}.</p>
+<p>If you didn't make this change, contact support immediately.</p>
 ```
 
 `GOTRUE_MAILER_NOTIFICATIONS_PHONE_CHANGED_ENABLED` - `bool`
@@ -745,86 +761,75 @@ Whether to send a notification email when a user's phone number is changed. Defa
 
 `GOTRUE_MAILER_TEMPLATES_IDENTITY_LINKED_NOTIFICATION` - `string`
 
-URL path to an email template to use when notifying a user that a new identity has been linked to their account. (e.g. `https://www.example.com/path-to-email-template.html`)
+URL path to an email template to use when notifying a user that a new sign-in method has been linked to their account. (e.g. `https://www.example.com/path-to-email-template.html`)
 `Email` and `Provider` variables are available.
 
 Default Content (if template is unavailable):
 
 ```html
-<h2>A new identity has been linked</h2>
+<h2>A new sign-in method was linked</h2>
 
-<p>
-  A new identity ({{ .Provider }}) has been linked to your account {{ .Email }}.
-</p>
-<p>If you did not make this change, please contact support immediately.</p>
+<p>Your {{ .Provider }} account was linked as a new sign-in method for {{ .Email }}.</p>
+<p>If you didn't make this change, contact support immediately.</p>
 ```
 
 `GOTRUE_MAILER_NOTIFICATIONS_IDENTITY_LINKED_ENABLED` - `bool`
 
-Whether to send a notification email when a new identity is linked to a user's account. Defaults to `false`.
+Whether to send a notification email when a new sign-in method is linked to a user's account. Defaults to `false`.
 
 `GOTRUE_MAILER_TEMPLATES_IDENTITY_UNLINKED_NOTIFICATION` - `string`
 
-URL path to an email template to use when notifying a user that an identity has been unlinked from their account. (e.g. `https://www.example.com/path-to-email-template.html`)
+URL path to an email template to use when notifying a user that a sign-in method has been removed from their account. (e.g. `https://www.example.com/path-to-email-template.html`)
 `Email` and `Provider` variables are available.
 
 Default Content (if template is unavailable):
 
 ```html
-<h2>An identity has been unlinked</h2>
+<h2>A sign-in method was removed</h2>
 
-<p>
-  An identity ({{ .Provider }}) has been unlinked from your account {{ .Email
-  }}.
-</p>
-<p>If you did not make this change, please contact support immediately.</p>
+<p>Your {{ .Provider }} account was removed as a sign-in method for {{ .Email }}.</p>
+<p>If you didn't make this change, contact support immediately.</p>
 ```
 
 `GOTRUE_MAILER_NOTIFICATIONS_IDENTITY_UNLINKED_ENABLED` - `bool`
 
-Whether to send a notification email when an identity is unlinked from a user's account. Defaults to `false`.
+Whether to send a notification email when a sign-in method is removed from a user's account. Defaults to `false`.
 
 `GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
 
-URL path to an email template to use when notifying a user that they have enrolled in a new MFA factor. (e.g. `https://www.example.com/path-to-email-template.html`)
+URL path to an email template to use when notifying a user that a new verification method has been added to their account. (e.g. `https://www.example.com/path-to-email-template.html`)
 `Email` and `FactorType` variables are available.
 
 Default Content (if template is unavailable):
 
 ```html
-<h2>MFA factor has been enrolled</h2>
+<h2>A new verification method was added</h2>
 
-<p>
-  A new factor ({{ .FactorType }}) has been enrolled for your account {{ .Email
-  }}.
-</p>
-<p>If you did not make this change, please contact support immediately.</p>
+<p>Sign-in verification method {{ .FactorType }} was added to your account.</p>
+<p>If you didn't make this change, contact support immediately.</p>
 ```
 
 `GOTRUE_MAILER_NOTIFICATIONS_MFA_FACTOR_ENROLLED_ENABLED` - `bool`
 
-Whether to send a notification email when a user enrolls in a new MFA factor. Defaults to `false`.
+Whether to send a notification email when a new verification method is added to a user's account. Defaults to `false`.
 
 `GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_UNENROLLED_NOTIFICATION` - `string`
 
-URL path to an email template to use when notifying a user that they have unenrolled from an MFA factor. (e.g. `https://www.example.com/path-to-email-template.html`)
+URL path to an email template to use when notifying a user that a verification method has been removed from their account. (e.g. `https://www.example.com/path-to-email-template.html`)
 `Email` and `FactorType` variables are available.
 
 Default Content (if template is unavailable):
 
 ```html
-<h2>MFA factor has been unenrolled</h2>
+<h2>A verification method was removed</h2>
 
-<p>
-  A factor ({{ .FactorType }}) has been unenrolled for your account {{ .Email
-  }}.
-</p>
-<p>If you did not make this change, please contact support immediately.</p>
+<p>Sign-in verification method {{ .FactorType }} was removed from your account.</p>
+<p>If you didn't make this change, contact support immediately.</p>
 ```
 
 `GOTRUE_MAILER_NOTIFICATIONS_MFA_FACTOR_UNENROLLED_ENABLED` - `bool`
 
-Whether to send a notification email when a user unenrolls from an MFA factor. Defaults to `false`.
+Whether to send a notification email when a verification method is removed from a user's account. Defaults to `false`.
 
 ### Phone Auth
 
