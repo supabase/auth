@@ -605,7 +605,7 @@ Email subject to use for phone changed notification. Defaults to `Your phone num
 
 `GOTRUE_MAILER_SUBJECTS_IDENTITY_LINKED_NOTIFICATION` - `string`
 
-Email subject to use for identity linked notification. Defaults to `A new sign-in method was linked to your account`.
+Email subject to use for identity linked notification. Defaults to `A sign-in method was linked to your account`.
 
 `GOTRUE_MAILER_SUBJECTS_IDENTITY_UNLINKED_NOTIFICATION` - `string`
 
@@ -761,21 +761,21 @@ Whether to send a notification email when a user's phone number is changed. Defa
 
 `GOTRUE_MAILER_TEMPLATES_IDENTITY_LINKED_NOTIFICATION` - `string`
 
-URL path to an email template to use when notifying a user that a new sign-in method has been linked to their account. (e.g. `https://www.example.com/path-to-email-template.html`)
+URL path to an email template to use when notifying a user that a sign-in method has been linked to their account. (e.g. `https://www.example.com/path-to-email-template.html`)
 `Email` and `Provider` variables are available.
 
 Default Content (if template is unavailable):
 
 ```html
-<h2>A new sign-in method was linked</h2>
+<h2>A sign-in method was linked</h2>
 
-<p>Your {{ .Provider }} account was linked as a new sign-in method for {{ .Email }}.</p>
+<p>Your {{ .Provider }} account was linked as a sign-in method for {{ .Email }}.</p>
 <p>If you didn't make this change, contact support immediately.</p>
 ```
 
 `GOTRUE_MAILER_NOTIFICATIONS_IDENTITY_LINKED_ENABLED` - `bool`
 
-Whether to send a notification email when a new sign-in method is linked to a user's account. Defaults to `false`.
+Whether to send a notification email when a sign-in method is linked to a user's account. Defaults to `false`.
 
 `GOTRUE_MAILER_TEMPLATES_IDENTITY_UNLINKED_NOTIFICATION` - `string`
 
