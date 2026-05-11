@@ -1106,17 +1106,32 @@ Returns:
 
 ### **POST /verify**
 
-Verify a registration or a password recovery. Type can be `signup`, `recovery`, `invite`, `magiclink`, `email_change`, `sms`, or `phone_change`
-and the `token` is a token returned from either `/signup` or `/recover`.
+Verify a registration, password recovery, magic link, email change, or phone
+OTP. Type can be `signup`, `recovery`, `invite`, `magiclink`, `email`,
+`email_change`, `sms`, or `phone_change`.
+
+For a raw OTP code, send `token` with exactly one of `email` or `phone`.
+Email-based verification types require `email`; phone-based verification types
+(`sms` and `phone_change`) require `phone`.
 
 ```json
 {
   "type": "signup",
-  "token": "confirmation-code-delivered-in-email"
+  "token": "confirmation-code-delivered-in-email",
+  "email": "email@example.com"
 }
 ```
 
-`password` is required for signup verification if no existing password exists.
+For email links that provide a token hash, send `token_hash` instead of
+`token`. Do not include `email`, `phone`, or `redirect_to` when using
+`token_hash`.
+
+```json
+{
+  "type": "signup",
+  "token_hash": "confirmation-token-hash-delivered-in-email-link"
+}
+```
 
 Returns:
 
