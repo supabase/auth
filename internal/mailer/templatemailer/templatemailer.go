@@ -82,9 +82,9 @@ const defaultPhoneChangedNotificationMail = `<h2>Your phone number was changed</
 <p>If you didn't make this change, contact support immediately.</p>
 `
 
-const defaultIdentityLinkedNotificationMail = `<h2>A sign-in method was linked</h2>
+const defaultIdentityLinkedNotificationMail = `<h2>A new sign-in method was linked</h2>
 
-<p>Your {{ .Provider }} account was linked as a sign-in method for {{ .Email }}.</p>
+<p>Your {{ .Provider }} account was linked as a new sign-in method for {{ .Email }}.</p>
 <p>If you didn't make this change, contact support immediately.</p>
 `
 
@@ -136,7 +136,7 @@ var (
 		PasswordChangedNotification:     "Your password was changed",
 		EmailChangedNotification:        "Your email address was changed",
 		PhoneChangedNotification:        "Your phone number was changed",
-		IdentityLinkedNotification:      "A sign-in method was linked to your account",
+		IdentityLinkedNotification:      "A new sign-in method was linked to your account",
 		IdentityUnlinkedNotification:    "A sign-in method was removed from your account",
 		MFAFactorEnrolledNotification:   "A new verification method was added to your account",
 		MFAFactorUnenrolledNotification: "A verification method was removed from your account",

@@ -605,7 +605,7 @@ Email subject to use for phone changed notification. Defaults to `Your phone num
 
 `GOTRUE_MAILER_SUBJECTS_IDENTITY_LINKED_NOTIFICATION` - `string`
 
-Email subject to use for identity linked notification. Defaults to `A sign-in method was linked to your account`.
+Email subject to use for identity linked notification. Defaults to `A new sign-in method was linked to your account`.
 
 `GOTRUE_MAILER_SUBJECTS_IDENTITY_UNLINKED_NOTIFICATION` - `string`
 
@@ -767,9 +767,9 @@ URL path to an email template to use when notifying a user that a sign-in method
 Default Content (if template is unavailable):
 
 ```html
-<h2>A sign-in method was linked</h2>
+<h2>A new sign-in method was linked</h2>
 
-<p>Your {{ .Provider }} account was linked as a sign-in method for {{ .Email }}.</p>
+<p>Your {{ .Provider }} account was linked as a new sign-in method for {{ .Email }}.</p>
 <p>If you didn't make this change, contact support immediately.</p>
 ```
 
