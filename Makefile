@@ -136,7 +136,7 @@ sec: | $(TOOL_BIN_DIR)/gosec # Check for security vulnerabilities
 		$(CHECK_FILES)
 
 vulncheck: $(TOOL_BIN_DIR)/govulncheck # Check for known vulnerabilities
-	$(TOOL_BIN_DIR)/govulncheck -format json $(CHECK_FILES) | go run ./hack/vulncheck-filter
+	$(TOOL_BIN_DIR)/govulncheck $(CHECK_FILES) | go run ./hack/vulncheck-filter
 
 unused: | $(TOOL_BIN_DIR)/staticcheck # Look for unused code
 	@echo "Unused code:"
