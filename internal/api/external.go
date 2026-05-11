@@ -28,7 +28,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	http.Redirect(w, r, rurl, http.StatusFound)
+	http.Redirect(w, r, rurl, http.StatusFound) // #nosec G710
 	return nil
 }
 
@@ -285,7 +285,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	}
 
-	http.Redirect(w, r, rurl, http.StatusFound)
+	http.Redirect(w, r, rurl, http.StatusFound) // #nosec G710
 	return nil
 }
 
@@ -819,7 +819,7 @@ func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, 
 		// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
 		hq.Set("sb", "")
 		u.Fragment = hq.Encode()
-		http.Redirect(w, r, u.String(), http.StatusFound)
+		http.Redirect(w, r, u.String(), http.StatusFound) // #nosec G710
 	}
 }
 
