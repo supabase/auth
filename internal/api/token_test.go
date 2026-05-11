@@ -620,7 +620,7 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 	// Extract token and sign in
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"code_verifier": codeVerifier,
-		"auth_code":     authCode,
+		"code":          authCode,
 	}))
 	req = httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
 	req.Header.Set("Content-Type", "application/json")
