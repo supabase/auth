@@ -392,6 +392,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	// Store scopes from authorization in session
 	scopes := authorization.Scope
 	grantParams.Scopes = &scopes
+	grantParams.Resource = authorization.Resource
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		authMethod := models.OAuthProviderAuthorizationCode

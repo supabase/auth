@@ -48,6 +48,7 @@ type GrantParams struct {
 
 	OAuthClientID *uuid.UUID
 	Scopes        *string
+	Resource      *string // RFC 8707: audience-restrict the issued access token to this resource URI
 
 	UserAgent string
 	IP        string

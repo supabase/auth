@@ -119,7 +119,8 @@ type GenerateAccessTokenParams struct {
 	User                 *models.User
 	SessionID            *uuid.UUID
 	AuthenticationMethod models.AuthenticationMethod
-	ClientID             *uuid.UUID // OAuth2 server client ID if applicable
+	ClientID             *uuid.UUID  // OAuth2 server client ID if applicable
+	Resource             *string     // RFC 8707: when set, used as the token's aud claim instead of user.Aud
 }
 
 // GenerateIDTokenParams contains parameters for generating OIDC ID tokens
@@ -630,10 +631,15 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		scopes = *session.Scopes
 	}
 
+	audience := jwt.ClaimStrings{params.User.Aud}
+	if params.Resource != nil && *params.Resource != "" {
+		audience = jwt.ClaimStrings{*params.Resource}
+	}
+
 	claims := &v0hooks.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   params.User.ID.String(),
-			Audience:  jwt.ClaimStrings{params.User.Aud},
+			Audience:  audience,
 			IssuedAt:  jwt.NewNumericDate(issuedAt),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			Issuer:    config.JWT.Issuer,
@@ -861,6 +867,7 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 			SessionID:            &sessionID,
 			AuthenticationMethod: authenticationMethod,
 			ClientID:             oAuthClientID,
+			Resource:             grantParams.Resource,
 		})
 		if terr != nil {
 			// Account for Hook Error

@@ -55,6 +55,7 @@ type OpenIDConfigurationResponse struct {
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
 	ClaimsSupported                   []string `json:"claims_supported,omitempty"`       // OIDC-specific
 	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"` // OAuth 2.1/PKCE
+	ResourceIndicatorsSupported       bool     `json:"resource_indicators_supported"`    // RFC 8707
 }
 
 // WellKnownOpenID handles both OIDC Discovery and OAuth 2.0 Authorization Server Metadata endpoints
@@ -88,6 +89,7 @@ func (a *API) WellKnownOpenID(w http.ResponseWriter, r *http.Request) error {
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "none"},
 		CodeChallengeMethodsSupported:     []string{"S256", "plain"},
 		ScopesSupported:                   models.SupportedOAuthScopes,
+		ResourceIndicatorsSupported:       true,
 
 		// OIDC Standard Claims
 		ClaimsSupported: []string{
