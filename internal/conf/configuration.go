@@ -1115,6 +1115,7 @@ func populateGlobal(config *GlobalConfiguration) error {
 		if SMSTemplate == "" {
 			SMSTemplate = "Your code is {{ .Code }}"
 		}
+		SMSTemplate = strings.ReplaceAll(SMSTemplate, `\n`, "\n")
 		template, err := template.New("").Parse(SMSTemplate)
 		if err != nil {
 			return err

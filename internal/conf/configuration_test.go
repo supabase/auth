@@ -241,6 +241,8 @@ func TestGlobal(t *testing.T) {
 		cfg := new(GlobalConfiguration)
 		cfg.Sms.Provider = "invalid"
 		cfg.Sms.Template = "{{{{{{{{{}}}}}}}}}"
+		
+		
 
 		err := populateGlobal(cfg)
 		require.Error(t, err)
