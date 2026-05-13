@@ -65,17 +65,45 @@ func (p *CustomOAuthProvider) AuthCodeURL(state string, opts ...oauth2.AuthCodeO
 func (p *CustomOAuthProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
 	return p.config.Exchange(ctx, code, opts...)
 }
+func applyAttributeMappingRaw(raw map[string]interface{}, mapping map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	for k, v := range raw {
+		result[k] = v
+	}
+	for targetField, sourceFieldOrValue := range mapping {
+		switch v := sourceFieldOrValue.(type) {
+		case string:
+			// treat as source field name
+			if value, exists := raw[v]; exists {
+				result[targetField] = value
+			}
+		default:
+			// literal value
+			result[targetField] = v
+		}
+	}
+	return result
+}
 
 // GetUserData fetches user data from the provider's userinfo endpoint
 func (p *CustomOAuthProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var claims Claims
-	if err := makeRequest(ctx, tok, p.config, p.userinfoURL, &claims); err != nil {
+
+	// Capture raw userinfo for attribute mapping
+	var rawUserinfo map[string]interface{}
+	if err := makeRequest(ctx, tok, p.config, p.userinfoURL, &rawUserinfo); err != nil {
 		return nil, err
 	}
 
-	// Apply attribute mapping if configured
+	// Apply attribute mapping on RAW data BEFORE converting to Claims
 	if len(p.attributeMapping) > 0 {
-		claims = applyAttributeMapping(claims, p.attributeMapping)
+		rawUserinfo = applyAttributeMappingRaw(rawUserinfo, p.attributeMapping)
+	}
+
+	// Now convert to Claims struct
+	rawBytes, _ := json.Marshal(rawUserinfo)
+	if err := json.Unmarshal(rawBytes, &claims); err != nil {
+		return nil, err
 	}
 
 	// Extract emails

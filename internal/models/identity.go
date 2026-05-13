@@ -41,6 +41,9 @@ func (i *Identity) GetEmail() string {
 func NewIdentity(user *User, provider string, identityData map[string]interface{}) (*Identity, error) {
 	providerId, ok := identityData["sub"]
 	if !ok {
+		providerId, ok = identityData["id"]
+	}
+	if !ok || providerId == nil {
 		return nil, errors.New("error missing provider id")
 	}
 	now := time.Now()
