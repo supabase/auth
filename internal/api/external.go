@@ -169,6 +169,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return err
 	}
+
 	userData := data.userData
 
 	if len(userData.Emails) == 0 && !emailOptional {
