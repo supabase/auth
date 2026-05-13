@@ -48,6 +48,7 @@ func ValidateOAuthURL(urlStr string) error {
 			"URL cannot point to localhost or loopback addresses",
 		)
 	}
+
 	// Resolve hostname to IP addresses
 	ips, err := net.LookupIP(hostname)
 	if err != nil {
