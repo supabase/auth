@@ -998,7 +998,7 @@ func TestMethods(t *testing.T) {
 		require.Equal(t, "", got)
 
 		// valid
-		val.TestOTP = map[string]string{"13334444": "123456"}
+		val.TestOTP = TestOTPMap{"13334444": "123456"}
 		got, ok = val.GetTestOTP("13334444", now)
 		require.True(t, ok)
 		require.Equal(t, "123456", got)
@@ -1019,6 +1019,57 @@ func TestMethods(t *testing.T) {
 		got, ok = val.GetTestOTP("13338888", now.Add(time.Second*2))
 		require.False(t, ok)
 		require.Equal(t, "", got)
+	}
+
+	{
+		t.Run("DecodeJSON", func(t *testing.T) {
+			var m TestOTPMap
+			err := m.Decode(`{"13334444": "123456"}`)
+			require.NoError(t, err)
+			require.Equal(t, TestOTPMap{"13334444": "123456"}, m)
+		})
+
+		t.Run("DecodeColonDelimited", func(t *testing.T) {
+			var m TestOTPMap
+			err := m.Decode(`13334444:123456`)
+			require.NoError(t, err)
+			require.Equal(t, TestOTPMap{"13334444": "123456"}, m)
+		})
+
+		t.Run("DecodeEqualsDelimited", func(t *testing.T) {
+			var m TestOTPMap
+			err := m.Decode(`13334444=123456`)
+			require.NoError(t, err)
+			require.Equal(t, TestOTPMap{"13334444": "123456"}, m)
+		})
+
+		t.Run("DecodeMultipleEntries", func(t *testing.T) {
+			var m TestOTPMap
+			err := m.Decode(`13334444:123456,15550001111:000000`)
+			require.NoError(t, err)
+			require.Equal(t, TestOTPMap{"13334444": "123456", "15550001111": "000000"}, m)
+		})
+
+		t.Run("DecodeMixedFormats", func(t *testing.T) {
+			var m TestOTPMap
+			err := m.Decode(`13334444:123456,15550001111=000000`)
+			require.NoError(t, err)
+			require.Equal(t, TestOTPMap{"13334444": "123456", "15550001111": "000000"}, m)
+		})
+
+		t.Run("DecodeEmptyString", func(t *testing.T) {
+			var m TestOTPMap
+			err := m.Decode(``)
+			require.NoError(t, err)
+			require.Nil(t, m)
+		})
+
+		t.Run("DecodeInvalidFormat", func(t *testing.T) {
+			var m TestOTPMap
+			err := m.Decode(`invalid`)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "invalid test OTP format")
+		})
 	}
 
 	{
@@ -1172,7 +1223,7 @@ func TestMethods(t *testing.T) {
 				Secret: "a",
 			},
 			Sms: SmsProviderConfiguration{
-				TestOTP: map[string]string{"13334444": "123456"},
+				TestOTP: TestOTPMap{"13334444": "123456"},
 			},
 		}
 		err := val.ApplyDefaults()
