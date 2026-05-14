@@ -678,7 +678,7 @@ func (m *TestOTPMap) Decode(value string) error {
 	}
 
 	if len(result) == 0 {
-		return fmt.Errorf("invalid test OTP format: %s", value)
+		return fmt.Errorf("invalid test OTP format")
 	}
 
 	*m = TestOTPMap(result)
