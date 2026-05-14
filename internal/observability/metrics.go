@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -69,17 +70,17 @@ func enablePrometheusMetrics(ctx context.Context, mc *conf.MetricsConfig) error 
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
 
-			if err := server.Shutdown(shutdownCtx); err != nil {
+			if err := server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
 				logrus.WithError(err).Errorf("prometheus server (%s) failed to gracefully shut down", addr)
 			}
 		}()
 
 		logrus.Infof("prometheus server listening on %s", addr)
 
-		if err := server.ListenAndServe(); err != nil {
-			logrus.WithError(err).Errorf("prometheus server (%s) shut down", addr)
-		} else {
+		if err := server.ListenAndServe(); errors.Is(err, http.ErrServerClosed) {
 			logrus.Info("prometheus metric exporter shut down")
+		} else {
+			logrus.WithError(err).Errorf("prometheus server (%s) shut down", addr)
 		}
 	}()
 
