@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseCompatibility(t *testing.T) {
-	join := func(s ...string) []byte {
-		return []byte(strings.Join(s, "\n"))
-	}
+func join(s ...string) []byte {
+	return []byte(strings.Join(s, "\n"))
+}
 
+func TestParseCompatibility(t *testing.T) {
 	type testCase struct {
 		name   string
 		from   []byte
@@ -34,6 +34,16 @@ func TestParseCompatibility(t *testing.T) {
 			name: "unquoted value beginning with hash is not a comment",
 			from: []byte("FOO=#bar"),
 			exp:  map[string]string{"FOO": "#bar"},
+		},
+		{
+			name:   "unterminated squote value",
+			from:   []byte(`FOO='bar`),
+			errStr: "unterminated quoted value",
+		},
+		{
+			name:   "unterminated dquote value",
+			from:   []byte(`FOO="bar`),
+			errStr: "unterminated quoted value",
 		},
 
 		// godot - TestParse
@@ -113,7 +123,7 @@ func TestParseCompatibility(t *testing.T) {
 				`INVALID LINE`,
 				`foo=bar`,
 			),
-			errStr: `unexpected character "\n" in variable name near "INVALID LINE\nfoo=bar"`,
+			errStr: `unexpected character`,
 		},
 		{
 			name: "godot - fixtures/plain.env",
@@ -449,6 +459,7 @@ func TestParseCompatibility(t *testing.T) {
 
 	runParseTest := func(t *testing.T, tt testCase) {
 		check := func(t *testing.T, exp, got map[string]string, err error) {
+			t.Helper()
 			if tt.errStr != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.errStr)

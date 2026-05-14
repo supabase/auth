@@ -34,7 +34,6 @@ package envparse
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"unicode"
@@ -158,10 +157,7 @@ loop:
 			if unicode.IsLetter(rchar) || unicode.IsNumber(rchar) || rchar == '.' {
 				continue
 			}
-
-			return "", nil, fmt.Errorf(
-				`unexpected character %q in variable name near %q`,
-				string(char), string(src))
+			return "", nil, errors.New("unexpected character in variable name")
 		}
 	}
 
@@ -173,6 +169,26 @@ loop:
 	key = strings.TrimRightFunc(key, unicode.IsSpace)
 	cutset = bytes.TrimLeftFunc(src[offset:], isSpace)
 	return key, cutset, nil
+}
+
+// expandDollarEscapes preserves godotenvs dollar escaping.
+func expandDollarEscapes(src []byte) []byte {
+	var n int
+	for r := 0; r < len(src); r++ {
+		if src[r] != '$' {
+			src[n] = src[r]
+			n++
+			continue
+		}
+
+		if n > 0 && src[n-1] == '\\' {
+			n--
+		}
+
+		src[n] = '$'
+		n++
+	}
+	return src[:n]
 }
 
 // extractVarValue extracts variable value and returns rest of slice.
@@ -211,8 +227,8 @@ func extractVarValue(src []byte) (value string, rest []byte, err error) {
 			}
 		}
 
-		trimmed := strings.TrimFunc(string(line[0:endOfVar]), isSpace)
-		return trimmed, src[endOfLine:], nil
+		trimmed := []byte(strings.TrimFunc(string(line[0:endOfVar]), isSpace))
+		return string(expandDollarEscapes(trimmed)), src[endOfLine:], nil
 	}
 
 	// lookup quoted string terminator
@@ -227,6 +243,7 @@ func extractVarValue(src []byte) (value string, rest []byte, err error) {
 		valueBytes := src[1:i]
 		if quote == prefixDoubleQuote {
 			valueBytes = expandEscapes(valueBytes)
+			valueBytes = expandDollarEscapes(valueBytes)
 		}
 
 		value = string(valueBytes)
@@ -238,7 +255,7 @@ func extractVarValue(src []byte) (value string, rest []byte, err error) {
 	if valEndIndex == -1 {
 		valEndIndex = len(src)
 	}
-	return "", nil, fmt.Errorf("unterminated quoted value %s", src[:valEndIndex])
+	return "", nil, errors.New("unterminated quoted value")
 }
 
 func isEscaped(src []byte, index int) bool {
