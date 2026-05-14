@@ -249,12 +249,6 @@ func extractVarValue(src []byte) (value string, rest []byte, err error) {
 		value = string(valueBytes)
 		return value, src[i+1:], nil
 	}
-
-	// return formatted error if quoted string is not terminated
-	valEndIndex := bytes.IndexFunc(src, isCharFunc('\n'))
-	if valEndIndex == -1 {
-		valEndIndex = len(src)
-	}
 	return "", nil, errors.New("unterminated quoted value")
 }
 
