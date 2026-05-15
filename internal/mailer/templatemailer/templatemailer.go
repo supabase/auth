@@ -425,14 +425,16 @@ func (m *Mailer) GetEmailActionLink(user *models.User, actionType, referrerURL s
 
 func (m *Mailer) PasswordChangedNotificationMail(r *http.Request, user *models.User) error {
 	data := map[string]any{
-		"Email": user.Email,
-		"Data":  user.UserMetaData,
+		"SiteURL": m.cfg.SiteURL,
+		"Email":   user.Email,
+		"Data":    user.UserMetaData,
 	}
 	return m.mail(r.Context(), m.cfg, PasswordChangedNotificationTemplate, user.GetEmail(), data)
 }
 
 func (m *Mailer) EmailChangedNotificationMail(r *http.Request, user *models.User, oldEmail string) error {
 	data := map[string]any{
+		"SiteURL":  m.cfg.SiteURL,
 		"Email":    user.GetEmail(), // the new email address that has been set on the account
 		"OldEmail": oldEmail,        // the old email address that was on the account before the change
 		"Data":     user.UserMetaData,
@@ -442,6 +444,7 @@ func (m *Mailer) EmailChangedNotificationMail(r *http.Request, user *models.User
 
 func (m *Mailer) PhoneChangedNotificationMail(r *http.Request, user *models.User, oldPhone string) error {
 	data := map[string]any{
+		"SiteURL":  m.cfg.SiteURL,
 		"Email":    user.GetEmail(),
 		"Phone":    user.GetPhone(), // the new phone number that has been set on the account
 		"OldPhone": oldPhone,        // the old phone number that was on the account before the change
@@ -452,6 +455,7 @@ func (m *Mailer) PhoneChangedNotificationMail(r *http.Request, user *models.User
 
 func (m *Mailer) IdentityLinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
 	data := map[string]any{
+		"SiteURL":  m.cfg.SiteURL,
 		"Email":    user.GetEmail(),
 		"Provider": provider, // the provider of the newly linked identity
 		"Data":     user.UserMetaData,
@@ -461,6 +465,7 @@ func (m *Mailer) IdentityLinkedNotificationMail(r *http.Request, user *models.Us
 
 func (m *Mailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
 	data := map[string]any{
+		"SiteURL":  m.cfg.SiteURL,
 		"Email":    user.GetEmail(),
 		"Provider": provider, // the provider of the unlinked identity
 		"Data":     user.UserMetaData,
@@ -470,6 +475,7 @@ func (m *Mailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.
 
 func (m *Mailer) MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
 	data := map[string]any{
+		"SiteURL":    m.cfg.SiteURL,
 		"Email":      user.GetEmail(),
 		"FactorType": factorType,
 		"Data":       user.UserMetaData,
@@ -479,6 +485,7 @@ func (m *Mailer) MFAFactorEnrolledNotificationMail(r *http.Request, user *models
 
 func (m *Mailer) MFAFactorUnenrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
 	data := map[string]any{
+		"SiteURL":    m.cfg.SiteURL,
 		"Email":      user.GetEmail(),
 		"FactorType": factorType,
 		"Data":       user.UserMetaData,
