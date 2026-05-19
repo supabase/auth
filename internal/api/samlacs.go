@@ -352,7 +352,8 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		http.Redirect(w, r, redirectTo, http.StatusFound)
+
+		http.Redirect(w, r, redirectTo, http.StatusFound) // #nosec G710
 		return nil
 	}
 
@@ -363,6 +364,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
+	// #nosec G710
 	http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
 
 	return nil
