@@ -1,12 +1,9 @@
 package main
 
 import (
-	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"slices"
-	"strings"
 )
 
 // Vulnerabilities with no upstream fix — remove entries once fixed.
@@ -22,49 +19,13 @@ func main() {
 }
 
 func run() error {
-	const (
-		stInit = iota
-		stVulnOpen
-	)
-
-	type vuln struct {
-		ID   string `json:"id"`
-		Text string
-	}
-
-	var (
-		cur   vuln
-		vulns []*vuln
-	)
-	st := stInit
-	sc := bufio.NewScanner(os.Stdin)
-	for sc.Scan() {
-		v := sc.Text()
-		switch st {
-		case stInit:
-			if strings.HasPrefix(v, "Vulnerability ") {
-				st = stVulnOpen
-				_, id, ok := strings.Cut(v, ": ")
-				if !ok {
-					return errors.New("no longer able to parse format")
-				}
-				cur = vuln{
-					ID: id,
-				}
-			}
-		case stVulnOpen:
-			cur.Text += v + "\n"
-			if v == "" {
-				st = stInit
-				cpy := cur
-				vulns = append(vulns, &cpy)
-			}
-		}
-	}
-	if err := sc.Err(); err != nil {
+	res, err := Parse(os.Stdin)
+	if err != nil {
 		return err
 	}
-	vulns = slices.DeleteFunc(vulns, func(v *vuln) bool {
+
+	vulns := res.Vulns
+	vulns = slices.DeleteFunc(vulns, func(v *Vulnerability) bool {
 		reason, ok := ignore[v.ID]
 		if ok {
 			fmt.Fprintf(os.Stderr, "ignoring %s: %s\n", v.ID, reason)
@@ -78,7 +39,7 @@ func run() error {
 	fmt.Fprintf(os.Stderr, "\n")
 	for idx, vuln := range vulns {
 		msg := "Vulnerability #%d: %v\n%v"
-		fmt.Fprintf(os.Stderr, msg, idx+1, vuln.ID, vuln.Text)
+		fmt.Fprintf(os.Stderr, msg, idx+1, vuln.ID, vuln.Text+"\n")
 	}
 	return fmt.Errorf("%d unignored vulnerability(ies) found", len(vulns))
 }

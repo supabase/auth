@@ -181,6 +181,7 @@ format:
 	gofmt -s -w .
 
 clean:
+	$(MAKE) -C tools clean
 	rm -rf \
 		$(addprefix release-,$(RELEASE_TARGETS)) \
 		$(addprefix auth-,$(RELEASE_TARGETS)) \
