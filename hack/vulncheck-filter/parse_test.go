@@ -450,7 +450,9 @@ func TestParse(t *testing.T) {
 
 func loadTestdata(t testing.TB, name string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("testdata", name))
+	// Not a vulnerability, tests are _ALREADY_ rooted and this value
+	// comes from a const.
+	data, err := os.ReadFile(filepath.Join("testdata", name)) //#nosec G304
 	if err != nil {
 		t.Fatal(err)
 	}
