@@ -627,7 +627,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 			newTokenResponse = &AccessTokenResponse{
 				Token:        tokenString,
 				TokenType:    "bearer",
-				ExpiresIn:    config.JWT.Exp,
+				ExpiresIn:    int(expiresAt - s.now().Unix()),
 				ExpiresAt:    expiresAt,
 				RefreshToken: issuedToken,
 				User:         user,
@@ -669,23 +669,18 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		return "", 0, terr
 	}
 
-	var expiresAt time.Time
-
 	issuedAt := s.now().UTC()
+	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
+
 	if config.Sessions.AllowLowAAL != nil && *config.Sessions.AllowLowAAL != 0 && models.CompareAAL(aal, params.User.HighestPossibleAAL()) < 0 {
 		// if user has mfa enabled and the session has not yet been upgraded
 		// and Limit duration of AAL1 sessions is enabled
 		// expiresAt should be set to the maximum duration for low aal sessions
 		// don't allow sessions.AllowLowAAL to exceed config.JWT.Exp
-		standardExp := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
 		lowAALExp := session.CreatedAt.UTC().Add(*config.Sessions.AllowLowAAL)
-		if lowAALExp.Before(standardExp) {
+		if lowAALExp.Before(expiresAt) {
 			expiresAt = lowAALExp
-		} else {
-			expiresAt = standardExp
 		}
-	} else {
-		expiresAt = issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
 	}
 
 	var clientID string
@@ -949,7 +944,7 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 	return &AccessTokenResponse{
 		Token:        tokenString,
 		TokenType:    "bearer",
-		ExpiresIn:    config.JWT.Exp,
+		ExpiresIn:    int(expiresAt - s.now().Unix()),
 		ExpiresAt:    expiresAt,
 		RefreshToken: refreshToken,
 		User:         user,
