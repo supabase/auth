@@ -187,3 +187,8 @@ require (
 )
 
 go 1.25.8
+
+replace (
+	github.com/joho/godotenv => ./internal/forks/godotenv
+	github.com/kelseyhightower/envconfig => ./internal/forks/envconfig
+)
