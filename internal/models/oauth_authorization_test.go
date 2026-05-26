@@ -7,6 +7,10 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/storage/test"
 )
 
 func TestNewOAuthServerAuthorization(t *testing.T) {
@@ -325,6 +329,57 @@ func TestOAuthServerAuthorization_MarkExpiredLogic(t *testing.T) {
 			assert.Equal(t, OAuthServerAuthorizationExpired, auth.Status)
 		})
 	}
+}
+
+// FindOAuthServerAuthorizationByIDForUpdate locks the row with FOR UPDATE
+// SKIP LOCKED so concurrent callers can't both claim the same pending
+// authorization. Verify a second caller in a fresh transaction sees the
+// locked row as "not found".
+func TestFindOAuthServerAuthorizationByIDForUpdate_SkipLocked(t *testing.T) {
+	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
+	require.NoError(t, err)
+
+	db, err := test.SetupDBConnection(globalConfig)
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, TruncateAll(db))
+
+	clientName := "Skip Locked Test Client"
+	secretHash, err := testHashClientSecret("test_secret")
+	require.NoError(t, err)
+	client := &OAuthServerClient{
+		ID:               uuid.Must(uuid.NewV4()),
+		ClientName:       &clientName,
+		GrantTypes:       "authorization_code,refresh_token",
+		RegistrationType: "dynamic",
+		ClientType:       OAuthServerClientTypeConfidential,
+		ClientSecretHash: secretHash,
+		RedirectURIs:     "https://example.com/callback",
+	}
+	require.NoError(t, CreateOAuthServerClient(db, client))
+
+	auth := NewOAuthServerAuthorization(NewOAuthServerAuthorizationParams{
+		ClientID:            client.ID,
+		RedirectURI:         "https://example.com/callback",
+		Scope:               "openid",
+		CodeChallenge:       "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+		CodeChallengeMethod: "S256",
+		TTL:                 10 * time.Minute,
+	})
+	require.NoError(t, CreateOAuthServerAuthorization(db, auth))
+
+	holdTx, err := db.Connection.NewTransaction()
+	require.NoError(t, err)
+	defer func() { _ = holdTx.TX.Rollback() }()
+	held := &storage.Connection{Connection: holdTx}
+	_, err = FindOAuthServerAuthorizationByIDForUpdate(held, auth.AuthorizationID)
+	require.NoError(t, err)
+
+	require.NoError(t, db.Transaction(func(tx *storage.Connection) error {
+		_, ferr := FindOAuthServerAuthorizationByIDForUpdate(tx, auth.AuthorizationID)
+		require.True(t, IsNotFoundError(ferr))
+		return nil
+	}))
 }
 
 func TestOAuthServerAuthorization_Validate(t *testing.T) {

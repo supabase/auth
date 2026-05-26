@@ -1333,7 +1333,7 @@ func (c *GlobalConfiguration) Validate() error {
 		}
 	}
 
-	if c.Passkey.Enabled {
+	if c.Passkey.Enabled || c.MFA.WebAuthn.EnrollEnabled || c.MFA.WebAuthn.VerifyEnabled {
 		if err := c.WebAuthn.Validate(); err != nil {
 			return err
 		}
