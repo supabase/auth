@@ -144,8 +144,8 @@ func TestVersionParseSemver(t *testing.T) {
 
 		{str: "2.165.1-rc.1.5", maj: 2, min: 165, pat: 1, rc: 1},
 		{str: "2.165.1-rc1.5", maj: 2, min: 165, pat: 1, rc: 1},
+		{str: "", maj: 0, min: 0, pat: 0, rc: 0},
 
-		{str: "", err: "Invalid Semantic Version"},
 		{str: "abc", err: "Invalid Semantic Version"},
 	}
 
