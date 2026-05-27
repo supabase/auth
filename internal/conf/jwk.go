@@ -1,12 +1,17 @@
 package conf
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
+	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/supabase/auth/internal/conf/awskmsjwk"
 )
 
 type JwtKeysDecoder map[string]JwkInfo
@@ -123,11 +128,40 @@ func GetSigningJwk(config *JWTConfiguration) (jwk.Key, error) {
 	return nil, fmt.Errorf("no signing key found")
 }
 
+var defaultKMSClient = sync.OnceValues(func() (*kms.Client, error) {
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	return kms.NewFromConfig(cfg), nil
+})
+
 func GetSigningKey(k jwk.Key) (any, error) {
 	var key any
 	if err := k.Raw(&key); err != nil {
 		return nil, err
 	}
+
+	if value, isKMS := k.Get("aws:kms:arn"); isKMS {
+		kmsARN, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("conf: jwk key has aws:kms:arn but is not a string %v", value)
+		}
+
+		kmsClient, err := defaultKMSClient()
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: Make GetSigningKey take a context, then pass it on here.
+		return &awskmsjwk.ES256Key{
+			Client: kmsClient,
+			KeyID:  kmsARN,
+			Raw:    key,
+		}, nil
+	}
+
 	return key, nil
 }
 
@@ -142,6 +176,10 @@ func GetSigningAlg(k jwk.Key) jwt.SigningMethod {
 	case "RS512":
 		return jwt.SigningMethodRS512
 	case "ES256":
+		if _, isKMS := k.Get("aws:kms:arn"); isKMS {
+			return awskmsjwk.SigningMethodES256KMS
+		}
+
 		return jwt.SigningMethodES256
 	case "ES512":
 		return jwt.SigningMethodES512
