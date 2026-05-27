@@ -7,6 +7,7 @@ require (
 	github.com/badoux/checkmail v0.0.0-20170203135005-d0a759655d62
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc
 	github.com/coreos/go-oidc/v3 v3.6.0
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0
 	github.com/didip/tollbooth/v5 v5.1.1
 	github.com/gobuffalo/validate/v3 v3.3.3 // indirect
 	github.com/gobwas/glob v0.2.3
@@ -39,7 +40,6 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/consensys/gnark-crypto v0.18.1 // indirect
 	github.com/crate-crypto/go-eth-kzg v1.4.0 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/ethereum/c-kzg-4844/v2 v2.1.5 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
