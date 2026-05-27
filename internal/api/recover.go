@@ -58,7 +58,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 			crypto.GenerateTokenHash(params.Email, "dummy")
 			
 			// Mitigate rate-limit enumeration by using an in-memory cache for non-existent users
-			if lastReq := utilities.CheckFakeRateLimit(db, params.Email, config.SMTP.MaxFrequency); lastReq != nil {
+			if lastReq := utilities.CheckFakeRateLimit(db, params.Email, config.SMTP.MaxFrequency, []byte(config.JWT.Secret)); lastReq != nil {
 				return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, "%s", generateFrequencyLimitErrorMessage(lastReq, config.SMTP.MaxFrequency))
 			}
 			return sendJSON(w, http.StatusOK, map[string]string{})
