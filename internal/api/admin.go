@@ -304,7 +304,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UserModifiedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UserModifiedAction, map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
@@ -457,7 +457,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 
 		user.Identities = identities
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UserSignedUpAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UserSignedUpAction, map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
@@ -527,7 +527,7 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UserDeletedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UserDeletedAction, map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
@@ -579,7 +579,7 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	db := a.db.WithContext(ctx)
 
 	err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.DeleteFactorAction, utilities.GetIPAddress(r), map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.DeleteFactorAction, map[string]interface{}{
 			"user_id":   user.ID,
 			"factor_id": factor.ID,
 		}); terr != nil {
@@ -633,7 +633,7 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UpdateFactorAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UpdateFactorAction, map[string]interface{}{
 			"user_id":     user.ID,
 			"factor_id":   factor.ID,
 			"factor_type": factor.FactorType,

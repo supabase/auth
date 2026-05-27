@@ -194,7 +194,7 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 			return terr
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.PasskeyCreatedAction, utilities.GetIPAddress(r), map[string]any{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.PasskeyCreatedAction, map[string]any{
 			"passkey_id": passkeyCredential.ID,
 		}); terr != nil {
 			return terr
