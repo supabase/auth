@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"math/rand"
 	"time"
 
 	"github.com/supabase/auth/internal/storage"
@@ -50,6 +51,11 @@ func CheckFakeRateLimit(db *storage.Connection, email string, frequency time.Dur
 		_ = tx.RawQuery(`UPDATE fake_rate_limits SET last_request_at = ? WHERE email_hash = ?`, now, hashStr).Exec()
 		return nil
 	})
+
+	// Probabilistic cleanup (10% chance) to prevent table unbounded growth
+	if rand.Intn(10) == 0 {
+		go CleanupFakeRateLimitCache(db, frequency)
+	}
 
 	return lastReq
 }
