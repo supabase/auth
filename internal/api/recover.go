@@ -4,8 +4,10 @@ import (
 	"net/http"
 
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // RecoverParams holds the parameters for a password recovery request
@@ -52,6 +54,13 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
+			// Simulate processing time to mitigate timing attacks
+			crypto.GenerateTokenHash(params.Email, "dummy")
+			
+			// Mitigate rate-limit enumeration by using an in-memory cache for non-existent users
+			if lastReq := utilities.CheckFakeRateLimit(params.Email, aud, config.SMTP.MaxFrequency); lastReq != nil {
+				return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, "%s", generateFrequencyLimitErrorMessage(lastReq, config.SMTP.MaxFrequency))
+			}
 			return sendJSON(w, http.StatusOK, map[string]string{})
 		}
 		return apierrors.NewInternalServerError("Unable to process request").WithInternalError(err)
