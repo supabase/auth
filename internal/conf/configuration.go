@@ -19,6 +19,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/gomail.v2"
 )
 
@@ -186,31 +187,15 @@ type WebAuthnConfiguration struct {
 
 func (w *WebAuthnConfiguration) Validate() error {
 	if w.RPID == "" {
-		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ID is required when passkeys are enabled")
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ID is required when WebAuthn is enabled")
 	}
 
 	if w.RPDisplayName == "" {
-		return errors.New("conf: GOTRUE_WEBAUTHN_RP_DISPLAY_NAME is required when passkeys are enabled")
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_DISPLAY_NAME is required when WebAuthn is enabled")
 	}
 
 	if len(w.RPOrigins) == 0 {
-		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ORIGINS is required when passkeys are enabled")
-	}
-
-	for _, origin := range w.RPOrigins {
-		u, err := url.Parse(origin)
-		if err != nil {
-			return fmt.Errorf("conf: invalid WebAuthn RP origin %q: %w", origin, err)
-		}
-
-		if u.Scheme == "http" {
-			host := u.Hostname()
-			if host != "localhost" && host != "127.0.0.1" {
-				return fmt.Errorf("conf: WebAuthn RP origin %q must use HTTPS (http is only allowed for localhost/127.0.0.1)", origin)
-			}
-		} else if u.Scheme != "https" {
-			return fmt.Errorf("conf: WebAuthn RP origin %q must use HTTPS", origin)
-		}
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ORIGINS is required when WebAuthn is enabled")
 	}
 
 	return nil
@@ -1335,7 +1320,7 @@ func (c *GlobalConfiguration) Validate() error {
 
 	if c.Passkey.Enabled || c.MFA.WebAuthn.EnrollEnabled || c.MFA.WebAuthn.VerifyEnabled {
 		if err := c.WebAuthn.Validate(); err != nil {
-			return err
+			logrus.WithError(err).Warn("WebAuthn configuration is invalid")
 		}
 	}
 
