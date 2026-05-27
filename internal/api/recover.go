@@ -31,9 +31,15 @@ func (p *RecoverParams) Validate(a *API) error {
 	return nil
 }
 
-// Recover sends a recovery email
 func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	start := time.Now()
+	const minResponseTime = 500 * time.Millisecond
+	defer func() {
+		if elapsed := time.Since(start); elapsed < minResponseTime {
+			time.Sleep(minResponseTime - elapsed)
+		}
+	}()
+
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
@@ -55,14 +61,10 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			// Simulate processing time to mitigate timing attacks
-			const minResponseTime = 500 * time.Millisecond
-			if elapsed := time.Since(start); elapsed < minResponseTime {
-				time.Sleep(minResponseTime - elapsed)
-			}
-			
 			// Mitigate rate-limit enumeration by using an in-memory cache for non-existent users
-			if lastReq := utilities.CheckFakeRateLimit(db, params.Email, config.SMTP.MaxFrequency, []byte(config.JWT.Secret)); lastReq != nil {
+			// Use a domain-separated secret to prevent key separation violations
+			secret := []byte("fake_rate_limit:" + config.JWT.Secret)
+			if lastReq := utilities.CheckFakeRateLimit(db, params.Email, config.SMTP.MaxFrequency, secret); lastReq != nil {
 				return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, "%s", generateFrequencyLimitErrorMessage(lastReq, config.SMTP.MaxFrequency))
 			}
 			return sendJSON(w, http.StatusOK, map[string]string{})
