@@ -1,12 +1,18 @@
 package conf
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
+	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/supabase/auth/internal/conf/awskmsjwk"
 )
 
 type JwtKeysDecoder map[string]JwkInfo
@@ -68,6 +74,12 @@ func (j *JwtKeysDecoder) decodePublicKey(
 		return err
 	}
 
+	if _, isKMS := privJwk.Get("aws:kms:arn"); isKMS {
+		if err := pubJwk.Remove("aws:kms:arn"); err != nil {
+			return err
+		}
+	}
+
 	config[pubJwk.KeyID()] = JwkInfo{
 		PublicKey:  pubJwk,
 		PrivateKey: privJwk,
@@ -123,11 +135,73 @@ func GetSigningJwk(config *JWTConfiguration) (jwk.Key, error) {
 	return nil, fmt.Errorf("no signing key found")
 }
 
-func GetSigningKey(k jwk.Key) (any, error) {
+var kmsClients sync.Map // map[string]func() (*kms.Client, error)
+
+func getKMSClient(region string) (*kms.Client, error) {
+	fn, _ := kmsClients.LoadOrStore(region, sync.OnceValues(func() (*kms.Client, error) {
+		cfg, err := config.LoadDefaultConfig(
+			context.Background(),
+			config.WithRegion(region),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		return kms.NewFromConfig(cfg), nil
+	}))
+
+	return fn.(func() (*kms.Client, error))()
+}
+
+func GetSigningKey(ctx context.Context, k jwk.Key) (any, error) {
+	if value, isKMS := k.Get("aws:kms:arn"); isKMS && k.KeyOps()[0] == jwk.KeyOpSign {
+		kmsARN, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("conf: jwk key has aws:kms:arn but is not a string %v", value)
+		}
+
+		parts := strings.SplitN(kmsARN, ":", 5)
+		kmsClient, err := getKMSClient(parts[3])
+		if err != nil {
+			return nil, err
+		}
+
+		pub, err := k.PublicKey()
+		if err != nil {
+			return nil, err
+		}
+
+		if err := pub.Set(jwk.KeyUsageKey, "sig"); err != nil {
+			return nil, err
+		}
+
+		if err := pub.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpVerify}); err != nil {
+			return nil, err
+		}
+
+		if err := pub.Remove("aws:kms:arn"); err != nil {
+			return nil, err
+		}
+
+		var raw any
+		if err := pub.Raw(&raw); err != nil {
+			return nil, err
+		}
+
+		return &awskmsjwk.RS256Key{
+			Ctx: ctx,
+			KMS: kmsClient,
+
+			KeyID: kmsARN,
+			Raw:   raw,
+		}, nil
+	}
+
 	var key any
 	if err := k.Raw(&key); err != nil {
 		return nil, err
 	}
+
 	return key, nil
 }
 
@@ -138,6 +212,10 @@ func GetSigningAlg(k jwk.Key) jwt.SigningMethod {
 
 	switch (k).Algorithm().String() {
 	case "RS256":
+		if _, isKMS := k.Get("aws:kms:arn"); isKMS {
+			return awskmsjwk.SigningMethodRS256KMS
+		}
+
 		return jwt.SigningMethodRS256
 	case "RS512":
 		return jwt.SigningMethodRS512
@@ -153,9 +231,9 @@ func GetSigningAlg(k jwk.Key) jwt.SigningMethod {
 	return jwt.SigningMethodHS256
 }
 
-func FindPublicKeyByKid(kid string, config *JWTConfiguration) (any, error) {
+func FindPublicKeyByKid(ctx context.Context, kid string, config *JWTConfiguration) (any, error) {
 	if k, ok := config.Keys[kid]; ok {
-		key, err := GetSigningKey(k.PublicKey)
+		key, err := GetSigningKey(ctx, k.PublicKey)
 		if err != nil {
 			return nil, err
 		}
