@@ -130,7 +130,7 @@ func (ts *RecoverTestSuite) TestRecover_NewEmailSent() {
 	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
 }
 
-func (ts *RecoverTestSuite) TestRecover_NoSideChannelLeak() {
+func (ts *RecoverTestSuite) TestRecover_NoSideChannelLeak_FirstRequest() {
 	email := "doesntexist@example.com"
 
 	_, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
@@ -150,4 +150,37 @@ func (ts *RecoverTestSuite) TestRecover_NoSideChannelLeak() {
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
+func (ts *RecoverTestSuite) TestRecover_NoSideChannelLeak_RateLimit() {
+	email := "doesntexist_ratelimit@example.com"
+
+	_, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
+	require.True(ts.T(), models.IsNotFoundError(err), "User with email %s does exist", email)
+
+	// First Request
+	var buffer1 bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer1).Encode(map[string]interface{}{
+		"email": email,
+	}))
+	req1 := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer1)
+	req1.Header.Set("Content-Type", "application/json")
+
+	w1 := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w1, req1)
+	assert.Equal(ts.T(), http.StatusOK, w1.Code)
+
+	// Second Request immediately after
+	var buffer2 bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer2).Encode(map[string]interface{}{
+		"email": email,
+	}))
+	req2 := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer2)
+	req2.Header.Set("Content-Type", "application/json")
+
+	w2 := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w2, req2)
+	
+	// Should be rate limited
+	assert.Equal(ts.T(), http.StatusTooManyRequests, w2.Code)
 }
