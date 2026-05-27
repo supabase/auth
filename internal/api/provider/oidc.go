@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,26 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 	}
 
 	verifier := provider.Verifier(config)
+	header, headerErr := parseJWTHeader(idToken)
+	isES256K := headerErr == nil && header.Algorithm == es256kAlgorithm
+	if isES256K {
+		var claims oidcDiscoveryClaims
+		if err := provider.Claims(&claims); err != nil {
+			return nil, nil, err
+		}
+		if claims.Issuer == "" || claims.JWKSURI == "" {
+			return nil, nil, errors.New("oidc: missing issuer or jwks_uri in provider metadata")
+		}
+		if !supportsES256K(claims, config) {
+			return nil, nil, errors.New("oidc: ES256K is not listed as a supported signing algorithm")
+		}
+
+		clonedConfig := *config
+		if len(clonedConfig.SupportedSigningAlgs) == 0 {
+			clonedConfig.SupportedSigningAlgs = []string{es256kAlgorithm}
+		}
+		verifier = oidc.NewVerifier(claims.Issuer, getES256KRemoteKeySet(claims.JWKSURI), &clonedConfig)
+	}
 	overrideVerifier, ok := OverrideVerifiers[provider.Endpoint().AuthURL]
 	if ok && overrideVerifier != nil {
 		verifier = overrideVerifier(ctx, config)
@@ -80,7 +101,13 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 	}
 
 	if !options.SkipAccessTokenCheck && token.AccessTokenHash != "" {
-		if err := token.VerifyAccessToken(options.AccessToken); err != nil {
+		var err error
+		if isES256K {
+			err = verifySHA256AccessTokenHash(token.AccessTokenHash, options.AccessToken)
+		} else {
+			err = token.VerifyAccessToken(options.AccessToken)
+		}
+		if err != nil {
 			return nil, nil, err
 		}
 	}
