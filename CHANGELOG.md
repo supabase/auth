@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.190.0](https://github.com/supabase/auth/compare/v2.189.0...v2.190.0) (2026-05-27)
+
+
+### Features
+
+* create tools directory for deterministic builds ([#2522](https://github.com/supabase/auth/issues/2522)) ([52cf3d9](https://github.com/supabase/auth/commit/52cf3d9bc2b6cbd971f4c85b81cd1e9a8bf9e381))
+* fix the vulncheck-filter to parse the text format instead ([#2525](https://github.com/supabase/auth/issues/2525)) ([4136d49](https://github.com/supabase/auth/commit/4136d49ebdee4e35fb9c9713f33bd5664b959431))
+* fork github.com/joho/godotenv into internal/conf/envparse ([#2521](https://github.com/supabase/auth/issues/2521)) ([cda62a9](https://github.com/supabase/auth/commit/cda62a9c215ea1b8eb7ab281e0db549a2c9e4b46))
+
+
+### Bug Fixes
+
+* catch cancelation errors in bg workers & servers ([#2530](https://github.com/supabase/auth/issues/2530)) ([77f5918](https://github.com/supabase/auth/commit/77f5918c0646433e67aec9e2e560168a50d844c3))
+* **config:** warn on invalid WebAuthn config instead of erroring ([#2545](https://github.com/supabase/auth/issues/2545)) ([ca0b154](https://github.com/supabase/auth/commit/ca0b1547f77f5261458a6e91ca2ccb2c0e907ca7))
+* **mailer:** include SiteURL in notification template data ([#2532](https://github.com/supabase/auth/issues/2532)) ([dc015da](https://github.com/supabase/auth/commit/dc015da420a3b9255f152b9d6dd7e17718d6e550))
+* **oauth-server:** serialize concurrent authorize/consent with row-level lock ([#2512](https://github.com/supabase/auth/issues/2512)) ([c816cfe](https://github.com/supabase/auth/commit/c816cfeec75c8521f8e25260de7073c7236a9ac9))
+* source WebAuthn RP config from env vars ([#2490](https://github.com/supabase/auth/issues/2490)) ([63949ca](https://github.com/supabase/auth/commit/63949cace4028679ec00192819fb66a5dc0f56f0))
+* when version is empty set to 0.0.0 ([#2531](https://github.com/supabase/auth/issues/2531)) ([a3b7c8c](https://github.com/supabase/auth/commit/a3b7c8c54d2a22bc6f9566591d94a9e07bbc7cc3))
+
 ## [2.189.0](https://github.com/supabase/auth/compare/v2.188.1...v2.189.0) (2026-04-23)
 
 
