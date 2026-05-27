@@ -14,8 +14,8 @@ var (
 
 // CheckFakeRateLimit simulates a rate limit check for a non-existent email.
 // It returns the timestamp of the last request if it was rate limited, or nil if not.
-func CheckFakeRateLimit(email string, aud string, frequency time.Duration) *time.Time {
-	hash := sha256.Sum256([]byte(email + "|" + aud))
+func CheckFakeRateLimit(email string, frequency time.Duration) *time.Time {
+	hash := sha256.Sum256([]byte(email))
 	hashStr := hex.EncodeToString(hash[:])
 
 	now := time.Now()
