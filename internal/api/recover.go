@@ -2,9 +2,9 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/supabase/auth/internal/api/apierrors"
-	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
@@ -33,6 +33,7 @@ func (p *RecoverParams) Validate(a *API) error {
 
 // Recover sends a recovery email
 func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
+	start := time.Now()
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
@@ -55,7 +56,10 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			// Simulate processing time to mitigate timing attacks
-			crypto.GenerateTokenHash(params.Email, "dummy")
+			const minResponseTime = 500 * time.Millisecond
+			if elapsed := time.Since(start); elapsed < minResponseTime {
+				time.Sleep(minResponseTime - elapsed)
+			}
 			
 			// Mitigate rate-limit enumeration by using an in-memory cache for non-existent users
 			if lastReq := utilities.CheckFakeRateLimit(db, params.Email, config.SMTP.MaxFrequency, []byte(config.JWT.Secret)); lastReq != nil {
