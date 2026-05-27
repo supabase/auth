@@ -18,6 +18,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // jwksResp represents the structure of the JWKS JSON
@@ -76,11 +77,21 @@ func verifySecp256k1Fallback(ctx context.Context, provider *oidc.Provider, idTok
 	}
 
 	// 1. Fetch OpenID config to get JWKS URI
-	req, err := http.NewRequestWithContext(ctx, "GET", claims.Iss+"/.well-known/openid-configuration", nil)
-	if err != nil {
-		return nil, nil, err
+	var providerMeta struct {
+		Issuer string `json:"issuer"`
 	}
-	resp, err := http.DefaultClient.Do(req)
+	if err := provider.Claims(&providerMeta); err != nil {
+		return nil, nil, fmt.Errorf("failed to get trusted provider issuer: %w", err)
+	}
+	if claims.Iss != providerMeta.Issuer {
+		return nil, nil, fmt.Errorf("token issuer %q does not match expected issuer %q", claims.Iss, providerMeta.Issuer)
+	}
+
+	issuerDiscoveryURL := providerMeta.Issuer + "/.well-known/openid-configuration"
+	if err := utilities.ValidateOAuthURL(issuerDiscoveryURL); err != nil {
+		return nil, nil, fmt.Errorf("SSRF protection: invalid issuer URL: %w", err)
+	}
+	resp, err := utilities.FetchURLWithTimeout(ctx, issuerDiscoveryURL, 10*time.Second)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -96,11 +107,10 @@ func verifySecp256k1Fallback(ctx context.Context, provider *oidc.Provider, idTok
 	}
 
 	// 2. Fetch JWKS
-	jwksReq, err := http.NewRequestWithContext(ctx, "GET", config.JwksURI, nil)
-	if err != nil {
-		return nil, nil, err
+	if err := utilities.ValidateOAuthURL(config.JwksURI); err != nil {
+		return nil, nil, fmt.Errorf("SSRF protection: invalid JWKS URI: %w", err)
 	}
-	jwksRespHTTP, err := http.DefaultClient.Do(jwksReq)
+	jwksRespHTTP, err := utilities.FetchURLWithTimeout(ctx, config.JwksURI, 10*time.Second)
 	if err != nil {
 		return nil, nil, err
 	}
