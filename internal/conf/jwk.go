@@ -138,6 +138,11 @@ var defaultKMSClient = sync.OnceValues(func() (*kms.Client, error) {
 })
 
 func GetSigningKey(k jwk.Key) (any, error) {
+	var key any
+	if err := k.Raw(&key); err != nil {
+		return nil, err
+	}
+
 	if value, isKMS := k.Get("aws:kms:arn"); isKMS {
 		kmsARN, ok := value.(string)
 		if !ok {
@@ -153,13 +158,10 @@ func GetSigningKey(k jwk.Key) (any, error) {
 		return &awskmsjwk.ES256Key{
 			Client: kmsClient,
 			KeyID:  kmsARN,
+			Raw:    key,
 		}, nil
 	}
 
-	var key any
-	if err := k.Raw(&key); err != nil {
-		return nil, err
-	}
 	return key, nil
 }
 

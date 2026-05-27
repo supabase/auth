@@ -2,7 +2,6 @@ package awskmsjwk
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/asn1"
 	"errors"
@@ -20,6 +19,7 @@ type KMSAPI interface {
 type ES256Key struct {
 	Client KMSAPI
 	KeyID  string
+	Raw    any
 	Ctx    context.Context
 }
 
@@ -66,13 +66,12 @@ func (m *signingMethodKMSES256) Sign(signingString string, key any) ([]byte, err
 }
 
 func (m *signingMethodKMSES256) Verify(signingString string, sig []byte, key any) error {
-	// Verification should normally use the public key, not KMS.
-	pub, ok := key.(*ecdsa.PublicKey)
+	k, ok := key.(*ES256Key)
 	if !ok {
-		return errors.New("kmsjwt: verify key must be *ecdsa.PublicKey")
+		return nil, errors.New("kmsjwt: key must be *ES256Key")
 	}
 
-	return jwt.SigningMethodES256.Verify(signingString, sig, pub)
+	return jwt.SigningMethodES256.Verify(signingString, sig, k.Raw)
 }
 
 type ecdsaDER struct {
