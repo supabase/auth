@@ -252,6 +252,82 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientListHandler() {
 	}
 }
 
+func (ts *OAuthClientTestSuite) TestOAuthServerClientListPagination() {
+	client1, _ := ts.createTestOAuthClient()
+	client2, _ := ts.createTestOAuthClient()
+	client3, _ := ts.createTestOAuthClient()
+	allIDs := []string{client1.ID.String(), client2.ID.String(), client3.ID.String()}
+
+	// page=1, per_page=1: returns 1 item, has next + last links, total count = 3
+	req := httptest.NewRequest(http.MethodGet, "/admin/oauth/clients?page=1&per_page=1", nil)
+	w := httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerClientList(w, req))
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+	assert.Equal(ts.T(), "3", w.Header().Get("X-Total-Count"))
+	assert.Contains(ts.T(), w.Header().Get("Link"), `rel="next"`)
+	assert.Contains(ts.T(), w.Header().Get("Link"), `rel="last"`)
+	var page1 OAuthServerClientListResponse
+	require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &page1))
+	assert.Len(ts.T(), page1.Clients, 1)
+
+	// page=2, per_page=1: returns 1 item, still has next link
+	req = httptest.NewRequest(http.MethodGet, "/admin/oauth/clients?page=2&per_page=1", nil)
+	w = httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerClientList(w, req))
+	assert.Equal(ts.T(), "3", w.Header().Get("X-Total-Count"))
+	assert.Contains(ts.T(), w.Header().Get("Link"), `rel="next"`)
+	var page2 OAuthServerClientListResponse
+	require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &page2))
+	assert.Len(ts.T(), page2.Clients, 1)
+
+	// page=3, per_page=1: last page — no next link
+	req = httptest.NewRequest(http.MethodGet, "/admin/oauth/clients?page=3&per_page=1", nil)
+	w = httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerClientList(w, req))
+	assert.Equal(ts.T(), "3", w.Header().Get("X-Total-Count"))
+	assert.NotContains(ts.T(), w.Header().Get("Link"), `rel="next"`)
+	var page3 OAuthServerClientListResponse
+	require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &page3))
+	assert.Len(ts.T(), page3.Clients, 1)
+
+	// all three pages together cover all clients with no duplicates
+	pagedIDs := []string{page1.Clients[0].ClientID, page2.Clients[0].ClientID, page3.Clients[0].ClientID}
+	for _, id := range allIDs {
+		assert.Contains(ts.T(), pagedIDs, id)
+	}
+
+	// per_page=2: page 1 returns 2, page 2 returns 1
+	req = httptest.NewRequest(http.MethodGet, "/admin/oauth/clients?page=1&per_page=2", nil)
+	w = httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerClientList(w, req))
+	var halfPage1 OAuthServerClientListResponse
+	require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &halfPage1))
+	assert.Len(ts.T(), halfPage1.Clients, 2)
+	assert.Contains(ts.T(), w.Header().Get("Link"), `rel="next"`)
+
+	req = httptest.NewRequest(http.MethodGet, "/admin/oauth/clients?page=2&per_page=2", nil)
+	w = httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerClientList(w, req))
+	var halfPage2 OAuthServerClientListResponse
+	require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &halfPage2))
+	assert.Len(ts.T(), halfPage2.Clients, 1)
+	assert.NotContains(ts.T(), w.Header().Get("Link"), `rel="next"`)
+
+	// no params: returns all 3 with default page size
+	req = httptest.NewRequest(http.MethodGet, "/admin/oauth/clients", nil)
+	w = httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerClientList(w, req))
+	assert.Equal(ts.T(), "3", w.Header().Get("X-Total-Count"))
+	var all OAuthServerClientListResponse
+	require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &all))
+	assert.Len(ts.T(), all.Clients, 3)
+
+	// invalid page param returns an error
+	req = httptest.NewRequest(http.MethodGet, "/admin/oauth/clients?page=abc", nil)
+	w = httptest.NewRecorder()
+	assert.Error(ts.T(), ts.Server.OAuthServerClientList(w, req))
+}
+
 func (ts *OAuthClientTestSuite) TestOAuthServerClientUpdateHandler() {
 	// Create a test client first
 	client, _ := ts.createTestOAuthClient()
