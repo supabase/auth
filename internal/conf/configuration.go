@@ -934,6 +934,28 @@ func (e *ExtensibilityPointConfiguration) PopulateExtensibilityPoint() error {
 	return nil
 }
 
+// Load applies the standard load sequence used by all gotrue subcommands:
+//
+//  1. configFile — base -c/--config file (godotenv.Overload; godotenv.Load when empty)
+//  2. configDir  — sorted *.env overlays from -d/--config-dir
+//  3. envconfig.Process into a *GlobalConfiguration
+//
+// Hard errors (bad configFile, failed envconfig processing) are fatal.
+// Errors from configDir are logged at Error level but non-fatal.
+func Load(configFile, configDir string) *GlobalConfiguration {
+	if err := LoadFile(configFile); err != nil {
+		logrus.WithError(err).Fatal("unable to load config")
+	}
+	if err := LoadDirectory(configDir); err != nil {
+		logrus.WithError(err).Error("unable to load config from watch dir")
+	}
+	config, err := LoadGlobalFromEnv()
+	if err != nil {
+		logrus.WithError(err).Fatal("unable to load config")
+	}
+	return config
+}
+
 // LoadFile calls godotenv.Load() when the given filename is empty ignoring any
 // errors loading, otherwise it calls godotenv.Overload(filename).
 //

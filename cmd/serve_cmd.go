@@ -32,18 +32,7 @@ var serveCmd = cobra.Command{
 }
 
 func serve(ctx context.Context) {
-	if err := conf.LoadFile(configFile); err != nil {
-		logrus.WithError(err).Fatal("unable to load config")
-	}
-
-	if err := conf.LoadDirectory(watchDir); err != nil {
-		logrus.WithError(err).Error("unable to load config from watch dir")
-	}
-
-	config, err := conf.LoadGlobalFromEnv()
-	if err != nil {
-		logrus.WithError(err).Fatal("unable to load config")
-	}
+	config := conf.Load(configFile, watchDir)
 
 	// Include serve ctx which carries cancelation signals so DialContext does
 	// not hang indefinitely at startup.

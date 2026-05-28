@@ -35,10 +35,7 @@ func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
 		panic("context must not be nil")
 	}
 
-	config, err := conf.LoadGlobal(configFile)
-	if err != nil {
-		logrus.Fatalf("Failed to load configuration: %+v", err)
-	}
+	config := conf.Load(configFile, watchDir)
 
 	if err := observability.ConfigureLogging(&config.Logging); err != nil {
 		logrus.WithError(err).Error("unable to configure logging")
