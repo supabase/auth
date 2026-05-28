@@ -170,6 +170,148 @@ func TestCustomOAuthProvider_GetUserDataWithAttributeMapping(t *testing.T) {
 	assert.True(t, userData.Emails[0].Verified) // Should be true from literal mapping
 }
 
+func TestCustomOAuthProvider_GetUserDataPreservesCustomClaims(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"sub":            "user-123",
+			"email":          "test@example.com",
+			"email_verified": true,
+			"name":           "Test User",
+			// Non-standard claims that previously got silently dropped.
+			"groups":    []string{"admins", "billing"},
+			"org_id":    "org_42",
+			"tenant_id": "tenant-abc",
+		})
+	}))
+	defer server.Close()
+
+	provider := NewCustomOAuthProvider(
+		"client-id",
+		"client-secret",
+		"https://example.com/authorize",
+		"https://example.com/token",
+		server.URL,
+		"https://myapp.com/callback",
+		[]string{"openid", "profile", "email"},
+		false,
+		nil,
+		nil,
+		nil,
+	)
+
+	token := &oauth2.Token{AccessToken: "test-access-token", TokenType: "Bearer"}
+	userData, err := provider.GetUserData(context.Background(), token)
+	require.NoError(t, err)
+	require.NotNil(t, userData)
+	require.NotNil(t, userData.Metadata)
+
+	// Standard fields still populated.
+	assert.Equal(t, "user-123", userData.Metadata.Subject)
+	assert.Equal(t, "test@example.com", userData.Metadata.Email)
+	assert.Equal(t, "Test User", userData.Metadata.Name)
+
+	// Non-standard claims preserved under CustomClaims.
+	require.NotNil(t, userData.Metadata.CustomClaims)
+	assert.Equal(t, "org_42", userData.Metadata.CustomClaims["org_id"])
+	assert.Equal(t, "tenant-abc", userData.Metadata.CustomClaims["tenant_id"])
+
+	groups, ok := userData.Metadata.CustomClaims["groups"].([]interface{})
+	require.True(t, ok, "groups should round-trip as []interface{}")
+	require.Len(t, groups, 2)
+	assert.Equal(t, "admins", groups[0])
+	assert.Equal(t, "billing", groups[1])
+
+	// Known fields must NOT also leak into CustomClaims.
+	_, hasEmail := userData.Metadata.CustomClaims["email"]
+	assert.False(t, hasEmail)
+	_, hasSub := userData.Metadata.CustomClaims["sub"]
+	assert.False(t, hasSub)
+}
+
+func TestCustomClaimsUnmarshalCapturesCustomClaims(t *testing.T) {
+	t.Run("standard claims fill typed fields and non-standard claims land in CustomClaims", func(t *testing.T) {
+		body := []byte(`{
+			"sub": "u-1",
+			"email": "a@b.com",
+			"email_verified": true,
+			"groups": ["x"],
+			"org_id": "o1"
+		}`)
+		var c customClaims
+		require.NoError(t, json.Unmarshal(body, &c))
+
+		assert.Equal(t, "u-1", c.Subject)
+		assert.Equal(t, "a@b.com", c.Email)
+		assert.True(t, c.EmailVerified)
+		require.NotNil(t, c.CustomClaims)
+		assert.Equal(t, "o1", c.CustomClaims["org_id"])
+		assert.Equal(t, []interface{}{"x"}, c.CustomClaims["groups"])
+
+		_, hasEmail := c.CustomClaims["email"]
+		assert.False(t, hasEmail, "standard claims must not also leak into CustomClaims")
+	})
+
+	t.Run("only standard claims means CustomClaims stays nil", func(t *testing.T) {
+		body := []byte(`{"sub":"u","email":"a@b.com"}`)
+		var c customClaims
+		require.NoError(t, json.Unmarshal(body, &c))
+		assert.Nil(t, c.CustomClaims)
+	})
+
+	t.Run("provider that literally returns custom_claims is preserved flat (not re-nested)", func(t *testing.T) {
+		body := []byte(`{"sub":"u-2","custom_claims":{"foo":"bar"}}`)
+		var c customClaims
+		require.NoError(t, json.Unmarshal(body, &c))
+		assert.Equal(t, "u-2", c.Subject)
+		require.NotNil(t, c.CustomClaims)
+		assert.Equal(t, "bar", c.CustomClaims["foo"])
+		_, nested := c.CustomClaims["custom_claims"]
+		assert.False(t, nested, "custom_claims must not be re-nested under itself")
+	})
+
+	t.Run("custom_claims object and other non-standard keys are merged at top level", func(t *testing.T) {
+		body := []byte(`{
+			"sub": "u-3",
+			"custom_claims": {"foo": "bar"},
+			"groups": ["admins"],
+			"org_id": "o1"
+		}`)
+		var c customClaims
+		require.NoError(t, json.Unmarshal(body, &c))
+		assert.Equal(t, "u-3", c.Subject)
+		require.NotNil(t, c.CustomClaims)
+		assert.Equal(t, "bar", c.CustomClaims["foo"])
+		assert.Equal(t, "o1", c.CustomClaims["org_id"])
+		assert.Equal(t, []interface{}{"admins"}, c.CustomClaims["groups"])
+		_, nested := c.CustomClaims["custom_claims"]
+		assert.False(t, nested, "custom_claims must not be re-nested under itself")
+	})
+
+	t.Run("entries inside custom_claims win over same-named top-level keys", func(t *testing.T) {
+		// IdP returns "groups" both inside custom_claims and at the top
+		// level. The typed decode places the inner value into CustomClaims
+		// first; the outer one must not silently overwrite it.
+		body := []byte(`{
+			"sub": "u-4",
+			"custom_claims": {"groups": ["from-inner"]},
+			"groups": ["from-outer"]
+		}`)
+		var c customClaims
+		require.NoError(t, json.Unmarshal(body, &c))
+		require.NotNil(t, c.CustomClaims)
+		assert.Equal(t, []interface{}{"from-inner"}, c.CustomClaims["groups"])
+	})
+
+	t.Run("plain Claims still drops non-standard claims (proves scoping)", func(t *testing.T) {
+		body := []byte(`{"sub":"u","groups":["x"]}`)
+		var c Claims
+		require.NoError(t, json.Unmarshal(body, &c))
+		assert.Equal(t, "u", c.Subject)
+		assert.Nil(t, c.CustomClaims, "non-custom providers must keep existing drop behaviour")
+	})
+}
+
 func TestApplyAttributeMapping(t *testing.T) {
 	tests := []struct {
 		name     string
