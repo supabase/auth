@@ -238,10 +238,10 @@ func (s *Server) OAuthServerClientList(w http.ResponseWriter, r *http.Request) e
 
 	var clients []models.OAuthServerClient
 	q := db.Q().Where("deleted_at is null").Order("created_at desc")
-	if err := q.Paginate(int(pageParams.Page), int(pageParams.PerPage)).All(&clients); err != nil { // #nosec G115
+	if err := q.Paginate(int(pageParams.Page), int(pageParams.PerPage)).All(&clients); err != nil {
 		return apierrors.NewInternalServerError("Error listing OAuth clients").WithInternalError(err)
 	}
-	pageParams.Count = uint64(q.Paginator.TotalEntriesSize) // #nosec G115
+	pageParams.Count = uint64(q.Paginator.TotalEntriesSize)
 
 	shared.AddPaginationHeaders(w, r, pageParams)
 

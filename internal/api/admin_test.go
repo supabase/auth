@@ -73,7 +73,7 @@ func (ts *AdminTestSuite) TestAdminUsers() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	assert.Equal(ts.T(), "</admin/users?page=0>; rel=\"last\"", w.Header().Get("Link"))
+	assert.Equal(ts.T(), "</admin/users?page=1>; rel=\"last\"", w.Header().Get("Link"))
 	assert.Equal(ts.T(), "0", w.Header().Get("X-Total-Count"))
 }
 
