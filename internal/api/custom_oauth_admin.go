@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -109,18 +110,43 @@ func (a *API) adminCustomOAuthProvidersList(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+// providerIdentifierFromPath reads the custom OAuth/OIDC provider identifier
+// from the request path, percent-decodes it, and validates the "custom:" prefix.
+//
+// chi routes on (and exposes via chi.URLParam) the raw, still percent-encoded
+// path segment. Browsers encode the ':' in the required "custom:" prefix as
+// "%3A" (encodeURIComponent("custom:line") == "custom%3Aline"), so the value
+// returned by chi.URLParam must be decoded before the prefix check and the
+// database lookup. Without decoding, a perfectly valid request is rejected with
+// a misleading "must start with 'custom:' prefix" error and the provider can
+// never be fetched, updated, or deleted from the dashboard.
+func providerIdentifierFromPath(r *http.Request) (string, error) {
+	identifier := chi.URLParam(r, "identifier")
+	if identifier == "" {
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier is required")
+	}
+
+	decoded, err := url.PathUnescape(identifier)
+	if err != nil {
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier is not a valid URL-encoded value")
+	}
+	identifier = decoded
+
+	if !strings.HasPrefix(identifier, "custom:") {
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier must start with 'custom:' prefix, e.g. 'custom:%s'", identifier)
+	}
+
+	return identifier, nil
+}
+
 // adminCustomOAuthProviderGet returns a single custom OAuth/OIDC provider
 func (a *API) adminCustomOAuthProviderGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	identifier := chi.URLParam(r, "identifier")
-	if identifier == "" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier is required")
-	}
-
-	if !strings.HasPrefix(identifier, "custom:") {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier must start with 'custom:' prefix, e.g. 'custom:%s'", identifier)
+	identifier, err := providerIdentifierFromPath(r)
+	if err != nil {
+		return err
 	}
 
 	observability.LogEntrySetField(r, "identifier", identifier)
@@ -250,13 +276,9 @@ func (a *API) adminCustomOAuthProviderUpdate(w http.ResponseWriter, r *http.Requ
 	db := a.db.WithContext(ctx)
 	config := a.config
 
-	identifier := chi.URLParam(r, "identifier")
-	if identifier == "" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier is required")
-	}
-
-	if !strings.HasPrefix(identifier, "custom:") {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier must start with 'custom:' prefix, e.g. 'custom:%s'", identifier)
+	identifier, err := providerIdentifierFromPath(r)
+	if err != nil {
+		return err
 	}
 
 	observability.LogEntrySetField(r, "identifier", identifier)
@@ -353,19 +375,15 @@ func (a *API) adminCustomOAuthProviderDelete(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	identifier := chi.URLParam(r, "identifier")
-	if identifier == "" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier is required")
-	}
-
-	if !strings.HasPrefix(identifier, "custom:") {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "identifier must start with 'custom:' prefix, e.g. 'custom:%s'", identifier)
+	identifier, err := providerIdentifierFromPath(r)
+	if err != nil {
+		return err
 	}
 
 	observability.LogEntrySetField(r, "identifier", identifier)
 
 	var issuerToInvalidate string
-	err := db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		provider, terr := models.FindCustomOAuthProviderByIdentifier(tx, identifier)
 		if terr != nil {
 			if models.IsNotFoundError(terr) {
@@ -777,4 +795,3 @@ func validateAttributeMapping(mapping map[string]interface{}) error {
 
 	return nil
 }
-
