@@ -14,6 +14,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -300,11 +301,11 @@ func defaultAddDirFn(ctx context.Context, wr watcher, dir string) error {
 }
 
 func defaultReloadFn(dir string) (*conf.GlobalConfiguration, error) {
-	if err := conf.LoadDirectory(dir); err != nil {
+	if err := confload.LoadDirectory(dir); err != nil {
 		return nil, err
 	}
 
-	cfg, err := conf.LoadGlobalFromEnv()
+	cfg, err := confload.LoadGlobalFromEnv()
 	if err != nil {
 		return nil, err
 	}

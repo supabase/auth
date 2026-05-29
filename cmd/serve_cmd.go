@@ -17,6 +17,7 @@ import (
 	"github.com/supabase/auth/internal/api/apilimiter"
 	"github.com/supabase/auth/internal/api/apiworker"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/reloader"
 	"github.com/supabase/auth/internal/storage"
@@ -32,15 +33,15 @@ var serveCmd = cobra.Command{
 }
 
 func serve(ctx context.Context) {
-	if err := conf.LoadFile(configFile); err != nil {
+	if err := confload.LoadFile(configFile); err != nil {
 		logrus.WithError(err).Fatal("unable to load config")
 	}
 
-	if err := conf.LoadDirectory(watchDir); err != nil {
+	if err := confload.LoadDirectory(watchDir); err != nil {
 		logrus.WithError(err).Error("unable to load config from watch dir")
 	}
 
-	config, err := conf.LoadGlobalFromEnv()
+	config, err := confload.LoadGlobalFromEnv()
 	if err != nil {
 		logrus.WithError(err).Fatal("unable to load config")
 	}
