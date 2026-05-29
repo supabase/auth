@@ -9,9 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	popslices "github.com/gobuffalo/pop/v6/slices"
-	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/gofrs/uuid"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -625,6 +626,71 @@ func (ts *CustomOAuthAdminTestSuite) TestDeleteProvider() {
 	require.Equal(ts.T(), http.StatusNotFound, w.Code)
 }
 
+// The following tests use a percent-encoded identifier in the URL path, exactly
+// as a browser (and the Supabase dashboard) sends it: the ':' in the required
+// "custom:" prefix is encoded as "%3A". Before the path parameter was decoded,
+// these requests failed with "identifier must start with 'custom:' prefix".
+
+func (ts *CustomOAuthAdminTestSuite) TestGetProviderWithEncodedIdentifier() {
+	ts.createProvider(ts.createTestOAuth2Payload("encoded-get"), http.StatusCreated)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/custom-providers/custom%3Aencoded-get", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var got models.CustomOAuthProvider
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&got))
+	assert.Equal(ts.T(), "custom:encoded-get", got.Identifier)
+}
+
+func (ts *CustomOAuthAdminTestSuite) TestUpdateProviderWithEncodedIdentifier() {
+	ts.createProvider(ts.createTestOAuth2Payload("encoded-update"), http.StatusCreated)
+
+	var body bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&body).Encode(map[string]interface{}{"name": "Renamed Provider"}))
+
+	req := httptest.NewRequest(http.MethodPut, "/admin/custom-providers/custom%3Aencoded-update", &body)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var got models.CustomOAuthProvider
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&got))
+	assert.Equal(ts.T(), "custom:encoded-update", got.Identifier)
+	assert.Equal(ts.T(), "Renamed Provider", got.Name)
+}
+
+func (ts *CustomOAuthAdminTestSuite) TestDeleteProviderWithEncodedIdentifier() {
+	// Reproduces the dashboard bug from the report: deleting a custom provider
+	// failed with "identifier must start with 'custom:' prefix" because the
+	// browser sends the ':' percent-encoded (custom%3A...).
+	ts.createProvider(ts.createTestOAuth2Payload("encoded-delete"), http.StatusCreated)
+
+	req := httptest.NewRequest(http.MethodDelete, "/admin/custom-providers/custom%3Aencoded-delete", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	// Confirm it is actually gone.
+	req = httptest.NewRequest(http.MethodGet, "/admin/custom-providers/custom%3Aencoded-delete", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusNotFound, w.Code)
+}
+
 // Helper methods
 
 func (ts *CustomOAuthAdminTestSuite) createTestOAuth2Payload(identifier string) map[string]interface{} {
@@ -686,4 +752,68 @@ func (ts *CustomOAuthAdminTestSuite) createProvider(payload map[string]interface
 	require.Equal(ts.T(), expectedStatus, w.Code)
 
 	return w
+}
+
+// TestProviderIdentifierFromPathDecoding verifies that a percent-encoded
+// provider identifier in the URL path is decoded before the "custom:" prefix
+// check. Browsers and the Supabase dashboard send the ':' percent-encoded
+// (encodeURIComponent("custom:line") == "custom%3Aline"), and chi exposes the
+// raw, still-encoded path segment via chi.URLParam.
+//
+// This test exercises the real chi routing the admin endpoints use and needs
+// no database, guarding against a regression where a valid request such as
+// DELETE /custom-providers/custom%3Aline is rejected with a misleading
+// "must start with 'custom:' prefix" error (and the provider can never be
+// fetched, updated, or deleted from the dashboard).
+func TestProviderIdentifierFromPathDecoding(t *testing.T) {
+	r := chi.NewRouter()
+	r.Route("/custom-providers/{identifier}", func(r chi.Router) {
+		r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+			identifier, err := providerIdentifierFromPath(req)
+			if err != nil {
+				herr := err.(*apierrors.HTTPError)
+				w.WriteHeader(herr.HTTPStatus)
+				_, _ = w.Write([]byte(herr.Message))
+				return
+			}
+			_, _ = w.Write([]byte(identifier))
+		})
+	})
+
+	cases := []struct {
+		name       string
+		path       string
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "percent-encoded colon is decoded (browser behaviour)",
+			path:       "/custom-providers/custom%3Aline",
+			wantStatus: http.StatusOK,
+			wantBody:   "custom:line",
+		},
+		{
+			name:       "raw colon keeps working",
+			path:       "/custom-providers/custom:line",
+			wantStatus: http.StatusOK,
+			wantBody:   "custom:line",
+		},
+		{
+			name:       "identifier without prefix is still rejected",
+			path:       "/custom-providers/line",
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "must start with 'custom:' prefix",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, c.path, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, c.wantStatus, w.Code)
+			require.Contains(t, w.Body.String(), c.wantBody)
+		})
+	}
 }
