@@ -172,3 +172,8 @@ require (
 )
 
 go 1.25.10
+
+replace (
+	github.com/joho/godotenv => ./internal/forks/godotenv
+	github.com/kelseyhightower/envconfig => ./internal/forks/envconfig
+)

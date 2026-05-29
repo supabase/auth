@@ -8,7 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
 )
@@ -336,7 +336,7 @@ func TestOAuthServerAuthorization_MarkExpiredLogic(t *testing.T) {
 // authorization. Verify a second caller in a fresh transaction sees the
 // locked row as "not found".
 func TestFindOAuthServerAuthorizationByIDForUpdate_SkipLocked(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
+	globalConfig, err := confload.LoadGlobal(modelsTestConfig)
 	require.NoError(t, err)
 
 	db, err := test.SetupDBConnection(globalConfig)

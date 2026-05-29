@@ -14,6 +14,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -37,15 +38,21 @@ type Reloader struct {
 }
 
 func NewReloader(rc conf.ReloadingConfiguration, watchDir string) *Reloader {
+	return NewReloaderFunc(rc, watchDir, defaultReloadFn)
+}
+
+func NewReloaderFunc(rc conf.ReloadingConfiguration, watchDir string, fn ReloadFunc) *Reloader {
 	return &Reloader{
 		rc:         rc,
 		watchDir:   watchDir,
 		tickerIval: tickerInterval,
 		watchFn:    newFSWatcher,
-		reloadFn:   defaultReloadFn,
+		reloadFn:   fn,
 		addDirFn:   defaultAddDirFn,
 	}
 }
+
+type ReloadFunc func(dir string) (*conf.GlobalConfiguration, error)
 
 // reload attempts to create a new *conf.GlobalConfiguration after loading the
 // currently configured watchDir.
@@ -300,11 +307,11 @@ func defaultAddDirFn(ctx context.Context, wr watcher, dir string) error {
 }
 
 func defaultReloadFn(dir string) (*conf.GlobalConfiguration, error) {
-	if err := conf.LoadDirectory(dir); err != nil {
+	if err := confload.LoadDirectory(dir); err != nil {
 		return nil, err
 	}
 
-	cfg, err := conf.LoadGlobalFromEnv()
+	cfg, err := confload.LoadGlobalFromEnv()
 	if err != nil {
 		return nil, err
 	}
