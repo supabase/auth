@@ -38,15 +38,21 @@ type Reloader struct {
 }
 
 func NewReloader(rc conf.ReloadingConfiguration, watchDir string) *Reloader {
+	return NewReloaderFunc(rc, watchDir, defaultReloadFn)
+}
+
+func NewReloaderFunc(rc conf.ReloadingConfiguration, watchDir string, fn ReloadFunc) *Reloader {
 	return &Reloader{
 		rc:         rc,
 		watchDir:   watchDir,
 		tickerIval: tickerInterval,
 		watchFn:    newFSWatcher,
-		reloadFn:   defaultReloadFn,
+		reloadFn:   fn,
 		addDirFn:   defaultAddDirFn,
 	}
 }
+
+type ReloadFunc func(dir string) (*conf.GlobalConfiguration, error)
 
 // reload attempts to create a new *conf.GlobalConfiguration after loading the
 // currently configured watchDir.
