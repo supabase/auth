@@ -6,9 +6,10 @@ import (
 )
 
 type Pagination struct {
-	Page    uint64
-	PerPage uint64
-	Count   uint64
+	Page           uint64
+	PerPage        uint64
+	Count          uint64
+	ShowTotalCount bool
 }
 
 func (p *Pagination) Offset() uint64 {

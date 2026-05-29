@@ -231,22 +231,28 @@ func (s *Server) OAuthServerClientList(w http.ResponseWriter, r *http.Request) e
 	ctx := r.Context()
 	db := s.db.WithContext(ctx)
 
-	// TODO(cemal) :: Add pagination, check the `/admin/users` endpoint for reference
+	pageParams, err := shared.Paginate(r)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Bad Pagination Parameters: %v", err).WithInternalError(err)
+	}
+
 	var clients []models.OAuthServerClient
-	if err := db.Q().Where("deleted_at is null").Order("created_at desc").All(&clients); err != nil {
+	q := db.Q().Where("deleted_at is null").Order("created_at desc")
+	if err := q.Paginate(int(pageParams.Page), int(pageParams.PerPage)).All(&clients); err != nil { // #nosec G115
 		return apierrors.NewInternalServerError("Error listing OAuth clients").WithInternalError(err)
 	}
+	pageParams.Count = uint64(q.Paginator.TotalEntriesSize) // #nosec G115
+
+	shared.AddPaginationHeaders(w, r, pageParams)
 
 	responses := make([]OAuthServerClientResponse, len(clients))
 	for i, client := range clients {
 		responses[i] = *oauthServerClientToResponse(&client)
 	}
 
-	response := OAuthServerClientListResponse{
+	return shared.SendJSON(w, http.StatusOK, OAuthServerClientListResponse{
 		Clients: responses,
-	}
-
-	return shared.SendJSON(w, http.StatusOK, response)
+	})
 }
 
 // OAuthTokenParams represents the parameters for the OAuth token endpoint
