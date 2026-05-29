@@ -2,6 +2,7 @@ package shared
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 )
 
 const DefaultPerPage = 50
+const MaxPerPage = 1000
 
 func calculateTotalPages(perPage, total uint64) uint64 {
 	pages := total / perPage
@@ -20,7 +22,7 @@ func calculateTotalPages(perPage, total uint64) uint64 {
 }
 
 func AddPaginationHeaders(w http.ResponseWriter, r *http.Request, p *models.Pagination) {
-	totalPages := calculateTotalPages(p.PerPage, p.Count)
+	totalPages := max(calculateTotalPages(p.PerPage, p.Count), 1)
 	u, _ := url.ParseRequestURI(r.URL.String())
 	query := u.Query()
 	header := ""
@@ -34,7 +36,9 @@ func AddPaginationHeaders(w http.ResponseWriter, r *http.Request, p *models.Pagi
 	header += "<" + u.String() + ">; rel=\"last\""
 
 	w.Header().Add("Link", header)
-	w.Header().Add("X-Total-Count", fmt.Sprintf("%v", p.Count))
+	if p.ShowTotalCount {
+		w.Header().Add("X-Total-Count", fmt.Sprintf("%v", p.Count))
+	}
 }
 
 func Paginate(r *http.Request) (*models.Pagination, error) {
@@ -49,11 +53,23 @@ func Paginate(r *http.Request) (*models.Pagination, error) {
 		if err != nil {
 			return nil, err
 		}
+		if page == 0 {
+			return nil, fmt.Errorf("page must be greater than 0")
+		}
+		if page > math.MaxInt32 {
+			return nil, fmt.Errorf("page exceeds maximum allowed value")
+		}
 	}
 	if queryPerPage != "" {
 		perPage, err = strconv.ParseUint(queryPerPage, 10, 64)
 		if err != nil {
 			return nil, err
+		}
+		if perPage == 0 {
+			return nil, fmt.Errorf("per_page must be greater than 0")
+		}
+		if perPage > MaxPerPage {
+			return nil, fmt.Errorf("per_page must not exceed %d", MaxPerPage)
 		}
 	}
 

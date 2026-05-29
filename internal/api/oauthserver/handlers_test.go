@@ -259,12 +259,12 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientListPagination() {
 	client3, _ := ts.createTestOAuthClient()
 	allIDs := []string{client1.ID.String(), client2.ID.String(), client3.ID.String()}
 
-	// page=1, per_page=1: returns 1 item, has next + last links, total count = 3
+	// page=1, per_page=1: returns 1 item, has next + last links
 	req := httptest.NewRequest(http.MethodGet, "/admin/oauth/clients?page=1&per_page=1", nil)
 	w := httptest.NewRecorder()
 	require.NoError(ts.T(), ts.Server.OAuthServerClientList(w, req))
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
-	assert.Equal(ts.T(), "3", w.Header().Get("X-Total-Count"))
+	assert.Empty(ts.T(), w.Header().Get("X-Total-Count"))
 	assert.Contains(ts.T(), w.Header().Get("Link"), `rel="next"`)
 	assert.Contains(ts.T(), w.Header().Get("Link"), `rel="last"`)
 	var page1 OAuthServerClientListResponse
@@ -275,7 +275,7 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientListPagination() {
 	req = httptest.NewRequest(http.MethodGet, "/admin/oauth/clients?page=2&per_page=1", nil)
 	w = httptest.NewRecorder()
 	require.NoError(ts.T(), ts.Server.OAuthServerClientList(w, req))
-	assert.Equal(ts.T(), "3", w.Header().Get("X-Total-Count"))
+	assert.Empty(ts.T(), w.Header().Get("X-Total-Count"))
 	assert.Contains(ts.T(), w.Header().Get("Link"), `rel="next"`)
 	var page2 OAuthServerClientListResponse
 	require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &page2))
@@ -285,7 +285,7 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientListPagination() {
 	req = httptest.NewRequest(http.MethodGet, "/admin/oauth/clients?page=3&per_page=1", nil)
 	w = httptest.NewRecorder()
 	require.NoError(ts.T(), ts.Server.OAuthServerClientList(w, req))
-	assert.Equal(ts.T(), "3", w.Header().Get("X-Total-Count"))
+	assert.Empty(ts.T(), w.Header().Get("X-Total-Count"))
 	assert.NotContains(ts.T(), w.Header().Get("Link"), `rel="next"`)
 	var page3 OAuthServerClientListResponse
 	require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &page3))
@@ -318,7 +318,7 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientListPagination() {
 	req = httptest.NewRequest(http.MethodGet, "/admin/oauth/clients", nil)
 	w = httptest.NewRecorder()
 	require.NoError(ts.T(), ts.Server.OAuthServerClientList(w, req))
-	assert.Equal(ts.T(), "3", w.Header().Get("X-Total-Count"))
+	assert.Empty(ts.T(), w.Header().Get("X-Total-Count"))
 	var all OAuthServerClientListResponse
 	require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &all))
 	assert.Len(ts.T(), all.Clients, 3)

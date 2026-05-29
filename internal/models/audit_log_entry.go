@@ -203,7 +203,8 @@ func FindAuditLogEntries(tx *storage.Connection, filterColumns []string, filterV
 	var err error
 	if pageParams != nil {
 		err = q.Paginate(int(pageParams.Page), int(pageParams.PerPage)).All(&logs) // #nosec G115
-		pageParams.Count = uint64(q.Paginator.TotalEntriesSize)                    // #nosec G115
+		pageParams.Count = uint64(q.Paginator.TotalEntriesSize)                  // #nosec G115
+		pageParams.ShowTotalCount = true
 	} else {
 		err = q.All(&logs)
 	}

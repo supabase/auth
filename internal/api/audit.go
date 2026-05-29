@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -19,7 +20,7 @@ func (a *API) adminAuditLog(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 
 	// aud := a.requestAud(ctx, r)
-	pageParams, err := paginate(r)
+	pageParams, err := shared.Paginate(r)
 	if err != nil {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Bad Pagination Parameters: %v", err)
 	}
@@ -42,7 +43,7 @@ func (a *API) adminAuditLog(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewInternalServerError("Error searching for audit logs").WithInternalError(err)
 	}
 
-	addPaginationHeaders(w, r, pageParams)
+	shared.AddPaginationHeaders(w, r, pageParams)
 
 	return sendJSON(w, http.StatusOK, logs)
 }

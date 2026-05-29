@@ -767,7 +767,8 @@ func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Paginat
 	var err error
 	if pageParams != nil {
 		err = q.Paginate(int(pageParams.Page), int(pageParams.PerPage)).All(&users) // #nosec G115
-		pageParams.Count = uint64(q.Paginator.TotalEntriesSize)                     // #nosec G115
+		pageParams.Count = uint64(q.Paginator.TotalEntriesSize)                   // #nosec G115
+		pageParams.ShowTotalCount = true
 	} else {
 		err = q.All(&users)
 	}
