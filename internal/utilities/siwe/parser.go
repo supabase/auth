@@ -57,6 +57,16 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 		return nil, ErrInvalidAddress
 	}
 
+	// Ethereum addresses are protocol-level case-insensitive: 0xABC... and
+	// 0xabc... are the same wallet. EIP-55 mixed-case is a visual checksum,
+	// not a distinct identifier. We normalize to lowercase here so callers
+	// (notably web3GrantEthereum, which uses Address as part of the
+	// identity provider_id) see a single canonical form and the same
+	// wallet cannot create duplicate auth.identities rows by signing in
+	// with different case variants. See issue #2264. This mirrors the
+	// existing email lowercase-normalization in models.Identity.BeforeUpdate.
+	address = strings.ToLower(address)
+
 	msg := &SIWEMessage{
 		Raw:     raw,
 		Domain:  domain,
