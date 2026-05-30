@@ -70,6 +70,22 @@ func TestDispatch(t *testing.T) {
 		},
 
 		{
+			desc: "pass - email with apostrophe in jsonb payload",
+			cfg: conf.ExtensibilityPointConfiguration{
+				URI:      `pg-functions://postgres/auth/v0pgfunc_test_return_input`,
+				HookName: `"auth"."v0pgfunc_test_return_input"`,
+			},
+			req: M{"user": M{"email": "joe.o'sullivan@example.com"}},
+			exp: M{"user": M{"email": "joe.o'sullivan@example.com"}},
+			sql: `
+				create or replace function v0pgfunc_test_return_input(input jsonb)
+				returns json as $
+				begin
+					return input;
+				end; $ language plpgsql;`,
+		},
+
+		{
 			desc: "pass - small sleep of 50ms within timeout (100ms)",
 			cfg: conf.ExtensibilityPointConfiguration{
 				URI:      `pg-functions://postgres/auth/v0pgfunc_test_sleep_timeout`,
