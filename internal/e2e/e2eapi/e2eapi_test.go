@@ -106,6 +106,48 @@ func TestInstance(t *testing.T) {
 			err = inst.initURL()
 			require.Error(t, err)
 		})
+
+		t.Run("CORSOriginsSet", func(t *testing.T) {
+			globalCfg := e2e.Must(e2e.Config())
+			globalCfg.CORS.AllowedOrigins = []string{"https://localhost:8000", "https://localhost:8443"}
+			inst, err := New(globalCfg)
+			require.NoError(t, err)
+			defer inst.Close()
+
+			// Preflight check (OPTIONS request)
+			httpReq, err := http.NewRequest("OPTIONS", "/token", nil)
+			require.NoError(t, err)
+			httpReq.Header.Set("Origin", "https://localhost:8000")
+			httpReq.Header.Set("Access-Control-Request-Method", "POST")
+			httpRes, err := inst.Do(httpReq)
+			require.Nil(t, err)
+			require.Equal(t, "https://localhost:8000", httpRes.Header.Get("Access-Control-Allow-Origin"))
+
+			// Preflight bad origin
+			httpReq, err = http.NewRequest("OPTIONS", "/token", nil)
+			require.NoError(t, err)
+			httpReq.Header.Set("Origin", "https://remotehost:8000")
+			httpReq.Header.Set("Access-Control-Request-Method", "POST")
+			httpRes, err = inst.Do(httpReq)
+			require.Nil(t, err)
+			require.Equal(t, "", httpRes.Header.Get("Access-Control-Allow-Origin"))
+		})
+
+		t.Run("CORSDefaultOrigin", func(t *testing.T) {
+			globalCfg := e2e.Must(e2e.Config())
+			inst, err := New(globalCfg)
+			require.NoError(t, err)
+			defer inst.Close()
+
+			// Preflight check (simple request)
+			httpReq, err := http.NewRequest("OPTIONS", "/", nil)
+			require.NoError(t, err)
+			httpReq.Header.Set("Origin", "https://localhost:8000")
+			httpReq.Header.Set("Access-Control-Request-Method", "POST")
+			httpRes, err := inst.Do(httpReq)
+			require.Nil(t, err)
+			require.Equal(t, "*", httpRes.Header.Get("Access-Control-Allow-Origin"))
+		})
 	})
 }
 
