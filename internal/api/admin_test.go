@@ -494,6 +494,31 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	}
 }
 
+func (ts *AdminTestSuite) TestAdminUserUpdateDuplicateEmailFailed() {
+	u1, err := models.NewUser("", "", "", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u1))
+
+	u2, err := models.NewUser("", "test@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u2))
+
+	ts.Run("update user with duplicate email", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]any{
+			"email": u2.Email,
+		}))
+
+		// Setup request
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u1.ID), &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+	})
+}
+
 func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
 	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
