@@ -637,6 +637,39 @@ type PhoneProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"false"`
 }
 
+type TestOTPMap map[string]string
+
+func (m *TestOTPMap) Decode(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+
+	if err := json.Unmarshal([]byte(trimmed), (*map[string]string)(m)); err == nil {
+		return nil
+	}
+
+	result := make(map[string]string)
+	for _, pair := range strings.Split(trimmed, ",") {
+		pair = strings.TrimSpace(pair)
+		var k, v string
+		var found bool
+		if k, v, found = strings.Cut(pair, "="); !found {
+			if k, v, found = strings.Cut(pair, ":"); !found {
+				continue
+			}
+		}
+		result[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+
+	if len(result) == 0 {
+		return fmt.Errorf("invalid test OTP format")
+	}
+
+	*m = TestOTPMap(result)
+	return nil
+}
+
 type SmsProviderConfiguration struct {
 	Autoconfirm       bool               `json:"autoconfirm"`
 	MaxFrequency      time.Duration      `json:"max_frequency" split_words:"true"`
@@ -644,7 +677,7 @@ type SmsProviderConfiguration struct {
 	OtpLength         int                `json:"otp_length" split_words:"true"`
 	Provider          string             `json:"provider"`
 	Template          string             `json:"template"`
-	TestOTP           map[string]string  `json:"test_otp" split_words:"true"`
+	TestOTP           TestOTPMap         `json:"test_otp" split_words:"true"`
 	TestOTPValidUntil Time               `json:"test_otp_valid_until" split_words:"true"`
 	SMSTemplate       *template.Template `json:"-"`
 
@@ -1199,7 +1232,7 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	}
 
 	if config.Sms.TestOTP != nil {
-		formatTestOtps := make(map[string]string)
+		formatTestOtps := make(TestOTPMap)
 		for phone, otp := range config.Sms.TestOTP {
 			phone = strings.ReplaceAll(strings.TrimPrefix(phone, "+"), " ", "")
 			formatTestOtps[phone] = otp
