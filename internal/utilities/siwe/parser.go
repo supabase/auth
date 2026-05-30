@@ -52,7 +52,9 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 		return nil, ErrInvalidDomain
 	}
 
-	address := strings.TrimSpace(lines[1])
+	// Normalize Ethereum addresses to lowercase to prevent case-sensitivity issues
+	// Ethereum addresses are case-insensitive (EIP-55 uses mixed case for checksum)
+	address := strings.ToLower(strings.TrimSpace(lines[1]))
 	if !addressPattern.MatchString(address) {
 		return nil, ErrInvalidAddress
 	}

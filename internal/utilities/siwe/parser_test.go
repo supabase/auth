@@ -116,7 +116,7 @@ func TestParseMessage(t *testing.T) {
 
 			require.Nil(t, err)
 			require.Equal(t, "example.com", parsed.Domain)
-			require.Equal(t, "0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E", parsed.Address)
+			require.Equal(t, "0x196a28d05ba75c8dc35b0f6e71dd622d1ac82b7e", parsed.Address)
 
 			if i == 0 {
 				require.Equal(t, "Sign in to Example App", *parsed.Statement)
