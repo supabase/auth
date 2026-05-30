@@ -21,7 +21,10 @@ type SessionsTestSuite struct {
 }
 
 func (ts *SessionsTestSuite) SetupTest() {
-	TruncateAll(ts.db)
+	// Defensive checks to avoid nil-derefs and to ensure test DB is clean
+	require.NotNil(ts.T(), ts.db, "db connection should be initialized for tests")
+	require.NoError(ts.T(), TruncateAll(ts.db))
+
 	email := "test@example.com"
 	user, err := NewUser("", email, "secret", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err)
