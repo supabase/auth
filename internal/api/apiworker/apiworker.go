@@ -217,7 +217,7 @@ func (o *Worker) maybeCreateIndexes(
 ) {
 	if cfg.IndexWorker.EnsureUserSearchIndexesExist || cfg.IndexWorker.MaxUsersThreshold > 0 {
 		err := indexworker.CreateIndexes(ctx, cfg, le)
-		if err != nil && !errors.Is(err, indexworker.ErrAdvisoryLockAlreadyAcquired) {
+		if err != nil && !errors.Is(err, indexworker.ErrAdvisoryLockAlreadyAcquired) && !errors.Is(err, indexworker.ErrOrioleDBUnsupported) {
 			le.WithError(err).Error("Failed to create indexes")
 		}
 	}

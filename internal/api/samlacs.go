@@ -314,8 +314,15 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 
 		if flowState != nil && flowState.IsPKCE() {
 			// PKCE flow: update flow state with user ID
+			// Re-fetch with FOR UPDATE lock inside the transaction to prevent concurrent claims
+			if flowState, terr = models.FindFlowStateByIDForUpdate(tx, flowState.ID.String()); terr != nil {
+				return terr
+			}
+			if flowState.UserID != nil {
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeFlowStateAlreadyUsed, "State has already been used")
+			}
 			flowState.UserID = &(user.ID)
-			if terr := tx.Update(flowState); terr != nil {
+			if terr = tx.Update(flowState); terr != nil {
 				return terr
 			}
 		}
@@ -345,7 +352,8 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		http.Redirect(w, r, redirectTo, http.StatusFound)
+
+		http.Redirect(w, r, redirectTo, http.StatusFound) // #nosec G710
 		return nil
 	}
 
@@ -356,6 +364,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
+	// #nosec G710
 	http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
 
 	return nil

@@ -398,7 +398,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 	return &tokens.AccessTokenResponse{
 		Token:        tokenString,
 		TokenType:    "bearer",
-		ExpiresIn:    config.JWT.Exp,
+		ExpiresIn:    int(expiresAt - a.Now().Unix()),
 		ExpiresAt:    expiresAt,
 		RefreshToken: issuedRefreshToken,
 		User:         user,

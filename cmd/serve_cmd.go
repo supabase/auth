@@ -93,11 +93,11 @@ func serve(ctx context.Context) {
 
 		var err error
 		defer func() {
-			logFn := wrkLog.Info
-			if err != nil {
-				logFn = wrkLog.WithError(err).Error
+			exitFn := wrkLog.Info
+			if err != nil && !errors.Is(err, context.Canceled) {
+				exitFn = wrkLog.WithError(err).Error
 			}
-			logFn("background apiworker is exiting")
+			exitFn("background apiworker is exiting")
 		}()
 
 		// Work exits when ctx is done as in-flight requests do not depend
@@ -125,7 +125,7 @@ func serve(ctx context.Context) {
 			var err error
 			defer func() {
 				exitFn := le.Info
-				if err != nil {
+				if err != nil && !errors.Is(err, context.Canceled) {
 					exitFn = le.WithError(err).Error
 				}
 				exitFn("config reloader is exiting")
@@ -162,9 +162,7 @@ func serve(ctx context.Context) {
 			}
 
 			rl := reloader.NewReloader(rc, watchDir)
-			if err = rl.Watch(ctx, fn); err != nil {
-				log.WithError(err).Error("config reloader is exiting")
-			}
+			err = rl.Watch(ctx, fn)
 		}()
 	}
 

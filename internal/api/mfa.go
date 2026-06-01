@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/aaronarduino/goqrsvg"
@@ -77,8 +75,6 @@ type WebAuthnChallengeData struct {
 }
 
 type WebAuthnParams struct {
-	RPID               string          `json:"rpId,omitempty"`
-	RPOrigins          []string        `json:"rpOrigins,omitempty"`
 	Type               string          `json:"type"` // "create" or "request"
 	CredentialResponse json.RawMessage `json:"credential_response"`
 }
@@ -87,39 +83,14 @@ type UnenrollFactorResponse struct {
 	ID uuid.UUID `json:"id"`
 }
 
-func (w *WebAuthnParams) ToConfig() (*webauthn.WebAuthn, error) {
-	if w.RPID == "" {
-		return nil, fmt.Errorf("webAuthn RP ID cannot be empty")
-	}
+func (a *API) getWebAuthnMFA() (*webauthn.WebAuthn, error) {
+	rpConfig := a.config.WebAuthn
 
-	if len(w.RPOrigins) == 0 {
-		return nil, fmt.Errorf("webAuthn RP Origins cannot be empty")
-	}
-
-	var validOrigins []string
-	var invalidOrigins []string
-
-	for _, origin := range w.RPOrigins {
-		parsedURL, err := url.Parse(origin)
-		if err != nil || (parsedURL.Scheme != "https" && !(parsedURL.Scheme == "http" && parsedURL.Hostname() == "localhost")) || parsedURL.Host == "" {
-			invalidOrigins = append(invalidOrigins, origin)
-		} else {
-			validOrigins = append(validOrigins, origin)
-		}
-	}
-
-	if len(invalidOrigins) > 0 {
-		return nil, fmt.Errorf("invalid RP origins: %s", strings.Join(invalidOrigins, ", "))
-	}
-
-	wconfig := &webauthn.Config{
-		// DisplayName is optional in spec but required to be non-empty in libary, we use the RPID as a placeholder.
-		RPDisplayName: w.RPID,
-		RPID:          w.RPID,
-		RPOrigins:     validOrigins,
-	}
-
-	return webauthn.New(wconfig)
+	return webauthn.New(&webauthn.Config{
+		RPDisplayName: rpConfig.RPDisplayName,
+		RPID:          rpConfig.RPID,
+		RPOrigins:     rpConfig.RPOrigins,
+	})
 }
 
 const (
@@ -500,10 +471,7 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
-	if params.WebAuthn == nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "web_authn config required")
-	}
-	webAuthn, err := params.WebAuthn.ToConfig()
+	webAuthn, err := a.getWebAuthnMFA()
 	if err != nil {
 		return err
 	}
@@ -917,7 +885,7 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 	case params.WebAuthn.CredentialResponse == nil:
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "credential_response required")
 	default:
-		webAuthn, err = params.WebAuthn.ToConfig()
+		webAuthn, err = a.getWebAuthnMFA()
 		if err != nil {
 			return err
 		}
