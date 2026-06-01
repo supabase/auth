@@ -115,6 +115,20 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 	if rerr != nil {
 		// redirect URL is for some reason invalid
 		return false
+	base, berr := url.Parse(config.SiteURL)
+	refurl, rerr := url.Parse(redirectURL)
+	if berr != nil || rerr != nil {
+		// either URL is for some reason invalid
+		return false
+	}
+
+	// Allow redirects back to the site: scheme, host and port must match. The port
+	// check is skipped for loopback addresses, since per RFC 8252 Section 7.3 native
+	// apps must be allowed to use variable port numbers.
+	if base.Hostname() == refurl.Hostname() &&
+		base.Scheme == refurl.Scheme &&
+		(base.Port() == refurl.Port() || isLocalhost(refurl.Hostname())) {
+		return true
 	}
 
 	scheme := strings.TrimSuffix(strings.ToLower(refurl.Scheme), ":")
