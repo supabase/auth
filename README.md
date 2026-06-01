@@ -206,7 +206,7 @@ Use this to disable phone signups (users can still use external OAuth providers 
 
 `GOTRUE_RATE_LIMIT_HEADER` - `string`
 
-Header on which to rate limit the `/token` endpoint.
+Header on which to rate limit the `/token` endpoint. This header is expected to be set by a trusted upstream proxy (such as Kong or Envoy). Headers such as `x-forwarded-for` are spoofable and can not be trusted for rate limiting when supplied directly by the client.
 
 `GOTRUE_RATE_LIMIT_EMAIL_SENT` - `string`
 
