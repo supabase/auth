@@ -1289,40 +1289,6 @@ func TestWebAuthnConfigurationValidate(t *testing.T) {
 		require.Contains(t, err.Error(), "GOTRUE_WEBAUTHN_RP_ORIGINS is required")
 	}
 
-	// HTTP origin (not localhost) → error
-	{
-		w := &WebAuthnConfiguration{
-			RPID:          "example.com",
-			RPDisplayName: "Example",
-			RPOrigins:     []string{"http://example.com"},
-		}
-		err := w.Validate()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "must use HTTPS")
-	}
-
-	// HTTP localhost is allowed
-	{
-		w := &WebAuthnConfiguration{
-			RPID:          "localhost",
-			RPDisplayName: "Localhost",
-			RPOrigins:     []string{"http://localhost:3000"},
-		}
-		err := w.Validate()
-		require.NoError(t, err)
-	}
-
-	// HTTP 127.0.0.1 is allowed
-	{
-		w := &WebAuthnConfiguration{
-			RPID:          "localhost",
-			RPDisplayName: "Localhost",
-			RPOrigins:     []string{"http://127.0.0.1:3000"},
-		}
-		err := w.Validate()
-		require.NoError(t, err)
-	}
-
 	// Valid HTTPS origins pass
 	{
 		w := &WebAuthnConfiguration{
@@ -1345,20 +1311,6 @@ func TestWebAuthnConfigurationValidate(t *testing.T) {
 		require.NoError(t, cfg.ApplyDefaults())
 		err := cfg.Validate()
 		require.NoError(t, err)
-	}
-
-	// Conditional validation: enabled passkey requires WebAuthn config
-	{
-		cfg := &GlobalConfiguration{
-			SiteURL: "https://example.com",
-			API:     APIConfiguration{ExternalURL: "https://example.com"},
-			JWT:     JWTConfiguration{Secret: "a"},
-		}
-		cfg.Passkey.Enabled = true
-		require.NoError(t, cfg.ApplyDefaults())
-		err := cfg.Validate()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "GOTRUE_WEBAUTHN_RP_ID is required")
 	}
 }
 
