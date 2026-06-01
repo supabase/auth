@@ -112,7 +112,7 @@ migrate_test: ## Run database migrations for test.
 	hack/migrate.sh postgres
 
 test: auth ## Run tests.
-	go test $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1
+	go test -failfast $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1
 	./hack/coverage.sh
 
 vet: # Vet the code
