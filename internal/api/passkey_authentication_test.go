@@ -109,6 +109,32 @@ func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationBannedUser() {
 	ts.Equal("user_banned", errResp["error_code"])
 }
 
+// TestDiscoverableAuthenticationSoftDeletedUser tests that a soft-deleted user is rejected.
+func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationSoftDeletedUser() {
+	authenticator, _ := ts.registerPasskey()
+
+	require.NoError(ts.T(), ts.TestUser.SoftDeleteUser(ts.API.db))
+	require.NotNil(ts.T(), ts.TestUser.DeletedAt)
+
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/options", nil)
+	ts.Require().Equal(http.StatusOK, w.Code)
+
+	var optionsResp PasskeyAuthenticationOptionsResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&optionsResp))
+
+	assertionResp, err := authenticator.getAssertion(optionsResp.Options)
+	require.NoError(ts.T(), err)
+
+	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/authentication/verify", map[string]any{
+		"challenge_id": optionsResp.ChallengeID,
+		"credential":   json.RawMessage(assertionResp.JSON),
+	})
+	ts.Equal(http.StatusForbidden, w.Code)
+	var errResp map[string]any
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResp))
+	ts.Equal("user_not_found", errResp["error_code"])
+}
+
 // TestDiscoverableAuthenticationChallengeExpired tests that an expired challenge is rejected.
 func (ts *PasskeyTestSuite) TestDiscoverableAuthenticationChallengeExpired() {
 	challenge := models.NewWebAuthnChallenge(

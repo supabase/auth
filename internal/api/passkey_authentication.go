@@ -154,6 +154,9 @@ func (a *API) PasskeyAuthenticationVerify(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return apierrors.NewInternalServerError("Database error loading user").WithInternalError(err)
 	}
+	if user.DeletedAt != nil {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeUserNotFound, "User not found")
+	}
 
 	if user.GetEmail() != "" && !user.IsConfirmed() {
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeEmailNotConfirmed, "Email not confirmed")
