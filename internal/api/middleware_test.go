@@ -12,6 +12,7 @@ import (
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
+	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -19,6 +20,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/sbff"
 	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/storage"
@@ -830,4 +832,116 @@ func (ts *MiddlewareTestSuite) TestDatabaseCleanup() {
 		})
 	}
 	mockCleanup.AssertNumberOfCalls(ts.T(), "Clean", 1)
+}
+
+func (ts *MiddlewareTestSuite) TestRequireAdminCredentialsSessionCheck() {
+	models.TruncateAll(ts.API.db)
+
+	user, err := models.NewUser("", "admin-session@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(user))
+
+	session, err := models.NewSession(user.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(session))
+
+	signClaims := func(claims *AccessTokenClaims) string {
+		signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+		require.NoError(ts.T(), err)
+		return signed
+	}
+
+	newRequest := func(token string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		return req
+	}
+
+	ts.Run("admin token with valid session is accepted", func() {
+		token := signClaims(&AccessTokenClaims{
+			Role:      "supabase_admin",
+			SessionId: session.ID.String(),
+			RegisteredClaims: jwt.RegisteredClaims{
+				Subject:   user.ID.String(),
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			},
+		})
+
+		_, err := ts.API.requireAdminCredentials(httptest.NewRecorder(), newRequest(token))
+		require.NoError(ts.T(), err)
+	})
+
+	ts.Run("admin token whose session was revoked is rejected", func() {
+		token := signClaims(&AccessTokenClaims{
+			Role:      "supabase_admin",
+			SessionId: session.ID.String(),
+			RegisteredClaims: jwt.RegisteredClaims{
+				Subject:   user.ID.String(),
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			},
+		})
+		require.NoError(ts.T(), models.LogoutSession(ts.API.db, session.ID))
+
+		_, err := ts.API.requireAdminCredentials(httptest.NewRecorder(), newRequest(token))
+		require.Error(ts.T(), err)
+		httpErr, ok := err.(*HTTPError)
+		require.True(ts.T(), ok, "expected HTTPError, got %T", err)
+		require.Equal(ts.T(), apierrors.ErrorCodeSessionNotFound, httpErr.ErrorCode)
+	})
+
+	ts.Run("admin token past session timebox is rejected", func() {
+		freshSession, err := models.NewSession(user.ID, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.API.db.Create(freshSession))
+
+		// Backdate the session past the timebox.
+		freshSession.CreatedAt = time.Now().Add(-48 * time.Hour)
+		require.NoError(ts.T(), ts.API.db.Update(freshSession))
+
+		timebox := time.Hour
+		original := ts.Config.Sessions.Timebox
+		ts.Config.Sessions.Timebox = &timebox
+		defer func() { ts.Config.Sessions.Timebox = original }()
+
+		token := signClaims(&AccessTokenClaims{
+			Role:      "supabase_admin",
+			SessionId: freshSession.ID.String(),
+			RegisteredClaims: jwt.RegisteredClaims{
+				Subject:   user.ID.String(),
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			},
+		})
+
+		_, err = ts.API.requireAdminCredentials(httptest.NewRecorder(), newRequest(token))
+		require.Error(ts.T(), err)
+		httpErr, ok := err.(*HTTPError)
+		require.True(ts.T(), ok, "expected HTTPError, got %T", err)
+		require.Equal(ts.T(), apierrors.ErrorCodeSessionExpired, httpErr.ErrorCode)
+	})
+
+	ts.Run("sessionless service_role token still passes", func() {
+		token := signClaims(&AccessTokenClaims{
+			Role: "service_role",
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			},
+		})
+
+		_, err := ts.API.requireAdminCredentials(httptest.NewRecorder(), newRequest(token))
+		require.NoError(ts.T(), err)
+	})
+
+	ts.Run("admin token with nil-uuid session_id passes (treated as sessionless)", func() {
+		token := signClaims(&AccessTokenClaims{
+			Role:      "supabase_admin",
+			SessionId: uuid.Nil.String(),
+			RegisteredClaims: jwt.RegisteredClaims{
+				Subject:   user.ID.String(),
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			},
+		})
+
+		_, err := ts.API.requireAdminCredentials(httptest.NewRecorder(), newRequest(token))
+		require.NoError(ts.T(), err)
+	})
 }
