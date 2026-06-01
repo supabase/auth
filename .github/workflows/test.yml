@@ -76,7 +76,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     services:
       postgres:
-        image: orioledb/orioledb:latest-pg17
+        image: orioledb/orioledb:beta16-pre-2-pg17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: root
