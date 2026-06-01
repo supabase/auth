@@ -894,9 +894,12 @@ func (ts *MiddlewareTestSuite) TestRequireAdminCredentialsSessionCheck() {
 		require.NoError(ts.T(), err)
 		require.NoError(ts.T(), ts.API.db.Create(freshSession))
 
-		// Backdate the session past the timebox.
-		freshSession.CreatedAt = time.Now().Add(-48 * time.Hour)
-		require.NoError(ts.T(), ts.API.db.Update(freshSession))
+		// Backdate the session past the timebox — pop manages created_at
+		// automatically on Update, so go through raw SQL.
+		require.NoError(ts.T(), ts.API.db.RawQuery(
+			"UPDATE auth.sessions SET created_at = ? WHERE id = ?",
+			time.Now().Add(-48*time.Hour), freshSession.ID,
+		).Exec())
 
 		timebox := time.Hour
 		original := ts.Config.Sessions.Timebox
