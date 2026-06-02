@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ var (
 	testUser5  = scimTestUser{UserName: "user5@acme.com", Email: "user5@acme.com"}
 	testUser6  = scimTestUser{UserName: "user6@example.com", Email: "user6@example.com"}
 	testUser7  = scimTestUser{UserName: "user7@example.com", Email: "user7@example.com"}
-	testUser9 = scimTestUser{UserName: "user9@acme.com", Email: "user9@acme.com", GivenName: "Jane", FamilyName: "Doe", Formatted: "Jane Doe", ExternalID: "ext-002"}
+	testUser9  = scimTestUser{UserName: "user9@acme.com", Email: "user9@acme.com", GivenName: "Jane", FamilyName: "Doe", Formatted: "Jane Doe", ExternalID: "ext-002"}
 	testUser10 = scimTestUser{UserName: "user10@acme.com", Email: "user10@acme.com", GivenName: "John", FamilyName: "Smith", Formatted: "John Smith", ExternalID: "ext-003"}
 	testUser13 = scimTestUser{UserName: "user13@example.com", Email: "user13@example.com", ExternalID: "ext-006"}
 	testUser14 = scimTestUser{UserName: "user14@acme.com", Email: "user14@acme.com", ExternalID: "ext-007"}
@@ -787,6 +788,57 @@ func (ts *SCIMTestSuite) TestSCIMReactivateAmbiguousDeprovisioned() {
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusConflict, w.Code, "Ambiguous deprovisioned users should return 409: %s", w.Body.String())
+}
+
+func (ts *SCIMTestSuite) TestSCIMConcurrentReactivation() {
+	created := ts.createSCIMUserWithExternalID(testUser20.UserName, testUser20.Email, testUser20.ExternalID)
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+created.ID, nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	body := map[string]interface{}{
+		"schemas":    []string{SCIMSchemaUser},
+		"userName":   testUser20.UserName,
+		"externalId": testUser20.ExternalID,
+		"emails": []map[string]interface{}{
+			{"value": testUser20.Email, "primary": true, "type": "work"},
+		},
+	}
+
+	var wg sync.WaitGroup
+	codes := make([]int, 2)
+	for i := range codes {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			rec := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(rec, ts.makeSCIMRequest(http.MethodPost, "/scim/v2/Users", body))
+			codes[idx] = rec.Code
+		}(i)
+	}
+	wg.Wait()
+
+	success, conflict := 0, 0
+	for _, code := range codes {
+		switch code {
+		case http.StatusOK, http.StatusCreated:
+			success++
+		case http.StatusConflict:
+			conflict++
+		default:
+			ts.T().Fatalf("unexpected status code %d", code)
+		}
+	}
+	require.Equal(ts.T(), 1, success, "exactly one request should reactivate")
+	require.Equal(ts.T(), 1, conflict, "the other request should conflict")
+
+	providerType := "sso:" + ts.SSOProvider.ID.String()
+	users, err := models.FindSSOUsersByEmailAndProvider(ts.API.db, testUser20.Email, ts.Config.JWT.Aud, providerType)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), users, 1)
+	require.True(ts.T(), users[0].IsActive())
 }
 
 func (ts *SCIMTestSuite) TestSCIMCreateUserCrossProviderSameEmail() {

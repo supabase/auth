@@ -139,7 +139,7 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 		}
 
-		ssoUsers, err := models.FindSSOUsersByEmailAndProvider(tx, email, config.JWT.Aud, providerType)
+		ssoUsers, err := models.FindSSOUsersByEmailAndProviderForUpdate(tx, email, config.JWT.Aud, providerType)
 		if err != nil {
 			return apierrors.NewSCIMInternalServerError("Error checking existing SSO user").WithInternalError(err)
 		}

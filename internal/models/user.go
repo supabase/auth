@@ -629,6 +629,32 @@ func FindUserByEmailAndAudience(tx *storage.Connection, email, aud string) (*Use
 // previously deprovisioned SSO users for reactivation without crossing provider
 // boundaries. Results are ordered with active users first.
 func FindSSOUsersByEmailAndProvider(tx *storage.Connection, email, aud, provider string) ([]*User, error) {
+	return findSSOUsersByEmailAndProvider(tx, email, aud, provider, false)
+}
+
+// FindSSOUsersByEmailAndProviderForUpdate behaves like FindSSOUsersByEmailAndProvider
+// but locks the matching rows FOR UPDATE so concurrent SCIM reactivations of the same
+// email are serialized.
+func FindSSOUsersByEmailAndProviderForUpdate(tx *storage.Connection, email, aud, provider string) ([]*User, error) {
+	return findSSOUsersByEmailAndProvider(tx, email, aud, provider, true)
+}
+
+func findSSOUsersByEmailAndProvider(tx *storage.Connection, email, aud, provider string, forUpdate bool) ([]*User, error) {
+	if forUpdate {
+		lockQuery := "SELECT id FROM " + (&User{}).TableName() +
+			" WHERE instance_id = ? AND LOWER(email) = ? AND aud = ? AND is_sso_user = true" +
+			" AND id IN (SELECT user_id FROM " + (&Identity{}).TableName() + " WHERE provider = ?)" +
+			" FOR UPDATE"
+		lockedIDs := []struct {
+			ID uuid.UUID `db:"id"`
+		}{}
+		if err := tx.RawQuery(lockQuery, uuid.Nil, strings.ToLower(email), aud, provider).All(&lockedIDs); err != nil {
+			if errors.Cause(err) != sql.ErrNoRows {
+				return nil, errors.Wrap(err, "error locking SSO users by email and provider")
+			}
+		}
+	}
+
 	users := []*User{}
 	err := tx.Eager().Q().
 		Where("instance_id = ? AND LOWER(email) = ? AND aud = ? AND is_sso_user = true",
