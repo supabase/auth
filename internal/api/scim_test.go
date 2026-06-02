@@ -471,6 +471,15 @@ func (ts *SCIMTestSuite) TestSCIMDeleteUser() {
 	require.False(ts.T(), dbUser.IsBanned())
 	require.Nil(ts.T(), dbUser.BannedUntil)
 
+	entries, err := models.FindAuditLogEntries(ts.API.db, nil, "", nil)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), entries)
+	traits, ok := entries[0].Payload["traits"].(map[string]interface{})
+	require.True(ts.T(), ok)
+	require.Equal(ts.T(), "sso", traits["provider"])
+	require.Equal(ts.T(), "scim", traits["channel"])
+	require.Equal(ts.T(), "deprovisioned", traits["action"])
+
 	req = ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+user.ID, nil)
 	w = httptest.NewRecorder()
 

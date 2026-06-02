@@ -213,8 +213,9 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 					auditAction = "reprovisioned_inactive"
 				}
 				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, candidate, models.UserModifiedAction, utilities.GetIPAddress(r), map[string]interface{}{
-					"provider":        "scim",
+					"provider":        "sso",
 					"sso_provider_id": provider.ID,
+					"channel":         "scim",
 					"action":          auditAction,
 				}); terr != nil {
 					return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
@@ -266,8 +267,10 @@ func (a *API) scimCreateUser(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, utilities.GetIPAddress(r), map[string]interface{}{
-			"provider":        "scim",
+			"provider":        "sso",
 			"sso_provider_id": provider.ID,
+			"channel":         "scim",
+			"action":          "provisioned",
 		}); terr != nil {
 			return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
@@ -380,8 +383,10 @@ func (a *API) scimReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, utilities.GetIPAddress(r), map[string]interface{}{
-			"provider":        "scim",
+			"provider":        "sso",
 			"sso_provider_id": provider.ID,
+			"channel":         "scim",
+			"action":          "updated",
 		}); terr != nil {
 			return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
@@ -445,8 +450,10 @@ func (a *API) scimPatchUser(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, utilities.GetIPAddress(r), map[string]interface{}{
-			"provider":        "scim",
+			"provider":        "sso",
 			"sso_provider_id": provider.ID,
+			"channel":         "scim",
+			"action":          "updated",
 		}); terr != nil {
 			return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
@@ -784,8 +791,10 @@ func (a *API) scimDeleteUser(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserDeletedAction, utilities.GetIPAddress(r), map[string]interface{}{
-			"provider":        "scim",
+			"provider":        "sso",
 			"sso_provider_id": provider.ID,
+			"channel":         "scim",
+			"action":          "deprovisioned",
 		}); terr != nil {
 			return apierrors.NewSCIMInternalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
