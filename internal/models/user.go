@@ -988,10 +988,8 @@ func (u *User) IsActive() bool {
 
 const LockReasonSCIMDeprovisioned = "SCIM_DEPROVISIONED"
 
-const BannedReasonSCIMDeprovisioned = "SCIM_DEPROVISIONED"
-
 func (u *User) IsSCIMDeprovisioned() bool {
-	return u.IsBanned() && u.BannedReason != nil && *u.BannedReason == BannedReasonSCIMDeprovisioned
+	return u.IsLocked() && u.LockedReason != nil && *u.LockedReason == LockReasonSCIMDeprovisioned
 }
 
 func (u *User) HasMFAEnabled() bool {

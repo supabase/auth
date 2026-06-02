@@ -63,7 +63,7 @@ func (a *API) userToSCIMResponse(user *models.User, providerType string) *SCIMUs
 		Schemas:  []string{SCIMSchemaUser},
 		ID:       user.ID.String(),
 		UserName: user.GetEmail(),
-		Active:   !user.IsBanned(),
+		Active:   user.IsActive(),
 		Meta: SCIMMeta{
 			ResourceType: "User",
 			Created:      &user.CreatedAt,
@@ -347,10 +347,13 @@ func updateGroupExternalID(tx *storage.Connection, group *models.SCIMGroup, exte
 }
 
 func scimDeprovisionUser(tx *storage.Connection, user *models.User) error {
-	if user.IsBanned() && !user.IsSCIMDeprovisioned() {
+	if user.IsBanned() {
 		return apierrors.NewSCIMConflictError("User is banned by an administrator and cannot be deprovisioned via SCIM", "")
 	}
-	if err := user.Ban(tx, 200*365*24*time.Hour, &scimDeprovisionedReason); err != nil {
+	if user.IsLocked() && !user.IsSCIMDeprovisioned() {
+		return apierrors.NewSCIMConflictError("User is locked and cannot be deprovisioned via SCIM", "")
+	}
+	if err := user.Lock(tx, 200*365*24*time.Hour, &scimDeprovisionedReason); err != nil {
 		return apierrors.NewSCIMInternalServerError("Error deprovisioning user").WithInternalError(err)
 	}
 	if err := models.Logout(tx, user.ID); err != nil {
@@ -360,13 +363,16 @@ func scimDeprovisionUser(tx *storage.Connection, user *models.User) error {
 }
 
 func scimReactivateUser(tx *storage.Connection, user *models.User) error {
-	if !user.IsBanned() {
+	if user.IsBanned() {
+		return apierrors.NewSCIMConflictError("User is banned by an administrator and cannot be reactivated via SCIM", "")
+	}
+	if !user.IsLocked() {
 		return nil
 	}
 	if !user.IsSCIMDeprovisioned() {
-		return apierrors.NewSCIMConflictError("User is banned by an administrator and cannot be reactivated via SCIM", "")
+		return apierrors.NewSCIMConflictError("User is locked and cannot be reactivated via SCIM", "")
 	}
-	if err := user.Ban(tx, 0, nil); err != nil {
+	if err := user.Lock(tx, 0, nil); err != nil {
 		return apierrors.NewSCIMInternalServerError("Error reactivating user").WithInternalError(err)
 	}
 	return nil
@@ -424,7 +430,7 @@ func checkSCIMEmailUniqueness(tx *storage.Connection, email, aud, providerType s
 		if !existingUser.IsSSOUser {
 			return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 		}
-		if existingUser.BannedReason == nil || *existingUser.BannedReason != scimDeprovisionedReason {
+		if !existingUser.IsSCIMDeprovisioned() {
 			return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 		}
 	}
@@ -437,7 +443,7 @@ func checkSCIMEmailUniqueness(tx *storage.Connection, email, aud, providerType s
 		if u.ID == excludeUserID {
 			continue
 		}
-		if u.BannedReason == nil || *u.BannedReason != scimDeprovisionedReason {
+		if !u.IsSCIMDeprovisioned() {
 			return apierrors.NewSCIMConflictError(scimErrEmailConflict, "uniqueness")
 		}
 	}

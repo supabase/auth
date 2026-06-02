@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -463,6 +464,13 @@ func (ts *SCIMTestSuite) TestSCIMDeleteUser() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&result))
 	require.False(ts.T(), result.Active, "Deprovisioned user should have active=false")
 
+	dbUser, err := models.FindUserByID(ts.API.db, uuid.FromStringOrNil(user.ID))
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), dbUser.IsSCIMDeprovisioned())
+	require.True(ts.T(), dbUser.IsLocked())
+	require.False(ts.T(), dbUser.IsBanned())
+	require.Nil(ts.T(), dbUser.BannedUntil)
+
 	req = ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+user.ID, nil)
 	w = httptest.NewRecorder()
 
@@ -747,10 +755,10 @@ func (ts *SCIMTestSuite) TestSCIMReactivateAmbiguousDeprovisioned() {
 	user2, err := models.NewUser("", testUser19.Email, "", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err)
 	user2.IsSSOUser = true
-	reason := models.BannedReasonSCIMDeprovisioned
-	user2.BannedReason = &reason
-	bannedUntil := time.Now().Add(200 * 365 * 24 * time.Hour)
-	user2.BannedUntil = &bannedUntil
+	reason := models.LockReasonSCIMDeprovisioned
+	user2.LockedReason = &reason
+	lockedUntil := time.Now().Add(200 * 365 * 24 * time.Hour)
+	user2.LockedUntil = &lockedUntil
 	require.NoError(ts.T(), ts.API.db.Create(user2))
 
 	providerType := "sso:" + ts.SSOProvider.ID.String()

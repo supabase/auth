@@ -34,8 +34,8 @@ const (
 	scimErrAmbiguousDeprovisioned    = "Multiple deprovisioned users exist for this email"
 )
 
-// Must be var (not const) because it's passed by pointer to user.Ban()
-var scimDeprovisionedReason = models.BannedReasonSCIMDeprovisioned
+// Must be var (not const) because it's passed by pointer to user.Lock()
+var scimDeprovisionedReason = models.LockReasonSCIMDeprovisioned
 
 // FlexBool handles both bool and string ("true"/"false") - Azure AD sends strings
 type FlexBool bool
