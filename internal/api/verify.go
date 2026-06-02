@@ -670,6 +670,10 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
+	if user.IsLocked() {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserLocked, "User account is locked")
+	}
+
 	var isExpired bool
 	switch params.Type {
 	case mail.EmailOTPVerification:
@@ -725,6 +729,10 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 	if user.IsBanned() {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+	}
+
+	if user.IsLocked() {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserLocked, "User account is locked")
 	}
 
 	var isValid bool

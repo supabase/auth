@@ -29,6 +29,7 @@ const (
 	ErrorCodeOAuthInvalidState                 ErrorCode = "oauth_invalid_state"
 	ErrorCodeSignupDisabled                    ErrorCode = "signup_disabled"
 	ErrorCodeUserBanned                        ErrorCode = "user_banned"
+	ErrorCodeUserLocked                        ErrorCode = "user_locked"
 	ErrorCodeProviderEmailNeedsVerification    ErrorCode = "provider_email_needs_verification"
 	ErrorCodeInviteNotFound                    ErrorCode = "invite_not_found"
 	ErrorCodeBadOAuthState                     ErrorCode = "bad_oauth_state"
