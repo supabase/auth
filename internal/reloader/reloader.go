@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -263,11 +262,6 @@ func (rl *Reloader) watchNotify(
 				err := errors.New("reloader: fsnotify event channel was closed")
 				logrus.WithError(err).Error(err)
 				return err
-			}
-
-			// We only read files ending in .env
-			if !strings.HasSuffix(evt.Name, ".env") {
-				continue
 			}
 
 			switch {

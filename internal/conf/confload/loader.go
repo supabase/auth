@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
 )
 
@@ -26,23 +27,13 @@ type optionFunc func(*Loader)
 
 func (f optionFunc) apply(a *Loader) { f(a) }
 
-func WithConfigFile(configFile string) Option {
-	return optionFunc(func(a *Loader) { a.file = configFile })
-}
-
-func WithConfigDir(configDir string) Option {
-	return optionFunc(func(a *Loader) { a.dir = configDir })
-}
-
 func withSystem(sys system) Option {
 	return optionFunc(func(a *Loader) { a.sys = sys })
 }
 
 type Loader struct {
-	mu   sync.Mutex
-	sys  system
-	file string
-	dir  string
+	mu  sync.Mutex
+	sys system
 }
 
 func NewLoader(opt ...Option) *Loader {
@@ -55,59 +46,45 @@ func NewLoader(opt ...Option) *Loader {
 	return ldr
 }
 
-func (o *Loader) Startup() (*conf.GlobalConfiguration, error) {
+func (o *Loader) Startup(file, dir string) (*conf.GlobalConfiguration, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	cfg, err := o.startup()
-	if err != nil {
+	cfgMap := make(map[string]string)
+	if err := o.startup(cfgMap, file, dir); err != nil {
 		return nil, fmt.Errorf("confload.Startup: %w", err)
+	}
+
+	cfg := new(conf.GlobalConfiguration)
+	if err := loadGlobal(cfg); err != nil {
+		return nil, err
 	}
 	return cfg, nil
 }
 
-func (o *Loader) startup() (*conf.GlobalConfiguration, error) {
-	cfgMap := make(map[string]string)
-
-	// We seed the cfgMap with the OS env for startup.
+func (o *Loader) startup(cfgMap map[string]string, file, dir string) error {
 	o.loadEnv(cfgMap, o.sys.Environ())
 
-	if err := o.loadFile(cfgMap); err != nil {
-		return nil, err
+	if err := o.loadFile(cfgMap, file); err != nil {
+		return err
 	}
-	if err := o.loadDir(cfgMap); err != nil {
-		return nil, err
+	if err := o.loadDir(cfgMap, dir); err != nil {
+		// Match current startup behavior and only log an error.
+		logrus.WithError(err).Error("unable to load config from watch dir")
 	}
 	if err := o.applyCfg(cfgMap); err != nil {
-		return nil, err
+		return err
 	}
-
-	cfg := new(conf.GlobalConfiguration)
-	if err := loadGlobal(cfg); err != nil {
-		return nil, err
-	}
-	return cfg, nil
+	return nil
 }
 
-func (o *Loader) Reload() (*conf.GlobalConfiguration, error) {
+func (o *Loader) Reload(dir string) (*conf.GlobalConfiguration, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	cfg, err := o.reload()
-	if err != nil {
-		return nil, fmt.Errorf("confload.Startup: %w", err)
-	}
-	return cfg, nil
-}
-
-func (o *Loader) reload() (*conf.GlobalConfiguration, error) {
 	cfgMap := make(map[string]string)
-
-	if err := o.loadDir(cfgMap); err != nil {
-		return nil, err
-	}
-	if err := o.applyCfg(cfgMap); err != nil {
-		return nil, err
+	if err := o.reload(cfgMap, dir); err != nil {
+		return nil, fmt.Errorf("confload.Startup: %w", err)
 	}
 
 	cfg := new(conf.GlobalConfiguration)
@@ -115,6 +92,16 @@ func (o *Loader) reload() (*conf.GlobalConfiguration, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+func (o *Loader) reload(cfgMap map[string]string, dir string) error {
+	if err := o.loadDir(cfgMap, dir); err != nil {
+		return err
+	}
+	if err := o.applyCfg(cfgMap); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (o *Loader) loadEnv(dst map[string]string, envs []string) {
@@ -127,10 +114,10 @@ func (o *Loader) loadEnv(dst map[string]string, envs []string) {
 	}
 }
 
-func (o *Loader) loadFile(dst map[string]string) error {
+func (o *Loader) loadFile(dst map[string]string, file string) error {
 	// If a cfg file is set we read the file and copy directly into dst
-	if o.file != "" {
-		return o.readFile(o.file, dst)
+	if file != "" {
+		return o.readFile(file, dst)
 	}
 
 	// Otherwise we need to mimic the current behavior of godotenv and
@@ -142,7 +129,6 @@ func (o *Loader) loadFile(dst map[string]string) error {
 	buf := make(map[string]string)
 	if err := o.readFile(".env", buf); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-
 			return nil // current behavior is to ignore errors loading .env
 		}
 		return err
@@ -190,8 +176,8 @@ func (o *Loader) applyCfg(cfgMap map[string]string) error {
 	return nil
 }
 
-func (o *Loader) loadDir(dst map[string]string) error {
-	paths, err := o.getPaths()
+func (o *Loader) loadDir(dst map[string]string, dir string) error {
+	paths, err := o.getPaths(dir)
 	if err != nil {
 		return fmt.Errorf("LoadDir: %w", err)
 	}
@@ -203,6 +189,7 @@ func (o *Loader) loadDir(dst map[string]string) error {
 	for _, p := range paths {
 		clear(buf)
 
+		// Matches godotenv.Overload
 		if err := o.readFile(p, buf); err != nil {
 			return fmt.Errorf("LoadDir: %w", err)
 		}
@@ -211,16 +198,25 @@ func (o *Loader) loadDir(dst map[string]string) error {
 	return nil
 }
 
-func (o *Loader) getPaths() ([]string, error) {
-	if o.dir == "" {
+func (o *Loader) getPaths(dir string) ([]string, error) {
+	if dir == "" {
 		return nil, nil
 	}
 
 	// Returns entries sorted by filename
-	ents, err := o.sys.ReadDir(o.dir)
+	ents, err := o.sys.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
+
+	// Remove directories and non .json and .env files
+	ents = slices.DeleteFunc(ents, func(ent fs.DirEntry) bool {
+		if ent.IsDir() {
+			return true
+		}
+		ext := filepath.Ext(ent.Name())
+		return ext != ".env" && ext != ".json"
+	})
 
 	var paths []string
 	for i := 0; i < len(ents); i++ {
@@ -236,7 +232,7 @@ func (o *Loader) getPaths() ([]string, error) {
 					// ents[i+0]=base.env
 					// ents[i+1]=base.json
 					i++
-					paths = append(paths, filepath.Join(o.dir, next))
+					paths = append(paths, filepath.Join(dir, next))
 					break
 				}
 				// ents[i+0]=base.env
@@ -244,7 +240,7 @@ func (o *Loader) getPaths() ([]string, error) {
 			}
 			fallthrough
 		case ".json":
-			paths = append(paths, filepath.Join(o.dir, cur))
+			paths = append(paths, filepath.Join(dir, cur))
 		}
 	}
 	return paths, nil
@@ -299,15 +295,15 @@ type system interface {
 type osSystem struct{}
 
 func (*osSystem) Open(name string) (fs.File, error) {
-	return os.Open(name)
+	return os.Open(name) //#nosec G304
 }
 
 func (*osSystem) ReadDir(name string) ([]fs.DirEntry, error) {
-	return os.ReadDir(name)
+	return os.ReadDir(name) //#nosec G304
 }
 
 func (*osSystem) ReadFile(name string) ([]byte, error) {
-	return os.ReadFile(name)
+	return os.ReadFile(name) //#nosec G304
 }
 
 func (*osSystem) Environ() []string {

@@ -9,6 +9,8 @@ import (
 // Vulnerabilities with no upstream fix — remove entries once fixed.
 var ignore = map[string]string{
 	"GO-2026-4518": "pgproto3/v2 DoS, no fix available (EOL). Transitive via pgconn v1 + pop/v6.",
+	"GO-2026-4945": "ignore",
+	"GO-2026-4985": "ignore",
 }
 
 func main() {

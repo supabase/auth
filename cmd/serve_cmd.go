@@ -33,12 +33,9 @@ var serveCmd = cobra.Command{
 }
 
 func serve(ctx context.Context) {
-	configLoader := confload.NewLoader(
-		confload.WithConfigFile(configFile),
-		confload.WithConfigDir(watchDir),
-	)
+	configLoader := confload.NewLoader()
 
-	config, err := configLoader.Startup()
+	config, err := configLoader.Startup(configFile, watchDir)
 	if err != nil {
 		logrus.WithError(err).Fatal("unable to load config")
 	}
@@ -160,7 +157,7 @@ func serve(ctx context.Context) {
 			}
 
 			rlFunc := func(dir string) (*conf.GlobalConfiguration, error) {
-				return configLoader.Reload()
+				return configLoader.Reload(dir)
 			}
 			rl := reloader.NewReloaderFunc(rc, watchDir, rlFunc)
 			err = rl.Watch(ctx, fn)
