@@ -23,6 +23,16 @@ end $$;
 
 comment on column {{ index .Options "Namespace" }}.users.banned_reason is 'Auth: Reason for user ban (e.g., SCIM_DEPROVISIONED)';
 
+-- Add lock state to users (distinct from ban; used by SCIM deprovisioning and future lockouts)
+do $$ begin
+    alter table only {{ index .Options "Namespace" }}.users
+        add column if not exists locked_until timestamptz null,
+        add column if not exists locked_reason text null;
+end $$;
+
+comment on column {{ index .Options "Namespace" }}.users.locked_until is 'Auth: User is locked out of authentication until this time (e.g. SCIM_DEPROVISIONED)';
+comment on column {{ index .Options "Namespace" }}.users.locked_reason is 'Auth: Reason for the user lock (e.g. SCIM_DEPROVISIONED)';
+
 -- SCIM Groups
 create table if not exists {{ index .Options "Namespace" }}.scim_groups (
     id uuid not null,

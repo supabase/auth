@@ -70,6 +70,8 @@ type User struct {
 	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
 	BannedUntil  *time.Time `json:"banned_until,omitempty" db:"banned_until"`
 	BannedReason *string    `json:"banned_reason,omitempty" db:"banned_reason"`
+	LockedUntil  *time.Time `json:"locked_until,omitempty" db:"locked_until"`
+	LockedReason *string    `json:"locked_reason,omitempty" db:"locked_reason"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 	IsAnonymous  bool       `json:"is_anonymous" db:"is_anonymous"`
 
@@ -957,6 +959,34 @@ func (u *User) IsBanned() bool {
 	}
 	return time.Now().Before(*u.BannedUntil)
 }
+
+// Lock a user for a given duration with an optional reason.
+func (u *User) Lock(tx *storage.Connection, duration time.Duration, reason *string) error {
+	if duration == time.Duration(0) {
+		u.LockedUntil = nil
+		u.LockedReason = nil
+	} else {
+		t := time.Now().Add(duration)
+		u.LockedUntil = &t
+		u.LockedReason = reason
+	}
+	return tx.UpdateOnly(u, "locked_until", "locked_reason")
+}
+
+// IsLocked checks if a user is locked or not
+func (u *User) IsLocked() bool {
+	if u.LockedUntil == nil {
+		return false
+	}
+	return time.Now().Before(*u.LockedUntil)
+}
+
+// IsActive reports whether the user may authenticate (neither banned nor locked).
+func (u *User) IsActive() bool {
+	return !u.IsBanned() && !u.IsLocked()
+}
+
+const LockReasonSCIMDeprovisioned = "SCIM_DEPROVISIONED"
 
 const BannedReasonSCIMDeprovisioned = "SCIM_DEPROVISIONED"
 
