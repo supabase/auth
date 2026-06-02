@@ -846,6 +846,36 @@ func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameExisting() {
 	require.Contains(ts.T(), meta["location"], "/scim/v2/Users/"+created.ID)
 }
 
+func (ts *SCIMTestSuite) TestSCIMFilterUsersByActive() {
+	active := ts.createSCIMUserWithExternalID(testUser13.UserName, testUser13.Email, testUser13.ExternalID)
+	deprovisioned := ts.createSCIMUserWithExternalID(testUser14.UserName, testUser14.Email, testUser14.ExternalID)
+
+	req := ts.makeSCIMRequest(http.MethodDelete, "/scim/v2/Users/"+deprovisioned.ID, nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=active+eq+%22false%22", nil)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var inactive SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&inactive))
+	require.Equal(ts.T(), 1, inactive.TotalResults)
+	require.Equal(ts.T(), deprovisioned.ID, inactive.Resources[0].(map[string]interface{})["id"])
+
+	req = ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=active+eq+%22true%22", nil)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var activeList SCIMListResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&activeList))
+	require.Equal(ts.T(), 1, activeList.TotalResults)
+	require.Equal(ts.T(), active.ID, activeList.Resources[0].(map[string]interface{})["id"])
+}
+
 func (ts *SCIMTestSuite) TestSCIMFilterUserByUserNameNonExistent() {
 	req := ts.makeSCIMRequest(http.MethodGet, "/scim/v2/Users?filter=userName+eq+%22nonexistent%40example.com%22", nil)
 	w := httptest.NewRecorder()

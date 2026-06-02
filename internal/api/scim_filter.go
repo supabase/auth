@@ -10,11 +10,14 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 )
 
+const scimActiveExpr = "((u.banned_until IS NULL OR u.banned_until < now()) AND (u.locked_until IS NULL OR u.locked_until < now()))"
+
 var SCIMUserFilterAttrs = map[string]string{
 	"username":     "COALESCE(NULLIF(i.identity_data->>'user_name', ''), u.email)",
 	"externalid":   "i.identity_data->>'external_id'",
 	"email":        "u.email",
 	"emails.value": "u.email",
+	"active":       scimActiveExpr,
 }
 
 var SCIMGroupFilterAttrs = map[string]string{
