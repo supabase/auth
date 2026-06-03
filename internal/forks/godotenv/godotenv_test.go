@@ -209,10 +209,10 @@ func TestSubstitutions(t *testing.T) {
 	envFileName := "fixtures/substitutions.env"
 	expectedValues := map[string]string{
 		"OPTION_A": "1",
-		"OPTION_B": "1",
-		"OPTION_C": "1",
-		"OPTION_D": "11",
-		"OPTION_E": "",
+		"OPTION_B": "${OPTION_A}",
+		"OPTION_C": "$OPTION_B",
+		"OPTION_D": "${OPTION_A}${OPTION_B}",
+		"OPTION_E": "${OPTION_NOT_DEFINED}",
 	}
 
 	loadEnvAndCompareValues(t, Load, envFileName, expectedValues, noopPresets)
@@ -227,22 +227,22 @@ func TestExpanding(t *testing.T) {
 		{
 			"expands variables found in values",
 			"FOO=test\nBAR=$FOO",
-			map[string]string{"FOO": "test", "BAR": "test"},
+			map[string]string{"FOO": "test", "BAR": "$FOO"},
 		},
 		{
 			"parses variables wrapped in brackets",
 			"FOO=test\nBAR=${FOO}bar",
-			map[string]string{"FOO": "test", "BAR": "testbar"},
+			map[string]string{"FOO": "test", "BAR": "${FOO}bar"},
 		},
 		{
 			"expands undefined variables to an empty string",
 			"BAR=$FOO",
-			map[string]string{"BAR": ""},
+			map[string]string{"BAR": "$FOO"},
 		},
 		{
 			"expands variables in double quoted strings",
 			"FOO=test\nBAR=\"quote $FOO\"",
-			map[string]string{"FOO": "test", "BAR": "quote test"},
+			map[string]string{"FOO": "test", "BAR": "quote $FOO"},
 		},
 		{
 			"does not expand variables in single quoted strings",
@@ -252,17 +252,17 @@ func TestExpanding(t *testing.T) {
 		{
 			"does not expand escaped variables",
 			`FOO="foo\$BAR"`,
-			map[string]string{"FOO": "foo$BAR"},
+			map[string]string{"FOO": "foo\\$BAR"},
 		},
 		{
 			"does not expand escaped variables",
 			`FOO="foo\${BAR}"`,
-			map[string]string{"FOO": "foo${BAR}"},
+			map[string]string{"FOO": "foo\\${BAR}"},
 		},
 		{
 			"does not expand escaped variables",
 			"FOO=test\nBAR=\"foo\\${FOO} ${FOO}\"",
-			map[string]string{"FOO": "test", "BAR": "foo${FOO} test"},
+			map[string]string{"FOO": "test", "BAR": "foo\\${FOO} ${FOO}"},
 		},
 	}
 
