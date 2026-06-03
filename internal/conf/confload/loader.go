@@ -2,6 +2,7 @@
 package confload
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/envparse"
 )
 
 type Option interface {
@@ -31,14 +33,21 @@ func withSystem(sys system) Option {
 	return optionFunc(func(a *Loader) { a.sys = sys })
 }
 
+func WithEnvparse() Option {
+	return optionFunc(func(a *Loader) { a.enableEnvparse = true })
+}
+
 type Loader struct {
 	mu  sync.Mutex
 	sys system
+
+	enableEnvparse bool
 }
 
 func NewLoader(opt ...Option) *Loader {
 	ldr := &Loader{
-		sys: &osSystem{},
+		sys:            &osSystem{},
+		enableEnvparse: true,
 	}
 	for _, o := range opt {
 		o.apply(ldr)
@@ -64,7 +73,6 @@ func (o *Loader) Startup(file, dir string) (*conf.GlobalConfiguration, error) {
 
 func (o *Loader) startup(cfgMap map[string]string, file, dir string) error {
 	o.loadEnv(cfgMap, o.sys.Environ())
-
 	if err := o.loadFile(cfgMap, file); err != nil {
 		return err
 	}
@@ -84,7 +92,7 @@ func (o *Loader) Reload(dir string) (*conf.GlobalConfiguration, error) {
 
 	cfgMap := make(map[string]string)
 	if err := o.reload(cfgMap, dir); err != nil {
-		return nil, fmt.Errorf("confload.Startup: %w", err)
+		return nil, fmt.Errorf("confload.Reload: %w", err)
 	}
 
 	cfg := new(conf.GlobalConfiguration)
@@ -144,7 +152,7 @@ func (o *Loader) merge(dst, src map[string]string, override bool) {
 		return
 	}
 	for k, v := range src {
-		if _, ok := dst[k]; ok {
+		if _, ok := dst[k]; !ok {
 			dst[k] = v
 		}
 	}
@@ -256,10 +264,8 @@ func (o *Loader) readFile(name string, dst map[string]string) error {
 	switch filepath.Ext(name) {
 	case ".json":
 		return o.readJSON(f, dst)
-	case ".env":
-		return o.readDotenv(f, dst)
 	default:
-		return nil
+		return o.readDotenv(f, dst)
 	}
 }
 
@@ -275,11 +281,45 @@ func (o *Loader) readJSON(r io.Reader, dst map[string]string) error {
 }
 
 func (o *Loader) readDotenv(r io.Reader, dst map[string]string) error {
+	if o.enableEnvparse {
+		return o.readEnvparse(r, dst)
+	}
+
 	m, err := godotenv.Parse(r)
 	if err != nil {
 		return fmt.Errorf("ReadDotenv: %w", err)
 	}
 	maps.Copy(dst, m)
+	return nil
+}
+
+func (o *Loader) readEnvparse(r io.Reader, dst map[string]string) error {
+	buf := new(bytes.Buffer)
+	tee := io.TeeReader(r, buf)
+
+	m1, err := godotenv.Parse(tee)
+	if err != nil {
+		return fmt.Errorf("ReadDotenv: %w", err)
+	}
+	maps.Copy(dst, m1)
+
+	m2, err := envparse.Parse(buf)
+	if err != nil {
+		logrus.WithError(err).Info("envparse rejected input godotenv permitted")
+	}
+
+	for _, k := range slices.Sorted(maps.Keys(m1)) {
+		v1, ok1 := m1[k]
+		v2, ok2 := m2[k]
+		switch {
+		case !ok1:
+			fmt.Printf("+ %s=%q\n", k, v2)
+		case !ok2:
+			fmt.Printf("- %s=%q\n", k, v1)
+		case v1 != v2:
+			fmt.Printf("~ %s: %q -> %q\n", k, v1, v2)
+		}
+	}
 	return nil
 }
 

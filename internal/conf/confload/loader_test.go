@@ -31,6 +31,20 @@ func TestLoaderCompat(t *testing.T) {
 	require.Equal(t, cfg1, cfg2)
 }
 
+func TestLoaderEnvparse(t *testing.T) {
+	cfg1, err := LoadGlobal(e2ecfg.GetConfigPath())
+	require.NoError(t, err)
+	require.NotNil(t, cfg1)
+
+	lr := NewLoader()
+	cfg2, err := lr.Startup(e2ecfg.GetConfigPath(), "")
+	require.NoError(t, err)
+	require.NotNil(t, cfg2)
+
+	// Old and new loader should have identical output
+	require.Equal(t, cfg1, cfg2)
+}
+
 func TestLoaderStartup(t *testing.T) {
 	type test struct {
 		name string
@@ -43,6 +57,46 @@ func TestLoaderStartup(t *testing.T) {
 	}
 
 	tests := []test{
+
+		{
+			name: "no config file specified only base environ",
+			sys: newTestSystem(fstest.MapFS{}).withEnv(M{
+				"KEY_1": "VAL_1_environ",
+				"KEY_2": "VAL_2_environ",
+				"KEY_3": "VAL_3_environ",
+				"KEY_4": "VAL_4_environ",
+			}),
+
+			file: "",
+			exp: M{
+				"KEY_1": "VAL_1_environ",
+				"KEY_2": "VAL_2_environ",
+				"KEY_3": "VAL_3_environ",
+				"KEY_4": "VAL_4_environ",
+			},
+		},
+
+		{
+			name: "no config file specified + base and cwd .env do not override existing env vals",
+			sys: newTestSystem(fstest.MapFS{
+				".env": fsFileDotenv(t, M{
+					"KEY_1": "VAL_1_env_.env",
+					"KEY_2": "VAL_2_env_.env",
+					"KEY_3": "VAL_3_env_.env",
+				}),
+			}).withEnv(M{
+				"KEY_1": "VAL_1_environ",
+				"KEY_2": "VAL_2_environ",
+			}),
+
+			file: "",
+			exp: M{
+				"KEY_1": "VAL_1_environ",
+				"KEY_2": "VAL_2_environ",
+				"KEY_3": "VAL_3_env_.env",
+			},
+		},
+
 		{
 			name: "single config file .env",
 			sys: newTestSystem(fstest.MapFS{
@@ -84,6 +138,32 @@ func TestLoaderStartup(t *testing.T) {
 				"KEY_2": "VAL_2_env",
 				"KEY_3": "VAL_3_env",
 				"KEY_4": "VAL_4_environ",
+			},
+		},
+
+		{
+			name: "single config file .env + base and cwd .env is ignored",
+			sys: newTestSystem(fstest.MapFS{
+				".env": fsFileDotenv(t, M{
+					"KEY_1": "VAL_1_env_.env",
+					"KEY_2": "VAL_2_env_.env",
+					"KEY_3": "VAL_3_env_.env",
+					"KEY_9": "VAL_9_env_.env",
+				}),
+				"etc": fsDir(),
+				"etc/gotrue.env": fsFileDotenv(t, M{
+					"KEY_3": "VAL_3_env_etc/gotrue.env",
+				}),
+			}).withEnv(M{
+				"KEY_1": "VAL_1_environ",
+				"KEY_2": "VAL_2_environ",
+			}),
+
+			file: "etc/gotrue.env",
+			exp: M{
+				"KEY_1": "VAL_1_environ",
+				"KEY_2": "VAL_2_environ",
+				"KEY_3": "VAL_3_env_etc/gotrue.env",
 			},
 		},
 
@@ -597,6 +677,25 @@ func TestLoaderStartup(t *testing.T) {
 			file:   "etc/gotrue.env",
 			errStr: "file does not exist",
 		},
+
+		// 		{
+		// 			name: "does not expand variables",
+		// 			sys: newTestSystem(fstest.MapFS{
+		// 				"etc": fsDir(),
+		// 				"etc/gotrue.env": fsFileDotenv(t, M{
+		// 					"KEY_1": "VAL_1_env",
+		// 					"KEY_2": "$KEY_2",
+		// 					"KEY_3": "VAL_3_env",
+		// 				}),
+		// 			}),
+		//
+		// 			file: "etc/gotrue.env",
+		// 			exp: M{
+		// 				"KEY_1": "VAL_1_env",
+		// 				"KEY_2": "$KEY_2",
+		// 				"KEY_3": "VAL_3_env",
+		// 			},
+		// 		},
 	}
 
 	for idx, tt := range tests {

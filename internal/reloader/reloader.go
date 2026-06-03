@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -264,6 +265,9 @@ func (rl *Reloader) watchNotify(
 				return err
 			}
 
+			if !isPathReloadable(evt.Name) {
+				continue
+			}
 			switch {
 			case evt.Op.Has(fsnotify.Create),
 				evt.Op.Has(fsnotify.Remove),
@@ -283,6 +287,16 @@ func (rl *Reloader) watchNotify(
 	}
 }
 
+// TOOD(cstockton): At some point we should pass a concrete ref to the loader
+// and ask the loader if a path is reloadable.
+func isPathReloadable(name string) bool {
+	switch filepath.Ext(name) {
+	case ".env", ".json":
+		return true
+	default:
+		return false
+	}
+}
 func isWatchable(dir string) bool {
 	fi, err := os.Stat(dir)
 	if err != nil {
