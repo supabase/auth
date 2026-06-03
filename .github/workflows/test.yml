@@ -102,3 +102,35 @@ jobs:
         run: make migrate_dev
       - name: Run tests
         run: go test ./... -p 1 -race -v -count=1
+
+  test_multigres:
+    name: Test / Multigres
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: ghcr.io/multigres/multigres-cluster:latest
+        env:
+          MULTIGRES_GATEWAY_PG_PORT: "5432"
+          MULTIGRES_NUM_CELLS: "2"
+        ports:
+          - 5432:5432
+        options: >-
+          --init
+          --shm-size=1gb
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+      - name: Init Database
+        # Multigres' superuser is postgres/postgres (POSTGRES_PASSWORD is
+        # ignored); init_postgres.sql then creates supabase_auth_admin (pw root)
+        # which migrations and tests connect as, exactly like the other jobs.
+        run: psql -f hack/init_postgres.sql postgresql://postgres:postgres@localhost:5432/postgres
+      - name: Run migrations
+        run: make migrate_dev
+      - name: Run tests
+        run: go test ./... -p 1 -race -v -count=1
