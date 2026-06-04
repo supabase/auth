@@ -656,6 +656,16 @@ func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
 	})
 	require.NoError(ts.T(), err)
 
+	// register a WebAuthn credential for the user
+	passkey := &models.WebAuthnCredential{
+		ID:           uuid.Must(uuid.NewV4()),
+		UserID:       u.ID,
+		CredentialID: []byte("test-credential-id"),
+		PublicKey:    []byte("test-public-key"),
+		FriendlyName: "test passkey",
+	}
+	require.NoError(ts.T(), ts.API.db.Create(passkey))
+
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"should_soft_delete": true,
@@ -690,6 +700,11 @@ func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
 	for _, identity := range deletedIdentities {
 		require.Empty(ts.T(), identity.IdentityData)
 	}
+
+	// passkeys (WebAuthn credentials) should be hard-deleted
+	deletedPasskeys, err := models.FindWebAuthnCredentialsByUserID(ts.API.db, deletedUser.ID)
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), deletedPasskeys)
 }
 
 func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
