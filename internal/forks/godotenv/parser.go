@@ -32,7 +32,7 @@ func parseBytes(src []byte, out map[string]string) error {
 			return err
 		}
 
-		value, left, err := extractVarValue(left, out)
+		value, left, err := extractVarValue(left)
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ loop:
 }
 
 // extractVarValue extracts variable value and returns rest of slice
-func extractVarValue(src []byte, vars map[string]string) (value string, rest []byte, err error) {
+func extractVarValue(src []byte) (value string, rest []byte, err error) {
 	quote, hasPrefix := hasQuotePrefix(src)
 	if !hasPrefix {
 		// unquoted value - read until end of line
@@ -263,8 +263,6 @@ func expandVariables(v string) string {
 		}
 		if submatch[1] == "\\" || submatch[2] == "(" {
 			return submatch[0][1:]
-		} else if submatch[4] != "" {
-			return submatch[4]
 		}
 		return s
 	})

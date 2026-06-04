@@ -252,17 +252,17 @@ func TestExpanding(t *testing.T) {
 		{
 			"does not expand escaped variables",
 			`FOO="foo\$BAR"`,
-			map[string]string{"FOO": "foo\\$BAR"},
+			map[string]string{"FOO": "foo$BAR"},
 		},
 		{
 			"does not expand escaped variables",
 			`FOO="foo\${BAR}"`,
-			map[string]string{"FOO": "foo\\${BAR}"},
+			map[string]string{"FOO": "foo${BAR}"},
 		},
 		{
 			"does not expand escaped variables",
 			"FOO=test\nBAR=\"foo\\${FOO} ${FOO}\"",
-			map[string]string{"FOO": "test", "BAR": "foo\\${FOO} ${FOO}"},
+			map[string]string{"FOO": "test", "BAR": "foo${FOO} ${FOO}"},
 		},
 	}
 
