@@ -2,7 +2,6 @@
 package confload
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,7 +17,6 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/conf/envparse"
 )
 
 type Option interface {
@@ -33,21 +31,14 @@ func withSystem(sys system) Option {
 	return optionFunc(func(a *Loader) { a.sys = sys })
 }
 
-func WithEnvparse() Option {
-	return optionFunc(func(a *Loader) { a.enableEnvparse = true })
-}
-
 type Loader struct {
 	mu  sync.Mutex
 	sys system
-
-	enableEnvparse bool
 }
 
 func NewLoader(opt ...Option) *Loader {
 	ldr := &Loader{
-		sys:            &osSystem{},
-		enableEnvparse: true,
+		sys: &osSystem{},
 	}
 	for _, o := range opt {
 		o.apply(ldr)
@@ -281,45 +272,11 @@ func (o *Loader) readJSON(r io.Reader, dst map[string]string) error {
 }
 
 func (o *Loader) readDotenv(r io.Reader, dst map[string]string) error {
-	if o.enableEnvparse {
-		return o.readEnvparse(r, dst)
-	}
-
 	m, err := godotenv.Parse(r)
 	if err != nil {
 		return fmt.Errorf("ReadDotenv: %w", err)
 	}
 	maps.Copy(dst, m)
-	return nil
-}
-
-func (o *Loader) readEnvparse(r io.Reader, dst map[string]string) error {
-	buf := new(bytes.Buffer)
-	tee := io.TeeReader(r, buf)
-
-	m1, err := godotenv.Parse(tee)
-	if err != nil {
-		return fmt.Errorf("ReadDotenv: %w", err)
-	}
-	maps.Copy(dst, m1)
-
-	m2, err := envparse.Parse(buf)
-	if err != nil {
-		logrus.WithError(err).Info("envparse rejected input godotenv permitted")
-	}
-
-	for _, k := range slices.Sorted(maps.Keys(m1)) {
-		v1, ok1 := m1[k]
-		v2, ok2 := m2[k]
-		switch {
-		case !ok1:
-			fmt.Printf("+ %s=%q\n", k, v2)
-		case !ok2:
-			fmt.Printf("- %s=%q\n", k, v1)
-		case v1 != v2:
-			fmt.Printf("~ %s: %q -> %q\n", k, v1, v2)
-		}
-	}
 	return nil
 }
 
