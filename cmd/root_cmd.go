@@ -36,7 +36,9 @@ func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
 		panic("context must not be nil")
 	}
 
-	config, err := confload.LoadGlobal(configFile)
+	configLoader := confload.NewLoader()
+
+	config, err := configLoader.Startup(configFile, watchDir)
 	if err != nil {
 		logrus.Fatalf("Failed to load configuration: %+v", err)
 	}
