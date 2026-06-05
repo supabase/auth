@@ -9,6 +9,7 @@ WORKDIR /go/src/github.com/supabase/auth
 
 # Pulling dependencies
 COPY ./Makefile ./go.* ./
+COPY ./internal/forks/godotenv ./internal/forks/godotenv
 RUN make deps
 
 # Building stuff
