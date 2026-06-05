@@ -11,14 +11,14 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 )
 
 const apiTestConfig = "../../hack/test.env"
 
 func TestLogger(t *testing.T) {
 	var logBuffer bytes.Buffer
-	config, err := conf.LoadGlobal(apiTestConfig)
+	config, err := confload.LoadGlobal(apiTestConfig)
 	require.NoError(t, err)
 
 	config.Logging.Level = "info"
@@ -52,7 +52,7 @@ func TestLogger(t *testing.T) {
 
 func TestExcludeHealthFromLogs(t *testing.T) {
 	var logBuffer bytes.Buffer
-	config, err := conf.LoadGlobal(apiTestConfig)
+	config, err := confload.LoadGlobal(apiTestConfig)
 	require.NoError(t, err)
 
 	config.Logging.Level = "info"

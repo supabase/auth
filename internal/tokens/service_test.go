@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -61,7 +62,7 @@ func (ts *RefreshTokenV2Suite) SetupTest() {
 }
 
 func (ts *RefreshTokenV2Suite) config() *conf.GlobalConfiguration {
-	config, err := conf.LoadGlobal("../../hack/test.env")
+	config, err := confload.LoadGlobal("../../hack/test.env")
 	if err != nil {
 		panic("failed to load config")
 	}
@@ -806,7 +807,7 @@ type IDTokenTestSuite struct {
 func TestIDTokenGeneration(t *testing.T) {
 	ts := &IDTokenTestSuite{}
 
-	config, err := conf.LoadGlobal("../../hack/test_asymmetric.env")
+	config, err := confload.LoadGlobal("../../hack/test_asymmetric.env")
 	require.NoError(t, err)
 
 	conn, err := test.SetupDBConnection(config)
@@ -1194,7 +1195,7 @@ func TestAsRedirectURL(t *testing.T) {
 }
 
 func TestGenerateAccessTokenAllowLowAAL(t *testing.T) {
-	config, err := conf.LoadGlobal("../../hack/test.env")
+	config, err := confload.LoadGlobal("../../hack/test.env")
 	require.NoError(t, err)
 
 	conn, err := test.SetupDBConnection(config)

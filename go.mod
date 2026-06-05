@@ -172,3 +172,7 @@ require (
 )
 
 go 1.25.11
+
+replace (
+	github.com/joho/godotenv => ./internal/forks/godotenv
+)

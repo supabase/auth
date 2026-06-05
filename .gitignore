@@ -20,3 +20,4 @@ www/.DS_Store
 www/node_modules
 npm-debug.log
 .data
+tmp

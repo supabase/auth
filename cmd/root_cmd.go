@@ -6,6 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/observability"
 )
 
@@ -35,7 +36,9 @@ func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
 		panic("context must not be nil")
 	}
 
-	config, err := conf.LoadGlobal(configFile)
+	configLoader := confload.NewLoader()
+
+	config, err := configLoader.Startup(configFile, watchDir)
 	if err != nil {
 		logrus.Fatalf("Failed to load configuration: %+v", err)
 	}

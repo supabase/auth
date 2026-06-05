@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"maps"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -171,7 +170,7 @@ func (o *poller) scanEntries(ps *pollerState, ents []fs.DirEntry) {
 		if fi.IsDir() {
 			continue
 		}
-		if !strings.HasSuffix(ent.Name(), ".env") {
+		if !isPathReloadable(ent.Name()) {
 			continue
 		}
 
