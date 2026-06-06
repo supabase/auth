@@ -209,6 +209,21 @@ func TestGlobal(t *testing.T) {
 
 }
 
+func TestGlobalIgnoresInvalidSMTPHeaders(t *testing.T) {
+	t.Setenv("GOTRUE_SITE_URL", "http://localhost:8080")
+	t.Setenv("GOTRUE_DB_DRIVER", "postgres")
+	t.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
+	t.Setenv("GOTRUE_OPERATOR_TOKEN", "token")
+	t.Setenv("GOTRUE_JWT_SECRET", "secret")
+	t.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
+	t.Setenv("GOTRUE_SMTP_HEADERS", `{"X-SES-Message-Tags":["ses:feedback-id-b=\$messageType"]}`)
+
+	gc, err := LoadGlobal("")
+	require.NoError(t, err)
+	require.NotNil(t, gc)
+	require.Nil(t, gc.SMTP.NormalizedHeaders())
+}
+
 func TestLoading(t *testing.T) {
 	os.Clearenv()
 

@@ -514,17 +514,16 @@ type SMTPConfiguration struct {
 }
 
 func (c *SMTPConfiguration) Validate() error {
-	headers := make(map[string][]string)
+	c.normalizedHeaders = nil
 
 	if c.Headers != "" {
+		headers := make(map[string][]string)
 		err := json.Unmarshal([]byte(c.Headers), &headers)
 		if err != nil {
-			return fmt.Errorf("conf: SMTP headers not a map[string][]string format: %w", err)
+			logrus.WithError(err).Warn("Invalid SMTP headers configuration; ignoring SMTP headers")
+		} else if len(headers) > 0 {
+			c.normalizedHeaders = headers
 		}
-	}
-
-	if len(headers) > 0 {
-		c.normalizedHeaders = headers
 	}
 
 	mail := gomail.NewMessage()

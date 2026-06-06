@@ -19,7 +19,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-
 func TestPasswordRequiredCharactersDecode(t *testing.T) {
 	examples := []struct {
 		Value  string
@@ -321,9 +320,20 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
-			val: &SMTPConfiguration{Headers: "invalid"},
-			err: `conf: SMTP headers not a map[string][]string format:` +
-				` invalid character 'i' looking for beginning of value`,
+			val: &SMTPConfiguration{Headers: `{"X-Test":["one","two"]}`},
+			check: func(t *testing.T, v any) {
+				got := (v.(*SMTPConfiguration)).NormalizedHeaders()
+				require.Equal(t, []string{"one", "two"}, got["X-Test"])
+			},
+		},
+		{
+			val: &SMTPConfiguration{
+				Headers:           `{"X-SES-Message-Tags":["ses:feedback-id-b=\$messageType"]}`,
+				normalizedHeaders: map[string][]string{"X-Test": {"stale"}},
+			},
+			check: func(t *testing.T, v any) {
+				require.Nil(t, (v.(*SMTPConfiguration)).NormalizedHeaders())
+			},
 		},
 
 		{
@@ -923,7 +933,6 @@ func TestMethods(t *testing.T) {
 		require.NoError(t, err)
 	}
 }
-
 
 func TestWebAuthnConfigurationValidate(t *testing.T) {
 	// Empty RPID → error
