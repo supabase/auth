@@ -292,6 +292,9 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
+		if url == "" {
+			return apierrors.NewInternalServerError("Error generating email action link").WithInternalError(errors.New("email action link is empty"))
+		}
 		return nil
 	})
 	if err != nil {
