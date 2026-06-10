@@ -111,6 +111,12 @@ func (c *SAMLConfiguration) PopulateFields(externalURL string) error {
 		if err := c.populateNextKey(certTemplate); err != nil {
 			return err
 		}
+	} else {
+		// envconfig allocates zero-value structs for nil pointer fields; reset
+		// them explicitly so CertificateNext == nil when no next key is set.
+		c.RSAPrivateKeyNext = nil
+		c.RSAPublicKeyNext = nil
+		c.CertificateNext = nil
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/xml"
 	"net/http"
 	"net/url"
@@ -92,7 +93,37 @@ func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		// During key rotation, advertise the next certificate so IdPs can
+		// cache it before we promote it to primary.
+		if a.config.SAML.CertificateNext != nil {
+			nextCertData := base64.StdEncoding.EncodeToString(a.config.SAML.CertificateNext.Raw)
+			nextKD := saml.KeyDescriptor{
+				Use: "signing",
+				KeyInfo: saml.KeyInfo{
+					X509Data: saml.X509Data{
+						X509Certificates: []saml.X509Certificate{
+							{Data: nextCertData},
+						},
+					},
+				},
+			}
+			keyDescriptors = append(keyDescriptors, nextKD)
+			if a.config.SAML.AllowEncryptedAssertions {
+				encKD := nextKD
+				encKD.Use = "encryption"
+				keyDescriptors = append(keyDescriptors, encKD)
+			}
+		}
+
 		spd.KeyDescriptors = keyDescriptors
+	}
+
+	// Reduce cache aggressiveness during key rotation so IdPs and CDNs pick
+	// up the updated metadata before we promote the next key.
+	cacheControl := "public, max-age=600"
+	if a.config.SAML.CertificateNext != nil {
+		metadata.CacheDuration = time.Hour
+		cacheControl = "public, max-age=60"
 	}
 
 	metadataXML, err := xml.Marshal(metadata)
@@ -101,7 +132,7 @@ func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/xml")
-	w.Header().Set("Cache-Control", "public, max-age=600") // cache at CDN for 10 minutes
+	w.Header().Set("Cache-Control", cacheControl)
 
 	if r.FormValue("download") == "true" {
 		w.Header().Set("Content-Disposition", "attachment; filename=\"metadata.xml\"")
