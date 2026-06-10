@@ -26,10 +26,23 @@ func TestGlobal(t *testing.T) {
 	gc, err := LoadGlobal("")
 	require.NoError(t, err)
 	assert.Equal(t, true, gc.SMTP.LoggingEnabled)
-	assert.Equal(t, "project_ref", gc.SMTP.NormalizedHeaders()["X-PM-Metadata-project-ref"][0])
 	require.NotNil(t, gc)
 	assert.Equal(t, "X-Request-ID", gc.API.RequestIDHeader)
 	assert.Equal(t, "pg-functions://postgres/auth/count_failed_attempts", gc.Hook.MFAVerificationAttempt.URI)
+
+	{
+		hdrs := gc.SMTP.NormalizedHeaders()
+		require.NoError(t, err)
+		assert.Equal(t, 1, len(hdrs["X-PM-Metadata-project-ref"]))
+		assert.Equal(t, "project_ref", hdrs["X-PM-Metadata-project-ref"][0])
+	}
+
+	{
+		hdrs := gc.Mailer.GetEmailValidationServiceHeaders()
+		require.NoError(t, err)
+		assert.Equal(t, 1, len(hdrs["apikey"]))
+		assert.Equal(t, "test", hdrs["apikey"][0])
+	}
 
 	{
 		os.Setenv("GOTRUE_RATE_LIMIT_EMAIL_SENT", "0/1h")
@@ -58,12 +71,6 @@ func TestGlobal(t *testing.T) {
 		gc, err = LoadGlobal("")
 		require.NoError(t, err)
 		assert.Equal(t, true, gc.Mailer.EmailBackgroundSending)
-	}
-
-	{
-		hdrs := gc.Mailer.GetEmailValidationServiceHeaders()
-		assert.Equal(t, 1, len(hdrs["apikey"]))
-		assert.Equal(t, "test", hdrs["apikey"][0])
 	}
 
 	{
