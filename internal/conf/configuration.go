@@ -534,6 +534,9 @@ func (c *SMTPConfiguration) buildNormalizedHeaders() cachedValue[map[string][]st
 		logrus.WithError(err).Warn(err)
 		return makeCachedValue(zero, err)
 	}
+	if len(val) == 0 {
+		return makeCachedValue(zero, err)
+	}
 	return makeCachedValue(val, nil)
 }
 
@@ -616,6 +619,9 @@ func (c *MailerConfiguration) buildServiceHeaders() cachedValue[map[string][]str
 		err = fmt.Errorf(
 			"conf: mailer validation headers not a map[string][]string format: %w", err)
 		logrus.WithError(err).Warn(err)
+		return makeCachedValue(zero, err)
+	}
+	if len(val) == 0 {
 		return makeCachedValue(zero, err)
 	}
 	return makeCachedValue(val, nil)
