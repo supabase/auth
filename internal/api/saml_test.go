@@ -10,11 +10,11 @@ import (
 
 	"github.com/crewjam/saml"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 )
 
 func TestSAMLMetadataWithAPI(t *tst.T) {
-	config, err := conf.LoadGlobal(apiTestConfig)
+	config, err := confload.LoadGlobal(apiTestConfig)
 	require.NoError(t, err)
 	config.API.ExternalURL = "https://projectref.supabase.co/auth/v1/"
 	config.SAML.Enabled = true

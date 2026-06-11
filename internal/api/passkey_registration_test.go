@@ -364,3 +364,83 @@ func (ts *PasskeyTestSuite) TestRegisterVerifySSOUser() {
 
 	ts.Equal(http.StatusUnprocessableEntity, w.Code)
 }
+
+// TestRegistrationOptionsBlockedAtAAL1WhenMFAEnabled verifies that a user enrolled
+// in a verified MFA factor cannot get registration options from an AAL1 session.
+func (ts *PasskeyTestSuite) TestRegistrationOptionsBlockedAtAAL1WhenMFAEnabled() {
+	ts.enrollVerifiedFactor(ts.TestUser)
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
+
+	ts.Equal(http.StatusForbidden, w.Code)
+	var errResp map[string]any
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResp))
+	ts.Equal("insufficient_aal", errResp["error_code"])
+}
+
+// TestRegistrationVerifyBlockedAtAAL1WhenMFAEnabled verifies that the AAL2 gate on
+// verify runs before the registration challenge is consumed, so a blocked request
+// leaves the challenge intact.
+func (ts *PasskeyTestSuite) TestRegistrationVerifyBlockedAtAAL1WhenMFAEnabled() {
+	ts.enrollVerifiedFactor(ts.TestUser)
+
+	challenge := models.NewWebAuthnChallenge(
+		&ts.TestUser.ID,
+		models.WebAuthnChallengeTypeRegistration,
+		dummySessionData(),
+		time.Now().Add(5*time.Minute),
+	)
+	require.NoError(ts.T(), ts.API.db.Create(challenge))
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
+		"challenge_id": challenge.ID.String(),
+		"credential":   map[string]any{},
+	}, withBearerToken(token))
+
+	ts.Equal(http.StatusForbidden, w.Code)
+	var errResp map[string]any
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResp))
+	ts.Equal("insufficient_aal", errResp["error_code"])
+
+	// The challenge must not have been consumed by a request that failed the gate.
+	_, err := models.FindWebAuthnChallengeByID(ts.API.db, challenge.ID)
+	require.NoError(ts.T(), err)
+}
+
+// TestRegisterPasskeyAAL2HappyPathWhenMFAEnabled verifies that a user with a
+// verified MFA factor who has stepped up to AAL2 can still register a passkey
+// end-to-end (both the options and verify endpoints pass the gate).
+func (ts *PasskeyTestSuite) TestRegisterPasskeyAAL2HappyPathWhenMFAEnabled() {
+	f := ts.enrollVerifiedFactor(ts.TestUser)
+	ts.elevateSessionToAAL2(ts.TestSession, f.ID)
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+
+	// Step 1: options succeed at AAL2
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
+	ts.Require().Equal(http.StatusOK, w.Code)
+
+	var optionsResp PasskeyRegistrationOptionsResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&optionsResp))
+
+	// Step 2: simulate the authenticator creating a credential
+	authenticator := &virtualAuthenticator{
+		rpID:   ts.Config.WebAuthn.RPID,
+		origin: ts.Config.WebAuthn.RPOrigins[0],
+	}
+	credResp, err := authenticator.createCredential(optionsResp.Options)
+	require.NoError(ts.T(), err)
+
+	// Step 3: verify succeeds at AAL2
+	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
+		"challenge_id": optionsResp.ChallengeID,
+		"credential":   json.RawMessage(credResp.JSON),
+	}, withBearerToken(token))
+	ts.Require().Equal(http.StatusOK, w.Code)
+
+	var passkeyResp PasskeyMetadataResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&passkeyResp))
+	ts.NotEmpty(passkeyResp.ID)
+}

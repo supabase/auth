@@ -19,6 +19,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -28,7 +29,7 @@ import (
 
 func TestValidateRequestOrigin(t *testing.T) {
 	// Setup test configuration
-	globalConfig, err := conf.LoadGlobal(oauthServerTestConfig)
+	globalConfig, err := confload.LoadGlobal(oauthServerTestConfig)
 	require.NoError(t, err)
 
 	// Set up test site URL for validation
@@ -135,7 +136,7 @@ func TestValidateRequestOrigin(t *testing.T) {
 }
 
 func TestValidateRequestOriginEdgeCases(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(oauthServerTestConfig)
+	globalConfig, err := confload.LoadGlobal(oauthServerTestConfig)
 	require.NoError(t, err)
 
 	globalConfig.SiteURL = "https://example.com"
@@ -208,7 +209,7 @@ type OAuthAuthorizeTestSuite struct {
 }
 
 func TestOAuthAuthorize(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(oauthServerTestConfig)
+	globalConfig, err := confload.LoadGlobal(oauthServerTestConfig)
 	require.NoError(t, err)
 
 	conn, err := test.SetupDBConnection(globalConfig)
