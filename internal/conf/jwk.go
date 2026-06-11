@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -135,10 +134,16 @@ func GetSigningJwk(config *JWTConfiguration) (jwk.Key, error) {
 	return nil, fmt.Errorf("no signing key found")
 }
 
-var kmsClients sync.Map // map[string]func() (*kms.Client, error)
+func getSigningKey(k jwk.Key) (func(context.Context) (any, error), error) {
+	if value, isKMS := k.Get("aws:kms:arn"); isKMS && k.KeyOps()[0] == jwk.KeyOpSign {
+		kmsARN, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("conf: jwk key has aws:kms:arn but is not a string %v", value)
+		}
 
-func getKMSClient(region string) (*kms.Client, error) {
-	fn, _ := kmsClients.LoadOrStore(region, sync.OnceValues(func() (*kms.Client, error) {
+		parts := strings.SplitN(kmsARN, ":", 5)
+		region := parts[3]
+
 		cfg, err := config.LoadDefaultConfig(
 			context.Background(),
 			config.WithRegion(region),
@@ -147,24 +152,7 @@ func getKMSClient(region string) (*kms.Client, error) {
 			return nil, err
 		}
 
-		return kms.NewFromConfig(cfg), nil
-	}))
-
-	return fn.(func() (*kms.Client, error))()
-}
-
-func GetSigningKey(ctx context.Context, k jwk.Key) (any, error) {
-	if value, isKMS := k.Get("aws:kms:arn"); isKMS && k.KeyOps()[0] == jwk.KeyOpSign {
-		kmsARN, ok := value.(string)
-		if !ok {
-			return nil, fmt.Errorf("conf: jwk key has aws:kms:arn but is not a string %v", value)
-		}
-
-		parts := strings.SplitN(kmsARN, ":", 5)
-		kmsClient, err := getKMSClient(parts[3])
-		if err != nil {
-			return nil, err
-		}
+		kmsClient := kms.NewFromConfig(cfg)
 
 		pub, err := k.PublicKey()
 		if err != nil {
@@ -188,13 +176,16 @@ func GetSigningKey(ctx context.Context, k jwk.Key) (any, error) {
 			return nil, err
 		}
 
-		return &awskmsjwk.RS256Key{
-			Ctx: ctx,
-			KMS: kmsClient,
+		return func(ctx context.Context) (any, error) {
+			return &awskmsjwk.RS256Key{
+				Ctx: ctx,
+				KMS: kmsClient,
 
-			KeyID: kmsARN,
-			Raw:   raw,
+				KeyID: kmsARN,
+				Raw:   raw,
+			}, nil
 		}, nil
+
 	}
 
 	var key any
@@ -202,7 +193,9 @@ func GetSigningKey(ctx context.Context, k jwk.Key) (any, error) {
 		return nil, err
 	}
 
-	return key, nil
+	return func(ctx context.Context) (any, error) {
+		return key, nil
+	}, nil
 }
 
 func GetSigningAlg(k jwk.Key) jwt.SigningMethod {
@@ -233,8 +226,8 @@ func GetSigningAlg(k jwk.Key) jwt.SigningMethod {
 
 func FindPublicKeyByKid(ctx context.Context, kid string, config *JWTConfiguration) (any, error) {
 	if k, ok := config.Keys[kid]; ok {
-		key, err := GetSigningKey(ctx, k.PublicKey)
-		if err != nil {
+		var key any
+		if err := k.PublicKey.Raw(&key); err != nil {
 			return nil, err
 		}
 		return key, nil

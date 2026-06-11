@@ -972,7 +972,7 @@ func SignJWT(ctx context.Context, config *conf.JWTConfiguration, claims jwt.Clai
 	}
 	// this serializes the aud claim to a string
 	jwt.MarshalSingleStringAsArray = false
-	signingKey, err := conf.GetSigningKey(ctx, signingJwk)
+	signingKey, err := config.SigningKey(ctx)
 	if err != nil {
 		return "", err
 	}
