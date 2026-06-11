@@ -240,3 +240,136 @@ func TestOIDCProviderCache_TTLPassedThrough(t *testing.T) {
 	cache := NewOIDCProviderCache(30 * time.Minute)
 	assert.Equal(t, 30*time.Minute, cache.ttl)
 }
+
+// newTestOIDCServerCustomPath creates a test server that serves discovery at a custom path.
+func newTestOIDCServerCustomPath(fetchCount *atomic.Int64, path string) *httptest.Server {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case path:
+			if fetchCount != nil {
+				fetchCount.Add(1)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"issuer":                                server.URL,
+				"authorization_endpoint":                server.URL + "/authorize",
+				"token_endpoint":                        server.URL + "/token",
+				"userinfo_endpoint":                     server.URL + "/userinfo",
+				"jwks_uri":                              server.URL + "/jwks",
+				"id_token_signing_alg_values_supported": []string{"RS256", "ES256", "HS256"},
+			})
+		case "/jwks":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"keys": []interface{}{},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	return server
+}
+
+func TestOIDCProviderCache_GetProviderFromURL_CustomPath(t *testing.T) {
+	var fetchCount atomic.Int64
+	server := newTestOIDCServerCustomPath(&fetchCount, "/my-discovery")
+	defer server.Close()
+
+	cache := NewOIDCProviderCache(time.Hour)
+
+	p, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/my-discovery")
+	require.NoError(t, err)
+	require.NotNil(t, p)
+
+	assert.Equal(t, int64(1), fetchCount.Load())
+	assert.Equal(t, server.URL+"/authorize", p.Endpoint().AuthURL)
+	assert.Equal(t, server.URL+"/token", p.Endpoint().TokenURL)
+	assert.Equal(t, server.URL+"/userinfo", p.UserInfoEndpoint())
+}
+
+func TestOIDCProviderCache_GetProviderFromURL_IssuerMismatch(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/discovery" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"issuer":                 "https://wrong-issuer.example.com",
+				"authorization_endpoint": server.URL + "/authorize",
+				"token_endpoint":         server.URL + "/token",
+				"jwks_uri":               server.URL + "/jwks",
+			})
+		}
+	}))
+	defer server.Close()
+
+	cache := NewOIDCProviderCache(time.Hour)
+
+	_, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/discovery")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "issuer mismatch")
+}
+
+func TestOIDCProviderCache_GetProviderFromURL_CacheHit(t *testing.T) {
+	var fetchCount atomic.Int64
+	server := newTestOIDCServerCustomPath(&fetchCount, "/custom-discovery")
+	defer server.Close()
+
+	cache := NewOIDCProviderCache(time.Hour)
+
+	p1, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/custom-discovery")
+	require.NoError(t, err)
+	require.NotNil(t, p1)
+	assert.Equal(t, int64(1), fetchCount.Load())
+
+	// Second call should hit cache — no additional HTTP request
+	p2, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/custom-discovery")
+	require.NoError(t, err)
+	require.NotNil(t, p2)
+	assert.Equal(t, int64(1), fetchCount.Load())
+
+	assert.Equal(t, p1, p2)
+}
+
+func TestOIDCProviderCache_GetProviderFromURL_StaleOnError(t *testing.T) {
+	var fetchCount atomic.Int64
+	server := newTestOIDCServerCustomPath(&fetchCount, "/custom-discovery")
+
+	now := time.Now()
+	cache := NewOIDCProviderCache(time.Hour)
+	cache.now = func() time.Time { return now }
+
+	// Prime the cache
+	p1, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/custom-discovery")
+	require.NoError(t, err)
+	require.NotNil(t, p1)
+	assert.Equal(t, int64(1), fetchCount.Load())
+
+	// Advance time past TTL, then close the server
+	now = now.Add(2 * time.Hour)
+	server.Close()
+
+	// Should return stale entry rather than error
+	p2, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/custom-discovery")
+	require.NoError(t, err)
+	assert.Equal(t, p1, p2)
+}
+
+func TestOIDCProviderCache_GetProviderFromURL_InvalidateWorks(t *testing.T) {
+	var fetchCount atomic.Int64
+	server := newTestOIDCServerCustomPath(&fetchCount, "/custom-discovery")
+	defer server.Close()
+
+	cache := NewOIDCProviderCache(time.Hour)
+
+	_, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/custom-discovery")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), fetchCount.Load())
+
+	// Invalidate by issuer (not discoveryURL)
+	cache.Invalidate(server.URL)
+
+	_, err = cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/custom-discovery")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), fetchCount.Load())
+}

@@ -765,7 +765,6 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	}
 
 	// Create custom OIDC provider instance
-	// oidc.NewProvider() will automatically fetch discovery document
 	p, err := provider.NewCustomOIDCProvider(
 		ctx,
 		customProvider.ClientID,
@@ -773,6 +772,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		redirectURL,
 		scopeList,
 		*customProvider.Issuer,
+		customProvider.GetDiscoveryURL(),
 		customProvider.PKCEEnabled,
 		customProvider.AcceptableClientIDs,
 		customProvider.AttributeMapping,
