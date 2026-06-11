@@ -49,6 +49,27 @@ func NewOIDCProviderCache(ttl time.Duration) *OIDCProviderCache {
 	}
 }
 
+// getEntry returns the cached entry for issuer, if any. It holds the read lock
+// only for the map access and releases it via defer, so a panic in a future
+// caller can't leave the mutex held and deadlock the auth server.
+func (c *OIDCProviderCache) getEntry(issuer string) (*oidcCacheEntry, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	entry, ok := c.cache[issuer]
+	return entry, ok
+}
+
+// putEntry stores provider for issuer, stamped with the current time. The write
+// lock is released via defer for the same panic-safety reason as getEntry.
+func (c *OIDCProviderCache) putEntry(issuer string, provider *oidc.Provider) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache[issuer] = &oidcCacheEntry{
+		provider:  provider,
+		fetchedAt: c.now(),
+	}
+}
+
 // GetProvider returns a cached *oidc.Provider for the given issuer, fetching
 // it via oidc.NewProvider if not cached or expired. Concurrent requests for
 // the same issuer are deduplicated via singleflight.
@@ -56,12 +77,9 @@ func (c *OIDCProviderCache) GetProvider(ctx context.Context, issuer string) (*oi
 	now := c.now()
 
 	// Fast path: read-lock check
-	c.mu.RLock()
-	if entry, ok := c.cache[issuer]; ok && now.Sub(entry.fetchedAt) < c.ttl {
-		c.mu.RUnlock()
+	if entry, ok := c.getEntry(issuer); ok && now.Sub(entry.fetchedAt) < c.ttl {
 		return entry.provider, nil
 	}
-	c.mu.RUnlock()
 
 	// Slow path: singleflight fetch
 	val, err, _ := c.sf.Do(issuer, func() (interface{}, error) {
@@ -70,24 +88,15 @@ func (c *OIDCProviderCache) GetProvider(ctx context.Context, issuer string) (*oi
 			return nil, err
 		}
 
-		c.mu.Lock()
-		c.cache[issuer] = &oidcCacheEntry{
-			provider:  p,
-			fetchedAt: c.now(),
-		}
-		c.mu.Unlock()
-
+		c.putEntry(issuer, p)
 		return p, nil
 	})
 	if err != nil {
 		// Serve stale entry if available — keeps auth working during
 		// transient network failures or issuer outages.
-		c.mu.RLock()
-		if entry, ok := c.cache[issuer]; ok {
-			c.mu.RUnlock()
+		if entry, ok := c.getEntry(issuer); ok {
 			return entry.provider, nil
 		}
-		c.mu.RUnlock()
 		return nil, err
 	}
 
@@ -101,13 +110,12 @@ func (c *OIDCProviderCache) GetProvider(ctx context.Context, issuer string) (*oi
 func (c *OIDCProviderCache) GetProviderFromURL(ctx context.Context, issuer, discoveryURL string) (*oidc.Provider, error) {
 	now := c.now()
 
-	c.mu.RLock()
-	if entry, ok := c.cache[issuer]; ok && now.Sub(entry.fetchedAt) < c.ttl {
-		c.mu.RUnlock()
+	// Fast path: read-lock check
+	if entry, ok := c.getEntry(issuer); ok && now.Sub(entry.fetchedAt) < c.ttl {
 		return entry.provider, nil
 	}
-	c.mu.RUnlock()
 
+	// Slow path: singleflight fetch
 	val, err, _ := c.sf.Do(issuer, func() (interface{}, error) {
 		doc, err := utilities.FetchAndValidateOIDCDiscovery(ctx, discoveryURL, issuer)
 		if err != nil {
@@ -130,22 +138,15 @@ func (c *OIDCProviderCache) GetProviderFromURL(ctx context.Context, issuer, disc
 			Algorithms:  algs,
 		}).NewProvider(ctx)
 
-		c.mu.Lock()
-		c.cache[issuer] = &oidcCacheEntry{
-			provider:  p,
-			fetchedAt: c.now(),
-		}
-		c.mu.Unlock()
-
+		c.putEntry(issuer, p)
 		return p, nil
 	})
 	if err != nil {
-		c.mu.RLock()
-		if entry, ok := c.cache[issuer]; ok {
-			c.mu.RUnlock()
+		// Serve stale entry if available — keeps auth working during
+		// transient network failures or issuer outages.
+		if entry, ok := c.getEntry(issuer); ok {
 			return entry.provider, nil
 		}
-		c.mu.RUnlock()
 		return nil, err
 	}
 
