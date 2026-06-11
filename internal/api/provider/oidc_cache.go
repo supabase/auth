@@ -2,20 +2,13 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/sync/singleflight"
 )
-
-// oidcDiscoveryHTTPClient bounds the discovery fetch so a slow or hung
-// upstream cannot wedge an auth request indefinitely. JWKS fetches use
-// go-oidc's own client and are unaffected.
-var oidcDiscoveryHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // oidcSupportedAlgorithms mirrors the set that go-oidc's discovery path filters
 // against internally. We duplicate it here because the manual ProviderConfig
@@ -27,15 +20,6 @@ var oidcSupportedAlgorithms = map[string]bool{
 	"ES256": true, "ES384": true, "ES512": true,
 	"PS256": true, "PS384": true, "PS512": true,
 	"EdDSA": true,
-}
-
-type oidcDiscoveryDoc struct {
-	Issuer      string   `json:"issuer"`
-	AuthURL     string   `json:"authorization_endpoint"`
-	TokenURL    string   `json:"token_endpoint"`
-	JWKSURL     string   `json:"jwks_uri"`
-	UserInfoURL string   `json:"userinfo_endpoint"`
-	Algorithms  []string `json:"id_token_signing_alg_values_supported"`
 }
 
 type oidcCacheEntry struct {
@@ -125,31 +109,13 @@ func (c *OIDCProviderCache) GetProviderFromURL(ctx context.Context, issuer, disc
 	c.mu.RUnlock()
 
 	val, err, _ := c.sf.Do(issuer, func() (interface{}, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil)
+		doc, err := utilities.FetchAndValidateOIDCDiscovery(ctx, discoveryURL, issuer)
 		if err != nil {
-			return nil, fmt.Errorf("oidc: failed to build discovery request: %w", err)
-		}
-		resp, err := oidcDiscoveryHTTPClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("oidc: discovery request to %s failed: %w", discoveryURL, err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("oidc: discovery request to %s returned %s", discoveryURL, resp.Status)
-		}
-
-		var doc oidcDiscoveryDoc
-		if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
-			return nil, fmt.Errorf("oidc: failed to decode discovery document from %s: %w", discoveryURL, err)
-		}
-
-		if doc.Issuer != issuer {
-			return nil, fmt.Errorf("oidc: issuer mismatch, expected %q got %q", issuer, doc.Issuer)
+			return nil, err
 		}
 
 		var algs []string
-		for _, a := range doc.Algorithms {
+		for _, a := range doc.IDTokenSigningAlgValuesSupported {
 			if oidcSupportedAlgorithms[a] {
 				algs = append(algs, a)
 			}
@@ -157,10 +123,10 @@ func (c *OIDCProviderCache) GetProviderFromURL(ctx context.Context, issuer, disc
 
 		p := (&oidc.ProviderConfig{
 			IssuerURL:   doc.Issuer,
-			AuthURL:     doc.AuthURL,
-			TokenURL:    doc.TokenURL,
-			UserInfoURL: doc.UserInfoURL,
-			JWKSURL:     doc.JWKSURL,
+			AuthURL:     doc.AuthorizationEndpoint,
+			TokenURL:    doc.TokenEndpoint,
+			UserInfoURL: doc.UserinfoEndpoint,
+			JWKSURL:     doc.JwksURI,
 			Algorithms:  algs,
 		}).NewProvider(ctx)
 

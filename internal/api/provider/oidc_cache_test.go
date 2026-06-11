@@ -12,7 +12,33 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/auth/internal/utilities"
 )
+
+// installPlainHTTPDiscoveryFetcher swaps the utility's HTTP fetcher to a
+// plain (non-SSRF-validated) one so httptest loopback servers work, and
+// restores the production default when the test ends.
+func installPlainHTTPDiscoveryFetcher(t *testing.T) {
+	t.Helper()
+	client := &http.Client{Timeout: 5 * time.Second}
+	t.Cleanup(utilities.SetOIDCDiscoveryHTTPFetcherForTest(
+		func(ctx context.Context, discoveryURL string) (*http.Response, error) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil)
+			if err != nil {
+				return nil, err
+			}
+			return client.Do(req)
+		},
+	))
+}
+
+// newTestOIDCProviderCache builds a cache and installs the plain HTTP
+// discovery fetcher for the test's lifetime so httptest loopback servers work.
+func newTestOIDCProviderCache(t *testing.T, ttl time.Duration) *OIDCProviderCache {
+	t.Helper()
+	installPlainHTTPDiscoveryFetcher(t)
+	return NewOIDCProviderCache(ttl)
+}
 
 // newTestOIDCServer creates a test OIDC discovery server that counts fetches.
 func newTestOIDCServer(fetchCount *atomic.Int64) *httptest.Server {
@@ -276,7 +302,7 @@ func TestOIDCProviderCache_GetProviderFromURL_CustomPath(t *testing.T) {
 	server := newTestOIDCServerCustomPath(&fetchCount, "/my-discovery")
 	defer server.Close()
 
-	cache := NewOIDCProviderCache(time.Hour)
+	cache := newTestOIDCProviderCache(t, time.Hour)
 
 	p, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/my-discovery")
 	require.NoError(t, err)
@@ -303,7 +329,7 @@ func TestOIDCProviderCache_GetProviderFromURL_IssuerMismatch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cache := NewOIDCProviderCache(time.Hour)
+	cache := newTestOIDCProviderCache(t, time.Hour)
 
 	_, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/discovery")
 	require.Error(t, err)
@@ -315,7 +341,7 @@ func TestOIDCProviderCache_GetProviderFromURL_CacheHit(t *testing.T) {
 	server := newTestOIDCServerCustomPath(&fetchCount, "/custom-discovery")
 	defer server.Close()
 
-	cache := NewOIDCProviderCache(time.Hour)
+	cache := newTestOIDCProviderCache(t, time.Hour)
 
 	p1, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/custom-discovery")
 	require.NoError(t, err)
@@ -336,7 +362,7 @@ func TestOIDCProviderCache_GetProviderFromURL_StaleOnError(t *testing.T) {
 	server := newTestOIDCServerCustomPath(&fetchCount, "/custom-discovery")
 
 	now := time.Now()
-	cache := NewOIDCProviderCache(time.Hour)
+	cache := newTestOIDCProviderCache(t, time.Hour)
 	cache.now = func() time.Time { return now }
 
 	// Prime the cache
@@ -360,7 +386,7 @@ func TestOIDCProviderCache_GetProviderFromURL_InvalidateWorks(t *testing.T) {
 	server := newTestOIDCServerCustomPath(&fetchCount, "/custom-discovery")
 	defer server.Close()
 
-	cache := NewOIDCProviderCache(time.Hour)
+	cache := newTestOIDCProviderCache(t, time.Hour)
 
 	_, err := cache.GetProviderFromURL(context.Background(), server.URL, server.URL+"/custom-discovery")
 	require.NoError(t, err)
