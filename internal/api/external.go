@@ -743,6 +743,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 			customProvider.AcceptableClientIDs,
 			customProvider.AttributeMapping,
 			customProvider.AuthorizationParams,
+			customProvider.CustomClaimsAllowlist,
 		)
 
 		// Build provider configuration
@@ -776,6 +777,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		customProvider.AcceptableClientIDs,
 		customProvider.AttributeMapping,
 		customProvider.AuthorizationParams,
+		customProvider.CustomClaimsAllowlist,
 		a.oidcCache,
 	)
 	if err != nil {
