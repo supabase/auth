@@ -529,13 +529,12 @@ func (c *SMTPConfiguration) buildNormalizedHeaders() cachedValue[map[string][]st
 	val := make(map[string][]string)
 	err := json.Unmarshal([]byte(c.Headers), &val)
 	if err != nil {
-		err = fmt.Errorf(
-			"conf: SMTP headers not a map[string][]string format: %w", err)
-		logrus.WithError(err).Warn(err)
+		const msg = "conf: SMTP headers configuration is invalid, ignoring"
+		logrus.WithError(err).Warn(msg)
 		return makeCachedValue(zero, err)
 	}
 	if len(val) == 0 {
-		return makeCachedValue(zero, err)
+		return makeCachedValue(zero, nil)
 	}
 	return makeCachedValue(val, nil)
 }
@@ -616,13 +615,12 @@ func (c *MailerConfiguration) buildServiceHeaders() cachedValue[map[string][]str
 	val := make(map[string][]string)
 	err := json.Unmarshal([]byte(c.EmailValidationServiceHeaders), &val)
 	if err != nil {
-		err = fmt.Errorf(
-			"conf: mailer validation headers not a map[string][]string format: %w", err)
-		logrus.WithError(err).Warn(err)
+		const msg = "conf: mailer validation headers configuration is invalid, ignoring"
+		logrus.WithError(err).Warn(msg)
 		return makeCachedValue(zero, err)
 	}
 	if len(val) == 0 {
-		return makeCachedValue(zero, err)
+		return makeCachedValue(zero, nil)
 	}
 	return makeCachedValue(val, nil)
 }
@@ -636,9 +634,8 @@ func (c *MailerConfiguration) buildBlockedMXRecords() cachedValue[map[string]boo
 	var blockedMXArray []string
 	err := json.Unmarshal([]byte(c.EmailValidationBlockedMX), &blockedMXArray)
 	if err != nil {
-		err = fmt.Errorf(
-			"conf: blocked mx records not a valid JSON array: %w", err)
-		logrus.WithError(err).Warn(err)
+		const msg = "conf: blocked mx records configuration is invalid, ignoring"
+		logrus.WithError(err).Warn(msg)
 		return makeCachedValue(zero, err)
 	}
 
