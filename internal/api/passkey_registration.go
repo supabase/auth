@@ -43,10 +43,15 @@ func (a *API) PasskeyRegistrationOptions(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	config := a.config
 	user := getUser(ctx)
+	session := getSession(ctx)
 	db := a.db.WithContext(ctx)
 
 	if user.IsSSOUser {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeValidationFailed, "SSO users cannot register passkeys")
+	}
+
+	if err := requirePasskeyManagementAAL(user, session); err != nil {
+		return err
 	}
 
 	// Check passkey limit
@@ -78,7 +83,7 @@ func (a *API) PasskeyRegistrationOptions(w http.ResponseWriter, r *http.Request)
 	}
 
 	webAuthnUser := newWebAuthnUser(user, existingCreds)
-	options, session, err := webAuthn.BeginRegistration(webAuthnUser, webauthn.WithExclusions(excludeList))
+	options, webAuthnSessionData, err := webAuthn.BeginRegistration(webAuthnUser, webauthn.WithExclusions(excludeList))
 	if err != nil {
 		return apierrors.NewInternalServerError("Failed to generate WebAuthn registration options").WithInternalError(err)
 	}
@@ -87,7 +92,7 @@ func (a *API) PasskeyRegistrationOptions(w http.ResponseWriter, r *http.Request)
 	challenge := models.NewWebAuthnChallenge(
 		&user.ID,
 		models.WebAuthnChallengeTypeRegistration,
-		&models.WebAuthnSessionData{SessionData: session},
+		&models.WebAuthnSessionData{SessionData: webAuthnSessionData},
 		expiresAt,
 	)
 
@@ -108,10 +113,15 @@ func (a *API) PasskeyRegistrationVerify(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	config := a.config
 	user := getUser(ctx)
+	session := getSession(ctx)
 	db := a.db.WithContext(ctx)
 
 	if user.IsSSOUser {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeValidationFailed, "SSO users cannot register passkeys")
+	}
+
+	if err := requirePasskeyManagementAAL(user, session); err != nil {
+		return err
 	}
 
 	params := &PasskeyRegistrationVerifyParams{}

@@ -10,7 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/apierrors"
-	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/observability"
 )
 
@@ -71,7 +71,7 @@ func TestHandleResponseErrorWithHTTPError(t *testing.T) {
 
 func TestRecoverer(t *testing.T) {
 	var logBuffer bytes.Buffer
-	config, err := conf.LoadGlobal(apiTestConfig)
+	config, err := confload.LoadGlobal(apiTestConfig)
 	require.NoError(t, err)
 	require.NoError(t, observability.ConfigureLogging(&config.Logging))
 

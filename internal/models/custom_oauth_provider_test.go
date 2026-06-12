@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
 )
@@ -24,7 +25,7 @@ func (ts *CustomOAuthProviderTestSuite) SetupTest() {
 }
 
 func TestCustomOAuthProvider(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
+	globalConfig, err := confload.LoadGlobal(modelsTestConfig)
 	require.NoError(t, err)
 
 	conn, err := test.SetupDBConnection(globalConfig)
@@ -448,6 +449,41 @@ func (ts *CustomOAuthProviderTestSuite) TestClientSecretRoundTripThroughDB() {
 	decrypted, err := found.GetClientSecret(ts.config.Security.DBEncryption)
 	require.NoError(ts.T(), err)
 	assert.Equal(ts.T(), secret, decrypted)
+}
+
+func TestGetDiscoveryURLStripsTrailingSlashes(t *testing.T) {
+	tests := []struct {
+		name     string
+		issuer   string
+		expected string
+	}{
+		{
+			name:     "no trailing slash",
+			issuer:   "https://example.com",
+			expected: "https://example.com/.well-known/openid-configuration",
+		},
+		{
+			name:     "single trailing slash",
+			issuer:   "https://example.com/",
+			expected: "https://example.com/.well-known/openid-configuration",
+		},
+		{
+			name:     "multiple trailing slashes",
+			issuer:   "https://example.com///",
+			expected: "https://example.com/.well-known/openid-configuration",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issuer := tt.issuer
+			provider := &CustomOAuthProvider{
+				ProviderType: ProviderTypeOIDC,
+				Issuer:       &issuer,
+			}
+			assert.Equal(t, tt.expected, provider.GetDiscoveryURL())
+		})
+	}
 }
 
 // Helper functions

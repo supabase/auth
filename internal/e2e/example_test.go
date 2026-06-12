@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/e2e"
 )
 
 func Example_config() {
 	testCfgPath := "../../hack/test.env"
-	testCfg := e2e.Must(conf.LoadGlobal(testCfgPath))
+	testCfg := e2e.Must(confload.LoadGlobal(testCfgPath))
 	globalCfg := e2e.Must(e2e.Config())
 
 	if reflect.DeepEqual(testCfg, globalCfg) {

@@ -552,6 +552,10 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 			if terr := models.DeleteFactorsByUserId(tx, user.ID); terr != nil {
 				return apierrors.NewInternalServerError("Error deleting user's factors").WithInternalError(terr)
 			}
+			// hard delete all associated WebAuthn credentials
+			if terr := models.DeleteWebAuthnCredentialsByUserID(tx, user.ID); terr != nil {
+				return apierrors.NewInternalServerError("Error deleting user's WebAuthn credentials").WithInternalError(terr)
+			}
 			// hard delete all associated sessions
 			if terr := models.Logout(tx, user.ID); terr != nil {
 				return apierrors.NewInternalServerError("Error deleting user's sessions").WithInternalError(terr)

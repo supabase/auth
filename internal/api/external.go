@@ -690,8 +690,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	config := a.config
 	var pConfig conf.OAuthProviderConfiguration
 
-	// Build the redirect URL
-	redirectURL := config.API.ExternalURL + "/callback"
+	redirectURL := strings.TrimRight(config.API.ExternalURL, "/") + "/callback"
 
 	// Parse scopes (space-separated per RFC 6749)
 	var scopeList []string
@@ -765,7 +764,6 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	}
 
 	// Create custom OIDC provider instance
-	// oidc.NewProvider() will automatically fetch discovery document
 	p, err := provider.NewCustomOIDCProvider(
 		ctx,
 		customProvider.ClientID,
@@ -773,6 +771,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		redirectURL,
 		scopeList,
 		*customProvider.Issuer,
+		customProvider.GetDiscoveryURL(),
 		customProvider.PKCEEnabled,
 		customProvider.AcceptableClientIDs,
 		customProvider.AttributeMapping,

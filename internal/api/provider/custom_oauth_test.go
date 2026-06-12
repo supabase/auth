@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -274,11 +275,12 @@ func TestNewCustomOIDCProvider(t *testing.T) {
 		"https://myapp.com/callback",
 		[]string{"profile", "email"}, // Without openid
 		server.URL, // issuer
+		server.URL + "/.well-known/openid-configuration",
 		true, // PKCE enabled
 		[]string{"ios-client", "android-client"},
 		map[string]interface{}{"email": "user_email"},
 		map[string]interface{}{"prompt": "consent"},
-		NewOIDCProviderCache(0),
+		newTestOIDCProviderCache(t, 0),
 	)
 
 	require.NoError(t, err)
@@ -403,6 +405,7 @@ func TestCustomOIDCProvider_AuthCodeURL(t *testing.T) {
 		"https://myapp.com/callback",
 		[]string{"openid", "profile"},
 		server.URL, // issuer
+		server.URL + "/.well-known/openid-configuration",
 		false,
 		nil,
 		nil,
@@ -412,7 +415,7 @@ func TestCustomOIDCProvider_AuthCodeURL(t *testing.T) {
 			"ui_locales": "en",
 			"login_hint": "user@example.com",
 		},
-		NewOIDCProviderCache(0),
+		newTestOIDCProviderCache(t, 0),
 	)
 
 	require.NoError(t, err)
@@ -429,6 +432,48 @@ func TestCustomOIDCProvider_AuthCodeURL(t *testing.T) {
 	assert.Contains(t, authURL, "max_age=3600")
 	assert.Contains(t, authURL, "ui_locales=en")
 	assert.Contains(t, authURL, "login_hint=user")
+}
+
+func TestNewCustomOIDCProvider_CustomDiscoveryURL(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/custom-discovery":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"issuer":                 server.URL,
+				"authorization_endpoint": server.URL + "/custom-authorize",
+				"token_endpoint":         server.URL + "/custom-token",
+				"userinfo_endpoint":      server.URL + "/custom-userinfo",
+				"jwks_uri":               server.URL + "/jwks",
+			})
+		case "/jwks":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"keys": []interface{}{}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	p, err := NewCustomOIDCProvider(
+		context.Background(),
+		"test-client-id",
+		"test-secret",
+		"https://myapp.com/callback",
+		[]string{"openid"},
+		server.URL,
+		server.URL+"/custom-discovery",
+		false,
+		nil, nil, nil,
+		newTestOIDCProviderCache(t, time.Hour),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, p)
+
+	assert.Equal(t, server.URL+"/custom-authorize", p.config.Endpoint.AuthURL)
+	assert.Equal(t, server.URL+"/custom-token", p.config.Endpoint.TokenURL)
+	assert.Equal(t, server.URL+"/custom-userinfo", p.userinfoEndpoint)
 }
 
 func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
@@ -461,11 +506,12 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 			"https://myapp.com/callback",
 			[]string{"openid"},
 			server.URL, // issuer
+			server.URL + "/.well-known/openid-configuration",
 			true, // PKCE enabled
 			nil,
 			nil,
 			nil,
-			NewOIDCProviderCache(0),
+			newTestOIDCProviderCache(t, 0),
 		)
 
 		require.NoError(t, err)
@@ -481,11 +527,12 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 			"https://myapp.com/callback",
 			[]string{"openid"},
 			server.URL, // issuer
+			server.URL + "/.well-known/openid-configuration",
 			false, // PKCE disabled
 			nil,
 			nil,
 			nil,
-			NewOIDCProviderCache(0),
+			newTestOIDCProviderCache(t, 0),
 		)
 
 		require.NoError(t, err)

@@ -110,12 +110,16 @@ type CustomOIDCProvider struct {
 	authorizationParams map[string]interface{}
 }
 
-// NewCustomOIDCProvider creates a new custom OIDC provider
+// NewCustomOIDCProvider creates a new custom OIDC provider.
+// discoveryURL is the URL to fetch the OIDC discovery document from
+// (typically {issuer}/.well-known/openid-configuration, or an admin-configured
+// override).
 func NewCustomOIDCProvider(
 	ctx context.Context,
 	clientID, clientSecret, redirectURL string,
 	scopes []string,
 	issuer string,
+	discoveryURL string,
 	pkceEnabled bool,
 	acceptableClientIDs []string,
 	attributeMapping, authorizationParams map[string]interface{},
@@ -133,8 +137,7 @@ func NewCustomOIDCProvider(
 		scopes = append([]string{"openid"}, scopes...)
 	}
 
-	// Create OIDC provider - uses cache to avoid redundant discovery fetches
-	oidcProvider, err := cache.GetProvider(ctx, issuer)
+	oidcProvider, err := cache.GetProviderFromURL(ctx, issuer, discoveryURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OIDC provider: %w", err)
 	}

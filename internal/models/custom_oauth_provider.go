@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/gobuffalo/pop/v6/slices"
@@ -134,7 +135,7 @@ func (p *CustomOAuthProvider) GetDiscoveryURL() string {
 		return *p.DiscoveryURL
 	}
 
-	return *p.Issuer + "/.well-known/openid-configuration"
+	return strings.TrimRight(*p.Issuer, "/") + "/.well-known/openid-configuration"
 }
 
 // SetDiscoveryCache stores a validated OIDC discovery document and records the cache time.

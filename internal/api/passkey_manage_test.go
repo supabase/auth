@@ -238,6 +238,41 @@ func (ts *PasskeyTestSuite) TestPasskeyDeleteUnauthenticated() {
 	ts.Equal(http.StatusUnauthorized, w.Code)
 }
 
+// TestPasskeyDeleteBlockedAtAAL1WhenMFAEnabled verifies that a user enrolled in a
+// verified MFA factor cannot delete a passkey from an AAL1 session.
+func (ts *PasskeyTestSuite) TestPasskeyDeleteBlockedAtAAL1WhenMFAEnabled() {
+	ts.enrollVerifiedFactor(ts.TestUser)
+	cred := ts.createTestPasskey(ts.TestUser.ID, "Protected")
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	w := ts.makeRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), nil, withBearerToken(token))
+
+	ts.Equal(http.StatusForbidden, w.Code)
+	var errResp map[string]any
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResp))
+	ts.Equal("insufficient_aal", errResp["error_code"])
+
+	// The passkey must still exist.
+	_, err := models.FindWebAuthnCredentialByID(ts.API.db, cred.ID)
+	require.NoError(ts.T(), err)
+}
+
+// TestPasskeyDeleteAllowedAtAAL2WhenMFAEnabled verifies that a user with a verified
+// MFA factor who has stepped up to AAL2 can delete a passkey.
+func (ts *PasskeyTestSuite) TestPasskeyDeleteAllowedAtAAL2WhenMFAEnabled() {
+	f := ts.enrollVerifiedFactor(ts.TestUser)
+	ts.elevateSessionToAAL2(ts.TestSession, f.ID)
+	cred := ts.createTestPasskey(ts.TestUser.ID, "To Delete")
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	w := ts.makeRequest(http.MethodDelete, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), nil, withBearerToken(token))
+
+	ts.Equal(http.StatusNoContent, w.Code)
+
+	_, err := models.FindWebAuthnCredentialByID(ts.API.db, cred.ID)
+	ts.True(models.IsNotFoundError(err))
+}
+
 func (ts *PasskeyTestSuite) TestPasskeyManageDisabled() {
 	ts.Config.Passkey.Enabled = false
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)

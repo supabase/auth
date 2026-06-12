@@ -5,14 +5,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
+	"github.com/supabase/auth/internal/e2e/e2ecfg"
 )
 
 func TestUtils(t *testing.T) {
 
 	// check paths
-	require.Equal(t, projectRoot, GetProjectRoot())
-	require.Equal(t, configPath, GetConfigPath())
+	require.Equal(t, projectRoot, e2ecfg.GetProjectRoot())
+	require.Equal(t, configPath, e2ecfg.GetConfigPath())
 
 	// Config
 	func() {
@@ -20,7 +21,7 @@ func TestUtils(t *testing.T) {
 		// positive
 		{
 			testCfgPath := "../../hack/test.env"
-			testCfg := Must(conf.LoadGlobal(testCfgPath))
+			testCfg := Must(confload.LoadGlobal(testCfgPath))
 			globalCfg := Must(Config())
 			require.Equal(t, testCfg, globalCfg)
 		}
@@ -80,26 +81,5 @@ func TestUtils(t *testing.T) {
 			}
 		}()
 		require.Error(t, err)
-	}()
-
-	// block init from main()
-	func() {
-		restore := isTesting
-		defer func() {
-			isTesting = restore
-		}()
-		isTesting = func() bool { return false }
-
-		var errStr string
-		func() {
-			defer func() {
-				errStr = recover().(string)
-			}()
-
-			initPackage()
-		}()
-
-		exp := "package e2e may not be used in a main package"
-		require.Equal(t, exp, errStr)
 	}()
 }

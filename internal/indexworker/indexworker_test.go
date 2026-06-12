@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -33,7 +34,7 @@ type IndexWorkerTestSuite struct {
 
 func (ts *IndexWorkerTestSuite) SetupSuite() {
 	// Load test configuration
-	config, err := conf.LoadGlobal("../../hack/test.env")
+	config, err := confload.LoadGlobal("../../hack/test.env")
 	require.NoError(ts.T(), err)
 	ts.config = config
 	ts.maxUsersThreshold = config.IndexWorker.MaxUsersThreshold

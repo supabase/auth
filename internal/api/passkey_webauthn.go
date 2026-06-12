@@ -3,8 +3,23 @@ package api
 import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 )
+
+// requirePasskeyManagementAAL enforces an AAL2 session for passkey credential
+// management (registration and deletion) when the user has a verified MFA
+// factor.
+//
+// When the user has no verified factor the check is skipped: their maximum
+// assurance level is AAL1, so requiring AAL2 could never be satisfied. The
+// check fails closed, treating a missing session as not meeting AAL2.
+func requirePasskeyManagementAAL(user *models.User, session *models.Session) error {
+	if user.HasMFAEnabled() && (session == nil || !session.IsAAL2()) {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeInsufficientAAL, "AAL2 session is required to manage passkeys when MFA is enabled")
+	}
+	return nil
+}
 
 // getPasskeyWebAuthn creates a *webauthn.WebAuthn instance from the shared server-side WebAuthn configuration.
 func (a *API) getPasskeyWebAuthn() (*webauthn.WebAuthn, error) {
