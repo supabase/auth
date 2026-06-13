@@ -971,6 +971,7 @@ func (config *GlobalConfiguration) PopulateGlobal() error {
 		if SMSTemplate == "" {
 			SMSTemplate = "Your code is {{ .Code }}"
 		}
+		SMSTemplate = strings.ReplaceAll(SMSTemplate, "\\n", "\n")
 		template, err := template.New("").Parse(SMSTemplate)
 		if err != nil {
 			return err
@@ -983,6 +984,7 @@ func (config *GlobalConfiguration) PopulateGlobal() error {
 		if smsTemplate == "" {
 			smsTemplate = "Your code is {{ .Code }}"
 		}
+		smsTemplate = strings.ReplaceAll(smsTemplate, "\\n", "\n")
 		template, err := template.New("").Parse(smsTemplate)
 		if err != nil {
 			return err
