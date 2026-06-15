@@ -472,6 +472,7 @@ func TestNewCustomOIDCProvider_CustomDiscoveryURL(t *testing.T) {
 		server.URL+"/custom-discovery",
 		false,
 		nil, nil, nil,
+		nil,
 		newTestOIDCProviderCache(t, time.Hour),
 	)
 	require.NoError(t, err)

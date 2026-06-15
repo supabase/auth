@@ -191,10 +191,10 @@ func TestCustomOIDCProvider_GetUserData_UserinfoAllowlist(t *testing.T) {
 	provider, err := NewCustomOIDCProvider(
 		context.Background(),
 		"client-id", "client-secret", "https://myapp.com/callback",
-		[]string{"openid"}, server.URL, false,
+		[]string{"openid"}, server.URL, server.URL + "/.well-known/openid-configuration", false,
 		nil, nil, nil,
 		[]string{"mail", "sn"},
-		NewOIDCProviderCache(0),
+		newTestOIDCProviderCache(t, 0),
 	)
 	require.NoError(t, err)
 
@@ -257,10 +257,10 @@ func TestCustomOIDCProvider_GetUserData_IDTokenAllowlist(t *testing.T) {
 	provider, err := NewCustomOIDCProvider(
 		context.Background(),
 		"client-id", "client-secret", "https://myapp.com/callback",
-		[]string{"openid"}, server.URL, false,
+		[]string{"openid"}, server.URL, server.URL + "/.well-known/openid-configuration", false,
 		nil, nil, nil,
 		[]string{"groups", "org_id"},
-		NewOIDCProviderCache(0),
+		newTestOIDCProviderCache(t, 0),
 	)
 	require.NoError(t, err)
 
