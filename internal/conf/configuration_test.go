@@ -322,7 +322,7 @@ func TestValidate(t *testing.T) {
 		{
 			val: &SMTPConfiguration{Headers: "invalid"},
 			check: func(t *testing.T, v any) {
-				const exp = `conf: SMTP headers not`
+				const exp = `invalid character`
 
 				mcfg := v.(*SMTPConfiguration)
 				val := mcfg.normalizedHeadersVal.val
@@ -338,7 +338,7 @@ func TestValidate(t *testing.T) {
 		{
 			val: &MailerConfiguration{EmailValidationServiceHeaders: "invalid"},
 			check: func(t *testing.T, v any) {
-				const exp = `conf: mailer validation headers`
+				const exp = `invalid character`
 
 				mcfg := v.(*MailerConfiguration)
 				val := mcfg.serviceHeadersVal.val
@@ -351,7 +351,7 @@ func TestValidate(t *testing.T) {
 		{
 			val: &MailerConfiguration{EmailValidationBlockedMX: "invalid"},
 			check: func(t *testing.T, v any) {
-				const exp = `conf: blocked mx records`
+				const exp = `invalid character`
 				mcfg := v.(*MailerConfiguration)
 				val := mcfg.blockedMXRecordsVal.val
 				err := mcfg.blockedMXRecordsVal.err
