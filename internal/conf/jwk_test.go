@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -187,39 +188,6 @@ func TestJwtKeys(t *testing.T) {
 		require.Equal(t, "no signing key found", err.Error())
 	}
 
-	// GetSigningKey - valid
-	{
-		m := helpToMap(t, testJwtKey)
-		jwt, err := json.Marshal(m["3"])
-		require.NoError(t, err)
-
-		sigKey1, err := jwk.ParseKey(jwt)
-		require.NoError(t, err)
-
-		got, err := GetSigningKey(sigKey1)
-		require.NoError(t, err)
-		require.NotNil(t, got)
-		require.Equal(t, fmt.Sprintf("%T", got), "*ecdsa.PrivateKey")
-	}
-
-	// GetSigningKey - not found
-	{
-		m := helpToMap(t, testJwtKey)
-		jwt, err := json.Marshal(m["4"])
-		require.NoError(t, err)
-
-		privKey, err := jwk.ParseKey(jwt)
-		require.NoError(t, err)
-
-		sentinel := errors.New("sentinel")
-		key := &mockKey{Key: privKey, err: sentinel, n: 0}
-
-		got, err := GetSigningKey(key)
-		require.Nil(t, got)
-		require.Error(t, err)
-		require.Equal(t, sentinel, err)
-	}
-
 	// FindPublicKeyByKid - valid
 	{
 		dec := make(JwtKeysDecoder)
@@ -228,7 +196,7 @@ func TestJwtKeys(t *testing.T) {
 			KeyID:  "abc",
 			Secret: "sentinel",
 		}
-		got, err := FindPublicKeyByKid("abc", jwtConfig)
+		got, err := FindPublicKeyByKid(context.Background(), "abc", jwtConfig)
 		require.NoError(t, err)
 		require.Equal(t, []byte("sentinel"), got)
 	}
@@ -239,7 +207,7 @@ func TestJwtKeys(t *testing.T) {
 		jwtConfig := &JWTConfiguration{
 			Keys: dec,
 		}
-		got, err := FindPublicKeyByKid("abc", jwtConfig)
+		got, err := FindPublicKeyByKid(context.Background(), "abc", jwtConfig)
 		require.Nil(t, got)
 		require.Nil(t, err)
 	}
@@ -263,7 +231,7 @@ func TestJwtKeys(t *testing.T) {
 			Keys: dec,
 		}
 
-		got, err := FindPublicKeyByKid("abc", jwtConfig)
+		got, err := FindPublicKeyByKid(context.Background(), "abc", jwtConfig)
 		require.NoError(t, err)
 		require.NotNil(t, got)
 		require.Equal(t, fmt.Sprintf("%T", got), "*ecdsa.PrivateKey")
@@ -291,7 +259,7 @@ func TestJwtKeys(t *testing.T) {
 			Keys: dec,
 		}
 
-		got, err := FindPublicKeyByKid("abc", jwtConfig)
+		got, err := FindPublicKeyByKid(context.Background(), "abc", jwtConfig)
 		require.Nil(t, got)
 		require.Error(t, err)
 		require.Equal(t, sentinel, err)

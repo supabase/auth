@@ -1174,6 +1174,16 @@ func (config *GlobalConfiguration) applyDefaultsJWTPrivateKey(privKey jwk.Key) e
 		PublicKey:  pubKey,
 		PrivateKey: privKey,
 	}
+
+	var key any
+	if err := privKey.Raw(&key); err != nil {
+		return err
+	}
+
+	config.JWT.SigningKey = func(ctx context.Context) (any, error) {
+		return key, nil
+	}
+
 	return nil
 }
 

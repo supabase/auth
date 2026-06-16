@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -167,7 +168,7 @@ func (ts *AuthTestSuite) TestParseJWTClaims() {
 			jwk, err := conf.GetSigningJwk(&ts.Config.JWT)
 			require.NoError(ts.T(), err)
 			signingMethod := conf.GetSigningAlg(jwk)
-			signingKey, err := conf.GetSigningKey(jwk)
+			signingKey, err := conf.SigningKey(context.Background())
 			require.NoError(ts.T(), err)
 
 			userJwtToken := jwt.NewWithClaims(signingMethod, userClaims)

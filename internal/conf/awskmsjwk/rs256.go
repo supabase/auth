@@ -46,7 +46,7 @@ func (m *signingMethodKMSRS256) Sign(signingString string, key any) ([]byte, err
 		SigningAlgorithm: kmstypes.SigningAlgorithmSpecRsassaPkcs1V15Sha256,
 	})
 	if err != nil {
-		logrus.WithError(err).Error("Unable to sign RS256 JWT with AWS KMS key %q", k.KeyID)
+		logrus.WithError(err).Errorf("Unable to sign RS256 JWT with AWS KMS key %q", k.KeyID)
 
 		return nil, err
 	}
