@@ -168,7 +168,7 @@ func (ts *AuthTestSuite) TestParseJWTClaims() {
 			jwk, err := conf.GetSigningJwk(&ts.Config.JWT)
 			require.NoError(ts.T(), err)
 			signingMethod := conf.GetSigningAlg(jwk)
-			signingKey, err := conf.SigningKey(context.Background())
+			signingKey, err := ts.Config.JWT.SigningKey(context.Background())
 			require.NoError(ts.T(), err)
 
 			userJwtToken := jwt.NewWithClaims(signingMethod, userClaims)
