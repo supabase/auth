@@ -992,6 +992,7 @@ func (config *GlobalConfiguration) PopulateGlobal() error {
 		if err := config.SAML.PopulateFields(config.API.ExternalURL); err != nil {
 			return err
 		}
+		config.SAML.PrivateKeyNext = ""
 	} else {
 		config.SAML.PrivateKey = ""
 	}

@@ -199,14 +199,31 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	serviceProvider := a.getSAMLServiceProvider(idpMetadata, initiatedBy == "idp")
+	serviceProvider := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKey, config.SAML.Certificate)
 	spAssertion, err := serviceProvider.ParseResponse(r, requestIds)
 	if err != nil {
-		if ire, ok := err.(*saml.InvalidResponseError); ok {
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Assertion is not valid %s", ire.Response).WithInternalError(ire.PrivateErr)
+		// During a key-rotation window the IdP may have cached the old (next)
+		// certificate from metadata and used it to encrypt the assertion.
+		// Retry with the old key in primary position to keep decryption working
+		// for the overlap period.  Only attempt this when encrypted assertions
+		// are enabled, because only then can the IdP send encrypted payloads.
+		// If the retry also fails we return the original error so the operator
+		// sees a consistent diagnostic.
+		if config.SAML.AllowEncryptedAssertions && config.SAML.RSAPrivateKeyNext != nil {
+			fallbackSP := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKeyNext, config.SAML.CertificateNext)
+			if spAssertion2, retryErr := fallbackSP.ParseResponse(r, requestIds); retryErr == nil {
+				spAssertion = spAssertion2
+				err = nil
+			}
 		}
 
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Assertion is not valid").WithInternalError(err)
+		if err != nil {
+			if ire, ok := err.(*saml.InvalidResponseError); ok {
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Assertion is not valid %s", ire.Response).WithInternalError(ire.PrivateErr)
+			}
+
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Assertion is not valid").WithInternalError(err)
+		}
 	}
 
 	assertion := SAMLAssertion{
