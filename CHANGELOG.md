@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.191.0](https://github.com/supabase/auth/compare/v2.190.0...v2.191.0) (2026-06-17)
+
+
+### Features
+
+* add RS256 signing keys backed by AWS KMS ([#2571](https://github.com/supabase/auth/issues/2571)) ([983f59a](https://github.com/supabase/auth/commit/983f59ac2e61de30533d108c08593a4eec5a0f61))
+* **saml:** support zero-downtime SP key rotation  ([#2575](https://github.com/supabase/auth/issues/2575)) ([5b95ff8](https://github.com/supabase/auth/commit/5b95ff82f6745d25be5eb66d4843d7362c2582a8))
+
 ## [2.190.0](https://github.com/supabase/auth/compare/v2.189.0...v2.190.0) (2026-06-11)
 
 
