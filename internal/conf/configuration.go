@@ -2,6 +2,7 @@ package conf
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -141,6 +142,8 @@ type JWTConfiguration struct {
 	KeyID            string         `json:"key_id" split_words:"true"`
 	Keys             JwtKeysDecoder `json:"keys"`
 	ValidMethods     []string       `json:"-" split_words:"true"`
+
+	SigningKey func(context.Context) (any, error) `json:"-"`
 }
 
 type MFAFactorTypeConfiguration struct {
@@ -1043,13 +1046,22 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		if err := config.applyDefaultsJWT([]byte(config.JWT.Secret)); err != nil {
 			return err
 		}
+	} else {
+		jwk, err := GetSigningJwk(&config.JWT)
+		if err != nil {
+			return err
+		}
+		sk, err := getSigningKey(jwk)
+		if err != nil {
+			return err
+		}
+		config.JWT.SigningKey = sk
 	}
 
 	if config.JWT.ValidMethods == nil {
 		config.JWT.ValidMethods = []string{}
 		for _, key := range config.JWT.Keys {
-			alg := GetSigningAlg(key.PublicKey)
-			config.JWT.ValidMethods = append(config.JWT.ValidMethods, alg.Alg())
+			config.JWT.ValidMethods = append(config.JWT.ValidMethods, key.PublicKey.Algorithm().String())
 		}
 
 	}
@@ -1193,6 +1205,16 @@ func (config *GlobalConfiguration) applyDefaultsJWTPrivateKey(privKey jwk.Key) e
 		PublicKey:  pubKey,
 		PrivateKey: privKey,
 	}
+
+	var key any
+	if err := privKey.Raw(&key); err != nil {
+		return err
+	}
+
+	config.JWT.SigningKey = func(ctx context.Context) (any, error) {
+		return key, nil
+	}
+
 	return nil
 }
 

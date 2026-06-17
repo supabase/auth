@@ -780,7 +780,7 @@ func parseIDTokenClaims(idToken string, config *conf.GlobalConfiguration) (jwt.M
 		if kid, ok := token.Header["kid"]; ok {
 			if kidStr, ok := kid.(string); ok {
 				// Find the public key by kid for asymmetric verification
-				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				key, err := conf.FindPublicKeyByKid(context.Background(), kidStr, &config.JWT)
 				if err != nil {
 					return nil, err
 				}
@@ -852,7 +852,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithAllScopes() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail, models.ScopeProfile, models.ScopePhone},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -883,7 +883,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithOnlyOpenIDScope() {
 		Scopes:   []string{models.ScopeOpenID},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -916,7 +916,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithEmailScope() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -946,7 +946,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithProfileScope() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeProfile},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -976,7 +976,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithPhoneScope() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopePhone},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -1006,7 +1006,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithMultipleScopes() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail, models.ScopeProfile},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
