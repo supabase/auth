@@ -2,12 +2,9 @@ package api
 
 import (
 	"context"
-	"encoding/json"
-	"io"
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	popslices "github.com/gobuffalo/pop/v6/slices"
@@ -666,61 +663,34 @@ func validateAuthorizationParams(params map[string]interface{}) error {
 	return nil
 }
 
-// maxDiscoveryResponseSize is the maximum size of an OIDC discovery response body (1 MB).
-const maxDiscoveryResponseSize = 1 << 20
-
-// discoveryFetchTimeout is the timeout for fetching an OIDC discovery document.
-const discoveryFetchTimeout = 10 * time.Second
-
-// fetchAndValidateDiscovery fetches the OIDC discovery document from the
-// provider's discovery URL and validates that it contains the required fields
-// per the OpenID Connect Discovery 1.0 specification. It also verifies that
-// the issuer in the discovery document matches the expected issuer.
+// fetchAndValidateDiscovery fetches the OIDC discovery document via the shared
+// utility, then applies admin-only validation: required fields per the OpenID
+// Connect Discovery 1.0 spec must be present before we persist the document.
+// Returns *models.OIDCDiscovery so the caller can store it directly.
 func fetchAndValidateDiscovery(ctx context.Context, discoveryURL, expectedIssuer string) (*models.OIDCDiscovery, error) {
-	resp, err := utilities.FetchURLWithTimeout(ctx, discoveryURL, discoveryFetchTimeout)
+	doc, err := utilities.FetchAndValidateOIDCDiscovery(ctx, discoveryURL, expectedIssuer)
 	if err != nil {
 		return nil, apierrors.NewBadRequestError(
 			apierrors.ErrorCodeValidationFailed,
-			"Failed to fetch OIDC discovery document from %q: %v", discoveryURL, err,
-		)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, apierrors.NewBadRequestError(
-			apierrors.ErrorCodeValidationFailed,
-			"OIDC discovery endpoint %q returned HTTP %d, expected 200", discoveryURL, resp.StatusCode,
+			"OIDC discovery from %q failed: %v", discoveryURL, err,
 		)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryResponseSize))
-	if err != nil {
-		return nil, apierrors.NewBadRequestError(
-			apierrors.ErrorCodeValidationFailed,
-			"Failed to read OIDC discovery response from %q", discoveryURL,
-		)
-	}
-
-	var discovery models.OIDCDiscovery
-	if err := json.Unmarshal(body, &discovery); err != nil {
-		return nil, apierrors.NewBadRequestError(
-			apierrors.ErrorCodeValidationFailed,
-			"OIDC discovery document from %q is not valid JSON", discoveryURL,
-		)
-	}
-
-	// Validate required fields per OpenID Connect Discovery 1.0 spec
+	// Validate required fields per OpenID Connect Discovery 1.0 spec.
+	// Stricter than the runtime path needs — runtime can tolerate missing
+	// fields and surface a less helpful error at login; admin should reject
+	// the configuration up front.
 	var missing []string
-	if discovery.Issuer == "" {
+	if doc.Issuer == "" {
 		missing = append(missing, "issuer")
 	}
-	if discovery.AuthorizationEndpoint == "" {
+	if doc.AuthorizationEndpoint == "" {
 		missing = append(missing, "authorization_endpoint")
 	}
-	if discovery.TokenEndpoint == "" {
+	if doc.TokenEndpoint == "" {
 		missing = append(missing, "token_endpoint")
 	}
-	if discovery.JwksURI == "" {
+	if doc.JwksURI == "" {
 		missing = append(missing, "jwks_uri")
 	}
 	if len(missing) > 0 {
@@ -730,16 +700,17 @@ func fetchAndValidateDiscovery(ctx context.Context, discoveryURL, expectedIssuer
 		)
 	}
 
-	// The issuer in the discovery document MUST exactly match the expected issuer
-	// per OpenID Connect Discovery 1.0, Section 4.3.
-	if discovery.Issuer != expectedIssuer {
-		return nil, apierrors.NewBadRequestError(
-			apierrors.ErrorCodeValidationFailed,
-			"OIDC discovery issuer mismatch: discovery document reports %q but expected %q", discovery.Issuer, expectedIssuer,
-		)
-	}
-
-	return &discovery, nil
+	return &models.OIDCDiscovery{
+		Issuer:                 doc.Issuer,
+		AuthorizationEndpoint:  doc.AuthorizationEndpoint,
+		TokenEndpoint:          doc.TokenEndpoint,
+		UserinfoEndpoint:       doc.UserinfoEndpoint,
+		JwksURI:                doc.JwksURI,
+		ScopesSupported:        doc.ScopesSupported,
+		ResponseTypesSupported: doc.ResponseTypesSupported,
+		GrantTypesSupported:    doc.GrantTypesSupported,
+		SubjectTypesSupported:  doc.SubjectTypesSupported,
+	}, nil
 }
 
 // validateAttributeMapping ensures no sensitive system fields are targeted
