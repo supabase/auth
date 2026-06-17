@@ -22,8 +22,13 @@ func TestUtils(t *testing.T) {
 		{
 			testCfgPath := "../../hack/test.env"
 			testCfg := Must(confload.LoadGlobal(testCfgPath))
+			// SigningKey is a func
+			testCfg.JWT.SigningKey = nil
+
 			globalCfg := Must(Config())
+			globalCfg.JWT.SigningKey = nil
 			require.Equal(t, testCfg, globalCfg)
+
 		}
 
 		// negative

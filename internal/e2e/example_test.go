@@ -13,6 +13,9 @@ func Example_config() {
 	testCfg := e2e.Must(confload.LoadGlobal(testCfgPath))
 	globalCfg := e2e.Must(e2e.Config())
 
+	testCfg.JWT.SigningKey = nil
+	globalCfg.JWT.SigningKey = nil
+
 	if reflect.DeepEqual(testCfg, globalCfg) {
 		fmt.Println("e2e.Config is equal to the config in hack/test.env")
 	} else {

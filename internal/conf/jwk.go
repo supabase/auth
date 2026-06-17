@@ -208,7 +208,6 @@ func GetSigningAlg(k jwk.Key) jwt.SigningMethod {
 		if _, isKMS := k.Get("aws:kms:arn"); isKMS {
 			return awskmsjwk.SigningMethodRS256KMS
 		}
-
 		return jwt.SigningMethodRS256
 	case "RS512":
 		return jwt.SigningMethodRS512
