@@ -8,7 +8,7 @@ RUN apk add --no-cache make git
 WORKDIR /go/src/github.com/supabase/auth
 
 # Pulling dependencies
-COPY ./Makefile ./go.* ./.git ./
+COPY ./Makefile ./go.* ./
 COPY ./internal/forks/godotenv ./internal/forks/godotenv
 RUN make deps
 
