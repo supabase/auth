@@ -401,10 +401,17 @@ func (o *mockKey) maybeErr() error {
 	return nil
 }
 
-func (o *mockKey) KeyOps() jwk.KeyOperationList  { return o.ops }
-func (o *mockKey) Algorithm() jwa.KeyAlgorithm   { return o.alg }
-func (o *mockKey) Validate() error               { return o.maybeErr() }
-func (o *mockKey) Raw(v any) error               { return o.maybeErr() }
+func (o *mockKey) KeyOps() jwk.KeyOperationList { return o.ops }
+func (o *mockKey) Algorithm() jwa.KeyAlgorithm  { return o.alg }
+func (o *mockKey) Validate() error              { return o.maybeErr() }
+func (o *mockKey) Raw(v any) error              { return o.maybeErr() }
+func (o *mockKey) Get(v string) (interface{}, bool) {
+	if o.Key == nil {
+		return "", false
+	}
+	return o.Key.Get(v)
+}
+
 func (o *mockKey) Set(string, interface{}) error { return o.maybeErr() }
 func (o *mockKey) PublicKey() (jwk.Key, error) {
 	if err := o.maybeErr(); err != nil {
