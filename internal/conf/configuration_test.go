@@ -19,7 +19,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-
 func TestPasswordRequiredCharactersDecode(t *testing.T) {
 	examples := []struct {
 		Value  string
@@ -322,27 +321,53 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			val: &SMTPConfiguration{Headers: "invalid"},
-			err: `conf: SMTP headers not a map[string][]string format:` +
-				` invalid character 'i' looking for beginning of value`,
-		},
+			check: func(t *testing.T, v any) {
+				const exp = `invalid character`
 
+				mcfg := v.(*SMTPConfiguration)
+				val := mcfg.normalizedHeadersVal.val
+				err := mcfg.normalizedHeadersVal.err
+				require.Contains(t, err.Error(), exp)
+				require.Error(t, err)
+				require.Nil(t, val)
+			},
+		},
 		{
 			val: &MailerConfiguration{},
 		},
 		{
 			val: &MailerConfiguration{EmailValidationServiceHeaders: "invalid"},
-			err: `conf: mailer validation headers not a map[string][]string format:` +
-				` invalid character 'i' looking for beginning of value`,
+			check: func(t *testing.T, v any) {
+				const exp = `invalid character`
+
+				mcfg := v.(*MailerConfiguration)
+				val := mcfg.serviceHeadersVal.val
+				err := mcfg.serviceHeadersVal.err
+				require.Contains(t, err.Error(), exp)
+				require.Error(t, err)
+				require.Nil(t, val)
+			},
 		},
 		{
 			val: &MailerConfiguration{EmailValidationBlockedMX: "invalid"},
-			err: `conf: email_validation_blocked_mx`,
+			check: func(t *testing.T, v any) {
+				const exp = `invalid character`
+				mcfg := v.(*MailerConfiguration)
+				val := mcfg.blockedMXRecordsVal.val
+				err := mcfg.blockedMXRecordsVal.err
+				require.Error(t, err)
+				require.Contains(t, err.Error(), exp)
+				require.Nil(t, val)
+			},
 		},
 		{
 			val: &MailerConfiguration{EmailValidationBlockedMX: `["foo.com"]`},
 			check: func(t *testing.T, v any) {
-				got := (v.(*MailerConfiguration)).GetEmailValidationBlockedMXRecords()
-				require.True(t, got["foo.com"])
+				mcfg := v.(*MailerConfiguration)
+				val := mcfg.blockedMXRecordsVal.val
+				err := mcfg.blockedMXRecordsVal.err
+				require.NoError(t, err)
+				require.True(t, val["foo.com"])
 			},
 		},
 
@@ -923,7 +948,6 @@ func TestMethods(t *testing.T) {
 		require.NoError(t, err)
 	}
 }
-
 
 func TestWebAuthnConfigurationValidate(t *testing.T) {
 	// Empty RPID → error
