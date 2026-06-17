@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"text/template"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -986,4 +987,37 @@ func TestWebAuthnConfigurationValidate(t *testing.T) {
 
 func toPtr[T any](v T) *T {
 	return &(&([1]T{T(v)}))[0]
+}
+
+func TestSMSTemplateNewlines(t *testing.T) {
+	// Literal "\n" escape sequences in the SMS/MFA OTP templates should be
+	// rendered as real newlines so multi-line messages can be sent (e.g. as
+	// required by the WebOTP API).
+	// See https://github.com/supabase/supabase/issues/6435
+	cfg := &GlobalConfiguration{
+		JWT: JWTConfiguration{Secret: "a"},
+		Sms: SmsProviderConfiguration{
+			Provider: "twilio",
+			Template: `Your code is {{ .Code }}\n@example.com #{{ .Code }}`,
+		},
+	}
+	cfg.MFA.Phone.EnrollEnabled = true
+	cfg.MFA.Phone.Template = `MFA code {{ .Code }}\nfrom example`
+
+	require.NoError(t, cfg.PopulateGlobal())
+
+	render := func(tmpl *template.Template) string {
+		var b strings.Builder
+		require.NoError(t, tmpl.Execute(&b, struct{ Code string }{Code: "123456"}))
+		return b.String()
+	}
+
+	smsMsg := render(cfg.Sms.SMSTemplate)
+	require.Equal(t, "Your code is 123456\n@example.com #123456", smsMsg)
+	require.Contains(t, smsMsg, "\n")
+	require.NotContains(t, smsMsg, `\n`)
+
+	mfaMsg := render(cfg.MFA.Phone.SMSTemplate)
+	require.Equal(t, "MFA code 123456\nfrom example", mfaMsg)
+	require.NotContains(t, mfaMsg, `\n`)
 }
