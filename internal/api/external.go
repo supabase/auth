@@ -173,7 +173,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	userData := data.userData
 
 	if len(userData.Emails) == 0 && !emailOptional {
-		return apierrors.NewInternalServerError("Error getting user email from external provider")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailAddressNotProvided, "Error getting user email from external provider")
 	}
 
 	userData.Metadata.EmailVerified = false
