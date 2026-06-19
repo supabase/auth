@@ -435,7 +435,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 			nonce = *authorization.Nonce
 		}
 
-		idToken, err := tokenService.GenerateIDToken(tokens.GenerateIDTokenParams{
+		idToken, err := tokenService.GenerateIDToken(ctx, tokens.GenerateIDTokenParams{
 			User:     user,
 			ClientID: client.ID,
 			Nonce:    nonce,

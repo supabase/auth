@@ -105,7 +105,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewInternalServerError("Error parsing SAML Metadata for SAML provider").WithInternalError(err)
 	}
 
-	serviceProvider := a.getSAMLServiceProvider(entityDescriptor, false /* <- idpInitiated */)
+	serviceProvider := a.newSAMLServiceProvider(entityDescriptor, false /* <- idpInitiated */, a.config.SAML.RSAPrivateKey, a.config.SAML.Certificate)
 
 	authnRequest, err := serviceProvider.MakeAuthenticationRequest(
 		serviceProvider.GetSSOBindingLocation(saml.HTTPRedirectBinding),
