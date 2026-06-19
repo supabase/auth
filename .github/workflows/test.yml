@@ -113,6 +113,7 @@ jobs:
         env:
           MULTIGRES_GATEWAY_PG_PORT: "5432"
           MULTIGRES_NUM_CELLS: "2"
+          MULTIGRES_PG_MAX_CONNECTIONS: "100"
         ports:
           - 5432:5432
         options: >-
@@ -133,4 +134,7 @@ jobs:
       - name: Run migrations
         run: make migrate_dev
       - name: Run tests
+        # Multigres' postgres superuser password is "postgres" (not "root")
+        env:
+          POSTGRES_PASSWORD: postgres
         run: go test ./... -p 1 -race -v -count=1
