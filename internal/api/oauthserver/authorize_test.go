@@ -666,3 +666,86 @@ func (ts *OAuthAuthorizeTestSuite) TestConsent_InvalidActionRejected() {
 	err := ts.Server.OAuthServerConsent(w, req)
 	ts.assertHTTPError(err, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
 }
+
+// Regression for https://github.com/supabase/auth/issues/2585: PKCE was
+// rejected on the /oauth/authorize endpoint even for confidential clients,
+// which made the OAuth server incompatible with consumers that don't send
+// `code_challenge` (Microsoft Power Platform Connectors, Shopify, …) even
+// though those clients authenticate with a client_secret at the token
+// exchange. OAuth 2.1 §4.1.1 only mandates PKCE for public clients.
+func (ts *OAuthAuthorizeTestSuite) TestAuthorize_ConfidentialClientWithoutPKCEAccepted() {
+	client := ts.createClient()
+	require.Equal(ts.T(), models.OAuthServerClientTypeConfidential, client.ClientType,
+		"createClient() should default to a confidential client")
+
+	q := url.Values{
+		"client_id":    []string{client.ID.String()},
+		"redirect_uri": []string{"https://example.com/callback"},
+		"scope":        []string{"openid"},
+		// No code_challenge / code_challenge_method — confidential client opts out.
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerAuthorize(w, req))
+
+	require.Equal(ts.T(), http.StatusFound, w.Code, "authorize: %s", w.Body.String())
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), loc.Query().Get("error"),
+		"expected no error redirect, got %s", w.Header().Get("Location"))
+	require.NotEmpty(ts.T(), loc.Query().Get("authorization_id"),
+		"expected an authorization_id, got %s", w.Header().Get("Location"))
+}
+
+func (ts *OAuthAuthorizeTestSuite) TestAuthorize_PublicClientWithoutPKCERejected() {
+	publicParams := &OAuthServerClientRegisterParams{
+		ClientName:              "Test Public Client",
+		RedirectURIs:            []string{"https://example.com/callback"},
+		RegistrationType:        "dynamic",
+		ClientType:              models.OAuthServerClientTypePublic,
+		TokenEndpointAuthMethod: models.TokenEndpointAuthMethodNone,
+	}
+	publicClient, _, err := ts.Server.registerOAuthServerClient(context.Background(), publicParams)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.OAuthServerClientTypePublic, publicClient.ClientType)
+
+	q := url.Values{
+		"client_id":    []string{publicClient.ID.String()},
+		"redirect_uri": []string{"https://example.com/callback"},
+		"scope":        []string{"openid"},
+		// No PKCE — must still error for public clients per OAuth 2.1.
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerAuthorize(w, req))
+
+	require.Equal(ts.T(), http.StatusFound, w.Code)
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), oAuth2ErrorInvalidRequest, loc.Query().Get("error"),
+		"expected invalid_request error redirect for public client missing PKCE, got %s",
+		w.Header().Get("Location"))
+	require.Contains(ts.T(), loc.Query().Get("error_description"), "PKCE flow requires")
+}
+
+func (ts *OAuthAuthorizeTestSuite) TestAuthorize_ConfidentialClientWithPartialPKCERejected() {
+	client := ts.createClient()
+
+	q := url.Values{
+		"client_id":      []string{client.ID.String()},
+		"redirect_uri":   []string{"https://example.com/callback"},
+		"scope":          []string{"openid"},
+		"code_challenge": []string{"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"},
+		// `code_challenge_method` deliberately omitted — half-supplied PKCE.
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerAuthorize(w, req))
+
+	require.Equal(ts.T(), http.StatusFound, w.Code)
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), oAuth2ErrorInvalidRequest, loc.Query().Get("error"),
+		"expected invalid_request when a confidential client provides only half of PKCE, got %s",
+		w.Header().Get("Location"))
+}
