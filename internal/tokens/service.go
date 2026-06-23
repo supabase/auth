@@ -81,6 +81,7 @@ type AccessTokenClaims struct {
 	AuthenticationMethodReference AMRClaim               `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
 	IsAnonymous                   bool                   `json:"is_anonymous"`
+	PendingPasswordSet            bool                   `json:"pending_password_set,omitempty"`
 	ClientID                      string                 `json:"client_id,omitempty"`
 	Scope                         string                 `json:"scope,omitempty"`
 }
@@ -696,6 +697,10 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		scopes = *session.Scopes
 	}
 
+	userHasPassword := params.User.HasPassword()
+	isPendingPasswordSet := session.IsRecovery() ||
+		(!userHasPassword && params.User.InvitedAt != nil)
+
 	claims := &v0hooks.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   params.User.ID.String(),
@@ -713,6 +718,7 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		AuthenticatorAssuranceLevel:   aal.String(),
 		AuthenticationMethodReference: amr,
 		IsAnonymous:                   params.User.IsAnonymous,
+		PendingPasswordSet:            isPendingPasswordSet,
 		ClientID:                      clientID,
 		Scope:                         scopes,
 	}
