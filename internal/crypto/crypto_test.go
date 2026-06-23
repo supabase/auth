@@ -1,9 +1,13 @@
 package crypto
 
 import (
+	"crypto/rand"
+	"math"
+	"strings"
 	"testing"
 
 	mrand "math/rand"
+	mathrand "math/rand/v2"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
@@ -75,6 +79,81 @@ func TestGenerateOtp(t *testing.T) {
 			assert.Equal(t, test.exp, otp)
 		}
 	}
+}
+
+func TestGenerateAlphanumericOtp(t *testing.T) {
+	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	charsetSet := make(map[rune]bool)
+	for _, c := range charset {
+		charsetSet[c] = true
+	}
+
+	t.Run("correct length", func(t *testing.T) {
+		for _, length := range []int{1, 4, 6, 8, 12} {
+			otp := generateAlphanumericOtp(rand.Reader, length)
+			if len(otp) != length {
+				t.Errorf("length=%d: got OTP of length %d: %q", length, len(otp), otp)
+			}
+		}
+	})
+
+	t.Run("only valid characters", func(t *testing.T) {
+		for range 100 {
+			otp := generateAlphanumericOtp(rand.Reader, 10)
+			for _, c := range otp {
+				if !charsetSet[c] {
+					t.Errorf("invalid character %q in OTP %q", c, otp)
+				}
+			}
+		}
+	})
+
+	t.Run("uppercase only", func(t *testing.T) {
+		for range 100 {
+			otp := generateAlphanumericOtp(rand.Reader, 10)
+			if otp != strings.ToUpper(otp) {
+				t.Errorf("OTP contains lowercase characters: %q", otp)
+			}
+		}
+	})
+
+	t.Run("deterministic with fixed reader", func(t *testing.T) {
+		seed := [32]byte{}
+		r1 := mathrand.NewChaCha8(seed)
+		r2 := mathrand.NewChaCha8(seed)
+		otp1 := generateAlphanumericOtp(r1, 8)
+		otp2 := generateAlphanumericOtp(r2, 8)
+		if otp1 != otp2 {
+			t.Errorf("same seed produced different OTPs: %q vs %q", otp1, otp2)
+		}
+	})
+
+	t.Run("different seeds produce different OTPs", func(t *testing.T) {
+		r1 := mathrand.NewChaCha8([32]byte{0})
+		r2 := mathrand.NewChaCha8([32]byte{1})
+		otp1 := generateAlphanumericOtp(r1, 16)
+		otp2 := generateAlphanumericOtp(r2, 16)
+		if otp1 == otp2 {
+			t.Errorf("different seeds produced the same OTP: %q", otp1)
+		}
+	})
+
+	t.Run("character distribution is roughly uniform", func(t *testing.T) {
+		counts := make(map[rune]int)
+		iterations := 36 * 1000
+		for range iterations {
+			otp := generateAlphanumericOtp(rand.Reader, 1)
+			counts[rune(otp[0])]++
+		}
+		expected := float64(iterations) / float64(len(charset))
+		tolerance := expected * 0.15
+		for _, c := range charset {
+			diff := math.Abs(float64(counts[c]) - expected)
+			if diff > tolerance {
+				t.Errorf("character %q count %d deviates too far from expected %.0f", c, counts[c], expected)
+			}
+		}
+	})
 }
 
 func TestEncryptedStringPositive(t *testing.T) {
