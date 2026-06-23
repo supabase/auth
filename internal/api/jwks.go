@@ -66,6 +66,9 @@ type OpenIDConfigurationResponse struct {
 func (a *API) WellKnownOpenID(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	issuer := config.JWT.Issuer
+	if issuer == "" {
+		issuer = config.API.ExternalURL
+	}
 
 	// Ensure issuer doesn't end with a slash to avoid double slashes in URLs
 	for len(issuer) > 0 && issuer[len(issuer)-1] == '/' {
@@ -73,7 +76,7 @@ func (a *API) WellKnownOpenID(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	response := OpenIDConfigurationResponse{
-		Issuer:                config.JWT.Issuer,
+		Issuer:                issuer,
 		AuthorizationEndpoint: issuer + "/oauth/authorize",
 		TokenEndpoint:         issuer + "/oauth/token",
 		JWKSURL:               issuer + "/.well-known/jwks.json",
