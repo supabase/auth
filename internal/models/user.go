@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -604,15 +605,74 @@ func CountOtherUsers(tx *storage.Connection, id uuid.UUID) (int, error) {
 }
 
 func findUser(tx *storage.Connection, query string, args ...interface{}) (*User, error) {
-	obj := &User{}
-	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
+	// Single query with JSON aggregation - embed by VALUE not pointer
+	type userWithJSON struct {
+		User
+		IdentitiesJSON []byte `db:"identities_json"`
+		FactorsJSON    []byte `db:"factors_json"`
+	}
+
+	var result userWithJSON
+
+	sqlQuery := `
+select
+  u.id, u.aud, u.role, u.email, u.is_sso_user,
+  u.encrypted_password, u.email_confirmed_at, u.invited_at,
+  u.phone, u.phone_confirmed_at,
+  u.confirmation_token, u.confirmation_sent_at, u.confirmed_at,
+  u.recovery_token, u.recovery_sent_at,
+  u.email_change_token_current, u.email_change_token_new, u.email_change,
+  u.email_change_sent_at, u.email_change_confirm_status,
+  u.phone_change_token, u.phone_change, u.phone_change_sent_at,
+  u.reauthentication_token, u.reauthentication_sent_at,
+  u.last_sign_in_at,
+  u.raw_app_meta_data, u.raw_user_meta_data,
+  u.created_at, u.updated_at, u.banned_until, u.deleted_at, u.is_anonymous,
+  u.instance_id,
+  coalesce((select json_agg(json_build_object(
+    'identity_id', i.id,
+    'id', i.provider_id,
+    'user_id', i.user_id,
+    'identity_data', i.identity_data,
+    'provider', i.provider,
+    'last_sign_in_at', i.last_sign_in_at,
+    'created_at', i.created_at,
+    'updated_at', i.updated_at,
+    'email', i.email
+  )) from ` + Identity{}.TableName() + ` i where i.user_id = u.id), '[]') as identities_json,
+  coalesce((select json_agg(json_build_object(
+    'id', f.id,
+    'user_id', f.user_id,
+    'created_at', f.created_at,
+    'updated_at', f.updated_at,
+    'status', f.status,
+    'friendly_name', f.friendly_name,
+    'factor_type', f.factor_type,
+    'secret', f.secret,
+    'phone', f.phone,
+    'last_challenged_at', f.last_challenged_at,
+    'web_authn_credential', f.web_authn_credential
+  )) from ` + Factor{}.TableName() + ` f where f.user_id = u.id), '[]') as factors_json
+from ` + User{}.TableName() + ` u
+where ` + query
+
+	if err := tx.RawQuery(sqlQuery, args...).First(&result); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, UserNotFoundError{}
 		}
 		return nil, errors.Wrap(err, "error finding user")
 	}
 
-	return obj, nil
+	// Deserialize identities and factors from JSON
+	if err := json.Unmarshal(result.IdentitiesJSON, &result.User.Identities); err != nil {
+		return nil, errors.Wrap(err, "error unmarshaling identities")
+	}
+
+	if err := json.Unmarshal(result.FactorsJSON, &result.User.Factors); err != nil {
+		return nil, errors.Wrap(err, "error unmarshaling factors")
+	}
+
+	return &result.User, nil
 }
 
 // FindUserByEmailAndAudience finds a user with the matching email and audience.
