@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -452,14 +453,27 @@ func (o *Cache) loadEntryBody(
 		temp := template.Must(template.New("").Parse(tempStr))
 		return temp, nil
 	}
-	if !strings.HasPrefix(url, "http") {
-		url = cfg.SiteURL + url
-	}
 
-	tempStr, err := o.fetch(ctx, cfg, url)
-	if err != nil {
-		err = wrapError(ctx, typ, "template_body_http_error", err)
-		return nil, err
+	var tempStr string
+	if strings.HasPrefix(url, "file://") || strings.HasPrefix(url, "/") || strings.HasPrefix(url, "./") {
+		// Local file path: strip optional file:// scheme and read from disk.
+		filePath := strings.TrimPrefix(url, "file://")
+		data, rerr := os.ReadFile(filePath)
+		if rerr != nil {
+			rerr = wrapError(ctx, typ, "template_body_file_error", rerr)
+			return nil, rerr
+		}
+		tempStr = string(data)
+	} else {
+		if !strings.HasPrefix(url, "http") {
+			url = cfg.SiteURL + url
+		}
+		var ferr error
+		tempStr, ferr = o.fetch(ctx, cfg, url)
+		if ferr != nil {
+			ferr = wrapError(ctx, typ, "template_body_http_error", ferr)
+			return nil, ferr
+		}
 	}
 
 	temp, err := template.New(url).Parse(tempStr)
