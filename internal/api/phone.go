@@ -167,5 +167,7 @@ func generateSMSFromTemplate(SMSTemplate *template.Template, otp string) (string
 	}{Code: otp}); err != nil {
 		return "", err
 	}
-	return message.String(), nil
+	msg := message.String()
+	msg = strings.ReplaceAll(msg, "\\n", "\n")
+	return msg, nil
 }
