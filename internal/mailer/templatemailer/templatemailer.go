@@ -209,7 +209,7 @@ func (m *Mailer) InviteMail(r *http.Request, user *models.User, otp, referrerURL
 
 	data := map[string]any{
 		"SiteURL":         m.cfg.SiteURL,
-		"ConfirmationURL": externalURL.ResolveReference(path).String(),
+		"ConfirmationURL": resolveWithBasePath(externalURL, path).String(),
 		"Email":           user.Email,
 		"Token":           otp,
 		"TokenHash":       user.ConfirmationToken,
@@ -232,7 +232,7 @@ func (m *Mailer) ConfirmationMail(r *http.Request, user *models.User, otp, refer
 
 	data := map[string]any{
 		"SiteURL":         m.cfg.SiteURL,
-		"ConfirmationURL": externalURL.ResolveReference(path).String(),
+		"ConfirmationURL": resolveWithBasePath(externalURL, path).String(),
 		"Email":           user.Email,
 		"Token":           otp,
 		"TokenHash":       user.ConfirmationToken,
@@ -297,7 +297,7 @@ func (m *Mailer) EmailChangeMail(r *http.Request, user *models.User, otpNew, otp
 		go func(address, token, tokenHash string) {
 			data := map[string]any{
 				"SiteURL":         m.cfg.SiteURL,
-				"ConfirmationURL": externalURL.ResolveReference(path).String(),
+				"ConfirmationURL": resolveWithBasePath(externalURL, path).String(),
 				"Email":           user.GetEmail(),
 				"NewEmail":        user.EmailChange,
 				"Token":           token,
@@ -337,7 +337,7 @@ func (m *Mailer) RecoveryMail(r *http.Request, user *models.User, otp, referrerU
 	}
 	data := map[string]any{
 		"SiteURL":         m.cfg.SiteURL,
-		"ConfirmationURL": externalURL.ResolveReference(path).String(),
+		"ConfirmationURL": resolveWithBasePath(externalURL, path).String(),
 		"Email":           user.Email,
 		"Token":           otp,
 		"TokenHash":       user.RecoveryToken,
@@ -360,7 +360,7 @@ func (m *Mailer) MagicLinkMail(r *http.Request, user *models.User, otp, referrer
 
 	data := map[string]any{
 		"SiteURL":         m.cfg.SiteURL,
-		"ConfirmationURL": externalURL.ResolveReference(path).String(),
+		"ConfirmationURL": resolveWithBasePath(externalURL, path).String(),
 		"Email":           user.Email,
 		"Token":           otp,
 		"TokenHash":       user.RecoveryToken,
@@ -418,7 +418,7 @@ func (m *Mailer) GetEmailActionLink(user *models.User, actionType, referrerURL s
 	if err != nil {
 		return "", err
 	}
-	return externalURL.ResolveReference(path).String(), nil
+	return resolveWithBasePath(externalURL, path).String(), nil
 }
 
 func (m *Mailer) PasswordChangedNotificationMail(r *http.Request, user *models.User) error {
@@ -489,6 +489,25 @@ func (m *Mailer) MFAFactorUnenrolledNotificationMail(r *http.Request, user *mode
 		"Data":       user.UserMetaData,
 	}
 	return m.mail(r.Context(), m.cfg, MFAFactorUnenrolledNotificationTemplate, user.GetEmail(), data)
+}
+
+// resolveWithBasePath is like url.ResolveReference but preserves the path
+// prefix of the base URL. url.ResolveReference implements RFC 3986 §5.2 which
+// replaces the entire base path when the reference path is absolute; this
+// causes the path component of API_EXTERNAL_URL (e.g. /auth/v1) to be
+// silently dropped when building email confirmation links.
+func resolveWithBasePath(base *url.URL, ref *url.URL) *url.URL {
+	result := *base
+	if ref.Path != "" {
+		if strings.HasPrefix(ref.Path, "/") {
+			result.Path = strings.TrimRight(base.Path, "/") + ref.Path
+		} else {
+			result.Path = strings.TrimRight(base.Path, "/") + "/" + ref.Path
+		}
+	}
+	result.RawQuery = ref.RawQuery
+	result.Fragment = ref.Fragment
+	return &result
 }
 
 type emailParams struct {
