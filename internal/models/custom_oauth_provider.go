@@ -37,9 +37,12 @@ type CustomOAuthProvider struct {
 	Scopes              slices.String `db:"scopes" json:"scopes"`
 	PKCEEnabled         bool          `db:"pkce_enabled" json:"pkce_enabled"`
 	AttributeMapping    slices.Map    `db:"attribute_mapping" json:"attribute_mapping"`
-	AuthorizationParams slices.Map    `db:"authorization_params" json:"authorization_params"`
-	Enabled             bool          `db:"enabled" json:"enabled"`
-	EmailOptional       bool          `db:"email_optional" json:"email_optional"`
+	// CustomClaimsAllowlist is a flat list of raw IdP claim keys copied verbatim
+	// into custom_claims. Empty means no custom claims are captured.
+	CustomClaimsAllowlist slices.String `db:"custom_claims_allowlist" json:"custom_claims_allowlist"`
+	AuthorizationParams   slices.Map    `db:"authorization_params" json:"authorization_params"`
+	Enabled               bool          `db:"enabled" json:"enabled"`
+	EmailOptional         bool          `db:"email_optional" json:"email_optional"`
 
 	// OIDC-specific fields (null for OAuth2 providers)
 	Issuer            *string        `db:"issuer" json:"issuer,omitempty"`
@@ -281,6 +284,9 @@ func CreateCustomOAuthProvider(tx *storage.Connection, provider *CustomOAuthProv
 	}
 	if provider.AcceptableClientIDs == nil {
 		provider.AcceptableClientIDs = slices.String{}
+	}
+	if provider.CustomClaimsAllowlist == nil {
+		provider.CustomClaimsAllowlist = slices.String{}
 	}
 
 	if err := tx.Create(provider); err != nil {
