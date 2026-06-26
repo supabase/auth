@@ -151,3 +151,44 @@ func (ts *RecoverTestSuite) TestRecover_NoSideChannelLeak() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 }
+
+func (ts *RecoverTestSuite) TestRecover_WithApostropheEmail() {
+	// Apostrophes are valid in the local part of email addresses per RFC 5321.
+	// Irish/UK names commonly use them (O'Sullivan, O'Brien, etc.).
+	// See: https://github.com/supabase/auth/issues/2329
+	email := "joe.o'sullivan@example.com"
+
+	// Create user with apostrophe in email
+	u, err := models.NewUser("", email, "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model with apostrophe email")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user with apostrophe email")
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err, "Error finding user with apostrophe email")
+	u.RecoverySentAt = &time.Time{}
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
+	// Request body
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": email,
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
+
+	// Verify the one-time token was created successfully
+	_, err = models.FindUserByConfirmationOrRecoveryToken(ts.API.db, u.RecoveryToken)
+	require.NoError(ts.T(), err, "Recovery token should be retrievable for apostrophe email user")
+}
