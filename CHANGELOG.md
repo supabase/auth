@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.192.0](https://github.com/supabase/auth/compare/v2.191.0...v2.192.0) (2026-06-29)
+
+
+### Features
+
+* **custom-oauth:** add per-provider custom_claims_allowlist ([#2576](https://github.com/supabase/auth/issues/2576)) ([acecb06](https://github.com/supabase/auth/commit/acecb063b0d089d6329af04171b3bc3903508c3b))
+
+
+### Bug Fixes
+
+* **tests:** rely on error codes for hooks tests to work across PG backends ([ee91c5f](https://github.com/supabase/auth/commit/ee91c5fd31ce3fd6721cb40ae1795ba702b8c9b8))
+* **vulncheck:** ignore GO-2026-5004 (pgx/v4, not reachable) ([#2602](https://github.com/supabase/auth/issues/2602)) ([f1cc16f](https://github.com/supabase/auth/commit/f1cc16fbd54b41623b8d39b0663d410ebbe9c9e6))
+
 ## [2.191.0](https://github.com/supabase/auth/compare/v2.190.0...v2.191.0) (2026-06-17)
 
 
