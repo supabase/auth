@@ -1141,12 +1141,6 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 	}
 }
 
-// TestSecureEmailChangeNotBypassedByAutoconfirm asserts that
-// double_confirm_changes (SecureEmailChangeEnabled) works correctly even when
-// mailer_autoconfirm is true. Previously, !Autoconfirm was ANDed into the
-// double-confirm guard, causing the email change to commit after a single
-// verification regardless of SecureEmailChangeEnabled.
-// See: https://github.com/supabase/auth/issues/2600
 func (ts *VerifyTestSuite) TestSecureEmailChangeNotBypassedByAutoconfirm() {
 	ts.Config.Mailer.SecureEmailChangeEnabled = true
 	ts.Config.Mailer.Autoconfirm = true
