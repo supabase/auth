@@ -389,11 +389,16 @@ type GlobalConfiguration struct {
 	SAML            SAMLConfiguration        `json:"saml"`
 	WebAuthn        WebAuthnConfiguration    `json:"webauthn"`
 	Passkey         PasskeyConfiguration     `json:"passkey"`
+	SCIM            SCIMConfiguration        `json:"scim"`
 	CORS            CORSConfiguration        `json:"cors"`
 	IndexWorker     IndexWorkerConfiguration `json:"index_worker" split_words:"true"`
 
 	Experimental ExperimentalConfiguration `json:"experimental"`
 	Reloading    ReloadingConfiguration    `json:"reloading"`
+}
+
+type SCIMConfiguration struct {
+	Enabled bool `json:"enabled" default:"false"`
 }
 
 type CORSConfiguration struct {
