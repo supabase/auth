@@ -396,6 +396,15 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	err = db.Transaction(func(tx *storage.Connection) error {
 		authMethod := models.OAuthProviderAuthorizationCode
 
+		// Consume the code under a row lock to keep it single use across concurrent requests
+		lockedAuthorization, terr := models.FindOAuthServerAuthorizationByCodeForUpdate(tx, params.Code)
+		if terr != nil {
+			if models.IsNotFoundError(terr) {
+				return apierrors.NewOAuthError("invalid_grant", "Invalid authorization code")
+			}
+			return terr
+		}
+
 		// Create audit log entry for OAuth token exchange
 		if terr := models.NewAuditLogEntry(s.config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider_type": "oauth_provider_authorization_code",
@@ -405,7 +414,6 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 		}
 
 		// Issue the refresh token and access token
-		var terr error
 		tokenResponse, terr = tokenService.IssueRefreshToken(r, w.Header(), tx, user, authMethod, grantParams)
 		if terr != nil {
 			return terr
@@ -413,7 +421,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 
 		// Mark authorization as used - authorization codes are single use
 		// We could either delete it or mark it as consumed
-		if terr = tx.Destroy(authorization); terr != nil {
+		if terr = tx.Destroy(lockedAuthorization); terr != nil {
 			return terr
 		}
 
@@ -423,6 +431,9 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	if err != nil {
 		if httpErr, ok := err.(*apierrors.HTTPError); ok {
 			return httpErr
+		}
+		if oauthErr, ok := err.(*apierrors.OAuthError); ok {
+			return oauthErr
 		}
 		return apierrors.NewInternalServerError("Error exchanging authorization code").WithInternalError(err)
 	}
