@@ -216,6 +216,25 @@ func TestGlobal(t *testing.T) {
 
 }
 
+func TestExperimentalProviderLinkingDomains(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("GOTRUE_SITE_URL", "http://localhost:8080")
+	os.Setenv("GOTRUE_DB_DRIVER", "postgres")
+	os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
+	os.Setenv("GOTRUE_OPERATOR_TOKEN", "token")
+	os.Setenv("GOTRUE_JWT_SECRET", "secret")
+	os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
+	os.Setenv("GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS", "github=social,custom:google=social")
+
+	cfg, err := LoadGlobalFromEnv()
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.Equal(t, conf.ProviderLinkingDomains{
+		"github":        "social",
+		"custom:google": "social",
+	}, cfg.Experimental.ProviderLinkingDomains)
+}
+
 func TestLoading(t *testing.T) {
 	os.Clearenv()
 

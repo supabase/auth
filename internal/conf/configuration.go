@@ -307,11 +307,52 @@ type AuditLogConfiguration struct {
 	DisablePostgres bool `split_words:"true" default:"false"`
 }
 
+// ProviderLinkingDomains maps a provider name to the account-linking domain it
+// belongs to. Providers mapped to the same domain link to one another (a
+// matching email lands on the same account) but stay isolated from the
+// "default" (email-linked) pool and from SSO.
+//
+// Provider names can themselves contain a colon (custom OAuth providers are
+// named "custom:<identifier>", e.g. "custom:github"), so the env format uses
+// "=" — not ":" — to separate the provider from its domain. Pairs are
+// comma-separated:
+//
+//	GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="custom:github=social,custom:google=social"
+type ProviderLinkingDomains map[string]string
+
+func (d *ProviderLinkingDomains) Decode(value string) error {
+	result := ProviderLinkingDomains{}
+	if value = strings.TrimSpace(value); value != "" {
+		for _, pair := range strings.Split(value, ",") {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) != 2 {
+				return fmt.Errorf("conf: invalid provider linking domain %q, expected format \"provider=domain\"", pair)
+			}
+			provider, domain := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
+			if provider == "" || domain == "" {
+				return fmt.Errorf("conf: invalid provider linking domain %q, provider and domain must be non-empty", pair)
+			}
+			result[provider] = domain
+		}
+	}
+	*d = result
+	return nil
+}
+
 type ExperimentalConfiguration struct {
+	// DEPRECATED: use ProviderLinkingDomains instead. Kept for backward
+	// compatibility; auto-migrated in ApplyDefaults into ProviderLinkingDomains as
+	// {provider: provider}.
+	//
 	// Names of providers (e.g. "google") which have their own identity
 	// linking domain, meaning that the ones listed here _will not
 	// participate_ in email similarity linking with other accounts.
 	ProvidersWithOwnLinkingDomain []string `split_words:"true"`
+
+	// ProviderLinkingDomains maps a provider name to the account-linking domain
+	// it belongs to. See the ProviderLinkingDomains type for the env format.
+	// Env: GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="custom:github=social,custom:google=social"
+	ProviderLinkingDomains ProviderLinkingDomains `split_words:"true"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime
@@ -1064,6 +1105,19 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 			config.JWT.ValidMethods = append(config.JWT.ValidMethods, key.PublicKey.Algorithm().String())
 		}
 
+	}
+
+	// Backfill the deprecated ProvidersWithOwnLinkingDomain list into the
+	// ProviderLinkingDomains map. A provider that owned its linking domain maps
+	// to a domain named after itself (own domain == own name). Explicit
+	// ProviderLinkingDomains entries win over the legacy backfill.
+	if config.Experimental.ProviderLinkingDomains == nil {
+		config.Experimental.ProviderLinkingDomains = map[string]string{}
+	}
+	for _, p := range config.Experimental.ProvidersWithOwnLinkingDomain {
+		if _, ok := config.Experimental.ProviderLinkingDomains[p]; !ok {
+			config.Experimental.ProviderLinkingDomains[p] = p
+		}
 	}
 
 	if config.Mailer.Autoconfirm && config.Mailer.AllowUnverifiedEmailSignIns {
