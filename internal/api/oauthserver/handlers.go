@@ -397,7 +397,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 		authMethod := models.OAuthProviderAuthorizationCode
 
 		// Create audit log entry for OAuth token exchange
-		if terr := models.NewAuditLogEntry(s.config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(s.config.AuditLog, r, tx, user, models.LoginAction, map[string]interface{}{
 			"provider_type": "oauth_provider_authorization_code",
 			"client_id":     client.ID.String(),
 		}); terr != nil {
@@ -610,7 +610,7 @@ func (s *Server) UserRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) er
 		}
 
 		// Create audit log entry
-		if terr := models.NewAuditLogEntry(s.config.AuditLog, r, tx, user, models.TokenRevokedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(s.config.AuditLog, r, tx, user, models.TokenRevokedAction, map[string]interface{}{
 			"oauth_client_id": clientID.String(),
 			"action":          "revoke_oauth_grant",
 		}); terr != nil {
