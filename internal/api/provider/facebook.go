@@ -5,6 +5,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -21,7 +23,20 @@ const (
 
 type facebookProvider struct {
 	*oauth2.Config
-	ProfileURL string
+	ProfileURL    string
+	DebugTokenURL string
+}
+
+type facebookDebugToken struct {
+	Data struct {
+		AppID   string `json:"app_id"`
+		IsValid bool   `json:"is_valid"`
+		UserID  string `json:"user_id"`
+		Error   struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	} `json:"data"`
 }
 
 type facebookUser struct {
@@ -45,7 +60,9 @@ func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 
 	authHost := chooseHost(ext.URL, defaultFacebookAuthBase)
 	tokenHost := chooseHost(ext.URL, defaultFacebookTokenBase)
-	profileURL := chooseHost(ext.URL, defaultFacebookAPIBase) + "/me?fields=email,first_name,last_name,name,picture"
+	apiHost := chooseHost(ext.URL, defaultFacebookAPIBase)
+	profileURL := apiHost + "/me?fields=email,first_name,last_name,name,picture"
+	debugTokenURL := apiHost + "/debug_token"
 
 	oauthScopes := []string{
 		"email",
@@ -66,8 +83,40 @@ func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 			},
 			Scopes: oauthScopes,
 		},
-		ProfileURL: profileURL,
+		ProfileURL:    profileURL,
+		DebugTokenURL: debugTokenURL,
 	}, nil
+}
+
+// VerifyAccessToken confirms that the given access token was issued for this
+// Facebook app and is still valid. This is required when signing in with an
+// access token obtained on the client (for example a native Android login),
+// to mitigate access token substitution where a token minted for another app
+// could otherwise be replayed against this one.
+func (p facebookProvider) VerifyAccessToken(ctx context.Context, accessToken string) error {
+	// The app access token is used as the inspecting token, see
+	// https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging
+	appAccessToken := p.Config.ClientID + "|" + p.Config.ClientSecret
+
+	query := url.Values{}
+	query.Set("input_token", accessToken)
+	query.Set("access_token", appAccessToken)
+	requestURL := p.DebugTokenURL + "?" + query.Encode()
+
+	var debugToken facebookDebugToken
+	if err := makeRequest(ctx, &oauth2.Token{AccessToken: accessToken}, p.Config, requestURL, &debugToken); err != nil {
+		return err
+	}
+
+	if !debugToken.Data.IsValid {
+		return fmt.Errorf("facebook: access token is not valid: %s", debugToken.Data.Error.Message)
+	}
+
+	if debugToken.Data.AppID != p.Config.ClientID {
+		return fmt.Errorf("facebook: access token was not issued for this app")
+	}
+
+	return nil
 }
 
 func (p facebookProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {

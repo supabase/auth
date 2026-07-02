@@ -51,6 +51,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		handler = a.RefreshTokenGrant
 	case "id_token":
 		handler = a.IdTokenGrant
+	case "access_token":
+		handler = a.AccessTokenGrant
 	case "pkce":
 		handler = a.PKCE
 	case "web3":
