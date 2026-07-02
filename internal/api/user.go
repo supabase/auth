@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
@@ -214,6 +216,30 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserUpdatePasswordAction, "", nil); terr != nil {
 				return terr
+			}
+
+			// If the user has an email but no email identity yet (typically a
+			// user whose only identity is from an external OAuth provider),
+			// setting a password establishes email/password as a sign-in
+			// method. Create the email identity so it shows up in
+			// auth.identities and the email provider is reflected in
+			// app_metadata.providers. See #2085.
+			if user.GetEmail() != "" {
+				if _, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil {
+					if !models.IsNotFoundError(terr) {
+						return terr
+					}
+					if _, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+						Subject:       user.ID.String(),
+						Email:         user.GetEmail(),
+						EmailVerified: user.IsConfirmed(),
+					})); terr != nil {
+						return terr
+					}
+					if terr := user.UpdateAppMetaDataProviders(tx); terr != nil {
+						return terr
+					}
+				}
 			}
 
 			// send a Password Changed email notification to the user to inform them that their password has been changed
