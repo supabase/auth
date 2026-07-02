@@ -592,6 +592,9 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 		if terr := tx.Destroy(factor); terr != nil {
 			return apierrors.NewInternalServerError("Database error deleting factor").WithInternalError(terr)
 		}
+		if terr := factor.DowngradeSessionsToAAL1(tx); terr != nil {
+			return apierrors.NewInternalServerError("Database error downgrading sessions").WithInternalError(terr)
+		}
 		return nil
 	})
 	if err != nil {
