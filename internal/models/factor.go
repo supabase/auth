@@ -135,7 +135,7 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return EmailChange, nil
 	case "token_refresh":
 		return TokenRefresh, nil
-	case "mfa/sms":
+	case "mfa/phone":
 		return MFAPhone, nil
 	case "mfa/webauthn":
 		return MFAWebAuthn, nil
@@ -397,13 +397,32 @@ func (f *Factor) UpdateStatus(tx *storage.Connection, state FactorState) error {
 	return tx.UpdateOnly(f, "status", "updated_at")
 }
 
+// amrMethodForFactorType returns the AMR authentication_method string stored in
+// mfa_amr_claims for a given factor type.
+func amrMethodForFactorType(factorType string) (string, error) {
+	switch factorType {
+	case TOTP:
+		return TOTPSignIn.String(), nil
+	case Phone:
+		return MFAPhone.String(), nil
+	case WebAuthn:
+		return MFAWebAuthn.String(), nil
+	default:
+		return "", fmt.Errorf("no AMR authentication method mapped for factor type %q", factorType)
+	}
+}
+
 func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
 	sessions, err := FindSessionsByFactorID(tx, f.ID)
 	if err != nil {
 		return err
 	}
+	amrMethod, err := amrMethodForFactorType(f.FactorType)
+	if err != nil {
+		return err
+	}
 	for _, session := range sessions {
-		if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: AMRClaim{}}).TableName()+" WHERE session_id = ? AND authentication_method = ?", session.ID, f.FactorType).Exec(); err != nil {
+		if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: AMRClaim{}}).TableName()+" WHERE session_id = ? AND authentication_method = ?", session.ID, amrMethod).Exec(); err != nil {
 			return err
 		}
 	}
