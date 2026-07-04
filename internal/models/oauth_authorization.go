@@ -269,14 +269,29 @@ func FindOAuthServerAuthorizationByIDForUpdate(tx *storage.Connection, authoriza
 	return auth, nil
 }
 
-// FindOAuthServerAuthorizationByCode finds an OAuth authorization by authorization code
-func FindOAuthServerAuthorizationByCode(tx *storage.Connection, code string) (*OAuthServerAuthorization, error) {
+// FindOAuthServerAuthorizationByCode finds an OAuth authorization by
+// authorization code. If forUpdate is true, the row is locked with FOR UPDATE
+// SKIP LOCKED and this must be called inside a transaction.
+func FindOAuthServerAuthorizationByCode(tx *storage.Connection, code string, forUpdate bool) (*OAuthServerAuthorization, error) {
 	auth := &OAuthServerAuthorization{}
-	if err := tx.Q().Where("authorization_code = ? AND status = ?", code, OAuthServerAuthorizationApproved).First(auth); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, OAuthServerAuthorizationNotFoundError{}
+	if forUpdate {
+		if err := tx.RawQuery(
+			fmt.Sprintf("SELECT * FROM %q WHERE authorization_code = ? AND status = ? LIMIT 1 FOR UPDATE SKIP LOCKED", auth.TableName()),
+			code,
+			OAuthServerAuthorizationApproved,
+		).First(auth); err != nil {
+			if errors.Cause(err) == sql.ErrNoRows {
+				return nil, OAuthServerAuthorizationNotFoundError{}
+			}
+			return nil, errors.Wrap(err, "error finding OAuth authorization by code")
 		}
-		return nil, errors.Wrap(err, "error finding OAuth authorization by code")
+	} else {
+		if err := tx.Q().Where("authorization_code = ? AND status = ?", code, OAuthServerAuthorizationApproved).First(auth); err != nil {
+			if errors.Cause(err) == sql.ErrNoRows {
+				return nil, OAuthServerAuthorizationNotFoundError{}
+			}
+			return nil, errors.Wrap(err, "error finding OAuth authorization by code")
+		}
 	}
 
 	// Load client relationship (always present)

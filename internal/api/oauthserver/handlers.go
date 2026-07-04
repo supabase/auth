@@ -332,72 +332,79 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 		return apierrors.NewInternalServerError("Token service not available")
 	}
 
-	// Find the OAuth authorization for this authorization code
-	authorization, err := models.FindOAuthServerAuthorizationByCode(db, params.Code)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return apierrors.NewOAuthError("invalid_grant", "Invalid authorization code")
-		}
-		return apierrors.NewInternalServerError("Error finding authorization code").WithInternalError(err)
-	}
-
-	// Check if the authorization has expired
-	if authorization.IsExpired() {
-		return apierrors.NewOAuthError("invalid_grant", "Authorization code has expired")
-	}
-
-	// Validate that the authorization code was issued for this client
-	if authorization.ClientID != client.ID {
-		return apierrors.NewOAuthError("invalid_grant", "Authorization code was not issued for this client")
-	}
-
-	// Validate that (if exists) the resource parameter matches the authorization code resource
-	if params.Resource != "" && params.Resource != utilities.StringValue(authorization.Resource) {
-		return apierrors.NewOAuthError("invalid_grant", "Authorization code resource does not match the resource parameter")
-	}
-
-	// Validate redirect_uri if provided - must match the one used in authorization
-	if params.RedirectURI != "" && params.RedirectURI != authorization.RedirectURI {
-		return apierrors.NewOAuthError("invalid_grant", "Invalid redirect_uri")
-	}
-
-	// Validate PKCE if used in the authorization
-	if err := authorization.VerifyPKCE(params.CodeVerifier); err != nil {
-		return apierrors.NewOAuthError("invalid_grant", "PKCE verification failed: "+err.Error())
-	}
-
-	// Get the user for the authorization code
-	if authorization.UserID == nil {
-		return apierrors.NewOAuthError("invalid_grant", "Authorization code has no associated user")
-	}
-
-	user, err := models.FindUserByID(db, *authorization.UserID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return apierrors.NewOAuthError("invalid_grant", "User not found for authorization code")
-		}
-		return apierrors.NewInternalServerError("Error finding user").WithInternalError(err)
-	}
-
-	if user.IsBanned() {
-		return apierrors.NewOAuthError("access_denied", "User is banned")
-	}
-
 	// Exchange the authorization code for tokens
+	var authorization *models.OAuthServerAuthorization
+	var user *models.User
 	var tokenResponse *tokens.AccessTokenResponse
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 	grantParams.OAuthClientID = &client.ID
 
-	// Store scopes from authorization in session
-	scopes := authorization.Scope
-	grantParams.Scopes = &scopes
+	err := db.Transaction(func(tx *storage.Connection) error {
+		// Find and lock the OAuth authorization for this authorization code.
+		var terr error
+		authorization, terr = models.FindOAuthServerAuthorizationByCode(tx, params.Code, true)
+		if terr != nil {
+			if models.IsNotFoundError(terr) {
+				return apierrors.NewOAuthError("invalid_grant", "Invalid authorization code")
+			}
+			return apierrors.NewInternalServerError("Error finding authorization code").WithInternalError(terr)
+		}
 
-	err = db.Transaction(func(tx *storage.Connection) error {
+		if authorization.AuthorizationCode == nil || *authorization.AuthorizationCode != params.Code || authorization.Status != models.OAuthServerAuthorizationApproved {
+			return apierrors.NewOAuthError("invalid_grant", "Invalid authorization code")
+		}
+
+		// Check if the authorization has expired
+		if authorization.IsExpired() {
+			return apierrors.NewOAuthError("invalid_grant", "Authorization code has expired")
+		}
+
+		// Validate that the authorization code was issued for this client
+		if authorization.ClientID != client.ID {
+			return apierrors.NewOAuthError("invalid_grant", "Authorization code was not issued for this client")
+		}
+
+		// Validate that (if exists) the resource parameter matches the authorization code resource
+		if params.Resource != "" && params.Resource != utilities.StringValue(authorization.Resource) {
+			return apierrors.NewOAuthError("invalid_grant", "Authorization code resource does not match the resource parameter")
+		}
+
+		// Validate redirect_uri if provided - must match the one used in authorization
+		if params.RedirectURI != "" && params.RedirectURI != authorization.RedirectURI {
+			return apierrors.NewOAuthError("invalid_grant", "Invalid redirect_uri")
+		}
+
+		// Validate PKCE if used in the authorization
+		if terr := authorization.VerifyPKCE(params.CodeVerifier); terr != nil {
+			return apierrors.NewOAuthError("invalid_grant", "PKCE verification failed: "+terr.Error())
+		}
+
+		// Get the user for the authorization code
+		if authorization.UserID == nil {
+			return apierrors.NewOAuthError("invalid_grant", "Authorization code has no associated user")
+		}
+
+		user, terr = models.FindUserByID(tx, *authorization.UserID)
+		if terr != nil {
+			if models.IsNotFoundError(terr) {
+				return apierrors.NewOAuthError("invalid_grant", "User not found for authorization code")
+			}
+			return apierrors.NewInternalServerError("Error finding user").WithInternalError(terr)
+		}
+
+		if user.IsBanned() {
+			return apierrors.NewOAuthError("access_denied", "User is banned")
+		}
+
+		// Store scopes from authorization in session
+		scopes := authorization.Scope
+		grantParams.Scopes = &scopes
+
 		authMethod := models.OAuthProviderAuthorizationCode
 
 		// Create audit log entry for OAuth token exchange
-		if terr := models.NewAuditLogEntry(s.config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
+		if terr = models.NewAuditLogEntry(s.config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider_type": "oauth_provider_authorization_code",
 			"client_id":     client.ID.String(),
 		}); terr != nil {
@@ -405,7 +412,6 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 		}
 
 		// Issue the refresh token and access token
-		var terr error
 		tokenResponse, terr = tokenService.IssueRefreshToken(r, w.Header(), tx, user, authMethod, grantParams)
 		if terr != nil {
 			return terr
@@ -423,6 +429,9 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	if err != nil {
 		if httpErr, ok := err.(*apierrors.HTTPError); ok {
 			return httpErr
+		}
+		if oauthErr, ok := err.(*apierrors.OAuthError); ok {
+			return oauthErr
 		}
 		return apierrors.NewInternalServerError("Error exchanging authorization code").WithInternalError(err)
 	}

@@ -6,12 +6,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/conf/confload"
@@ -538,6 +542,89 @@ func (ts *OAuthClientTestSuite) TestHandlerValidation() {
 	err = ts.Server.AdminOAuthServerClientRegister(w, req)
 	require.Error(ts.T(), err)
 	assert.Contains(ts.T(), err.Error(), "invalid redirect_uri")
+}
+
+func (ts *OAuthClientTestSuite) TestAuthorizationCodeGrantConcurrentReplay() {
+	client, _ := ts.createTestOAuthClient()
+	user := ts.createTestUser("oauth-code-replay@example.com")
+	codeVerifier := "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
+
+	authorization := models.NewOAuthServerAuthorization(models.NewOAuthServerAuthorizationParams{
+		ClientID:            client.ID,
+		RedirectURI:         "https://example.com/callback",
+		Scope:               "email",
+		CodeChallenge:       codeVerifier,
+		CodeChallengeMethod: "plain",
+		TTL:                 time.Hour,
+	})
+	require.NoError(ts.T(), models.CreateOAuthServerAuthorization(ts.DB, authorization))
+	require.NoError(ts.T(), authorization.SetUser(ts.DB, user.ID))
+	require.NoError(ts.T(), authorization.Approve(ts.DB))
+	require.NotNil(ts.T(), authorization.AuthorizationCode)
+
+	const attempts = 8
+	start := make(chan struct{})
+	type tokenResult struct {
+		recorder *httptest.ResponseRecorder
+		err      error
+	}
+	results := make(chan tokenResult, attempts)
+
+	var wg sync.WaitGroup
+	wg.Add(attempts)
+	for i := 0; i < attempts; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+
+			form := url.Values{}
+			form.Set("grant_type", GrantTypeAuthorizationCode)
+			form.Set("code", *authorization.AuthorizationCode)
+			form.Set("redirect_uri", authorization.RedirectURI)
+			form.Set("code_verifier", codeVerifier)
+
+			req := httptest.NewRequest(http.MethodPost, "/oauth/token", bytes.NewBufferString(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req = req.WithContext(shared.WithOAuthServerClient(req.Context(), client))
+
+			w := httptest.NewRecorder()
+			if err := ts.Server.OAuthToken(w, req); err != nil {
+				if oauthErr, ok := err.(*apierrors.OAuthError); ok {
+					err = shared.SendJSON(w, http.StatusBadRequest, oauthErr)
+					results <- tokenResult{recorder: w, err: err}
+					return
+				}
+				results <- tokenResult{recorder: w, err: err}
+				return
+			}
+			results <- tokenResult{recorder: w}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(results)
+
+	successes := 0
+	failures := 0
+	for result := range results {
+		require.NoError(ts.T(), result.err)
+		w := result.recorder
+		switch w.Code {
+		case http.StatusOK:
+			successes++
+		case http.StatusBadRequest:
+			failures++
+			var body apierrors.OAuthError
+			require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &body))
+			assert.Equal(ts.T(), "invalid_grant", body.Err)
+		default:
+			ts.T().Fatalf("unexpected status %d with body %s", w.Code, w.Body.String())
+		}
+	}
+
+	assert.Equal(ts.T(), 1, successes)
+	assert.Equal(ts.T(), attempts-1, failures)
 }
 
 // Helper function to create a test user
