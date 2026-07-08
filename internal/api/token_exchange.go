@@ -31,6 +31,7 @@ var subjectTokenTypeProviders = map[string]string{
 type TokenExchangeGrantParams struct {
 	SubjectToken     string `json:"subject_token"`
 	SubjectTokenType string `json:"subject_token_type"`
+	LinkIdentity     bool   `json:"link_identity"`
 }
 
 // TokenExchangeGrant implements the RFC 8693 token-exchange grant. It lets a
@@ -43,6 +44,10 @@ type TokenExchangeGrantParams struct {
 // only a classic access token, which carries no profile claims. This grant
 // verifies that token belongs to this app, reads the provider subject from it,
 // and signs in the existing identity, so it does not create accounts.
+//
+// When link_identity is set and a valid user access token is provided in the
+// Authorization header, the provider identity is linked to that user instead of
+// signing in an existing identity.
 func (a *API) TokenExchangeGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 
@@ -61,6 +66,33 @@ func (a *API) TokenExchangeGrant(ctx context.Context, w http.ResponseWriter, r *
 	providerType, ok := subjectTokenTypeProviders[params.SubjectTokenType]
 	if !ok {
 		return apierrors.NewOAuthError("invalid_request", fmt.Sprintf("unsupported subject_token_type %q", params.SubjectTokenType))
+	}
+
+	// When linking, the caller must present a valid user access token; the
+	// verified provider identity is attached to that user instead of signing in
+	// an existing identity.
+	var targetUser *models.User
+	if params.LinkIdentity {
+		if r.Header.Get("Authorization") == "" {
+			return apierrors.NewOAuthError("invalid_request", "Linking requires a valid user access token in Authorization")
+		}
+
+		requireAuthCtx, err := a.requireAuthentication(w, r)
+		if err != nil {
+			return err
+		}
+
+		targetUser = getUser(requireAuthCtx)
+		if targetUser == nil {
+			return apierrors.NewOAuthError("invalid_request", "Linking requires a valid user authentication")
+		}
+
+		if targetUser.IsBanned() {
+			return apierrors.NewOAuthError("invalid_grant", "User is banned")
+		}
+
+		// set it so linkIdentityToUser works below
+		ctx = withTargetUser(ctx, targetUser)
 	}
 
 	oauthProvider, pConfig, err := a.OAuthProvider(ctx, providerType)
@@ -88,44 +120,57 @@ func (a *API) TokenExchangeGrant(ctx context.Context, w http.ResponseWriter, r *
 	// signs in an identity that already exists (created on the first login via
 	// the id_token grant). A missing identity means the user must sign up first,
 	// but the error stays generic to avoid leaking whether an account exists.
-	identity, err := models.FindIdentityByIdAndProvider(db, subject, providerType)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return apierrors.NewOAuthError("invalid_request", "Invalid subject_token").WithInternalError(err)
+	var user *models.User
+	if !params.LinkIdentity {
+		identity, err := models.FindIdentityByIdAndProvider(db, subject, providerType)
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return apierrors.NewOAuthError("invalid_request", "Invalid subject_token").WithInternalError(err)
+			}
+			return apierrors.NewInternalServerError("Database error finding identity").WithInternalError(err)
 		}
-		return apierrors.NewInternalServerError("Database error finding identity").WithInternalError(err)
-	}
 
-	user, err := models.FindUserByID(db, identity.UserID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return apierrors.NewOAuthError("invalid_request", "No user found for this identity")
+		user, err = models.FindUserByID(db, identity.UserID)
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return apierrors.NewOAuthError("invalid_request", "No user found for this identity")
+			}
+			return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 		}
-		return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
-	}
 
-	if user.IsBanned() {
-		return apierrors.NewOAuthError("invalid_request", "Invalid subject_token")
-	}
+		if user.IsBanned() {
+			return apierrors.NewOAuthError("invalid_request", "Invalid subject_token")
+		}
 
-	// Don't hand out a session to an unconfirmed user unless the instance allows
-	// unverified email sign-ins, matching the other sign-in paths. The error
-	// stays generic to avoid leaking account state.
-	if !user.IsConfirmed() && !a.config.Mailer.AllowUnverifiedEmailSignIns {
-		return apierrors.NewOAuthError("invalid_request", "Invalid subject_token")
+		// Don't hand out a session to an unconfirmed user unless the instance
+		// allows unverified email sign-ins, matching the other sign-in paths.
+		// The error stays generic to avoid leaking account state.
+		if !user.IsConfirmed() && !a.config.Mailer.AllowUnverifiedEmailSignIns {
+			return apierrors.NewOAuthError("invalid_request", "Invalid subject_token")
+		}
 	}
 
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
+	// userData for the link path carries only the provider subject; the access
+	// token exposes no profile claims.
+	userData := &provider.UserProvidedData{Metadata: &provider.Claims{Subject: subject}}
+
 	var token *AccessTokenResponse
 	if err := db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		if params.LinkIdentity {
+			user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType)
+			if terr != nil {
+				return terr
+			}
+		}
 		if terr := models.NewAuditLogEntry(a.config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": providerType,
 		}); terr != nil {
 			return terr
 		}
-		var terr error
 		token, terr = a.issueRefreshToken(r, w.Header(), tx, user, models.OAuth, grantParams)
 		return terr
 	}); err != nil {

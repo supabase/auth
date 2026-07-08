@@ -204,3 +204,81 @@ func (ts *ExternalTestSuite) TestTokenExchangeProviderDisabled() {
 	w := ts.tokenExchange("some_token")
 	ts.Require().Equal(http.StatusBadRequest, w.Code)
 }
+
+func (ts *ExternalTestSuite) generateAccessTokenAndSession(u *models.User) string {
+	s, err := models.NewSession(u.ID, nil)
+	ts.Require().NoError(err)
+	ts.Require().NoError(ts.API.db.Create(s))
+
+	req := httptest.NewRequest(http.MethodPost, "/token?grant_type=password", nil)
+	token, _, err := ts.API.generateAccessToken(req, ts.API.db, u, &s.ID, models.PasswordGrant)
+	ts.Require().NoError(err)
+	return token
+}
+
+func (ts *ExternalTestSuite) tokenExchangeLink(subjectToken, authToken string) *httptest.ResponseRecorder {
+	var buffer bytes.Buffer
+	ts.Require().NoError(json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"subject_token":      subjectToken,
+		"subject_token_type": FacebookAccessTokenType,
+		"link_identity":      true,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type="+TokenExchangeGrantType, &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	if authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	return w
+}
+
+func (ts *ExternalTestSuite) TestTokenExchangeLinkIdentity() {
+	// User exists with an email identity but no facebook identity yet.
+	user, err := ts.createUser("link-user-sub", "linkme@example.com", "Link Me", "", "")
+	ts.Require().NoError(err)
+	authToken := ts.generateAccessTokenAndSession(user)
+
+	server := FacebookAccessTokenSetup(ts, ts.Config.External.Facebook.ClientID[0], true, "USER", "fbLinkTarget")
+	defer server.Close()
+
+	w := ts.tokenExchangeLink("valid_access_token", authToken)
+	ts.Require().Equal(http.StatusOK, w.Code, w.Body.String())
+
+	var response AccessTokenResponse
+	ts.Require().NoError(json.NewDecoder(w.Body).Decode(&response))
+	ts.Require().NotNil(response.User)
+	ts.Equal(user.ID, response.User.ID)
+
+	// the facebook identity should now be linked to the existing user
+	ts.Require().NoError(ts.API.db.Load(user, "Identities"))
+	var providers []string
+	for _, identity := range user.Identities {
+		providers = append(providers, identity.Provider)
+	}
+	ts.Contains(providers, "facebook")
+}
+
+func (ts *ExternalTestSuite) TestTokenExchangeLinkIdentityRequiresAuth() {
+	server := FacebookAccessTokenSetup(ts, ts.Config.External.Facebook.ClientID[0], true, "USER", "fbLinkTarget")
+	defer server.Close()
+
+	w := ts.tokenExchangeLink("valid_access_token", "")
+	ts.Require().Equal(http.StatusBadRequest, w.Code)
+}
+
+func (ts *ExternalTestSuite) TestTokenExchangeLinkIdentityRejectsBannedUser() {
+	user, err := ts.createUser("link-user-sub", "linkme@example.com", "Link Me", "", "")
+	ts.Require().NoError(err)
+	authToken := ts.generateAccessTokenAndSession(user)
+	t := time.Now().Add(24 * time.Hour)
+	user.BannedUntil = &t
+	ts.Require().NoError(ts.API.db.UpdateOnly(user, "banned_until"))
+
+	server := FacebookAccessTokenSetup(ts, ts.Config.External.Facebook.ClientID[0], true, "USER", "fbLinkTarget")
+	defer server.Close()
+
+	w := ts.tokenExchangeLink("valid_access_token", authToken)
+	ts.Require().Equal(http.StatusBadRequest, w.Code)
+}
