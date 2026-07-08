@@ -113,67 +113,13 @@ paths:
                   signature: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1b"
                   chain: "ethereum"
             schema:
-              type: object
-              description: |-
-                For the refresh token flow, supply only `refresh_token`.
-                For the email/phone with password flow, supply `email`, `phone` and `password` with an optional `gotrue_meta_security`.
-                For the OIDC ID token flow, supply `id_token`, `nonce`, `provider`, `client_id`, `issuer` with an optional `gotrue_meta_security`.
-                For the Web3 flow, supply `message`, `signature`, and `chain`.
-              properties:
-                refresh_token:
-                  type: string
-                password:
-                  type: string
-                email:
-                  type: string
-                  format: email
-                phone:
-                  type: string
-                  format: phone
-                id_token:
-                  type: string
-                access_token:
-                  type: string
-                  description: Provide only when `grant_type` is `id_token` and the provided ID token requires the presence of an access token to be accepted (usually by having an `at_hash` claim).
-                nonce:
-                  type: string
-                provider:
-                  type: string
-                  enum:
-                    - google
-                    - apple
-                    - azure
-                    - facebook
-                    - keycloak
-                client_id:
-                  type: string
-                issuer:
-                  type: string
-                  description: If `provider` is `azure` then you can specify any Azure OIDC issuer string here, which will be used for verification.
-                gotrue_meta_security:
-                  $ref: "#/components/schemas/GoTrueSecurity"
-                auth_code:
-                  type: string
-                  format: uuid
-                code_verifier:
-                  type: string
-                message:
-                  type: string
-                  description: |
-                    Signed message for Web3 authentication following the Sign in with Solana (SIWS) or Sign in with Ethereum (SIWE) standard. Must include: `Issued At`, `URI`, `Version`.
-                signature:
-                  type: string
-                  description: |
-                    The signature of the message for Web3 authentication. 
-                    For Solana: Base64 or Base64-URL encoded. 
-                    For Ethereum: hexadecimal string with 0x prefix.
-                chain:
-                  type: string
-                  description: What blockchain is the Web3 message and signature for.
-                  enum:
-                    - solana
-                    - ethereum
-                  example: solana
+              description: The request shape depends on the `grant_type` query parameter.
+              oneOf:
+                - $ref: "#/components/schemas/PasswordGrantRequest"
+                - $ref: "#/components/schemas/RefreshTokenGrantRequest"
+                - $ref: "#/components/schemas/IdTokenGrantRequest"
+                - $ref: "#/components/schemas/PKCEGrantRequest"
+                - $ref: "#/components/schemas/Web3GrantRequest"
       responses:
         200:
           description: >
@@ -186,9 +132,9 @@ paths:
         400:
           $ref: "#/components/responses/BadRequestResponse"
         401:
-          $ref: "#/components/responses/ForbiddenResponse"
-        403:
           $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
         500:
           $ref: "#/components/responses/InternalServerErrorResponse"
         429:
@@ -268,40 +214,10 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                type:
-                  type: string
-                  enum:
-                    - signup
-                    - recovery
-                    - invite
-                    - magiclink
-                    - email_change
-                    - sms
-                    - phone_change
-                token:
-                  type: string
-                token_hash:
-                  type: string
-                  description: >
-                    The hashed value of token. Applicable only if used with `type` and nothing else.
-                email:
-                  type: string
-                  format: email
-                  description: >
-                    Applicable only if `type` is with regards to an email address.
-                phone:
-                  type: string
-                  format: phone
-                  description: >
-                    Applicable only if `type` is with regards to an phone number.
-                redirect_to:
-                  type: string
-                  format: uri
-                  description: >
-                    (Optional) URL to redirect back into the app on after verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
-
+              description: Provide either a plaintext `token` (with `email` or `phone`) or a `token_hash`, never both.
+              oneOf:
+                - $ref: "#/components/schemas/VerifyTokenRequest"
+                - $ref: "#/components/schemas/VerifyTokenHashRequest"
       responses:
         200:
           description: An access and refresh token.
@@ -1012,24 +928,16 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - factor_type
-              properties:
-                factor_type:
-                  type: string
-                  enum:
-                    - totp
-                    - phone
-                    - webauthn
-                friendly_name:
-                  type: string
-                issuer:
-                  type: string
-                  format: uri
-                phone:
-                  type: string
-                  format: phone
+              oneOf:
+                - $ref: "#/components/schemas/EnrollTOTPFactorRequest"
+                - $ref: "#/components/schemas/EnrollPhoneFactorRequest"
+                - $ref: "#/components/schemas/EnrollWebAuthnFactorRequest"
+              discriminator:
+                propertyName: factor_type
+                mapping:
+                  totp: "#/components/schemas/EnrollTOTPFactorRequest"
+                  phone: "#/components/schemas/EnrollPhoneFactorRequest"
+                  webauthn: "#/components/schemas/EnrollWebAuthnFactorRequest"
       responses:
         200:
           description: >
@@ -3138,6 +3046,203 @@ components:
         Use this property to pass a CAPTCHA token only if you have enabled CAPTCHA protection.
       properties:
         captcha_token:
+          type: string
+
+    PasswordGrantRequest:
+      type: object
+      description: Sign in with an email or phone number and password. Provide exactly one of `email` or `phone`.
+      required:
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          format: phone
+        password:
+          type: string
+        gotrue_meta_security:
+          $ref: "#/components/schemas/GoTrueSecurity"
+
+    RefreshTokenGrantRequest:
+      type: object
+      description: Exchange a refresh token for a new access and refresh token. CAPTCHA protection does not apply to this grant.
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+
+    IdTokenGrantRequest:
+      type: object
+      description: Sign in using an OIDC ID token, e.g. one obtained from Sign in with Apple or Google. Only offered in experimental mode.
+      required:
+        - id_token
+        - provider
+      properties:
+        id_token:
+          type: string
+        access_token:
+          type: string
+          description: Provide only when the provided ID token requires the presence of an access token to be accepted (usually by having an `at_hash` claim).
+        nonce:
+          type: string
+        provider:
+          type: string
+          enum:
+            - google
+            - apple
+            - azure
+            - facebook
+            - keycloak
+        client_id:
+          type: string
+        issuer:
+          type: string
+          description: If `provider` is `azure` then you can specify any Azure OIDC issuer string here, which will be used for verification.
+        link_identity:
+          type: boolean
+          description: (Optional) Link this identity to the currently signed-in user instead of signing in as the identity's owner.
+        gotrue_meta_security:
+          $ref: "#/components/schemas/GoTrueSecurity"
+
+    PKCEGrantRequest:
+      type: object
+      description: Exchange a PKCE authorization code for an access and refresh token.
+      required:
+        - auth_code
+        - code_verifier
+      properties:
+        auth_code:
+          type: string
+          format: uuid
+        code_verifier:
+          type: string
+        gotrue_meta_security:
+          $ref: "#/components/schemas/GoTrueSecurity"
+
+    Web3GrantRequest:
+      type: object
+      description: Sign in with a Web3 wallet by proving possession of a signed Sign-In-With-Solana (SIWS) or Sign-In-With-Ethereum (SIWE) message.
+      required:
+        - message
+        - signature
+        - chain
+      properties:
+        message:
+          type: string
+          description: |
+            Signed message for Web3 authentication following the Sign in with Solana (SIWS) or Sign in with Ethereum (SIWE) standard. Must include: `Issued At`, `URI`, `Version`.
+        signature:
+          type: string
+          description: |
+            The signature of the message for Web3 authentication.
+            For Solana: Base64 or Base64-URL encoded.
+            For Ethereum: hexadecimal string with 0x prefix.
+        chain:
+          type: string
+          description: What blockchain is the Web3 message and signature for.
+          enum:
+            - solana
+            - ethereum
+          example: solana
+        gotrue_meta_security:
+          $ref: "#/components/schemas/GoTrueSecurity"
+
+    VerifyTokenRequest:
+      type: object
+      description: Verify a plaintext one-time password (OTP) sent to an email address or phone number.
+      required:
+        - type
+        - token
+      properties:
+        type:
+          type: string
+          enum:
+            - signup
+            - recovery
+            - invite
+            - magiclink
+            - email_change
+            - sms
+            - phone_change
+        token:
+          type: string
+        email:
+          type: string
+          format: email
+          description: Provide when `type` concerns an email address. Exactly one of `email` or `phone` must be set.
+        phone:
+          type: string
+          format: phone
+          description: Provide when `type` concerns a phone number. Exactly one of `email` or `phone` must be set.
+        redirect_to:
+          type: string
+          format: uri
+          description: >
+            (Optional) URL to redirect back into the app on after verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+
+    VerifyTokenHashRequest:
+      type: object
+      description: Verify a token hash previously issued to this server, e.g. the `token_hash` embedded in a confirmation link. No other property may be provided alongside `token_hash`.
+      required:
+        - type
+        - token_hash
+      properties:
+        type:
+          type: string
+          enum:
+            - signup
+            - recovery
+            - invite
+            - magiclink
+            - email_change
+            - sms
+            - phone_change
+        token_hash:
+          type: string
+          description: The hashed value of token.
+
+    EnrollTOTPFactorRequest:
+      type: object
+      required:
+        - factor_type
+      properties:
+        factor_type:
+          type: string
+          enum: [totp]
+        friendly_name:
+          type: string
+        issuer:
+          type: string
+          format: uri
+          description: (Optional) Overrides the issuer name shown in the authenticator app. Defaults to the site URL's host.
+
+    EnrollPhoneFactorRequest:
+      type: object
+      required:
+        - factor_type
+        - phone
+      properties:
+        factor_type:
+          type: string
+          enum: [phone]
+        friendly_name:
+          type: string
+        phone:
+          type: string
+          format: phone
+
+    EnrollWebAuthnFactorRequest:
+      type: object
+      required:
+        - factor_type
+      properties:
+        factor_type:
+          type: string
+          enum: [webauthn]
+        friendly_name:
           type: string
 
     ErrorSchema:
