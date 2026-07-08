@@ -255,6 +255,8 @@ paths:
       responses:
         302:
           $ref: "#/components/responses/AccessRefreshTokenRedirectResponse"
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
     post:
       summary: Authenticate by verifying the possession of a one-time token.
       operationId: verifyOtp
@@ -357,6 +359,14 @@ paths:
       responses:
         302:
           $ref: "#/components/responses/OAuthAuthorizeRedirectResponse"
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        404:
+          description: Returned when `invite_token` is provided but no matching invitation could be found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
 
   /signup:
     post:
@@ -657,6 +667,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UserSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
     put:
       summary: Update certain properties of the current user account.
       operationId: updateUser
@@ -742,10 +754,30 @@ paths:
             enum:
               - plain
               - S256
+        - name: skip_http_redirect
+          in: query
+          description: Set to `true` if the response to this request should not be a HTTP redirect -- useful for browser-based applications.
+          schema:
+            type: boolean
       responses:
+        200:
+          description: >
+            Returned only when `skip_http_redirect` is `true`. Client libraries should use the returned URL to redirect or open a browser.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
         302:
           $ref: "#/components/responses/OAuthAuthorizeRedirectResponse"
-    
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+
   /user/identities/{identityId}:
     parameters:
       - name: identityId
@@ -1813,6 +1845,10 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/SSOProviderSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
     post:
       summary: Register a new SSO provider.
       operationId: adminCreateSsoProvider
