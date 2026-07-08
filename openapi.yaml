@@ -1190,6 +1190,8 @@ paths:
         When an OAuth sign-in flow fails for any reason, the error message needs to be delivered to the frontend app requesting the flow. This callback delivers the errors as `error` and `error_description` query params. Usually this request is not called directly.
       tags:
         - oauth-client
+      security:
+        - APIKeyAuth: []
       responses:
         302:
           $ref: "#/components/responses/OAuthCallbackRedirectResponse"
@@ -2713,6 +2715,8 @@ paths:
         Allows applications to register as OAuth clients with this server dynamically. This follows the OAuth 2.0 Dynamic Client Registration Protocol. Only available when OAuth server is enabled and dynamic registration is allowed (set `GOTRUE_OAUTH_SERVER_ENABLED=true` and `GOTRUE_OAUTH_SERVER_ALLOW_DYNAMIC_REGISTRATION=true` for self-hosted or enable both settings in Supabase Dashboard).
       tags:
         - oauth-server
+      security:
+        - APIKeyAuth: []
       requestBody:
         content:
           application/json:
@@ -2738,6 +2742,8 @@ paths:
         Issues access tokens in exchange for authorization codes or refresh tokens. Supports authorization_code and refresh_token grant types. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
       tags:
         - oauth-server
+      security:
+        - APIKeyAuth: []
       requestBody:
         content:
           application/x-www-form-urlencoded:
@@ -2808,6 +2814,8 @@ paths:
         Initiates the OAuth authorization code flow. Redirects users to login and authorize the requesting application. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
       tags:
         - oauth-server
+      security:
+        - APIKeyAuth: []
       parameters:
         - name: response_type
           in: query
@@ -3049,7 +3057,6 @@ paths:
                     description: Whether new phone numbers need to be confirmed before sign-in is possible.
                   sms_provider:
                     type: string
-                    optional: true
                     example: twilio
                     description: Which SMS provider is being used to send messages to phone numbers.
                   saml_enabled:
@@ -3064,9 +3071,8 @@ paths:
                       apple: true
                       email: true
                       phone: true
-                    patternProperties:
-                      "[a-zA-Z0-9]+":
-                        type: boolean
+                    additionalProperties:
+                      type: boolean
 
 components:
   securitySchemes:
@@ -3228,22 +3234,22 @@ components:
       properties:
         keys:
           type: object
-          patternProperties:
-            ".+":
-              type: object
-              properties:
-                name:
+          description: Maps a destination user attribute name to its SAML assertion source.
+          additionalProperties:
+            type: object
+            properties:
+              name:
+                type: string
+              names:
+                type: array
+                items:
                   type: string
-                names:
-                  type: array
-                  items:
-                    type: string
-                default:
-                  oneOf:
-                    - type: string
-                    - type: number
-                    - type: boolean
-                    - type: object
+              default:
+                oneOf:
+                  - type: string
+                  - type: number
+                  - type: boolean
+                  - type: object
 
     SSOProviderSchema:
       type: object
