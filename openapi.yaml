@@ -353,7 +353,7 @@ paths:
             type: string
             enum:
               - plain
-              - s256
+              - S256
       responses:
         302:
           $ref: "#/components/responses/OAuthAuthorizeRedirectResponse"
@@ -389,7 +389,7 @@ paths:
                 value:
                   email: user@example.com
                   password: password1
-                  code_challenge_method: s256
+                  code_challenge_method: S256
                   code_challenge: elU6u5zyqQT2f92GRQUq6PautAeNDf4DQPayyR0ek_c&
             schema:
               type: object
@@ -415,7 +415,7 @@ paths:
                   type: string
                   enum:
                     - plain
-                    - s256
+                    - S256
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueSecurity"
       responses:
@@ -460,7 +460,7 @@ paths:
                   type: string
                   enum:
                     - plain
-                    - s256
+                    - S256
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueSecurity"
       responses:
@@ -613,7 +613,7 @@ paths:
                 code_challenge_method:
                   type: string
                   enum:
-                    - s256
+                    - S256
                     - plain
                 code_challenge:
                   type: string
@@ -741,7 +741,7 @@ paths:
             type: string
             enum:
               - plain
-              - s256
+              - S256
       responses:
         302:
           $ref: "#/components/responses/OAuthAuthorizeRedirectResponse"
@@ -1228,7 +1228,7 @@ paths:
                   type: string
                   enum:
                     - plain
-                    - s256
+                    - S256
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueSecurity"
       responses:
