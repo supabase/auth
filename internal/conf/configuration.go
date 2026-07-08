@@ -718,11 +718,12 @@ type SmsProviderConfiguration struct {
 	TestOTPValidUntil Time               `json:"test_otp_valid_until" split_words:"true"`
 	SMSTemplate       *template.Template `json:"-"`
 
-	Twilio       TwilioProviderConfiguration       `json:"twilio"`
-	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify" split_words:"true"`
-	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
-	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
-	Vonage       VonageProviderConfiguration       `json:"vonage"`
+	Twilio         TwilioProviderConfiguration         `json:"twilio"`
+	TwilioVerify   TwilioVerifyProviderConfiguration   `json:"twilio_verify" split_words:"true"`
+	Messagebird    MessagebirdProviderConfiguration    `json:"messagebird"`
+	Textlocal      TextlocalProviderConfiguration      `json:"textlocal"`
+	Vonage         VonageProviderConfiguration         `json:"vonage"`
+	AfricasTalking AfricasTalkingProviderConfiguration `json:"africas_talking" split_words:"true" envconfig:"AT"`
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
@@ -761,6 +762,12 @@ type VonageProviderConfiguration struct {
 	ApiKey    string `json:"api_key" split_words:"true"`
 	ApiSecret string `json:"api_secret" split_words:"true"`
 	From      string `json:"from" split_words:"true"`
+}
+
+type AfricasTalkingProviderConfiguration struct {
+	APIKey   string `json:"api_key" split_words:"true"`
+	Username string `json:"username"`
+	SenderID string `json:"sender_id" split_words:"true"`
 }
 
 type CaptchaConfiguration struct {
@@ -1376,6 +1383,16 @@ func (t *VonageProviderConfiguration) Validate() error {
 	}
 	if t.From == "" {
 		return errors.New("missing Vonage 'from' parameter")
+	}
+	return nil
+}
+
+func (t *AfricasTalkingProviderConfiguration) Validate() error {
+	if t.APIKey == "" {
+		return errors.New("africas_talking: missing API key")
+	}
+	if t.Username == "" {
+		return errors.New("africas_talking: missing username")
 	}
 	return nil
 }
