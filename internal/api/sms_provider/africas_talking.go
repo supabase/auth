@@ -88,7 +88,10 @@ func (a *AfricasTalkingProvider) SendSms(phone, message string) (string, error) 
 		return "", fmt.Errorf("africas_talking: failed to create request: %w", err)
 	}
 
-	req.Header.Set("apiKey", a.Config.APIKey)
+	// Use direct map assignment to preserve exact header casing.
+	// Africa's Talking requires "apiKey" (lowercase k); Header.Set would
+	// canonicalise it to "Apikey", causing a 401.
+	req.Header["apiKey"] = []string{a.Config.APIKey}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
