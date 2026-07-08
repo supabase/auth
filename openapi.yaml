@@ -62,6 +62,7 @@ paths:
   /token:
     post:
       summary: Issues access and refresh tokens based on grant type.
+      operationId: token
       tags:
         - auth
       parameters:
@@ -196,6 +197,7 @@ paths:
   /logout:
     post:
       summary: Logs out a user.
+      operationId: logout
       tags:
         - auth
       security:
@@ -221,6 +223,7 @@ paths:
   /verify:
     get:
       summary: Authenticate by verifying the possession of a one-time token. Usually for use as clickable links.
+      operationId: verifyRedirect
       tags:
         - auth
       parameters:
@@ -254,6 +257,7 @@ paths:
           $ref: "#/components/responses/AccessRefreshTokenRedirectResponse"
     post:
       summary: Authenticate by verifying the possession of a one-time token.
+      operationId: verifyOtp
       tags:
         - auth
       security:
@@ -309,6 +313,7 @@ paths:
   /authorize:
     get:
       summary: Redirects to an external OAuth provider. Usually for use as clickable links.
+      operationId: authorize
       tags:
         - oauth-client
       security:
@@ -356,6 +361,7 @@ paths:
   /signup:
     post:
       summary: Signs a user up.
+      operationId: signup
       description: >
         Creates a new user.
       tags:
@@ -430,6 +436,7 @@ paths:
   /recover:
     post:
       summary: Request password recovery.
+      operationId: recover
       description: >
         Users that have forgotten their password can have it reset with this API.
       tags:
@@ -477,6 +484,7 @@ paths:
   /resend:
     post:
       summary: Resends a one-time password (OTP) through email or SMS.
+      operationId: resend
       description: >
         Allows a user to resend an existing signup, sms, email_change or phone_change OTP.
       tags:
@@ -533,6 +541,7 @@ paths:
   /magiclink:
     post:
       summary: Authenticate a user by sending them a magic link.
+      operationId: sendMagicLink
       description: >
         A magic link is a special type of URL that includes a One-Time Password. When a user visits this link in a browser they are immediately authenticated.
       tags:
@@ -575,6 +584,7 @@ paths:
   /otp:
     post:
       summary: Authenticate a user by sending them a One-Time Password over email or SMS.
+      operationId: sendOtp
       tags:
         - auth
       security:
@@ -634,6 +644,7 @@ paths:
   /user:
     get:
       summary: Fetch the latest user account information.
+      operationId: getUser
       tags:
         - user
       security:
@@ -648,6 +659,7 @@ paths:
                 $ref: "#/components/schemas/UserSchema"
     put:
       summary: Update certain properties of the current user account.
+      operationId: updateUser
       tags:
         - user
       security:
@@ -693,6 +705,7 @@ paths:
   /user/identities/authorize:
     get:
       summary: Links an OAuth identity to an existing user. Redirects to an external OAuth provider.
+      operationId: linkIdentity
       tags:
         - user
       security:
@@ -743,6 +756,7 @@ paths:
           format: uuid
     delete:
       summary: Unlinks an identity from the current user.
+      operationId: unlinkIdentity
       tags:
         - user
       security:
@@ -760,7 +774,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/responses/UnauthorizedResponse"
+                $ref: "#/components/schemas/ErrorSchema"
               examples:
                 example:
                   summary: no_authorization
@@ -771,7 +785,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/responses/ForbiddenResponse"
+                $ref: "#/components/schemas/ErrorSchema"
               examples:
                 example:
                   summary: bad_jwt
@@ -823,6 +837,7 @@ paths:
   /user/oauth/grants:
     get:
       summary: List OAuth grants
+      operationId: listOauthGrants
       description: >
         Retrieves a list of all OAuth grants that the authenticated user has authorized. Only available when OAuth server is enabled.
       tags:
@@ -875,6 +890,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
     delete:
       summary: Revoke OAuth grant
+      operationId: revokeOauthGrant
       description: >
         Revokes the user's OAuth grant for a specific client. This will:
         - Mark the consent as revoked
@@ -931,6 +947,7 @@ paths:
   /reauthenticate:
     post:
       summary: Reauthenticates the possession of an email or phone number for the purpose of password change.
+      operationId: reauthenticate
       description: >
         For a password to be changed on a user account, the user's email or phone number needs to be confirmed before they are allowed to set a new password. This requirement is configurable. This API sends a confirmation email or SMS message. A nonce in this message can be provided in `PUT /user` to change the password on the account.
       tags:
@@ -953,6 +970,7 @@ paths:
   /factors:
     post:
       summary: Begin enrolling a new factor for MFA.
+      operationId: enrollFactor
       tags:
         - user
       security:
@@ -1016,6 +1034,7 @@ paths:
   /factors/{factorId}/challenge:
     post:
       summary: Create a new challenge for a MFA factor.
+      operationId: challengeFactor
       tags:
         - user
       security:
@@ -1051,6 +1070,12 @@ paths:
                 oneOf:
                   - $ref: '#/components/schemas/TOTPPhoneChallengeResponse'
                   - $ref: '#/components/schemas/WebAuthnChallengeResponse'
+                discriminator:
+                  propertyName: type
+                  mapping:
+                    totp: '#/components/schemas/TOTPPhoneChallengeResponse'
+                    phone: '#/components/schemas/TOTPPhoneChallengeResponse'
+                    webauthn: '#/components/schemas/WebAuthnChallengeResponse'
         400:
           $ref: "#/components/responses/BadRequestResponse"
         429:
@@ -1059,6 +1084,7 @@ paths:
   /factors/{factorId}/verify:
     post:
       summary: Verify a challenge on a factor.
+      operationId: verifyFactor
       tags:
         - user
       security:
@@ -1114,6 +1140,7 @@ paths:
   /factors/{factorId}:
     delete:
       summary: Remove a MFA factor from a user.
+      operationId: unenrollFactor
       tags:
         - user
       security:
@@ -1146,6 +1173,7 @@ paths:
   /callback:
     get:
       summary: Redirects OAuth flow errors to the frontend app.
+      operationId: oauthCallbackGet
       description: >
         When an OAuth sign-in flow fails for any reason, the error message needs to be delivered to the frontend app requesting the flow. This callback delivers the errors as `error` and `error_description` query params. Usually this request is not called directly.
       tags:
@@ -1157,6 +1185,7 @@ paths:
           $ref: "#/components/responses/OAuthCallbackRedirectResponse"
     post:
       summary: Redirects OAuth flow errors to the frontend app.
+      operationId: oauthCallbackPost
       description: >
         When an OAuth sign-in flow fails for any reason, the error message needs to be delivered to the frontend app requesting the flow. This callback delivers the errors as `error` and `error_description` query params. Usually this request is not called directly.
       tags:
@@ -1168,6 +1197,7 @@ paths:
   /sso:
     post:
       summary: Initiate a Single-Sign On flow.
+      operationId: ssoSignIn
       tags:
         - sso
       security:
@@ -1234,6 +1264,7 @@ paths:
   /saml/metadata:
     get:
       summary: Returns the SAML 2.0 Metadata XML.
+      operationId: getSamlMetadata
       description: >
         The metadata XML can be downloaded or used for the SAML 2.0 Metadata URL discovery mechanism. This URL is the SAML 2.0 EntityID of the Service Provider implemented by this server.
       tags:
@@ -1268,6 +1299,7 @@ paths:
   /saml/acs:
     post:
       summary: SAML 2.0 Assertion Consumer Service (ACS) endpoint.
+      operationId: samlAcs
       description: >
         Implements the SAML 2.0 Assertion Consumer Service (ACS) endpoint supporting the POST and Artifact bindings.
       tags:
@@ -1307,6 +1339,7 @@ paths:
   /invite:
     post:
       summary: Invite a user by email.
+      operationId: inviteUserByEmail
       description: >
         Sends an invitation email which contains a link that allows the user to sign-in.
       tags:
@@ -1344,6 +1377,7 @@ paths:
   /admin/generate_link:
     post:
       summary: Generate a link to send in an email message.
+      operationId: adminGenerateLink
       tags:
         - admin
       security:
@@ -1426,6 +1460,7 @@ paths:
   /admin/audit:
     get:
       summary: Fetch audit log events.
+      operationId: adminListAuditLogEntries
       tags:
         - admin
       security:
@@ -1521,6 +1556,7 @@ paths:
   /admin/users:
     get:
       summary: Fetch a listing of users.
+      operationId: adminListUsers
       tags:
         - admin
       security:
@@ -1569,6 +1605,7 @@ paths:
           format: uuid
     get:
       summary: Fetch user account data for a user.
+      operationId: adminGetUser
       tags:
         - admin
       security:
@@ -1593,6 +1630,7 @@ paths:
                 $ref: "#/components/schemas/ErrorSchema"
     put:
       summary: Update user's account data.
+      operationId: adminUpdateUser
       tags:
         - admin
       security:
@@ -1622,6 +1660,7 @@ paths:
                 $ref: "#/components/schemas/ErrorSchema"
     delete:
       summary: Delete a user.
+      operationId: adminDeleteUser
       tags:
         - admin
       security:
@@ -1655,6 +1694,7 @@ paths:
           format: uuid
     get:
       summary: List all of the MFA factors for a user.
+      operationId: adminListUserFactors
       tags:
         - admin
       security:
@@ -1696,6 +1736,7 @@ paths:
           format: uuid
     put:
       summary: Update a user's MFA factor.
+      operationId: adminUpdateUserFactor
       tags:
         - admin
       security:
@@ -1725,6 +1766,7 @@ paths:
                 $ref: "#/components/schemas/ErrorSchema"
     delete:
       summary: Remove a user's MFA factor.
+      operationId: adminDeleteUserFactor
       tags:
         - admin
       security:
@@ -1751,6 +1793,7 @@ paths:
   /admin/sso/providers:
     get:
       summary: Fetch a list of all registered SSO providers.
+      operationId: adminListSsoProviders
       tags:
         - admin
       security:
@@ -1770,6 +1813,7 @@ paths:
                       $ref: "#/components/schemas/SSOProviderSchema"
     post:
       summary: Register a new SSO provider.
+      operationId: adminCreateSsoProvider
       tags:
         - admin
       security:
@@ -1823,6 +1867,7 @@ paths:
           format: uuid
     get:
       summary: Fetch SSO provider details.
+      operationId: adminGetSsoProvider
       tags:
         - admin
       security:
@@ -1847,6 +1892,7 @@ paths:
                 $ref: "#/components/schemas/ErrorSchema"
     put:
       summary: Update details about a SSO provider.
+      operationId: adminUpdateSsoProvider
       description: >
         You can only update only one of `metadata_url` or `metadata_xml` at once. The SAML Metadata represented by these updates must advertize the same Identity Provider EntityID. Do not include the `domains` or `attribute_mapping` property to keep the existing database values.
       tags:
@@ -1893,6 +1939,7 @@ paths:
                 $ref: "#/components/schemas/ErrorSchema"
     delete:
       summary: Remove an SSO provider.
+      operationId: adminDeleteSsoProvider
       tags:
         - admin
       security:
@@ -1919,6 +1966,7 @@ paths:
   /admin/oauth/clients:
     get:
       summary: List OAuth clients (admin)
+      operationId: adminListOauthClients
       description: >
         Retrieves a list of all registered OAuth clients. Only available when OAuth server is enabled.
       tags:
@@ -1958,6 +2006,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
     post:
       summary: Register OAuth client (admin)
+      operationId: adminCreateOauthClient
       description: >
         Manually register a new OAuth client (admin endpoint). Only available when OAuth server is enabled.
       tags:
@@ -2052,6 +2101,7 @@ paths:
           type: string
     get:
       summary: Get OAuth client details (admin)
+      operationId: adminGetOauthClient
       description: >
         Retrieves details of a specific OAuth client. Only available when OAuth server is enabled.
       tags:
@@ -2079,6 +2129,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
     put:
       summary: Update OAuth client (admin)
+      operationId: adminUpdateOauthClient
       description: >
         Updates an existing OAuth client registration. Only the provided fields will be updated.
         Only available when OAuth server is enabled.
@@ -2154,6 +2205,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
     delete:
       summary: Delete OAuth client (admin)
+      operationId: adminDeleteOauthClient
       description: >
         Removes an OAuth client registration. Only available when OAuth server is enabled.
       tags:
@@ -2185,6 +2237,7 @@ paths:
           type: string
     post:
       summary: Regenerate OAuth client secret (admin)
+      operationId: adminRegenerateOauthClientSecret
       description: >
         Regenerates the client secret for a confidential OAuth client. Only available when OAuth server is enabled.
         This endpoint can only be used for confidential clients, not public clients.
@@ -2221,6 +2274,7 @@ paths:
   /admin/custom-providers:
     get:
       summary: List all custom OIDC/OAuth providers
+      operationId: adminListCustomOauthProviders
       description: >
         Retrieves a list of all custom OAuth 2.0 and OIDC provider configurations.
         Optionally filter by provider type. Only available when custom OIDC/OAuth providers are enabled
@@ -2271,6 +2325,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
     post:
       summary: Create a new custom OIDC/OAuth provider
+      operationId: adminCreateCustomOauthProvider
       description: >
         Creates a new custom OAuth 2.0 or OIDC provider configuration.
         Required fields differ based on provider_type. Only available when custom OIDC/OAuth providers are enabled.
@@ -2481,6 +2536,7 @@ paths:
         example: "custom:mycompany"
     get:
       summary: Get custom OIDC/OAuth provider details
+      operationId: adminGetCustomOauthProvider
       description: >
         Retrieves details of a specific custom OIDC/OAuth provider.
         Only available when custom OIDC/OAuth providers are enabled.
@@ -2527,6 +2583,7 @@ paths:
                     msg: "Custom OAuth provider not found"
     put:
       summary: Update custom OIDC/OAuth provider
+      operationId: adminUpdateCustomOauthProvider
       description: >
         Updates an existing custom OIDC/OAuth provider. All fields are optional.
         Only provided fields will be updated. Only available when custom OIDC/OAuth providers are enabled.
@@ -2664,6 +2721,7 @@ paths:
                 $ref: "#/components/schemas/ErrorSchema"
     delete:
       summary: Delete custom OIDC/OAuth provider
+      operationId: adminDeleteCustomOauthProvider
       description: >
         Permanently removes a custom OIDC/OAuth provider configuration.
         Only available when custom OIDC/OAuth providers are enabled.
@@ -2708,6 +2766,7 @@ paths:
   /oauth/clients/register:
     post:
       summary: Register a new OAuth client dynamically (public endpoint).
+      operationId: registerOauthClient
       description: >
         Allows applications to register as OAuth clients with this server dynamically. This follows the OAuth 2.0 Dynamic Client Registration Protocol. Only available when OAuth server is enabled and dynamic registration is allowed (set `GOTRUE_OAUTH_SERVER_ENABLED=true` and `GOTRUE_OAUTH_SERVER_ALLOW_DYNAMIC_REGISTRATION=true` for self-hosted or enable both settings in Supabase Dashboard).
       tags:
@@ -2790,6 +2849,7 @@ paths:
   /oauth/token:
     post:
       summary: OAuth 2.1 Token endpoint
+      operationId: oauthToken
       description: >
         Issues access tokens in exchange for authorization codes or refresh tokens. Supports authorization_code and refresh_token grant types. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
       tags:
@@ -2859,6 +2919,7 @@ paths:
   /oauth/authorize:
     get:
       summary: OAuth 2.1 Authorization endpoint
+      operationId: oauthAuthorize
       description: >
         Initiates the OAuth authorization code flow. Redirects users to login and authorize the requesting application. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
       tags:
@@ -2928,6 +2989,7 @@ paths:
           type: string
     get:
       summary: Get OAuth authorization details
+      operationId: getOauthAuthorization
       description: >
         Retrieves details about a pending OAuth authorization request. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
       tags:
@@ -2991,6 +3053,7 @@ paths:
           type: string
     post:
       summary: Approve or deny OAuth authorization
+      operationId: oauthAuthorizationConsent
       description: >
         User approves or denies authorization to the OAuth client. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
       tags:
@@ -3031,6 +3094,7 @@ paths:
   /health:
     get:
       summary: Service healthcheck.
+      operationId: healthCheck
       description: Ping this endpoint to receive information about the health of the service.
       tags:
         - general
@@ -3071,6 +3135,7 @@ paths:
   /settings:
     get:
       summary: Retrieve some of the public settings of the server.
+      operationId: getSettings
       description: >
         Use this endpoint to configure parts of any authentication UIs depending on the configured settings.
       tags:
