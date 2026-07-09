@@ -58,6 +58,33 @@ func TestDispatch(t *testing.T) {
 		},
 
 		{
+			desc: "pass - email with apostrophe in payload",
+			req: M{
+				"user": M{
+					"email": "joe.o'sullivan@example.com",
+				},
+			},
+			exp: M{"success": true},
+			hr: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Verify the apostrophe email is correctly received in the JSON payload
+				var body M
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				user, _ := body["user"].(map[string]any)
+				email, _ := user["email"].(string)
+				if email != "joe.o'sullivan@example.com" {
+					http.Error(w, fmt.Sprintf("unexpected email: %q", email), http.StatusBadRequest)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(M{"success": true})
+			}),
+		},
+
+		{
 			desc: "pass - empty content type should not error 204 status",
 			exp:  M{},
 			hr: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
