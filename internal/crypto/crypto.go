@@ -23,6 +23,11 @@ func GenerateOtp(digits int) string {
 	return generateOtp(rand.Reader, digits)
 }
 
+// GenerateAlphanumericOtp generates a random n digit otp with extended charset
+func GenerateAlphanumericOtp(digits int) string {
+	return generateAlphanumericOtp(rand.Reader, digits)
+}
+
 func generateOtp(r io.Reader, digits int) string {
 	// TODO(cstockton): Change the code to be below and propagate errors so we
 	// can have non-panicing bounds checks. This is just a defensive change so
@@ -40,6 +45,18 @@ func generateOtp(r io.Reader, digits int) string {
 	otp := fmt.Sprintf(expr, val.String())
 
 	return otp
+}
+
+func generateAlphanumericOtp(r io.Reader, length int) string {
+	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	charsetLen := big.NewInt(int64(len(charset)))
+
+	otp := make([]byte, length)
+	for i := range otp {
+		val := must(rand.Int(r, charsetLen))
+		otp[i] = charset[val.Int64()]
+	}
+	return string(otp)
 }
 
 func GenerateTokenHash(emailOrPhone, otp string) string {
