@@ -343,7 +343,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		// surface change. It therefore set to true for other linking
 		// domains, not just SSO ones. This enables different linking
 		// domains to co-exist, such as when using
-		// GOTRUE_EXPERIMENTAL_PROVIDERS_WITH_OWN_LINKING_DOMAIN="provider_a,provider_b".
+		// GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="provider_a=social,provider_b=social".
 		isSSOUser := decision.LinkingDomain != "default"
 
 		// because params above sets no password, this method is not
@@ -690,8 +690,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	config := a.config
 	var pConfig conf.OAuthProviderConfiguration
 
-	// Build the redirect URL
-	redirectURL := config.API.ExternalURL + "/callback"
+	redirectURL := strings.TrimRight(config.API.ExternalURL, "/") + "/callback"
 
 	// Parse scopes (space-separated per RFC 6749)
 	var scopeList []string
@@ -744,6 +743,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 			customProvider.AcceptableClientIDs,
 			customProvider.AttributeMapping,
 			customProvider.AuthorizationParams,
+			customProvider.CustomClaimsAllowlist,
 		)
 
 		// Build provider configuration
@@ -765,7 +765,6 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	}
 
 	// Create custom OIDC provider instance
-	// oidc.NewProvider() will automatically fetch discovery document
 	p, err := provider.NewCustomOIDCProvider(
 		ctx,
 		customProvider.ClientID,
@@ -773,10 +772,12 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		redirectURL,
 		scopeList,
 		*customProvider.Issuer,
+		customProvider.GetDiscoveryURL(),
 		customProvider.PKCEEnabled,
 		customProvider.AcceptableClientIDs,
 		customProvider.AttributeMapping,
 		customProvider.AuthorizationParams,
+		customProvider.CustomClaimsAllowlist,
 		a.oidcCache,
 	)
 	if err != nil {

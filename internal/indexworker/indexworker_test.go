@@ -1,10 +1,12 @@
 package indexworker
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -33,7 +36,7 @@ type IndexWorkerTestSuite struct {
 
 func (ts *IndexWorkerTestSuite) SetupSuite() {
 	// Load test configuration
-	config, err := conf.LoadGlobal("../../hack/test.env")
+	config, err := confload.LoadGlobal("../../hack/test.env")
 	require.NoError(ts.T(), err)
 	ts.config = config
 	ts.maxUsersThreshold = config.IndexWorker.MaxUsersThreshold
@@ -432,11 +435,12 @@ func (ts *IndexWorkerTestSuite) TestCreateIndexesWithInvalidIndexes() {
 		assert.True(ts.T(), idx.IsReady, "Index %s should be ready initially", idx.IndexName)
 	}
 
-	// Step 2: Connect as the postgres superuser to manipulate pg_index
-	// Parse the existing connection URL and replace credentials with postgres superuser
+	// Step 2: Connect as the postgres superuser to manipulate pg_index.
+	// Parse the existing connection URL and replace credentials with the postgres superuser.
+	superuserPassword := cmp.Or(os.Getenv("POSTGRES_PASSWORD"), "root")
 	manipulatorURL := ts.config.DB.URL
 	if u, err := url.Parse(ts.config.DB.URL); err == nil {
-		u.User = url.UserPassword("postgres", "root")
+		u.User = url.UserPassword("postgres", superuserPassword)
 		manipulatorURL = u.String()
 	}
 

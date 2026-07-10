@@ -11,281 +11,12 @@ import (
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
 	defer os.Clearenv()
 	os.Exit(m.Run())
-}
-
-func TestGlobal(t *testing.T) {
-	os.Setenv("GOTRUE_SITE_URL", "http://localhost:8080")
-	os.Setenv("GOTRUE_DB_DRIVER", "postgres")
-	os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
-	os.Setenv("GOTRUE_OPERATOR_TOKEN", "token")
-	os.Setenv("GOTRUE_API_REQUEST_ID_HEADER", "X-Request-ID")
-	os.Setenv("GOTRUE_JWT_SECRET", "secret")
-	os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
-	os.Setenv("GOTRUE_HOOK_MFA_VERIFICATION_ATTEMPT_URI", "pg-functions://postgres/auth/count_failed_attempts")
-	os.Setenv("GOTRUE_HOOK_SEND_SMS_SECRETS", "v1,whsec_aWxpa2VzdXBhYmFzZXZlcnltdWNoYW5kaWhvcGV5b3Vkb3Rvbw==")
-	os.Setenv("GOTRUE_SMTP_HEADERS", `{"X-PM-Metadata-project-ref":["project_ref"],"X-SES-Message-Tags":["ses:feedback-id-a=project_ref,ses:feedback-id-b=$messageType"]}`)
-	os.Setenv("GOTRUE_MAILER_EMAIL_VALIDATION_SERVICE_HEADERS", `{"apikey":["test"]}`)
-	os.Setenv("GOTRUE_SMTP_LOGGING_ENABLED", "true")
-	gc, err := LoadGlobal("")
-	require.NoError(t, err)
-	assert.Equal(t, true, gc.SMTP.LoggingEnabled)
-	assert.Equal(t, "project_ref", gc.SMTP.NormalizedHeaders()["X-PM-Metadata-project-ref"][0])
-	require.NotNil(t, gc)
-	assert.Equal(t, "X-Request-ID", gc.API.RequestIDHeader)
-	assert.Equal(t, "pg-functions://postgres/auth/count_failed_attempts", gc.Hook.MFAVerificationAttempt.URI)
-
-	{
-		os.Setenv("GOTRUE_RATE_LIMIT_EMAIL_SENT", "0/1h")
-
-		gc, err := LoadGlobal("")
-		require.NoError(t, err)
-		assert.Equal(t, float64(0), gc.RateLimitEmailSent.Events)
-		assert.Equal(t, time.Hour, gc.RateLimitEmailSent.OverTime)
-	}
-
-	{
-		os.Setenv("GOTRUE_RATE_LIMIT_EMAIL_SENT", "10/1h")
-
-		gc, err := LoadGlobal("")
-		require.NoError(t, err)
-		assert.Equal(t, float64(10), gc.RateLimitEmailSent.Events)
-		assert.Equal(t, time.Hour, gc.RateLimitEmailSent.OverTime)
-	}
-
-	{
-		gc, err := LoadGlobal("")
-		require.NoError(t, err)
-		assert.Equal(t, false, gc.Mailer.EmailBackgroundSending)
-
-		os.Setenv("GOTRUE_MAILER_EMAIL_BACKGROUND_SENDING", "true")
-		gc, err = LoadGlobal("")
-		require.NoError(t, err)
-		assert.Equal(t, true, gc.Mailer.EmailBackgroundSending)
-	}
-
-	{
-		hdrs := gc.Mailer.GetEmailValidationServiceHeaders()
-		assert.Equal(t, 1, len(hdrs["apikey"]))
-		assert.Equal(t, "test", hdrs["apikey"][0])
-	}
-
-	{
-		cfg, err := LoadGlobalFromEnv()
-		require.NoError(t, err)
-		require.NotNil(t, cfg)
-	}
-
-	{
-		cfg, err := LoadGlobal("")
-		require.NoError(t, err)
-		require.NotNil(t, cfg)
-	}
-
-	{
-		cfg, err := LoadGlobal("__invalid__")
-		require.Error(t, err)
-		require.Nil(t, cfg)
-	}
-
-	{
-		os.Setenv("GOTRUE_MAILER_AUTOCONFIRM", "TRUE")
-		os.Setenv("GOTRUE_MAILER_ALLOW_UNVERIFIED_EMAIL_SIGN_INS", "TRUE")
-		cfg, err := LoadGlobal("")
-		require.Error(t, err)
-		require.Nil(t, cfg)
-		os.Setenv("GOTRUE_MAILER_AUTOCONFIRM", "FALSE")
-		os.Setenv("GOTRUE_MAILER_ALLOW_UNVERIFIED_EMAIL_SIGN_INS", "FALSE")
-	}
-
-	{
-		os.Setenv("API_EXTERNAL_URL", "")
-		cfg := new(GlobalConfiguration)
-		err := loadGlobal(cfg)
-		require.Error(t, err)
-		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
-	}
-
-	{
-		os.Setenv("API_EXTERNAL_URL", "")
-		cfg := new(GlobalConfiguration)
-		cfg.Hook = HookConfiguration{
-			PasswordVerificationAttempt: ExtensibilityPointConfiguration{
-				Enabled: true,
-				URI:     "\n",
-			},
-		}
-
-		err := populateGlobal(cfg)
-		require.Error(t, err)
-		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
-	}
-
-	{
-		os.Setenv("API_EXTERNAL_URL", "")
-		cfg := new(GlobalConfiguration)
-		cfg.Hook = HookConfiguration{
-			SendSMS: ExtensibilityPointConfiguration{
-				Enabled: true,
-				URI:     "\n",
-			},
-		}
-
-		err := populateGlobal(cfg)
-		require.Error(t, err)
-		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
-	}
-
-	{
-		os.Setenv("API_EXTERNAL_URL", "")
-		cfg := new(GlobalConfiguration)
-		cfg.Hook = HookConfiguration{
-			SendEmail: ExtensibilityPointConfiguration{
-				Enabled: true,
-				URI:     "\n",
-			},
-		}
-
-		err := populateGlobal(cfg)
-		require.Error(t, err)
-		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
-	}
-
-	{
-		os.Setenv("API_EXTERNAL_URL", "")
-		cfg := new(GlobalConfiguration)
-		cfg.Hook = HookConfiguration{
-			MFAVerificationAttempt: ExtensibilityPointConfiguration{
-				Enabled: true,
-				URI:     "\n",
-			},
-		}
-
-		err := populateGlobal(cfg)
-		require.Error(t, err)
-		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
-	}
-
-	{
-		os.Setenv("API_EXTERNAL_URL", "")
-		cfg := new(GlobalConfiguration)
-		cfg.Hook = HookConfiguration{
-			CustomAccessToken: ExtensibilityPointConfiguration{
-				Enabled: true,
-				URI:     "\n",
-			},
-		}
-
-		err := populateGlobal(cfg)
-		require.Error(t, err)
-		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
-	}
-
-	{
-		os.Setenv("API_EXTERNAL_URL", "")
-		cfg := new(GlobalConfiguration)
-		cfg.Hook = HookConfiguration{
-			BeforeUserCreated: ExtensibilityPointConfiguration{
-				Enabled: true,
-				URI:     "\n",
-			},
-		}
-
-		err := populateGlobal(cfg)
-		require.Error(t, err)
-		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
-	}
-
-	{
-		os.Setenv("API_EXTERNAL_URL", "")
-		cfg := new(GlobalConfiguration)
-		cfg.Hook = HookConfiguration{
-			AfterUserCreated: ExtensibilityPointConfiguration{
-				Enabled: true,
-				URI:     "\n",
-			},
-		}
-
-		err := populateGlobal(cfg)
-		require.Error(t, err)
-		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
-	}
-
-	{
-		os.Setenv("API_EXTERNAL_URL", "")
-		cfg := new(GlobalConfiguration)
-		cfg.SAML = SAMLConfiguration{
-			Enabled: true,
-		}
-
-		err := populateGlobal(cfg)
-		require.Error(t, err)
-		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
-	}
-
-	{
-		cfg := new(GlobalConfiguration)
-		cfg.Sms.Provider = "invalid"
-
-		err := populateGlobal(cfg)
-		require.NoError(t, err)
-	}
-
-	{
-		cfg := new(GlobalConfiguration)
-		cfg.Sms.Provider = "invalid"
-		cfg.Sms.Template = "{{{{{{{{{}}}}}}}}}"
-
-		err := populateGlobal(cfg)
-		require.Error(t, err)
-	}
-
-	{
-		cfg := new(GlobalConfiguration)
-		cfg.MFA.Phone.EnrollEnabled = true
-		cfg.MFA.Phone.Template = "{{{{{{{{{}}}}}}}}}"
-
-		err := populateGlobal(cfg)
-		require.Error(t, err)
-	}
-
-	{
-		cfg := new(GlobalConfiguration)
-		cfg.MFA.Phone.EnrollEnabled = true
-
-		err := populateGlobal(cfg)
-		require.NoError(t, err)
-	}
-
-	// ConnPercentage
-	{
-		tests := []struct {
-			from int
-			exp  int
-		}{
-			{-2, 0},
-			{-1, 0},
-			{0, 0},
-			{1, 1},
-			{25, 25},
-			{99, 99},
-			{100, 100},
-			{101, 100},
-			{102, 100},
-		}
-		for _, test := range tests {
-			cfg := &DBConfiguration{ConnPercentage: test.from}
-			err := cfg.Validate()
-			require.NoError(t, err)
-			require.Equal(t, test.exp, cfg.ConnPercentage)
-		}
-	}
 }
 
 func TestPasswordRequiredCharactersDecode(t *testing.T) {
@@ -590,27 +321,53 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			val: &SMTPConfiguration{Headers: "invalid"},
-			err: `conf: SMTP headers not a map[string][]string format:` +
-				` invalid character 'i' looking for beginning of value`,
-		},
+			check: func(t *testing.T, v any) {
+				const exp = `invalid character`
 
+				mcfg := v.(*SMTPConfiguration)
+				val := mcfg.normalizedHeadersVal.val
+				err := mcfg.normalizedHeadersVal.err
+				require.Contains(t, err.Error(), exp)
+				require.Error(t, err)
+				require.Nil(t, val)
+			},
+		},
 		{
 			val: &MailerConfiguration{},
 		},
 		{
 			val: &MailerConfiguration{EmailValidationServiceHeaders: "invalid"},
-			err: `conf: mailer validation headers not a map[string][]string format:` +
-				` invalid character 'i' looking for beginning of value`,
+			check: func(t *testing.T, v any) {
+				const exp = `invalid character`
+
+				mcfg := v.(*MailerConfiguration)
+				val := mcfg.serviceHeadersVal.val
+				err := mcfg.serviceHeadersVal.err
+				require.Contains(t, err.Error(), exp)
+				require.Error(t, err)
+				require.Nil(t, val)
+			},
 		},
 		{
 			val: &MailerConfiguration{EmailValidationBlockedMX: "invalid"},
-			err: `conf: email_validation_blocked_mx`,
+			check: func(t *testing.T, v any) {
+				const exp = `invalid character`
+				mcfg := v.(*MailerConfiguration)
+				val := mcfg.blockedMXRecordsVal.val
+				err := mcfg.blockedMXRecordsVal.err
+				require.Error(t, err)
+				require.Contains(t, err.Error(), exp)
+				require.Nil(t, val)
+			},
 		},
 		{
 			val: &MailerConfiguration{EmailValidationBlockedMX: `["foo.com"]`},
 			check: func(t *testing.T, v any) {
-				got := (v.(*MailerConfiguration)).GetEmailValidationBlockedMXRecords()
-				require.True(t, got["foo.com"])
+				mcfg := v.(*MailerConfiguration)
+				val := mcfg.blockedMXRecordsVal.val
+				err := mcfg.blockedMXRecordsVal.err
+				require.NoError(t, err)
+				require.True(t, val["foo.com"])
 			},
 		},
 
@@ -1243,67 +1000,6 @@ func TestMethods(t *testing.T) {
 	}
 }
 
-func TestLoading(t *testing.T) {
-	defer os.Clearenv()
-
-	{
-		os.Clearenv()
-		err := LoadFile("abc")
-		require.Error(t, err)
-	}
-
-	{
-		os.Clearenv()
-		err := LoadFile("")
-		require.NoError(t, err)
-	}
-
-	{
-		os.Clearenv()
-		err := loadEnvironment("abc")
-		require.Error(t, err)
-	}
-
-	{
-		os.Clearenv()
-		err := loadEnvironment("")
-		require.NoError(t, err)
-	}
-
-	{
-		os.Clearenv()
-		err := LoadDirectory("")
-		require.NoError(t, err)
-	}
-
-	{
-		os.Clearenv()
-		err := LoadDirectory("__invalid__")
-		require.Error(t, err)
-		require.Contains(t, err.Error(),
-			`open __invalid__: no such file or directory`)
-	}
-
-	{
-		os.Clearenv()
-		err := LoadDirectory("../reloader/testdata")
-		require.NoError(t, err)
-	}
-
-	{
-		os.Clearenv()
-		err := loadDirectoryPaths("__invalid__")
-		require.Error(t, err)
-	}
-
-	{
-		os.Clearenv()
-		cfg, err := LoadGlobalFromEnv()
-		require.Error(t, err)
-		require.Nil(t, cfg)
-	}
-}
-
 func TestWebAuthnConfigurationValidate(t *testing.T) {
 	// Empty RPID → error
 	{
@@ -1338,40 +1034,6 @@ func TestWebAuthnConfigurationValidate(t *testing.T) {
 		require.Contains(t, err.Error(), "GOTRUE_WEBAUTHN_RP_ORIGINS is required")
 	}
 
-	// HTTP origin (not localhost) → error
-	{
-		w := &WebAuthnConfiguration{
-			RPID:          "example.com",
-			RPDisplayName: "Example",
-			RPOrigins:     []string{"http://example.com"},
-		}
-		err := w.Validate()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "must use HTTPS")
-	}
-
-	// HTTP localhost is allowed
-	{
-		w := &WebAuthnConfiguration{
-			RPID:          "localhost",
-			RPDisplayName: "Localhost",
-			RPOrigins:     []string{"http://localhost:3000"},
-		}
-		err := w.Validate()
-		require.NoError(t, err)
-	}
-
-	// HTTP 127.0.0.1 is allowed
-	{
-		w := &WebAuthnConfiguration{
-			RPID:          "localhost",
-			RPDisplayName: "Localhost",
-			RPOrigins:     []string{"http://127.0.0.1:3000"},
-		}
-		err := w.Validate()
-		require.NoError(t, err)
-	}
-
 	// Valid HTTPS origins pass
 	{
 		w := &WebAuthnConfiguration{
@@ -1395,22 +1057,90 @@ func TestWebAuthnConfigurationValidate(t *testing.T) {
 		err := cfg.Validate()
 		require.NoError(t, err)
 	}
-
-	// Conditional validation: enabled passkey requires WebAuthn config
-	{
-		cfg := &GlobalConfiguration{
-			SiteURL: "https://example.com",
-			API:     APIConfiguration{ExternalURL: "https://example.com"},
-			JWT:     JWTConfiguration{Secret: "a"},
-		}
-		cfg.Passkey.Enabled = true
-		require.NoError(t, cfg.ApplyDefaults())
-		err := cfg.Validate()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "GOTRUE_WEBAUTHN_RP_ID is required")
-	}
 }
 
 func toPtr[T any](v T) *T {
 	return &(&([1]T{T(v)}))[0]
+}
+
+func TestExperimentalProviderLinkingDomainsBackfill(t *testing.T) {
+	baseConfig := func() *GlobalConfiguration {
+		c := &GlobalConfiguration{}
+		c.JWT.Secret = "secret"
+		return c
+	}
+
+	// legacy-only: own-domain list backfills into the map as {p: p}, including
+	// provider names that contain a colon
+	{
+		c := baseConfig()
+		c.Experimental.ProvidersWithOwnLinkingDomain = []string{"custom:github"}
+		require.NoError(t, c.ApplyDefaults())
+		require.Equal(t, "custom:github", c.Experimental.ProviderLinkingDomains["custom:github"])
+	}
+
+	// new-only: explicit linking domains are preserved untouched
+	{
+		c := baseConfig()
+		c.Experimental.ProviderLinkingDomains = ProviderLinkingDomains{
+			"custom:github": "social",
+			"custom:google": "social",
+		}
+		require.NoError(t, c.ApplyDefaults())
+		require.Equal(t, ProviderLinkingDomains{
+			"custom:github": "social",
+			"custom:google": "social",
+		}, c.Experimental.ProviderLinkingDomains)
+	}
+
+	// both-set: explicit entry wins over the legacy backfill
+	{
+		c := baseConfig()
+		c.Experimental.ProvidersWithOwnLinkingDomain = []string{"custom:github"}
+		c.Experimental.ProviderLinkingDomains = ProviderLinkingDomains{"custom:github": "social"}
+		require.NoError(t, c.ApplyDefaults())
+		require.Equal(t, "social", c.Experimental.ProviderLinkingDomains["custom:github"])
+	}
+}
+
+func TestProviderLinkingDomainsDecode(t *testing.T) {
+	// "=" separates provider from domain so colon-bearing custom names survive
+	// as keys, alongside builtin names that share the same domain
+	{
+		var d ProviderLinkingDomains
+		require.NoError(t, d.Decode("github=social,custom:google=social"))
+		require.Equal(t, ProviderLinkingDomains{
+			"github":        "social",
+			"custom:google": "social",
+		}, d)
+	}
+
+	// surrounding whitespace is trimmed
+	{
+		var d ProviderLinkingDomains
+		require.NoError(t, d.Decode(" custom:github = social , google = social "))
+		require.Equal(t, ProviderLinkingDomains{
+			"custom:github": "social",
+			"google":        "social",
+		}, d)
+	}
+
+	// empty value yields an empty (non-nil) map
+	{
+		var d ProviderLinkingDomains
+		require.NoError(t, d.Decode(""))
+		require.Equal(t, ProviderLinkingDomains{}, d)
+	}
+
+	// a ":"-only pair is rejected
+	{
+		var d ProviderLinkingDomains
+		require.Error(t, d.Decode("custom:github:social"))
+	}
+
+	// missing domain is rejected
+	{
+		var d ProviderLinkingDomains
+		require.Error(t, d.Decode("custom:github="))
+	}
 }

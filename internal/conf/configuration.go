@@ -2,13 +2,12 @@ package conf
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"text/template"
@@ -16,9 +15,8 @@ import (
 
 	"github.com/gobwas/glob"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/joho/godotenv"
-	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/gomail.v2"
 )
 
@@ -144,6 +142,8 @@ type JWTConfiguration struct {
 	KeyID            string         `json:"key_id" split_words:"true"`
 	Keys             JwtKeysDecoder `json:"keys"`
 	ValidMethods     []string       `json:"-" split_words:"true"`
+
+	SigningKey func(context.Context) (any, error) `json:"-"`
 }
 
 type MFAFactorTypeConfiguration struct {
@@ -186,31 +186,15 @@ type WebAuthnConfiguration struct {
 
 func (w *WebAuthnConfiguration) Validate() error {
 	if w.RPID == "" {
-		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ID is required when passkeys are enabled")
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ID is required when WebAuthn is enabled")
 	}
 
 	if w.RPDisplayName == "" {
-		return errors.New("conf: GOTRUE_WEBAUTHN_RP_DISPLAY_NAME is required when passkeys are enabled")
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_DISPLAY_NAME is required when WebAuthn is enabled")
 	}
 
 	if len(w.RPOrigins) == 0 {
-		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ORIGINS is required when passkeys are enabled")
-	}
-
-	for _, origin := range w.RPOrigins {
-		u, err := url.Parse(origin)
-		if err != nil {
-			return fmt.Errorf("conf: invalid WebAuthn RP origin %q: %w", origin, err)
-		}
-
-		if u.Scheme == "http" {
-			host := u.Hostname()
-			if host != "localhost" && host != "127.0.0.1" {
-				return fmt.Errorf("conf: WebAuthn RP origin %q must use HTTPS (http is only allowed for localhost/127.0.0.1)", origin)
-			}
-		} else if u.Scheme != "https" {
-			return fmt.Errorf("conf: WebAuthn RP origin %q must use HTTPS", origin)
-		}
+		return errors.New("conf: GOTRUE_WEBAUTHN_RP_ORIGINS is required when WebAuthn is enabled")
 	}
 
 	return nil
@@ -323,11 +307,52 @@ type AuditLogConfiguration struct {
 	DisablePostgres bool `split_words:"true" default:"false"`
 }
 
+// ProviderLinkingDomains maps a provider name to the account-linking domain it
+// belongs to. Providers mapped to the same domain link to one another (a
+// matching email lands on the same account) but stay isolated from the
+// "default" (email-linked) pool and from SSO.
+//
+// Provider names can themselves contain a colon (custom OAuth providers are
+// named "custom:<identifier>", e.g. "custom:github"), so the env format uses
+// "=" — not ":" — to separate the provider from its domain. Pairs are
+// comma-separated:
+//
+//	GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="custom:github=social,custom:google=social"
+type ProviderLinkingDomains map[string]string
+
+func (d *ProviderLinkingDomains) Decode(value string) error {
+	result := ProviderLinkingDomains{}
+	if value = strings.TrimSpace(value); value != "" {
+		for _, pair := range strings.Split(value, ",") {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) != 2 {
+				return fmt.Errorf("conf: invalid provider linking domain %q, expected format \"provider=domain\"", pair)
+			}
+			provider, domain := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
+			if provider == "" || domain == "" {
+				return fmt.Errorf("conf: invalid provider linking domain %q, provider and domain must be non-empty", pair)
+			}
+			result[provider] = domain
+		}
+	}
+	*d = result
+	return nil
+}
+
 type ExperimentalConfiguration struct {
+	// DEPRECATED: use ProviderLinkingDomains instead. Kept for backward
+	// compatibility; auto-migrated in ApplyDefaults into ProviderLinkingDomains as
+	// {provider: provider}.
+	//
 	// Names of providers (e.g. "google") which have their own identity
 	// linking domain, meaning that the ones listed here _will not
 	// participate_ in email similarity linking with other accounts.
 	ProvidersWithOwnLinkingDomain []string `split_words:"true"`
+
+	// ProviderLinkingDomains maps a provider name to the account-linking domain
+	// it belongs to. See the ProviderLinkingDomains type for the env format.
+	// Env: GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="custom:github=social,custom:google=social"
+	ProviderLinkingDomains ProviderLinkingDomains `split_words:"true"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime
@@ -528,29 +553,34 @@ type SMTPConfiguration struct {
 	Headers        string        `json:"headers"`
 	LoggingEnabled bool          `json:"logging_enabled" split_words:"true" default:"false"`
 
-	fromAddress       string              `json:"-"`
-	normalizedHeaders map[string][]string `json:"-"`
+	fromAddress          string                           `json:"-"`
+	normalizedHeadersVal cachedValue[map[string][]string] `json:"-"`
 }
 
 func (c *SMTPConfiguration) Validate() error {
-	headers := make(map[string][]string)
-
-	if c.Headers != "" {
-		err := json.Unmarshal([]byte(c.Headers), &headers)
-		if err != nil {
-			return fmt.Errorf("conf: SMTP headers not a map[string][]string format: %w", err)
-		}
-	}
-
-	if len(headers) > 0 {
-		c.normalizedHeaders = headers
-	}
-
 	mail := gomail.NewMessage()
-
 	c.fromAddress = mail.FormatAddress(c.AdminEmail, c.SenderName)
-
+	c.normalizedHeadersVal = c.buildNormalizedHeaders()
 	return nil
+}
+
+func (c *SMTPConfiguration) buildNormalizedHeaders() cachedValue[map[string][]string] {
+	var zero map[string][]string
+	if c.Headers == "" {
+		return makeCachedValue(zero, nil)
+	}
+
+	val := make(map[string][]string)
+	err := json.Unmarshal([]byte(c.Headers), &val)
+	if err != nil {
+		const msg = "conf: SMTP headers configuration is invalid, ignoring"
+		logrus.WithError(err).Warn(msg)
+		return makeCachedValue(zero, err)
+	}
+	if len(val) == 0 {
+		return makeCachedValue(zero, nil)
+	}
+	return makeCachedValue(val, nil)
 }
 
 func (c *SMTPConfiguration) FromAddress() string {
@@ -558,7 +588,7 @@ func (c *SMTPConfiguration) FromAddress() string {
 }
 
 func (c *SMTPConfiguration) NormalizedHeaders() map[string][]string {
-	return c.normalizedHeaders
+	return c.normalizedHeadersVal.val
 }
 
 type MailerConfiguration struct {
@@ -602,50 +632,75 @@ type MailerConfiguration struct {
 	// template reload.
 	TemplateReloadingMaxIdle time.Duration `json:"template_reloading_max_idle" split_words:"true" default:"20m"`
 
-	serviceHeaders   map[string][]string `json:"-"`
-	blockedMXRecords map[string]bool     `json:"-"`
+	serviceHeadersVal   cachedValue[map[string][]string] `json:"-"`
+	blockedMXRecordsVal cachedValue[map[string]bool]     `json:"-"`
 }
 
 func (c *MailerConfiguration) Validate() error {
-	headers := make(map[string][]string)
-
-	if c.EmailValidationServiceHeaders != "" {
-		err := json.Unmarshal([]byte(c.EmailValidationServiceHeaders), &headers)
-		if err != nil {
-			return fmt.Errorf("conf: mailer validation headers not a map[string][]string format: %w", err)
-		}
-	}
-
-	if len(headers) > 0 {
-		c.serviceHeaders = headers
-	}
-
-	// EmailValidationBlockedMX is a JSON array in the config string for brevity.
-	var blockedMXRecords map[string]bool
-	if c.EmailValidationBlockedMX != "" {
-		var blockedMXArray []string
-		err := json.Unmarshal([]byte(c.EmailValidationBlockedMX), &blockedMXArray)
-		if err != nil {
-			return fmt.Errorf("conf: email_validation_blocked_mx is not a valid JSON array: %w", err)
-		}
-		blockedMXRecords = make(map[string]bool, len(blockedMXArray)*2)
-		for _, record := range blockedMXArray {
-			blockedMXRecords[record] = true
-			blockedMXRecords[record+"."] = true
-		}
-	}
-
-	c.blockedMXRecords = blockedMXRecords
-
+	c.serviceHeadersVal = c.buildServiceHeaders()
+	c.blockedMXRecordsVal = c.buildBlockedMXRecords()
 	return nil
 }
 
 func (c *MailerConfiguration) GetEmailValidationServiceHeaders() map[string][]string {
-	return c.serviceHeaders
+	return c.serviceHeadersVal.val
 }
 
 func (c *MailerConfiguration) GetEmailValidationBlockedMXRecords() map[string]bool {
-	return c.blockedMXRecords
+	return c.blockedMXRecordsVal.val
+}
+
+func (c *MailerConfiguration) buildServiceHeaders() cachedValue[map[string][]string] {
+	var zero map[string][]string
+	if c.EmailValidationServiceHeaders == "" {
+		return makeCachedValue(zero, nil)
+	}
+
+	val := make(map[string][]string)
+	err := json.Unmarshal([]byte(c.EmailValidationServiceHeaders), &val)
+	if err != nil {
+		const msg = "conf: mailer validation headers configuration is invalid, ignoring"
+		logrus.WithError(err).Warn(msg)
+		return makeCachedValue(zero, err)
+	}
+	if len(val) == 0 {
+		return makeCachedValue(zero, nil)
+	}
+	return makeCachedValue(val, nil)
+}
+
+func (c *MailerConfiguration) buildBlockedMXRecords() cachedValue[map[string]bool] {
+	var zero map[string]bool
+	if c.EmailValidationBlockedMX == "" {
+		return makeCachedValue(zero, nil)
+	}
+
+	var blockedMXArray []string
+	err := json.Unmarshal([]byte(c.EmailValidationBlockedMX), &blockedMXArray)
+	if err != nil {
+		const msg = "conf: blocked mx records configuration is invalid, ignoring"
+		logrus.WithError(err).Warn(msg)
+		return makeCachedValue(zero, err)
+	}
+
+	val := make(map[string]bool, len(blockedMXArray)*2)
+	for _, record := range blockedMXArray {
+		val[record] = true
+		val[record+"."] = true
+	}
+	return makeCachedValue(val, nil)
+}
+
+type cachedValue[T any] struct {
+	val T
+	err error
+}
+
+func makeCachedValue[T any](val T, err error) cachedValue[T] {
+	return cachedValue[T]{
+		val: val,
+		err: err,
+	}
 }
 
 type PhoneProviderConfiguration struct {
@@ -849,20 +904,6 @@ func (c *SecurityConfiguration) Validate() error {
 	return nil
 }
 
-func loadEnvironment(filename string) error {
-	var err error
-	if filename != "" {
-		err = godotenv.Overload(filename)
-	} else {
-		err = godotenv.Load()
-		// handle if .env file does not exist, this is OK
-		if os.IsNotExist(err) {
-			return nil
-		}
-	}
-	return err
-}
-
 // Moving away from the existing HookConfig so we can get a fresh start.
 type HookConfiguration struct {
 	MFAVerificationAttempt      ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
@@ -982,118 +1023,7 @@ func (e *ExtensibilityPointConfiguration) PopulateExtensibilityPoint() error {
 	return nil
 }
 
-// LoadFile calls godotenv.Load() when the given filename is empty ignoring any
-// errors loading, otherwise it calls godotenv.Overload(filename).
-//
-// godotenv.Load: preserves env, ".env" path is optional
-// godotenv.Overload: overrides env, "filename" path must exist
-func LoadFile(filename string) error {
-	var err error
-	if filename != "" {
-		err = godotenv.Overload(filename)
-	} else {
-		err = godotenv.Load()
-		// handle if .env file does not exist, this is OK
-		if os.IsNotExist(err) {
-			return nil
-		}
-	}
-	return err
-}
-
-// LoadDirectory does nothing when configDir is empty, otherwise it will attempt
-// to load a list of configuration files located in configDir by using ReadDir
-// to obtain a sorted list of files containing a .env suffix.
-//
-// When the list is empty it will do nothing, otherwise it passes the file list
-// to godotenv.Overload to pull them into the current environment.
-func LoadDirectory(configDir string) error {
-	if configDir == "" {
-		return nil
-	}
-
-	// Returns entries sorted by filename
-	ents, err := os.ReadDir(configDir)
-	if err != nil {
-		// We mimic the behavior of LoadGlobal here, if an explicit path is
-		// provided we return an error.
-		return err
-	}
-
-	var paths []string
-	for _, ent := range ents {
-		if ent.IsDir() {
-			continue // ignore directories
-		}
-
-		// We only read files ending in .env
-		name := ent.Name()
-		if !strings.HasSuffix(name, ".env") {
-			continue
-		}
-
-		// ent.Name() does not include the watch dir.
-		paths = append(paths, filepath.Join(configDir, name))
-	}
-
-	// If at least one path was found we load the configuration files in the
-	// directory. We don't call override without config files because it will
-	// override the env vars previously set with a ".env", if one exists.
-	return loadDirectoryPaths(paths...)
-}
-
-func loadDirectoryPaths(p ...string) error {
-	// If at least one path was found we load the configuration files in the
-	// directory. We don't call override without config files because it will
-	// override the env vars previously set with a ".env", if one exists.
-	if len(p) > 0 {
-		if err := godotenv.Overload(p...); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// LoadGlobalFromEnv will return a new *GlobalConfiguration value from the
-// currently configured environment.
-func LoadGlobalFromEnv() (*GlobalConfiguration, error) {
-	config := new(GlobalConfiguration)
-	if err := loadGlobal(config); err != nil {
-		return nil, err
-	}
-	return config, nil
-}
-
-func LoadGlobal(filename string) (*GlobalConfiguration, error) {
-	if err := loadEnvironment(filename); err != nil {
-		return nil, err
-	}
-
-	config := new(GlobalConfiguration)
-	if err := loadGlobal(config); err != nil {
-		return nil, err
-	}
-	return config, nil
-}
-
-func loadGlobal(config *GlobalConfiguration) error {
-	// although the package is called "auth" it used to be called "gotrue"
-	// so environment configs will remain to be called "GOTRUE"
-	if err := envconfig.Process("gotrue", config); err != nil {
-		return err
-	}
-
-	if err := config.ApplyDefaults(); err != nil {
-		return err
-	}
-
-	if err := config.Validate(); err != nil {
-		return err
-	}
-	return populateGlobal(config)
-}
-
-func populateGlobal(config *GlobalConfiguration) error {
+func (config *GlobalConfiguration) PopulateGlobal() error {
 	if config.Hook.PasswordVerificationAttempt.Enabled {
 		if err := config.Hook.PasswordVerificationAttempt.PopulateExtensibilityPoint(); err != nil {
 			return err
@@ -1139,6 +1069,7 @@ func populateGlobal(config *GlobalConfiguration) error {
 		if err := config.SAML.PopulateFields(config.API.ExternalURL); err != nil {
 			return err
 		}
+		config.SAML.PrivateKeyNext = ""
 	} else {
 		config.SAML.PrivateKey = ""
 	}
@@ -1189,15 +1120,37 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		if err := config.applyDefaultsJWT([]byte(config.JWT.Secret)); err != nil {
 			return err
 		}
+	} else {
+		jwk, err := GetSigningJwk(&config.JWT)
+		if err != nil {
+			return err
+		}
+		sk, err := getSigningKey(jwk)
+		if err != nil {
+			return err
+		}
+		config.JWT.SigningKey = sk
 	}
 
 	if config.JWT.ValidMethods == nil {
 		config.JWT.ValidMethods = []string{}
 		for _, key := range config.JWT.Keys {
-			alg := GetSigningAlg(key.PublicKey)
-			config.JWT.ValidMethods = append(config.JWT.ValidMethods, alg.Alg())
+			config.JWT.ValidMethods = append(config.JWT.ValidMethods, key.PublicKey.Algorithm().String())
 		}
 
+	}
+
+	// Backfill the deprecated ProvidersWithOwnLinkingDomain list into the
+	// ProviderLinkingDomains map. A provider that owned its linking domain maps
+	// to a domain named after itself (own domain == own name). Explicit
+	// ProviderLinkingDomains entries win over the legacy backfill.
+	if config.Experimental.ProviderLinkingDomains == nil {
+		config.Experimental.ProviderLinkingDomains = map[string]string{}
+	}
+	for _, p := range config.Experimental.ProvidersWithOwnLinkingDomain {
+		if _, ok := config.Experimental.ProviderLinkingDomains[p]; !ok {
+			config.Experimental.ProviderLinkingDomains[p] = p
+		}
 	}
 
 	if config.Mailer.Autoconfirm && config.Mailer.AllowUnverifiedEmailSignIns {
@@ -1339,6 +1292,16 @@ func (config *GlobalConfiguration) applyDefaultsJWTPrivateKey(privKey jwk.Key) e
 		PublicKey:  pubKey,
 		PrivateKey: privKey,
 	}
+
+	var key any
+	if err := privKey.Raw(&key); err != nil {
+		return err
+	}
+
+	config.JWT.SigningKey = func(ctx context.Context) (any, error) {
+		return key, nil
+	}
+
 	return nil
 }
 
@@ -1368,7 +1331,7 @@ func (c *GlobalConfiguration) Validate() error {
 
 	if c.Passkey.Enabled || c.MFA.WebAuthn.EnrollEnabled || c.MFA.WebAuthn.VerifyEnabled {
 		if err := c.WebAuthn.Validate(); err != nil {
-			return err
+			logrus.WithError(err).Warn("WebAuthn configuration is invalid")
 		}
 	}
 

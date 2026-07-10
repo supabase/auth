@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
@@ -31,7 +32,7 @@ func (ts *UserTestSuite) SetupTest() {
 }
 
 func TestUser(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
+	globalConfig, err := confload.LoadGlobal(modelsTestConfig)
 	require.NoError(t, err)
 
 	conn, err := test.SetupDBConnection(globalConfig)
@@ -182,6 +183,34 @@ func (ts *UserTestSuite) TestIsDuplicatedEmail() {
 	e, err = IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "other-aud", nil, nil)
 	require.NoError(ts.T(), err)
 	require.Nil(ts.T(), e, "expected same email to not be duplicated")
+}
+
+func (ts *UserTestSuite) TestIsDuplicatedEmailWithLinkingDomains() {
+	linkingDomains := map[string]string{"github": "social", "google": "social"}
+
+	// A grouped-provider user (its own "social" linking domain, is_sso_user=true)
+	// must NOT be treated as a default-pool duplicate: a default email signup with
+	// the same address is allowed to coexist with it.
+	githubUser, err := NewUser("", "grouped@example.com", "", "test", nil)
+	require.NoError(ts.T(), err)
+	githubUser.IsSSOUser = true
+	require.NoError(ts.T(), ts.db.Create(githubUser))
+	githubIdentity, err := NewIdentity(githubUser, "github", map[string]interface{}{
+		"sub":   githubUser.ID.String(),
+		"email": "grouped@example.com",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(githubIdentity))
+
+	e, err := IsDuplicatedEmail(ts.db, "grouped@example.com", "test", nil, linkingDomains)
+	require.NoError(ts.T(), err)
+	require.Nil(ts.T(), e, "grouped-provider email must not count as a default-pool duplicate")
+
+	// A default-pool email user with the same address IS still a duplicate.
+	_ = ts.createUserWithEmail("default@example.com")
+	e, err = IsDuplicatedEmail(ts.db, "default@example.com", "test", nil, linkingDomains)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), e, "default email must still count as a duplicate")
 }
 
 func (ts *UserTestSuite) createUser() *User {

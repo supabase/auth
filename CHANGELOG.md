@@ -1,5 +1,54 @@
 # Changelog
 
+## [2.192.0](https://github.com/supabase/auth/compare/v2.191.0...v2.192.0) (2026-06-29)
+
+
+### Features
+
+* **custom-oauth:** add per-provider custom_claims_allowlist ([#2576](https://github.com/supabase/auth/issues/2576)) ([acecb06](https://github.com/supabase/auth/commit/acecb063b0d089d6329af04171b3bc3903508c3b))
+
+
+### Bug Fixes
+
+* **tests:** rely on error codes for hooks tests to work across PG backends ([ee91c5f](https://github.com/supabase/auth/commit/ee91c5fd31ce3fd6721cb40ae1795ba702b8c9b8))
+* **vulncheck:** ignore GO-2026-5004 (pgx/v4, not reachable) ([#2602](https://github.com/supabase/auth/issues/2602)) ([f1cc16f](https://github.com/supabase/auth/commit/f1cc16fbd54b41623b8d39b0663d410ebbe9c9e6))
+
+## [2.191.0](https://github.com/supabase/auth/compare/v2.190.0...v2.191.0) (2026-06-17)
+
+
+### Features
+
+* add RS256 signing keys backed by AWS KMS ([#2571](https://github.com/supabase/auth/issues/2571)) ([983f59a](https://github.com/supabase/auth/commit/983f59ac2e61de30533d108c08593a4eec5a0f61))
+* **saml:** support zero-downtime SP key rotation  ([#2575](https://github.com/supabase/auth/issues/2575)) ([5b95ff8](https://github.com/supabase/auth/commit/5b95ff82f6745d25be5eb66d4843d7362c2582a8))
+
+## [2.190.0](https://github.com/supabase/auth/compare/v2.189.0...v2.190.0) (2026-06-11)
+
+
+### Features
+
+* add -failfast to make test command ([#2553](https://github.com/supabase/auth/issues/2553)) ([bec1dd0](https://github.com/supabase/auth/commit/bec1dd022c3ae7a97c70249949f40056f4c06071))
+* **conf:** add JSON config file support ([#2540](https://github.com/supabase/auth/issues/2540)) ([e63fef9](https://github.com/supabase/auth/commit/e63fef9c71a3287aee6fcc7c595ad82797e357cd))
+* create tools directory for deterministic builds ([#2522](https://github.com/supabase/auth/issues/2522)) ([52cf3d9](https://github.com/supabase/auth/commit/52cf3d9bc2b6cbd971f4c85b81cd1e9a8bf9e381))
+* **custom-oidc:** support non-standard discovery URLs ([#2573](https://github.com/supabase/auth/issues/2573)) ([3dacc64](https://github.com/supabase/auth/commit/3dacc6410202e832de2044a5dff1cc8bae8065bd))
+* fix the vulncheck-filter to parse the text format instead ([#2525](https://github.com/supabase/auth/issues/2525)) ([4136d49](https://github.com/supabase/auth/commit/4136d49ebdee4e35fb9c9713f33bd5664b959431))
+* fork github.com/joho/godotenv into internal/conf/envparse ([#2521](https://github.com/supabase/auth/issues/2521)) ([cda62a9](https://github.com/supabase/auth/commit/cda62a9c215ea1b8eb7ab281e0db549a2c9e4b46))
+
+
+### Bug Fixes
+
+* Azure issuer validation ([#2560](https://github.com/supabase/auth/issues/2560)) ([a39858b](https://github.com/supabase/auth/commit/a39858b6e9d194198005eceff9e707c0cd3118e1))
+* catch cancelation errors in bg workers & servers ([#2530](https://github.com/supabase/auth/issues/2530)) ([77f5918](https://github.com/supabase/auth/commit/77f5918c0646433e67aec9e2e560168a50d844c3))
+* check session state for admin tokens ([#2555](https://github.com/supabase/auth/issues/2555)) ([c5969ed](https://github.com/supabase/auth/commit/c5969ed897f2fefc2af386e78eb15b68b214ef0d))
+* **config:** warn on invalid WebAuthn config instead of erroring ([#2545](https://github.com/supabase/auth/issues/2545)) ([ca0b154](https://github.com/supabase/auth/commit/ca0b1547f77f5261458a6e91ca2ccb2c0e907ca7))
+* **custom-oidc:** strip trailing slashes from issuer ([#2570](https://github.com/supabase/auth/issues/2570)) ([169ad67](https://github.com/supabase/auth/commit/169ad67533ccad633d69ecb69e768888449d5090))
+* **Dockerfile:** ensure forks exists on fs before make deps ([#2567](https://github.com/supabase/auth/issues/2567)) ([01f136d](https://github.com/supabase/auth/commit/01f136de0101c40f5033958c6b50d59dd084ee45))
+* **mailer:** include SiteURL in notification template data ([#2532](https://github.com/supabase/auth/issues/2532)) ([dc015da](https://github.com/supabase/auth/commit/dc015da420a3b9255f152b9d6dd7e17718d6e550))
+* **oauth-server:** serialize concurrent authorize/consent with row-level lock ([#2512](https://github.com/supabase/auth/issues/2512)) ([c816cfe](https://github.com/supabase/auth/commit/c816cfeec75c8521f8e25260de7073c7236a9ac9))
+* **passkeys:** delete webauthn creds when user is soft-deleted ([#2564](https://github.com/supabase/auth/issues/2564)) ([7e1c060](https://github.com/supabase/auth/commit/7e1c0603cb4a1f6bf7e862a4154f558918a1a870))
+* **passkeys:** enforce AAL checks on passkey registration and deletion ([#2565](https://github.com/supabase/auth/issues/2565)) ([7e6f2e4](https://github.com/supabase/auth/commit/7e6f2e473e5d4ac8bb09bb06c55cc2ed4e20a102))
+* source WebAuthn RP config from env vars ([#2490](https://github.com/supabase/auth/issues/2490)) ([63949ca](https://github.com/supabase/auth/commit/63949cace4028679ec00192819fb66a5dc0f56f0))
+* when version is empty set to 0.0.0 ([#2531](https://github.com/supabase/auth/issues/2531)) ([a3b7c8c](https://github.com/supabase/auth/commit/a3b7c8c54d2a22bc6f9566591d94a9e07bbc7cc3))
+
 ## [2.189.0](https://github.com/supabase/auth/compare/v2.188.1...v2.189.0) (2026-04-23)
 
 

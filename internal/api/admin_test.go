@@ -656,6 +656,16 @@ func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
 	})
 	require.NoError(ts.T(), err)
 
+	// register a WebAuthn credential for the user
+	passkey := &models.WebAuthnCredential{
+		ID:           uuid.Must(uuid.NewV4()),
+		UserID:       u.ID,
+		CredentialID: []byte("test-credential-id"),
+		PublicKey:    []byte("test-public-key"),
+		FriendlyName: "test passkey",
+	}
+	require.NoError(ts.T(), ts.API.db.Create(passkey))
+
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"should_soft_delete": true,
@@ -690,6 +700,11 @@ func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
 	for _, identity := range deletedIdentities {
 		require.Empty(ts.T(), identity.IdentityData)
 	}
+
+	// passkeys (WebAuthn credentials) should be hard-deleted
+	deletedPasskeys, err := models.FindWebAuthnCredentialsByUserID(ts.API.db, deletedUser.ID)
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), deletedPasskeys)
 }
 
 func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
@@ -775,6 +790,14 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	require.NoError(ts.T(), f.SetSecret("secretkey", ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey))
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
+	// An AAL2 session backed by the factor should be downgraded to AAL1 when the
+	// factor is deleted by an admin (mirrors the self-service unenroll behaviour).
+	s, err := models.NewSession(u.ID, &f.ID)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(s))
+	require.NoError(ts.T(), models.AddClaimToSession(ts.API.db, s.ID, models.TOTPSignIn))
+	require.NoError(ts.T(), s.UpdateAALAndAssociatedFactor(ts.API.db, models.AAL2, &f.ID))
+
 	// Setup request
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/factors/%s/", u.ID, f.ID), nil)
@@ -787,6 +810,14 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 
+	// The factor's session must be downgraded and its AMR claim stripped.
+	downgraded, err := models.FindSessionByID(ts.API.db, s.ID, false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.AAL1.String(), downgraded.GetAAL())
+	require.Nil(ts.T(), downgraded.FactorID)
+	aal, _, err := downgraded.CalculateAALAndAMR(u)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.AAL1, aal)
 }
 
 // TestAdminUserGetFactor tests API /admin/user/<user_id>/factors/

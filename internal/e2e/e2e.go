@@ -2,50 +2,21 @@
 package e2e
 
 import (
-	"path/filepath"
-	"runtime"
-	"testing"
-
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
+	"github.com/supabase/auth/internal/e2e/e2ecfg"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
 )
 
 var (
-	projectRoot string
-	configPath  string
+	projectRoot = e2ecfg.GetProjectRoot()
+	configPath  = e2ecfg.GetConfigPath()
 )
 
-var isTesting func() bool = testing.Testing
-
-func init() {
-	initPackage()
-}
-
-func initPackage() {
-	if isTesting() {
-		_, thisFile, _, _ := runtime.Caller(0)
-		projectRoot = filepath.Join(filepath.Dir(thisFile), "../..")
-		configPath = filepath.Join(GetProjectRoot(), "hack", "test.env")
-	} else {
-		panic("package e2e may not be used in a main package")
-	}
-}
-
-// GetProjectRoot returns the path to the root of the project. This may be used
-// to locate files without needing the relative path from a given test.
-func GetProjectRoot() string {
-	return projectRoot
-}
-
-// GetConfigPath returns the path for the "/hack/test.env" config file.
-func GetConfigPath() string {
-	return configPath
-}
-
-// Config calls conf.LoadGlobal using GetConfigPath().
+// Config calls confload.LoadGlobal using GetConfigPath().
 func Config() (*conf.GlobalConfiguration, error) {
-	globalCfg, err := conf.LoadGlobal(GetConfigPath())
+	globalCfg, err := confload.LoadGlobal(configPath)
 	if err != nil {
 		return nil, err
 	}

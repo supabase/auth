@@ -112,7 +112,7 @@ migrate_test: ## Run database migrations for test.
 	hack/migrate.sh postgres
 
 test: auth ## Run tests.
-	go test $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1
+	go test -failfast $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1
 	./hack/coverage.sh
 
 vet: # Vet the code
@@ -136,7 +136,7 @@ sec: | $(TOOL_BIN_DIR)/gosec # Check for security vulnerabilities
 		$(CHECK_FILES)
 
 vulncheck: $(TOOL_BIN_DIR)/govulncheck # Check for known vulnerabilities
-	$(TOOL_BIN_DIR)/govulncheck -format json $(CHECK_FILES) | go run ./hack/vulncheck-filter
+	$(TOOL_BIN_DIR)/govulncheck $(CHECK_FILES) | go run ./hack/vulncheck-filter
 
 unused: | $(TOOL_BIN_DIR)/staticcheck # Look for unused code
 	@echo "Unused code:"
@@ -181,6 +181,7 @@ format:
 	gofmt -s -w .
 
 clean:
+	$(MAKE) -C tools clean
 	rm -rf \
 		$(addprefix release-,$(RELEASE_TARGETS)) \
 		$(addprefix auth-,$(RELEASE_TARGETS)) \

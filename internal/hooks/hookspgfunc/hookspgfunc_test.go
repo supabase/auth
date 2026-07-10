@@ -2,10 +2,13 @@ package hookspgfunc
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/e2e"
@@ -22,16 +25,17 @@ func TestDispatch(t *testing.T) {
 	db := e2e.Must(e2e.Conn(globalCfg))
 
 	type testCase struct {
-		ctx    context.Context
-		desc   string
-		tx     *storage.Connection
-		dr     *Dispatcher
-		cfg    conf.ExtensibilityPointConfiguration
-		sql    string
-		req    any
-		exp    any
-		err    error
-		errStr string
+		ctx     context.Context
+		desc    string
+		tx      *storage.Connection
+		dr      *Dispatcher
+		cfg     conf.ExtensibilityPointConfiguration
+		sql     string
+		req     any
+		exp     any
+		err     error
+		errStr  string
+		errCode string
 	}
 
 	cases := []testCase{
@@ -109,7 +113,8 @@ func TestDispatch(t *testing.T) {
 					PERFORM pg_sleep(0.05);
 					return input;
 				end; $$ language plpgsql;`,
-			errStr: `ERROR: canceling statement due to statement timeout`,
+			errStr:  `ERROR: canceling statement due to statement timeout`,
+			errCode: pgerrcode.QueryCanceled,
 		},
 
 		{
@@ -118,8 +123,9 @@ func TestDispatch(t *testing.T) {
 				URI:      `pg-functions://postgres/auth/v0pgfunc_test_NOT_EXIST`,
 				HookName: `"auth"."v0pgfunc_test_NOT_EXIST"`,
 			},
-			req:    M{"user": M{"ID": uuid.Must(uuid.NewV4())}},
-			errStr: "auth.v0pgfunc_test_NOT_EXIST(unknown) does not exist",
+			req:     M{"user": M{"ID": uuid.Must(uuid.NewV4())}},
+			errStr:  "auth.v0pgfunc_test_NOT_EXIST(unknown) does not exist",
+			errCode: pgerrcode.UndefinedFunction,
 		},
 
 		{
@@ -128,9 +134,10 @@ func TestDispatch(t *testing.T) {
 				URI:      `pg-functions://postgres/auth/v0pgfunc_test_NOT_EXIST`,
 				HookName: `"auth"."v0pgfunc_test_NOT_EXIST"`,
 			},
-			tx:     db,
-			req:    M{"user": M{"ID": uuid.Must(uuid.NewV4())}},
-			errStr: "auth.v0pgfunc_test_NOT_EXIST(unknown) does not exist",
+			tx:      db,
+			req:     M{"user": M{"ID": uuid.Must(uuid.NewV4())}},
+			errStr:  "auth.v0pgfunc_test_NOT_EXIST(unknown) does not exist",
+			errCode: pgerrcode.UndefinedFunction,
 		},
 
 		{
@@ -143,8 +150,9 @@ func TestDispatch(t *testing.T) {
 				db,
 				WithTimeout(-time.Millisecond),
 			),
-			req:    M{"user": M{"ID": uuid.Must(uuid.NewV4())}},
-			errStr: "ERROR: -1 ms is outside the valid range for parameter",
+			req:     M{"user": M{"ID": uuid.Must(uuid.NewV4())}},
+			errStr:  "ERROR: -1 ms is outside the valid range for parameter",
+			errCode: pgerrcode.InvalidParameterValue,
 		},
 
 		{
@@ -157,8 +165,9 @@ func TestDispatch(t *testing.T) {
 				db,
 				WithTimeout(time.Millisecond*100),
 			),
-			req:    M{"user": M{"ID": uuid.Must(uuid.NewV4())}},
-			errStr: "ERROR: syntax error at or near",
+			req:     M{"user": M{"ID": uuid.Must(uuid.NewV4())}},
+			errStr:  "syntax error",
+			errCode: pgerrcode.SyntaxError,
 		},
 
 		{
@@ -246,9 +255,17 @@ func TestDispatch(t *testing.T) {
 				require.Equal(t, tc.err, err)
 				return
 			}
-			if tc.errStr != "" {
+			if tc.errStr != "" || tc.errCode != "" {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.errStr)
+				if tc.errStr != "" {
+					require.Contains(t, err.Error(), tc.errStr)
+				}
+				if tc.errCode != "" {
+					var pgErr *pgconn.PgError
+					require.True(t, errors.As(err, &pgErr),
+						"expected a *pgconn.PgError, got %T: %v", err, err)
+					require.Equal(t, tc.errCode, pgErr.Code)
+				}
 				return
 			}
 			require.NoError(t, err)

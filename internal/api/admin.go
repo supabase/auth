@@ -348,7 +348,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if user, err := models.IsDuplicatedEmail(db, params.Email, aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain); err != nil {
+		if user, err := models.IsDuplicatedEmail(db, params.Email, aud, nil, config.Experimental.ProviderLinkingDomains); err != nil {
 			return apierrors.NewInternalServerError("Database error checking email").WithInternalError(err)
 		} else if user != nil {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
@@ -552,6 +552,10 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 			if terr := models.DeleteFactorsByUserId(tx, user.ID); terr != nil {
 				return apierrors.NewInternalServerError("Error deleting user's factors").WithInternalError(terr)
 			}
+			// hard delete all associated WebAuthn credentials
+			if terr := models.DeleteWebAuthnCredentialsByUserID(tx, user.ID); terr != nil {
+				return apierrors.NewInternalServerError("Error deleting user's WebAuthn credentials").WithInternalError(terr)
+			}
 			// hard delete all associated sessions
 			if terr := models.Logout(tx, user.ID); terr != nil {
 				return apierrors.NewInternalServerError("Error deleting user's sessions").WithInternalError(terr)
@@ -587,6 +591,9 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 		}
 		if terr := tx.Destroy(factor); terr != nil {
 			return apierrors.NewInternalServerError("Database error deleting factor").WithInternalError(terr)
+		}
+		if terr := factor.DowngradeSessionsToAAL1(tx); terr != nil {
+			return apierrors.NewInternalServerError("Database error downgrading sessions").WithInternalError(terr)
 		}
 		return nil
 	})

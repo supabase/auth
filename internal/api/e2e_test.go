@@ -980,7 +980,7 @@ func TestE2EHooks(t *testing.T) {
 					) (any, error) {
 						if kid, ok := token.Header["kid"]; ok {
 							if kidStr, ok := kid.(string); ok {
-								return conf.FindPublicKeyByKid(kidStr, &globalCfg.JWT)
+								return conf.FindPublicKeyByKid(context.Background(), kidStr, &globalCfg.JWT)
 							}
 						}
 						if alg, ok := token.Header["alg"]; ok {
@@ -1055,7 +1055,7 @@ func TestE2EHooks(t *testing.T) {
 				func(token *jwt.Token) (any, error) {
 					if kid, ok := token.Header["kid"]; ok {
 						if kidStr, ok := kid.(string); ok {
-							return conf.FindPublicKeyByKid(kidStr, &globalCfg.JWT)
+							return conf.FindPublicKeyByKid(context.Background(), kidStr, &globalCfg.JWT)
 						}
 					}
 					if alg, ok := token.Header["alg"]; ok {

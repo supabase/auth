@@ -2,13 +2,14 @@ package models
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
 )
@@ -20,7 +21,7 @@ type FactorTestSuite struct {
 }
 
 func TestFactor(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
+	globalConfig, err := confload.LoadGlobal(modelsTestConfig)
 	require.NoError(t, err)
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
@@ -29,6 +30,31 @@ func TestFactor(t *testing.T) {
 	}
 	defer ts.db.Close()
 	suite.Run(t, ts)
+}
+
+// TestAMRMethodForFactorType pins the factor-type -> AMR method mapping.
+func TestAMRMethodForFactorType(t *testing.T) {
+	for factorType, want := range map[string]AuthenticationMethod{
+		TOTP:     TOTPSignIn,
+		Phone:    MFAPhone,
+		WebAuthn: MFAWebAuthn,
+	} {
+		got, err := amrMethodForFactorType(factorType)
+		require.NoError(t, err, "factor type %q must map", factorType)
+		require.Equal(t, want.String(), got)
+	}
+
+	_, err := amrMethodForFactorType("not-a-real-factor-type")
+	require.Error(t, err)
+}
+
+// TestAuthenticationMethodRoundTrip guards the String() <-> ParseAuthenticationMethod symmetry.
+func TestAuthenticationMethodRoundTrip(t *testing.T) {
+	for _, m := range []AuthenticationMethod{TOTPSignIn, MFAPhone, MFAWebAuthn} {
+		parsed, err := ParseAuthenticationMethod(m.String())
+		require.NoError(t, err, "method %q must round-trip", m.String())
+		require.Equal(t, m, parsed)
+	}
 }
 
 func (ts *FactorTestSuite) SetupTest() {
@@ -71,4 +97,70 @@ func (ts *FactorTestSuite) TestEncodedFactorDoesNotLeakSecret() {
 	decodedFactor := Factor{}
 	json.Unmarshal(encodedFactor, &decodedFactor)
 	require.Equal(ts.T(), decodedFactor.Secret, "")
+}
+
+// TestDowngradeSessionsToAAL1RemovesAMRClaim asserts that unenrolling a verified
+// factor strips the AMR claim it granted, dropping the session back to AAL1.
+func (ts *FactorTestSuite) TestDowngradeSessionsToAAL1RemovesAMRClaim() {
+	cases := []struct {
+		desc       string
+		newFactor  func(u *User) *Factor
+		authMethod AuthenticationMethod
+	}{
+		{
+			desc:       "phone",
+			newFactor:  func(u *User) *Factor { return NewPhoneFactor(u, "+15555555555", "") },
+			authMethod: MFAPhone,
+		},
+		{
+			desc:       "webauthn",
+			newFactor:  func(u *User) *Factor { return NewWebAuthnFactor(u, "webauthnfactor") },
+			authMethod: MFAWebAuthn,
+		},
+		{
+			desc:       "totp",
+			newFactor:  func(u *User) *Factor { return NewTOTPFactor(u, "totpfactor") },
+			authMethod: TOTPSignIn,
+		},
+	}
+
+	for i, c := range cases {
+		ts.Run(c.desc, func() {
+			user, err := NewUser("", fmt.Sprintf("downgrade-%d@example.com", i), "secret", "test", nil)
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), ts.db.Create(user))
+
+			factor := c.newFactor(user)
+			require.NoError(ts.T(), factor.SetSecret("secretkey", false, "", ""))
+			require.NoError(ts.T(), ts.db.Create(factor))
+			require.NoError(ts.T(), factor.UpdateStatus(ts.db, FactorStateVerified))
+
+			session, err := NewSession(user.ID, &factor.ID)
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), ts.db.Create(session))
+			require.NoError(ts.T(), AddClaimToSession(ts.db, session.ID, c.authMethod))
+			require.NoError(ts.T(), session.UpdateAALAndAssociatedFactor(ts.db, AAL2, &factor.ID))
+
+			// the claim upgrades the session to AAL2.
+			loaded, err := FindSessionByID(ts.db, session.ID, false)
+			require.NoError(ts.T(), err)
+			aal, _, err := loaded.CalculateAALAndAMR(user)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), AAL2, aal)
+
+			require.NoError(ts.T(), factor.DowngradeSessionsToAAL1(ts.db))
+
+			downgraded, err := FindSessionByID(ts.db, session.ID, false)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), AAL1.String(), downgraded.GetAAL())
+			require.Nil(ts.T(), downgraded.FactorID)
+
+			aal, _, err = downgraded.CalculateAALAndAMR(user)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), AAL1, aal)
+			for _, claim := range downgraded.AMRClaims {
+				require.NotEqual(ts.T(), c.authMethod.String(), claim.GetAuthenticationMethod())
+			}
+		})
+	}
 }

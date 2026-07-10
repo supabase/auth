@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -61,7 +62,7 @@ func (ts *RefreshTokenV2Suite) SetupTest() {
 }
 
 func (ts *RefreshTokenV2Suite) config() *conf.GlobalConfiguration {
-	config, err := conf.LoadGlobal("../../hack/test.env")
+	config, err := confload.LoadGlobal("../../hack/test.env")
 	if err != nil {
 		panic("failed to load config")
 	}
@@ -779,7 +780,7 @@ func parseIDTokenClaims(idToken string, config *conf.GlobalConfiguration) (jwt.M
 		if kid, ok := token.Header["kid"]; ok {
 			if kidStr, ok := kid.(string); ok {
 				// Find the public key by kid for asymmetric verification
-				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				key, err := conf.FindPublicKeyByKid(context.Background(), kidStr, &config.JWT)
 				if err != nil {
 					return nil, err
 				}
@@ -806,7 +807,7 @@ type IDTokenTestSuite struct {
 func TestIDTokenGeneration(t *testing.T) {
 	ts := &IDTokenTestSuite{}
 
-	config, err := conf.LoadGlobal("../../hack/test_asymmetric.env")
+	config, err := confload.LoadGlobal("../../hack/test_asymmetric.env")
 	require.NoError(t, err)
 
 	conn, err := test.SetupDBConnection(config)
@@ -851,7 +852,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithAllScopes() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail, models.ScopeProfile, models.ScopePhone},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -882,7 +883,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithOnlyOpenIDScope() {
 		Scopes:   []string{models.ScopeOpenID},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -915,7 +916,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithEmailScope() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -945,7 +946,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithProfileScope() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeProfile},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -975,7 +976,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithPhoneScope() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopePhone},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -1005,7 +1006,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithMultipleScopes() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail, models.ScopeProfile},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -1194,7 +1195,7 @@ func TestAsRedirectURL(t *testing.T) {
 }
 
 func TestGenerateAccessTokenAllowLowAAL(t *testing.T) {
-	config, err := conf.LoadGlobal("../../hack/test.env")
+	config, err := confload.LoadGlobal("../../hack/test.env")
 	require.NoError(t, err)
 
 	conn, err := test.SetupDBConnection(config)

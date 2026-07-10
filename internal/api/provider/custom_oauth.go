@@ -12,12 +12,13 @@ import (
 
 // CustomOAuthProvider implements OAuthProvider for custom OAuth2 providers
 type CustomOAuthProvider struct {
-	config              *oauth2.Config
-	userinfoURL         string
-	pkceEnabled         bool
-	acceptableClientIDs []string
-	attributeMapping    map[string]interface{}
-	authorizationParams map[string]interface{}
+	config                *oauth2.Config
+	userinfoURL           string
+	pkceEnabled           bool
+	acceptableClientIDs   []string
+	attributeMapping      map[string]interface{}
+	authorizationParams   map[string]interface{}
+	customClaimsAllowlist []string
 }
 
 // NewCustomOAuthProvider creates a new custom OAuth provider
@@ -27,6 +28,7 @@ func NewCustomOAuthProvider(
 	pkceEnabled bool,
 	acceptableClientIDs []string,
 	attributeMapping, authorizationParams map[string]interface{},
+	customClaimsAllowlist []string,
 ) *CustomOAuthProvider {
 	config := &oauth2.Config{
 		ClientID:     clientID,
@@ -40,12 +42,13 @@ func NewCustomOAuthProvider(
 	}
 
 	return &CustomOAuthProvider{
-		config:              config,
-		userinfoURL:         userinfoURL,
-		pkceEnabled:         pkceEnabled,
-		acceptableClientIDs: acceptableClientIDs,
-		attributeMapping:    attributeMapping,
-		authorizationParams: authorizationParams,
+		config:                config,
+		userinfoURL:           userinfoURL,
+		pkceEnabled:           pkceEnabled,
+		acceptableClientIDs:   acceptableClientIDs,
+		attributeMapping:      attributeMapping,
+		authorizationParams:   authorizationParams,
+		customClaimsAllowlist: customClaimsAllowlist,
 	}
 }
 
@@ -68,10 +71,13 @@ func (p *CustomOAuthProvider) GetOAuthToken(ctx context.Context, code string, op
 
 // GetUserData fetches user data from the provider's userinfo endpoint
 func (p *CustomOAuthProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var claims Claims
-	if err := makeRequest(ctx, tok, p.config, p.userinfoURL, &claims); err != nil {
+	claims, raw, err := fetchUserinfoClaims(ctx, tok, p.config, p.userinfoURL)
+	if err != nil {
 		return nil, err
 	}
+
+	// Capture allowlisted custom claims before attribute mapping
+	captureAllowedClaims(raw, p.customClaimsAllowlist, &claims)
 
 	// Apply attribute mapping if configured
 	if len(p.attributeMapping) > 0 {
@@ -101,24 +107,30 @@ func (p *CustomOAuthProvider) RequiresPKCE() bool {
 
 // CustomOIDCProvider implements OAuthProvider for custom OIDC providers
 type CustomOIDCProvider struct {
-	config              *oauth2.Config
-	oidcProvider        *oidc.Provider
-	userinfoEndpoint    string
-	pkceEnabled         bool
-	acceptableClientIDs []string
-	attributeMapping    map[string]interface{}
-	authorizationParams map[string]interface{}
+	config                *oauth2.Config
+	oidcProvider          *oidc.Provider
+	userinfoEndpoint      string
+	pkceEnabled           bool
+	acceptableClientIDs   []string
+	attributeMapping      map[string]interface{}
+	authorizationParams   map[string]interface{}
+	customClaimsAllowlist []string
 }
 
-// NewCustomOIDCProvider creates a new custom OIDC provider
+// NewCustomOIDCProvider creates a new custom OIDC provider.
+// discoveryURL is the URL to fetch the OIDC discovery document from
+// (typically {issuer}/.well-known/openid-configuration, or an admin-configured
+// override).
 func NewCustomOIDCProvider(
 	ctx context.Context,
 	clientID, clientSecret, redirectURL string,
 	scopes []string,
 	issuer string,
+	discoveryURL string,
 	pkceEnabled bool,
 	acceptableClientIDs []string,
 	attributeMapping, authorizationParams map[string]interface{},
+	customClaimsAllowlist []string,
 	cache *OIDCProviderCache,
 ) (*CustomOIDCProvider, error) {
 	// Ensure 'openid' scope is always present for OIDC
@@ -133,8 +145,7 @@ func NewCustomOIDCProvider(
 		scopes = append([]string{"openid"}, scopes...)
 	}
 
-	// Create OIDC provider - uses cache to avoid redundant discovery fetches
-	oidcProvider, err := cache.GetProvider(ctx, issuer)
+	oidcProvider, err := cache.GetProviderFromURL(ctx, issuer, discoveryURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OIDC provider: %w", err)
 	}
@@ -152,13 +163,14 @@ func NewCustomOIDCProvider(
 	}
 
 	return &CustomOIDCProvider{
-		config:              config,
-		oidcProvider:        oidcProvider,
-		userinfoEndpoint:    userinfoEndpoint,
-		pkceEnabled:         pkceEnabled,
-		acceptableClientIDs: acceptableClientIDs,
-		attributeMapping:    attributeMapping,
-		authorizationParams: authorizationParams,
+		config:                config,
+		oidcProvider:          oidcProvider,
+		userinfoEndpoint:      userinfoEndpoint,
+		pkceEnabled:           pkceEnabled,
+		acceptableClientIDs:   acceptableClientIDs,
+		attributeMapping:      attributeMapping,
+		authorizationParams:   authorizationParams,
+		customClaimsAllowlist: customClaimsAllowlist,
 	}, nil
 }
 
@@ -198,6 +210,17 @@ func (p *CustomOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token)
 			return nil, err
 		}
 
+		// Capture allowlisted custom claims from the raw ID token before
+		// attribute mapping. Because we only copy explicitly listed keys, there
+		// is no risk of re-adding keys a parser intentionally stripped (e.g. Azure).
+		if len(p.customClaimsAllowlist) > 0 && userData.Metadata != nil {
+			var raw map[string]interface{}
+			if err := idTokenObj.Claims(&raw); err != nil {
+				return nil, fmt.Errorf("failed to read ID token claims: %w", err)
+			}
+			captureAllowedClaims(raw, p.customClaimsAllowlist, userData.Metadata)
+		}
+
 		// Apply attribute mapping to the metadata from ID token
 		if len(p.attributeMapping) > 0 && userData.Metadata != nil {
 			*userData.Metadata = applyAttributeMapping(*userData.Metadata, p.attributeMapping)
@@ -208,10 +231,13 @@ func (p *CustomOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token)
 
 	// No ID token, use userinfo endpoint
 	if p.userinfoEndpoint != "" {
-		var claims Claims
-		if err := makeRequest(ctx, tok, p.config, p.userinfoEndpoint, &claims); err != nil {
+		claims, raw, err := fetchUserinfoClaims(ctx, tok, p.config, p.userinfoEndpoint)
+		if err != nil {
 			return nil, err
 		}
+
+		// Capture allowlisted custom claims before attribute mapping
+		captureAllowedClaims(raw, p.customClaimsAllowlist, &claims)
 
 		// Apply attribute mapping
 		if len(p.attributeMapping) > 0 {
@@ -263,6 +289,44 @@ func (p *CustomOIDCProvider) validateAudience(audiences []string) error {
 
 	// No valid audience found
 	return fmt.Errorf("token audience %v does not match any acceptable client ID", audiences)
+}
+
+// fetchUserinfoClaims fetches the userinfo response once and returns both the
+// typed Claims and the raw claim map. The raw map is needed so that arbitrary
+// allowlisted keys (which have no typed field) can be copied verbatim.
+func fetchUserinfoClaims(ctx context.Context, tok *oauth2.Token, config *oauth2.Config, url string) (Claims, map[string]interface{}, error) {
+	var raw map[string]interface{}
+	if err := makeRequest(ctx, tok, config, url, &raw); err != nil {
+		return Claims{}, nil, err
+	}
+
+	var claims Claims
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return Claims{}, nil, err
+	}
+	if err := json.Unmarshal(b, &claims); err != nil {
+		return Claims{}, nil, err
+	}
+
+	return claims, raw, nil
+}
+
+// captureAllowedClaims copies each allowlisted key present in raw into
+// c.CustomClaims verbatim. An empty allowlist captures nothing (D1), and keys
+// absent from raw are silently skipped (no nil entry is created). Because only
+// explicitly listed keys are copied, protocol/registered claims never leak.
+func captureAllowedClaims(raw map[string]interface{}, allowlist []string, c *Claims) {
+	for _, key := range allowlist {
+		value, ok := raw[key]
+		if !ok {
+			continue
+		}
+		if c.CustomClaims == nil {
+			c.CustomClaims = make(map[string]interface{})
+		}
+		c.CustomClaims[key] = value
+	}
 }
 
 // applyAttributeMapping applies custom attribute mapping to claims
