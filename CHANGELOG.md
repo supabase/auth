@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.193.0](https://github.com/supabase/auth/compare/v2.192.0...v2.193.0) (2026-07-07)
+
+
+### Features
+
+* **linking:** add experimental provider linking-domain groups ([#2604](https://github.com/supabase/auth/issues/2604)) ([c4f6964](https://github.com/supabase/auth/commit/c4f69649a0d95a86648b23657795b5430894f472))
+
+
+### Bug Fixes
+
+* downgrade session AAL after admin deletion of factor ([#2607](https://github.com/supabase/auth/issues/2607)) ([4d1d660](https://github.com/supabase/auth/commit/4d1d660674ce15d9858cc220a3deda0cf0088077))
+* **mfa:** use AMR method (not factor type) when downgrading sessions to AAL1 ([#2615](https://github.com/supabase/auth/issues/2615)) ([dfe62d0](https://github.com/supabase/auth/commit/dfe62d0fcc047099614c2eaff4b4d20d807671d9))
+
 ## [2.192.0](https://github.com/supabase/auth/compare/v2.191.0...v2.192.0) (2026-06-29)
 
 
