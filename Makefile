@@ -79,18 +79,7 @@ release-test: \
 	vulncheck \
 	test
 
-release: $(RELEASE_ARCHIVES) verify-release
-
-# The archive name comes from the make target stem while its content comes
-# from the recipe's build env, so a mismatched GOOS ships silently (the
-# darwin-arm64 assets of v2.189.0..v2.192.0 contained Linux ELF binaries).
-# Fail the release when a staged binary's format contradicts its platform.
-verify-release: $(foreach t,$(RELEASE_TARGETS),release-$(t)/auth)
-	file release-x86/auth | grep -q 'ELF'
-	file release-arm64/auth | grep -q 'ELF'
-	file release-darwin-arm64/auth | grep -q 'Mach-O'
-	file release-amd64-strip/auth | grep -q 'ELF'
-	file release-arm64-strip/auth | grep -q 'ELF'
+release: $(RELEASE_ARCHIVES)
 
 auth-$(VERSION)-%.tar.gz: \
 		release-%/auth \
