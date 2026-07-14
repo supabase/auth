@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -24,6 +25,7 @@ const (
 
 type facebookProvider struct {
 	*oauth2.Config
+	ClientIDs     []string
 	ProfileURL    string
 	DebugTokenURL string
 }
@@ -85,6 +87,7 @@ func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 			},
 			Scopes: oauthScopes,
 		},
+		ClientIDs:     ext.ClientID,
 		ProfileURL:    profileURL,
 		DebugTokenURL: debugTokenURL,
 	}, nil
@@ -120,7 +123,7 @@ func (p facebookProvider) VerifyAccessToken(ctx context.Context, accessToken str
 		return "", fmt.Errorf("facebook: access token is not valid: %s", debugToken.Data.Error.Message)
 	}
 
-	if debugToken.Data.AppID != p.Config.ClientID {
+	if !slices.Contains(p.ClientIDs, debugToken.Data.AppID) {
 		return "", fmt.Errorf("facebook: access token was not issued for this app")
 	}
 
