@@ -1,4 +1,4 @@
-.PHONY: all build deps image migrate test vet sec vulncheck format unused release verify-release
+.PHONY: all build deps image migrate test vet sec vulncheck format unused release
 .PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck
 CHECK_FILES ?= ./...
 
