@@ -3,6 +3,7 @@ package oauthserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -398,7 +399,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 			if models.IsNotFoundError(terr) {
 				return apierrors.NewOAuthError("invalid_grant", "Invalid authorization code")
 			}
-			return apierrors.NewInternalServerError("Error locking authorization code").WithInternalError(terr)
+			return apierrors.NewInternalServerError("Error finding authorization code").WithInternalError(terr)
 		}
 
 		authMethod := models.OAuthProviderAuthorizationCode
@@ -428,11 +429,11 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	})
 
 	if err != nil {
-		if httpErr, ok := err.(*apierrors.HTTPError); ok {
-			return httpErr
+		if e := new(apierrors.HTTPError); errors.As(err, &e) {
+			return e
 		}
-		if oauthErr, ok := err.(*apierrors.OAuthError); ok {
-			return oauthErr
+		if e := new(apierrors.OAuthError); errors.As(err, &e) {
+			return e
 		}
 		return apierrors.NewInternalServerError("Error exchanging authorization code").WithInternalError(err)
 	}

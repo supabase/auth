@@ -1,15 +1,17 @@
 package oauthserver
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 )
@@ -27,39 +29,79 @@ func (ts *OAuthClientTestSuite) mintApprovedCode(clientID, userID uuid.UUID) str
 	return *auth.AuthorizationCode
 }
 
-func (ts *OAuthClientTestSuite) TestAuthCodeReplayRace() {
+func (ts *OAuthClientTestSuite) TestAuthCodeReplayRaceCS() {
+	ctx, cancel := context.WithCancel(ts.T().Context())
+	defer cancel()
+
 	client, _ := ts.createTestOAuthClient()
+	ctx = shared.WithOAuthServerClient(ctx, client)
 	user := ts.createTestUser("replay-race@example.com")
 	code := ts.mintApprovedCode(client.ID, user.ID)
 
-	const n = 10
-	start := make(chan struct{})
-	var wg sync.WaitGroup
-	var success int32
+	const count = 10
+	errCh := make(chan error, count)
+	initCh := make(chan struct{}, count)
+	startCh := make(chan struct{})
+	startFn := sync.OnceFunc(func() { close(startCh) })
+	defer startFn()
 
-	for i := 0; i < n; i++ {
-		wg.Add(1)
+	for range count {
 		go func() {
-			defer wg.Done()
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/oauth/token", nil)
+			params := &OAuthTokenParams{Code: code, GrantType: GrantTypeAuthorizationCode}
 
-			req := httptest.NewRequest(http.MethodPost, "/oauth/token", nil)
-			ctx := shared.WithOAuthServerClient(req.Context(), client)
-			req = req.WithContext(ctx)
-			w := httptest.NewRecorder()
-			params := &OAuthTokenParams{GrantType: GrantTypeAuthorizationCode, Code: code}
+			select {
+			case <-ctx.Done():
+				return
+			case initCh <- struct{}{}:
+			}
+			<-startCh
 
-			<-start
-			if err := ts.Server.handleAuthorizationCodeGrant(ctx, w, req, params); err == nil {
-				atomic.AddInt32(&success, 1)
+			err := ts.Server.handleAuthorizationCodeGrant(ctx, rec, req, params)
+			select {
+			case <-ctx.Done():
+			case errCh <- err:
 			}
 		}()
 	}
 
-	close(start)
-	wg.Wait()
+	// Wait for goroutines to be ready
+	for range count {
+		select {
+		case <-ctx.Done():
+			ts.T().Fatal(ctx.Err())
+		case <-initCh:
+		}
+	}
 
-	assert.Equal(ts.T(), int32(1), success, "authorization code must be single-use: expected exactly one successful redemption, got %d", success)
+	// Start goroutines
+	startFn()
+
+	// Collect errors
+	var errs []error
+	for range count {
+		select {
+		case <-ctx.Done():
+			ts.T().Fatal(ctx.Err())
+		case err := <-errCh:
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+
+	assert.Equal(ts.T(), count-1, len(errs),
+		"authorization code must be single-use, got %d", count-len(errs))
+
+	for _, err := range errs {
+		e := new(apierrors.OAuthError)
+		assert.True(ts.T(), errors.As(err, &e), "expected error type %T; got %T", e, err)
+		assert.Equal(ts.T(), e.Err, "invalid_grant")
+		assert.Equal(ts.T(), e.Description, "Invalid authorization code")
+	}
 
 	_, err := models.FindOAuthServerAuthorizationByCode(ts.DB, code)
-	assert.True(ts.T(), models.IsNotFoundError(err), "authorization code should be consumed after redemption")
+	assert.True(ts.T(), models.IsNotFoundError(err),
+		"authorization code should be consumed after redemption")
 }
