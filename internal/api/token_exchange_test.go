@@ -162,6 +162,24 @@ func (ts *ExternalTestSuite) TestTokenExchangeRejectsTokenFromAnotherApp() {
 	ts.Require().Equal(http.StatusBadRequest, w.Code)
 }
 
+func (ts *ExternalTestSuite) TestTokenExchangeAcceptsSecondaryClientID() {
+	primary := ts.Config.External.Facebook.ClientID[0]
+	ts.Config.External.Facebook.ClientID = []string{primary, "second_app_id"}
+	defer func() { ts.Config.External.Facebook.ClientID = []string{primary} }()
+
+	user := ts.createFacebookIdentity("facebookTestId", "facebook@example.com")
+
+	server := FacebookAccessTokenSetup(ts, "second_app_id", true, "USER", "facebookTestId")
+	defer server.Close()
+
+	w := ts.tokenExchange("token_for_second_app")
+	ts.Require().Equal(http.StatusOK, w.Code, w.Body.String())
+
+	var response AccessTokenResponse
+	ts.Require().NoError(json.NewDecoder(w.Body).Decode(&response))
+	ts.Equal(user.ID, response.User.ID)
+}
+
 func (ts *ExternalTestSuite) TestTokenExchangeRejectsInvalidToken() {
 	ts.createFacebookIdentity("facebookTestId", "facebook@example.com")
 
