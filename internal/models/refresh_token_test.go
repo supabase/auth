@@ -67,6 +67,48 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	require.Equal(ts.T(), u.ID, s.UserID)
 }
 
+func (ts *RefreshTokenTestSuite) TestFindTokenBySessionID() {
+	u := ts.createUser()
+	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
+	require.NoError(ts.T(), err)
+
+	found, err := FindTokenBySessionID(ts.db, r.SessionId)
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), r.ID, found.ID)
+	require.Equal(ts.T(), r.Token, found.Token)
+	require.False(ts.T(), found.Revoked)
+}
+
+func (ts *RefreshTokenTestSuite) TestFindTokenBySessionIDExcludesRevokedToken() {
+	u := ts.createUser()
+	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
+	require.NoError(ts.T(), err)
+
+	s, err := GrantRefreshTokenSwap(ts.config.AuditLog, &http.Request{}, ts.db, u, r)
+	require.NoError(ts.T(), err)
+
+	found, err := FindTokenBySessionID(ts.db, r.SessionId)
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), s.ID, found.ID, "expected the active (post-swap) token, not the revoked one")
+	require.NotEqual(ts.T(), r.ID, found.ID)
+	require.False(ts.T(), found.Revoked)
+}
+
+func (ts *RefreshTokenTestSuite) TestFindTokenBySessionIDNotFoundWhenAllRevoked() {
+	u := ts.createUser()
+	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
+	require.NoError(ts.T(), err)
+
+	r.Revoked = true
+	require.NoError(ts.T(), ts.db.UpdateOnly(r, "revoked"))
+
+	_, err = FindTokenBySessionID(ts.db, r.SessionId)
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err), "expected NotFoundError")
+}
+
 func (ts *RefreshTokenTestSuite) TestLogout() {
 	u := ts.createUser()
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
