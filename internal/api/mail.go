@@ -304,11 +304,16 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	returnedHashedToken := hashedToken
+	if params.Type == mail.EmailChangeNewVerification {
+		returnedHashedToken = user.EmailChangeTokenNew
+	}
+
 	resp := GenerateLinkResponse{
 		User:             *user,
 		ActionLink:       url,
 		EmailOtp:         otp,
-		HashedToken:      hashedToken,
+		HashedToken:      returnedHashedToken,
 		VerificationType: params.Type,
 		RedirectTo:       referrer,
 	}
