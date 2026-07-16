@@ -1,5 +1,5 @@
 .PHONY: all build deps image migrate test vet sec vulncheck format unused release
-.PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck
+.PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck check-go-version
 CHECK_FILES ?= ./...
 
 ifdef RELEASE_VERSION
@@ -41,7 +41,7 @@ TOOL_TARGETS = \
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-all: vet sec static build ## Run the tests and build the binary.
+all: check-go-version vet sec static build ## Run the tests and build the binary.
 
 build: auth auth-amd64 auth-arm64 auth-darwin-arm64 ## Build the binaries.
 
@@ -73,6 +73,7 @@ deps: ## Install dependencies.
 	@go mod verify
 
 release-test: \
+	check-go-version \
 	vet \
 	static \
 	sec \
@@ -117,6 +118,9 @@ test: auth ## Run tests.
 
 vet: # Vet the code
 	go vet $(CHECK_FILES)
+
+check-go-version: ## Verify the pinned Go version matches across go.mod, Dockerfiles, and submodules.
+	./hack/check-go-version.sh
 
 .NOTPARALLEL: $(TOOL_TARGETS)
 $(TOOL_TARGETS):
