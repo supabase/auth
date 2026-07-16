@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.193.1](https://github.com/supabase/auth/compare/v2.193.0...v2.193.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* build darwin-arm64 release binaries with GOOS=darwin ([#2618](https://github.com/supabase/auth/issues/2618)) ([318b4d1](https://github.com/supabase/auth/commit/318b4d166ffc407e661dc99580082758a9b4e885))
+* ensure legacy refresh token revoked ([#2624](https://github.com/supabase/auth/issues/2624)) ([8748000](https://github.com/supabase/auth/commit/87480005e2c3a16e35e5f6eacb97ea22b82ac9a5))
+* **oauth:** prevent authorization-code replay race at /oauth/token ([#2612](https://github.com/supabase/auth/issues/2612)) ([bdbf01e](https://github.com/supabase/auth/commit/bdbf01eb99ac8750bfa6ec06626002673cf5479d))
+* **siwe:** return false instead of panicking on malformed signatures ([#2625](https://github.com/supabase/auth/issues/2625)) ([c3005a4](https://github.com/supabase/auth/commit/c3005a47c20240d21772bb5103843b15bbc472bb))
+
 ## [2.193.0](https://github.com/supabase/auth/compare/v2.192.0...v2.193.0) (2026-07-07)
 
 
