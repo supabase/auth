@@ -764,3 +764,74 @@ func (ts *UserTestSuite) TestUserUpdatePasswordSendsNotificationEmail() {
 		})
 	}
 }
+
+// TestUserUpdatePasswordCreatesEmailIdentity covers issue #2085: when a user
+// who only has an external (e.g. OAuth) identity sets a password via
+// PUT /user, an `email` identity row should be created so the email/password
+// sign-in method becomes addressable.
+func (ts *UserTestSuite) TestUserUpdatePasswordCreatesEmailIdentity() {
+	// Create a user with an email but only an external (OAuth-style) identity.
+	u, err := models.NewUser("", "oauth-only@example.com", "", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u))
+
+	now := time.Now()
+	u.EmailConfirmedAt = &now
+	require.NoError(ts.T(), ts.API.db.UpdateOnly(u, "email_confirmed_at"))
+
+	externalIdentity, err := models.NewIdentity(u, "google", map[string]interface{}{
+		"sub":            "ext-provider-sub-123",
+		"email":          u.GetEmail(),
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(externalIdentity))
+
+	// Sanity check: no email identity yet.
+	_, err = models.FindIdentityByIdAndProvider(ts.API.db, u.ID.String(), "email")
+	require.True(ts.T(), models.IsNotFoundError(err), "expected email identity to be absent before password set")
+
+	token := ts.generateAccessTokenAndSession(u)
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"password": "newpassword12345",
+	}))
+
+	req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	emailIdentity, err := models.FindIdentityByIdAndProvider(ts.API.db, u.ID.String(), "email")
+	require.NoError(ts.T(), err, "email identity should be created after PUT /user with password")
+	require.Equal(ts.T(), u.GetEmail(), emailIdentity.Email.String())
+	require.Equal(ts.T(), u.ID.String(), emailIdentity.ProviderID)
+
+	// Calling PUT /user with a password again should not duplicate the
+	// email identity. Supply the current password since the user now has
+	// one set.
+	var buffer2 bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer2).Encode(map[string]interface{}{
+		"password":         "anothernewpassword12345",
+		"current_password": "newpassword12345",
+	}))
+	req2 := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer2)
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	w2 := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w2, req2)
+	require.Equal(ts.T(), http.StatusOK, w2.Code)
+
+	identities, err := models.FindIdentitiesByUserID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+	emailCount := 0
+	for _, id := range identities {
+		if id.Provider == "email" {
+			emailCount++
+		}
+	}
+	require.Equal(ts.T(), 1, emailCount, "expected exactly one email identity, got %d", emailCount)
+}
