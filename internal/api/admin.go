@@ -12,6 +12,7 @@ import (
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -107,7 +108,7 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	aud := a.requestAud(ctx, r)
 
-	pageParams, err := paginate(r)
+	pageParams, err := shared.Paginate(r)
 	if err != nil {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Bad Pagination Parameters: %v", err).WithInternalError(err)
 	}
@@ -123,7 +124,7 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return apierrors.NewInternalServerError("Database error finding users").WithInternalError(err)
 	}
-	addPaginationHeaders(w, r, pageParams)
+	shared.AddPaginationHeaders(w, r, pageParams)
 
 	return sendJSON(w, http.StatusOK, AdminListUsersResponse{
 		Users: users,

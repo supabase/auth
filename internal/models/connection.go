@@ -1,18 +1,39 @@
 package models
 
 import (
+	"math"
+
 	"github.com/gobuffalo/pop/v6"
 	"github.com/supabase/auth/internal/storage"
 )
 
 type Pagination struct {
-	Page    uint64
-	PerPage uint64
-	Count   uint64
+	Page           uint64
+	PerPage        uint64
+	Count          uint64
+	ShowTotalCount bool
 }
 
 func (p *Pagination) Offset() uint64 {
 	return (p.Page - 1) * p.PerPage
+}
+
+// PageInt returns Page as an int, clamped to math.MaxInt32 to guard against
+// overflow when converting from uint64 (e.g. on 32-bit platforms).
+func (p *Pagination) PageInt() int {
+	if p.Page > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int(p.Page)
+}
+
+// PerPageInt returns PerPage as an int, clamped to math.MaxInt32 to guard
+// against overflow when converting from uint64 (e.g. on 32-bit platforms).
+func (p *Pagination) PerPageInt() int {
+	if p.PerPage > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int(p.PerPage)
 }
 
 type SortDirection string
