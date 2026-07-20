@@ -133,7 +133,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			e.ErrorID = errorID
 			// this will get us the stack trace too
 			log.WithError(e.Cause()).Error(e.Error())
-		case e.HTTPStatus == http.StatusTooManyRequests:
+		case e.HTTPStatus >= http.StatusBadRequest:
 			log.WithError(e.Cause()).Warn(e.Error())
 		default:
 			log.WithError(e.Cause()).Info(e.Error())
