@@ -133,7 +133,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			return a.sendConfirmation(r, tx, user, flowType)
+			return a.sendConfirmation(r, tx, user, flowType, "")
 		case smsVerification:
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr

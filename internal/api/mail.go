@@ -315,7 +315,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, resp)
 }
 
-func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *models.User, flowType models.FlowType) error {
+func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *models.User, flowType models.FlowType, redirectTo string) error {
 	var err error
 
 	config := a.config
@@ -335,6 +335,7 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 		emailActionType:     mail.SignupVerification,
 		otp:                 otp,
 		tokenHashWithPrefix: u.ConfirmationToken,
+		redirectTo:          redirectTo,
 	}); err != nil {
 		u.ConfirmationToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
@@ -754,12 +755,17 @@ type sendEmailParams struct {
 	oldPhone            string
 	provider            string
 	factorType          string
+	// redirectTo, when set and allow-listed, overrides GetReferrer (e.g. signup JSON body).
+	redirectTo string
 }
 
 func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, params sendEmailParams) error {
 	ctx := r.Context()
 	config := a.config
 	referrerURL := utilities.GetReferrer(r, config)
+	if params.redirectTo != "" && utilities.IsRedirectURLValid(config, params.redirectTo) {
+		referrerURL = params.redirectTo
+	}
 	externalURL := getExternalHost(ctx)
 	otp := params.otp
 

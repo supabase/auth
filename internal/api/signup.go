@@ -27,6 +27,17 @@ type SignupParams struct {
 	Channel             string                 `json:"channel"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
+	// RedirectTo is the post-confirm redirect. Clients may also send email_redirect_to.
+	RedirectTo      string `json:"redirect_to"`
+	EmailRedirectTo string `json:"email_redirect_to"`
+}
+
+// GetRedirectTo returns the explicit redirect from the signup body, if any.
+func (p *SignupParams) GetRedirectTo() string {
+	if p.RedirectTo != "" {
+		return p.RedirectTo
+	}
+	return p.EmailRedirectTo
 }
 
 func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
@@ -247,7 +258,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 						return terr
 					}
 				}
-				if terr = a.sendConfirmation(r, tx, user, flowType); terr != nil {
+				if terr = a.sendConfirmation(r, tx, user, flowType, params.GetRedirectTo()); terr != nil {
 					return terr
 				}
 			}

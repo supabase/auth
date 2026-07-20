@@ -336,3 +336,57 @@ func TestGetReferrer(t *tst.T) {
 		})
 	}
 }
+
+func TestGetReferrerPrefersSiteURLOverOriginOnlyReferer(t *tst.T) {
+	cases := []struct {
+		desc     string
+		siteURL  string
+		referer  string
+		query    string
+		expected string
+	}{
+		{
+			desc:     "origin-only referer loses to site url with path",
+			siteURL:  "https://user.github.io/repo/",
+			referer:  "https://user.github.io/",
+			expected: "https://user.github.io/repo/",
+		},
+		{
+			desc:     "explicit redirect_to still wins",
+			siteURL:  "https://user.github.io/repo/",
+			referer:  "https://user.github.io/",
+			query:    "https://user.github.io/repo/welcome",
+			expected: "https://user.github.io/repo/welcome",
+		},
+		{
+			desc:     "referer with path still used",
+			siteURL:  "https://user.github.io/repo/",
+			referer:  "https://user.github.io/repo/signup",
+			expected: "https://user.github.io/repo/signup",
+		},
+		{
+			desc:     "origin-only referer kept when site url has no path",
+			siteURL:  "https://example.com",
+			referer:  "https://example.com/",
+			expected: "https://example.com/",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *tst.T) {
+			config := conf.GlobalConfiguration{
+				SiteURL: c.siteURL,
+				JWT:     conf.JWTConfiguration{Secret: "testsecret"},
+			}
+			require.NoError(t, config.ApplyDefaults())
+
+			reqURL := "http://localhost/signup"
+			if c.query != "" {
+				reqURL += "?redirect_to=" + c.query
+			}
+			r := httptest.NewRequest("POST", reqURL, nil)
+			r.Header.Set("Referer", c.referer)
+			require.Equal(t, c.expected, GetReferrer(r, &config))
+		})
+	}
+}
