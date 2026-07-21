@@ -2,6 +2,7 @@ package conf
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -141,6 +142,8 @@ type JWTConfiguration struct {
 	KeyID            string         `json:"key_id" split_words:"true"`
 	Keys             JwtKeysDecoder `json:"keys"`
 	ValidMethods     []string       `json:"-" split_words:"true"`
+
+	SigningKey func(context.Context) (any, error) `json:"-"`
 }
 
 type MFAFactorTypeConfiguration struct {
@@ -304,11 +307,52 @@ type AuditLogConfiguration struct {
 	DisablePostgres bool `split_words:"true" default:"false"`
 }
 
+// ProviderLinkingDomains maps a provider name to the account-linking domain it
+// belongs to. Providers mapped to the same domain link to one another (a
+// matching email lands on the same account) but stay isolated from the
+// "default" (email-linked) pool and from SSO.
+//
+// Provider names can themselves contain a colon (custom OAuth providers are
+// named "custom:<identifier>", e.g. "custom:github"), so the env format uses
+// "=" — not ":" — to separate the provider from its domain. Pairs are
+// comma-separated:
+//
+//	GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="custom:github=social,custom:google=social"
+type ProviderLinkingDomains map[string]string
+
+func (d *ProviderLinkingDomains) Decode(value string) error {
+	result := ProviderLinkingDomains{}
+	if value = strings.TrimSpace(value); value != "" {
+		for _, pair := range strings.Split(value, ",") {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) != 2 {
+				return fmt.Errorf("conf: invalid provider linking domain %q, expected format \"provider=domain\"", pair)
+			}
+			provider, domain := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
+			if provider == "" || domain == "" {
+				return fmt.Errorf("conf: invalid provider linking domain %q, provider and domain must be non-empty", pair)
+			}
+			result[provider] = domain
+		}
+	}
+	*d = result
+	return nil
+}
+
 type ExperimentalConfiguration struct {
+	// DEPRECATED: use ProviderLinkingDomains instead. Kept for backward
+	// compatibility; auto-migrated in ApplyDefaults into ProviderLinkingDomains as
+	// {provider: provider}.
+	//
 	// Names of providers (e.g. "google") which have their own identity
 	// linking domain, meaning that the ones listed here _will not
 	// participate_ in email similarity linking with other accounts.
 	ProvidersWithOwnLinkingDomain []string `split_words:"true"`
+
+	// ProviderLinkingDomains maps a provider name to the account-linking domain
+	// it belongs to. See the ProviderLinkingDomains type for the env format.
+	// Env: GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="custom:github=social,custom:google=social"
+	ProviderLinkingDomains ProviderLinkingDomains `split_words:"true"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime
@@ -509,29 +553,34 @@ type SMTPConfiguration struct {
 	Headers        string        `json:"headers"`
 	LoggingEnabled bool          `json:"logging_enabled" split_words:"true" default:"false"`
 
-	fromAddress       string              `json:"-"`
-	normalizedHeaders map[string][]string `json:"-"`
+	fromAddress          string                           `json:"-"`
+	normalizedHeadersVal cachedValue[map[string][]string] `json:"-"`
 }
 
 func (c *SMTPConfiguration) Validate() error {
-	headers := make(map[string][]string)
-
-	if c.Headers != "" {
-		err := json.Unmarshal([]byte(c.Headers), &headers)
-		if err != nil {
-			return fmt.Errorf("conf: SMTP headers not a map[string][]string format: %w", err)
-		}
-	}
-
-	if len(headers) > 0 {
-		c.normalizedHeaders = headers
-	}
-
 	mail := gomail.NewMessage()
-
 	c.fromAddress = mail.FormatAddress(c.AdminEmail, c.SenderName)
-
+	c.normalizedHeadersVal = c.buildNormalizedHeaders()
 	return nil
+}
+
+func (c *SMTPConfiguration) buildNormalizedHeaders() cachedValue[map[string][]string] {
+	var zero map[string][]string
+	if c.Headers == "" {
+		return makeCachedValue(zero, nil)
+	}
+
+	val := make(map[string][]string)
+	err := json.Unmarshal([]byte(c.Headers), &val)
+	if err != nil {
+		const msg = "conf: SMTP headers configuration is invalid, ignoring"
+		logrus.WithError(err).Warn(msg)
+		return makeCachedValue(zero, err)
+	}
+	if len(val) == 0 {
+		return makeCachedValue(zero, nil)
+	}
+	return makeCachedValue(val, nil)
 }
 
 func (c *SMTPConfiguration) FromAddress() string {
@@ -539,7 +588,7 @@ func (c *SMTPConfiguration) FromAddress() string {
 }
 
 func (c *SMTPConfiguration) NormalizedHeaders() map[string][]string {
-	return c.normalizedHeaders
+	return c.normalizedHeadersVal.val
 }
 
 type MailerConfiguration struct {
@@ -583,50 +632,75 @@ type MailerConfiguration struct {
 	// template reload.
 	TemplateReloadingMaxIdle time.Duration `json:"template_reloading_max_idle" split_words:"true" default:"20m"`
 
-	serviceHeaders   map[string][]string `json:"-"`
-	blockedMXRecords map[string]bool     `json:"-"`
+	serviceHeadersVal   cachedValue[map[string][]string] `json:"-"`
+	blockedMXRecordsVal cachedValue[map[string]bool]     `json:"-"`
 }
 
 func (c *MailerConfiguration) Validate() error {
-	headers := make(map[string][]string)
-
-	if c.EmailValidationServiceHeaders != "" {
-		err := json.Unmarshal([]byte(c.EmailValidationServiceHeaders), &headers)
-		if err != nil {
-			return fmt.Errorf("conf: mailer validation headers not a map[string][]string format: %w", err)
-		}
-	}
-
-	if len(headers) > 0 {
-		c.serviceHeaders = headers
-	}
-
-	// EmailValidationBlockedMX is a JSON array in the config string for brevity.
-	var blockedMXRecords map[string]bool
-	if c.EmailValidationBlockedMX != "" {
-		var blockedMXArray []string
-		err := json.Unmarshal([]byte(c.EmailValidationBlockedMX), &blockedMXArray)
-		if err != nil {
-			return fmt.Errorf("conf: email_validation_blocked_mx is not a valid JSON array: %w", err)
-		}
-		blockedMXRecords = make(map[string]bool, len(blockedMXArray)*2)
-		for _, record := range blockedMXArray {
-			blockedMXRecords[record] = true
-			blockedMXRecords[record+"."] = true
-		}
-	}
-
-	c.blockedMXRecords = blockedMXRecords
-
+	c.serviceHeadersVal = c.buildServiceHeaders()
+	c.blockedMXRecordsVal = c.buildBlockedMXRecords()
 	return nil
 }
 
 func (c *MailerConfiguration) GetEmailValidationServiceHeaders() map[string][]string {
-	return c.serviceHeaders
+	return c.serviceHeadersVal.val
 }
 
 func (c *MailerConfiguration) GetEmailValidationBlockedMXRecords() map[string]bool {
-	return c.blockedMXRecords
+	return c.blockedMXRecordsVal.val
+}
+
+func (c *MailerConfiguration) buildServiceHeaders() cachedValue[map[string][]string] {
+	var zero map[string][]string
+	if c.EmailValidationServiceHeaders == "" {
+		return makeCachedValue(zero, nil)
+	}
+
+	val := make(map[string][]string)
+	err := json.Unmarshal([]byte(c.EmailValidationServiceHeaders), &val)
+	if err != nil {
+		const msg = "conf: mailer validation headers configuration is invalid, ignoring"
+		logrus.WithError(err).Warn(msg)
+		return makeCachedValue(zero, err)
+	}
+	if len(val) == 0 {
+		return makeCachedValue(zero, nil)
+	}
+	return makeCachedValue(val, nil)
+}
+
+func (c *MailerConfiguration) buildBlockedMXRecords() cachedValue[map[string]bool] {
+	var zero map[string]bool
+	if c.EmailValidationBlockedMX == "" {
+		return makeCachedValue(zero, nil)
+	}
+
+	var blockedMXArray []string
+	err := json.Unmarshal([]byte(c.EmailValidationBlockedMX), &blockedMXArray)
+	if err != nil {
+		const msg = "conf: blocked mx records configuration is invalid, ignoring"
+		logrus.WithError(err).Warn(msg)
+		return makeCachedValue(zero, err)
+	}
+
+	val := make(map[string]bool, len(blockedMXArray)*2)
+	for _, record := range blockedMXArray {
+		val[record] = true
+		val[record+"."] = true
+	}
+	return makeCachedValue(val, nil)
+}
+
+type cachedValue[T any] struct {
+	val T
+	err error
+}
+
+func makeCachedValue[T any](val T, err error) cachedValue[T] {
+	return cachedValue[T]{
+		val: val,
+		err: err,
+	}
 }
 
 type PhoneProviderConfiguration struct {
@@ -962,6 +1036,7 @@ func (config *GlobalConfiguration) PopulateGlobal() error {
 		if err := config.SAML.PopulateFields(config.API.ExternalURL); err != nil {
 			return err
 		}
+		config.SAML.PrivateKeyNext = ""
 	} else {
 		config.SAML.PrivateKey = ""
 	}
@@ -1012,15 +1087,37 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		if err := config.applyDefaultsJWT([]byte(config.JWT.Secret)); err != nil {
 			return err
 		}
+	} else {
+		jwk, err := GetSigningJwk(&config.JWT)
+		if err != nil {
+			return err
+		}
+		sk, err := getSigningKey(jwk)
+		if err != nil {
+			return err
+		}
+		config.JWT.SigningKey = sk
 	}
 
 	if config.JWT.ValidMethods == nil {
 		config.JWT.ValidMethods = []string{}
 		for _, key := range config.JWT.Keys {
-			alg := GetSigningAlg(key.PublicKey)
-			config.JWT.ValidMethods = append(config.JWT.ValidMethods, alg.Alg())
+			config.JWT.ValidMethods = append(config.JWT.ValidMethods, key.PublicKey.Algorithm().String())
 		}
 
+	}
+
+	// Backfill the deprecated ProvidersWithOwnLinkingDomain list into the
+	// ProviderLinkingDomains map. A provider that owned its linking domain maps
+	// to a domain named after itself (own domain == own name). Explicit
+	// ProviderLinkingDomains entries win over the legacy backfill.
+	if config.Experimental.ProviderLinkingDomains == nil {
+		config.Experimental.ProviderLinkingDomains = map[string]string{}
+	}
+	for _, p := range config.Experimental.ProvidersWithOwnLinkingDomain {
+		if _, ok := config.Experimental.ProviderLinkingDomains[p]; !ok {
+			config.Experimental.ProviderLinkingDomains[p] = p
+		}
 	}
 
 	if config.Mailer.Autoconfirm && config.Mailer.AllowUnverifiedEmailSignIns {
@@ -1162,6 +1259,16 @@ func (config *GlobalConfiguration) applyDefaultsJWTPrivateKey(privKey jwk.Key) e
 		PublicKey:  pubKey,
 		PrivateKey: privKey,
 	}
+
+	var key any
+	if err := privKey.Raw(&key); err != nil {
+		return err
+	}
+
+	config.JWT.SigningKey = func(ctx context.Context) (any, error) {
+		return key, nil
+	}
+
 	return nil
 }
 

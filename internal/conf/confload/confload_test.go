@@ -26,10 +26,23 @@ func TestGlobal(t *testing.T) {
 	gc, err := LoadGlobal("")
 	require.NoError(t, err)
 	assert.Equal(t, true, gc.SMTP.LoggingEnabled)
-	assert.Equal(t, "project_ref", gc.SMTP.NormalizedHeaders()["X-PM-Metadata-project-ref"][0])
 	require.NotNil(t, gc)
 	assert.Equal(t, "X-Request-ID", gc.API.RequestIDHeader)
 	assert.Equal(t, "pg-functions://postgres/auth/count_failed_attempts", gc.Hook.MFAVerificationAttempt.URI)
+
+	{
+		hdrs := gc.SMTP.NormalizedHeaders()
+		require.NoError(t, err)
+		assert.Equal(t, 1, len(hdrs["X-PM-Metadata-project-ref"]))
+		assert.Equal(t, "project_ref", hdrs["X-PM-Metadata-project-ref"][0])
+	}
+
+	{
+		hdrs := gc.Mailer.GetEmailValidationServiceHeaders()
+		require.NoError(t, err)
+		assert.Equal(t, 1, len(hdrs["apikey"]))
+		assert.Equal(t, "test", hdrs["apikey"][0])
+	}
 
 	{
 		os.Setenv("GOTRUE_RATE_LIMIT_EMAIL_SENT", "0/1h")
@@ -58,12 +71,6 @@ func TestGlobal(t *testing.T) {
 		gc, err = LoadGlobal("")
 		require.NoError(t, err)
 		assert.Equal(t, true, gc.Mailer.EmailBackgroundSending)
-	}
-
-	{
-		hdrs := gc.Mailer.GetEmailValidationServiceHeaders()
-		assert.Equal(t, 1, len(hdrs["apikey"]))
-		assert.Equal(t, "test", hdrs["apikey"][0])
 	}
 
 	{
@@ -207,6 +214,25 @@ func TestGlobal(t *testing.T) {
 		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
 	}
 
+}
+
+func TestExperimentalProviderLinkingDomains(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("GOTRUE_SITE_URL", "http://localhost:8080")
+	os.Setenv("GOTRUE_DB_DRIVER", "postgres")
+	os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
+	os.Setenv("GOTRUE_OPERATOR_TOKEN", "token")
+	os.Setenv("GOTRUE_JWT_SECRET", "secret")
+	os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
+	os.Setenv("GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS", "github=social,custom:google=social")
+
+	cfg, err := LoadGlobalFromEnv()
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.Equal(t, conf.ProviderLinkingDomains{
+		"github":        "social",
+		"custom:google": "social",
+	}, cfg.Experimental.ProviderLinkingDomains)
 }
 
 func TestLoading(t *testing.T) {

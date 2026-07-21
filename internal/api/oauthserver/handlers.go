@@ -394,6 +394,13 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	grantParams.Scopes = &scopes
 
 	err = db.Transaction(func(tx *storage.Connection) error {
+		if _, terr := models.FindOAuthServerAuthorizationByIDForUpdate(tx, authorization.AuthorizationID); terr != nil {
+			if models.IsNotFoundError(terr) {
+				return apierrors.NewOAuthError("invalid_grant", "Invalid authorization code")
+			}
+			return apierrors.NewInternalServerError("Error locking authorization code").WithInternalError(terr)
+		}
+
 		authMethod := models.OAuthProviderAuthorizationCode
 
 		// Create audit log entry for OAuth token exchange
@@ -424,6 +431,9 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 		if httpErr, ok := err.(*apierrors.HTTPError); ok {
 			return httpErr
 		}
+		if oauthErr, ok := err.(*apierrors.OAuthError); ok {
+			return oauthErr
+		}
 		return apierrors.NewInternalServerError("Error exchanging authorization code").WithInternalError(err)
 	}
 
@@ -435,7 +445,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 			nonce = *authorization.Nonce
 		}
 
-		idToken, err := tokenService.GenerateIDToken(tokens.GenerateIDTokenParams{
+		idToken, err := tokenService.GenerateIDToken(ctx, tokens.GenerateIDTokenParams{
 			User:     user,
 			ClientID: client.ID,
 			Nonce:    nonce,

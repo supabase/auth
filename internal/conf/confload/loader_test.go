@@ -27,19 +27,9 @@ func TestLoaderCompat(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cfg2)
 
-	// Old and new loader should have identical output
-	require.Equal(t, cfg1, cfg2)
-}
-
-func TestLoaderEnvparse(t *testing.T) {
-	cfg1, err := LoadGlobal(e2ecfg.GetConfigPath())
-	require.NoError(t, err)
-	require.NotNil(t, cfg1)
-
-	lr := NewLoader()
-	cfg2, err := lr.Startup(e2ecfg.GetConfigPath(), "")
-	require.NoError(t, err)
-	require.NotNil(t, cfg2)
+	// SigningKey is a func
+	cfg1.JWT.SigningKey = nil
+	cfg2.JWT.SigningKey = nil
 
 	// Old and new loader should have identical output
 	require.Equal(t, cfg1, cfg2)

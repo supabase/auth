@@ -1,3 +1,3 @@
 module github.com/joho/godotenv
 
-go 1.25.11
+go 1.25.12

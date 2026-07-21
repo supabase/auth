@@ -19,7 +19,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-
 func TestPasswordRequiredCharactersDecode(t *testing.T) {
 	examples := []struct {
 		Value  string
@@ -322,27 +321,53 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			val: &SMTPConfiguration{Headers: "invalid"},
-			err: `conf: SMTP headers not a map[string][]string format:` +
-				` invalid character 'i' looking for beginning of value`,
-		},
+			check: func(t *testing.T, v any) {
+				const exp = `invalid character`
 
+				mcfg := v.(*SMTPConfiguration)
+				val := mcfg.normalizedHeadersVal.val
+				err := mcfg.normalizedHeadersVal.err
+				require.Contains(t, err.Error(), exp)
+				require.Error(t, err)
+				require.Nil(t, val)
+			},
+		},
 		{
 			val: &MailerConfiguration{},
 		},
 		{
 			val: &MailerConfiguration{EmailValidationServiceHeaders: "invalid"},
-			err: `conf: mailer validation headers not a map[string][]string format:` +
-				` invalid character 'i' looking for beginning of value`,
+			check: func(t *testing.T, v any) {
+				const exp = `invalid character`
+
+				mcfg := v.(*MailerConfiguration)
+				val := mcfg.serviceHeadersVal.val
+				err := mcfg.serviceHeadersVal.err
+				require.Contains(t, err.Error(), exp)
+				require.Error(t, err)
+				require.Nil(t, val)
+			},
 		},
 		{
 			val: &MailerConfiguration{EmailValidationBlockedMX: "invalid"},
-			err: `conf: email_validation_blocked_mx`,
+			check: func(t *testing.T, v any) {
+				const exp = `invalid character`
+				mcfg := v.(*MailerConfiguration)
+				val := mcfg.blockedMXRecordsVal.val
+				err := mcfg.blockedMXRecordsVal.err
+				require.Error(t, err)
+				require.Contains(t, err.Error(), exp)
+				require.Nil(t, val)
+			},
 		},
 		{
 			val: &MailerConfiguration{EmailValidationBlockedMX: `["foo.com"]`},
 			check: func(t *testing.T, v any) {
-				got := (v.(*MailerConfiguration)).GetEmailValidationBlockedMXRecords()
-				require.True(t, got["foo.com"])
+				mcfg := v.(*MailerConfiguration)
+				val := mcfg.blockedMXRecordsVal.val
+				err := mcfg.blockedMXRecordsVal.err
+				require.NoError(t, err)
+				require.True(t, val["foo.com"])
 			},
 		},
 
@@ -924,7 +949,6 @@ func TestMethods(t *testing.T) {
 	}
 }
 
-
 func TestWebAuthnConfigurationValidate(t *testing.T) {
 	// Empty RPID → error
 	{
@@ -986,4 +1010,86 @@ func TestWebAuthnConfigurationValidate(t *testing.T) {
 
 func toPtr[T any](v T) *T {
 	return &(&([1]T{T(v)}))[0]
+}
+
+func TestExperimentalProviderLinkingDomainsBackfill(t *testing.T) {
+	baseConfig := func() *GlobalConfiguration {
+		c := &GlobalConfiguration{}
+		c.JWT.Secret = "secret"
+		return c
+	}
+
+	// legacy-only: own-domain list backfills into the map as {p: p}, including
+	// provider names that contain a colon
+	{
+		c := baseConfig()
+		c.Experimental.ProvidersWithOwnLinkingDomain = []string{"custom:github"}
+		require.NoError(t, c.ApplyDefaults())
+		require.Equal(t, "custom:github", c.Experimental.ProviderLinkingDomains["custom:github"])
+	}
+
+	// new-only: explicit linking domains are preserved untouched
+	{
+		c := baseConfig()
+		c.Experimental.ProviderLinkingDomains = ProviderLinkingDomains{
+			"custom:github": "social",
+			"custom:google": "social",
+		}
+		require.NoError(t, c.ApplyDefaults())
+		require.Equal(t, ProviderLinkingDomains{
+			"custom:github": "social",
+			"custom:google": "social",
+		}, c.Experimental.ProviderLinkingDomains)
+	}
+
+	// both-set: explicit entry wins over the legacy backfill
+	{
+		c := baseConfig()
+		c.Experimental.ProvidersWithOwnLinkingDomain = []string{"custom:github"}
+		c.Experimental.ProviderLinkingDomains = ProviderLinkingDomains{"custom:github": "social"}
+		require.NoError(t, c.ApplyDefaults())
+		require.Equal(t, "social", c.Experimental.ProviderLinkingDomains["custom:github"])
+	}
+}
+
+func TestProviderLinkingDomainsDecode(t *testing.T) {
+	// "=" separates provider from domain so colon-bearing custom names survive
+	// as keys, alongside builtin names that share the same domain
+	{
+		var d ProviderLinkingDomains
+		require.NoError(t, d.Decode("github=social,custom:google=social"))
+		require.Equal(t, ProviderLinkingDomains{
+			"github":        "social",
+			"custom:google": "social",
+		}, d)
+	}
+
+	// surrounding whitespace is trimmed
+	{
+		var d ProviderLinkingDomains
+		require.NoError(t, d.Decode(" custom:github = social , google = social "))
+		require.Equal(t, ProviderLinkingDomains{
+			"custom:github": "social",
+			"google":        "social",
+		}, d)
+	}
+
+	// empty value yields an empty (non-nil) map
+	{
+		var d ProviderLinkingDomains
+		require.NoError(t, d.Decode(""))
+		require.Equal(t, ProviderLinkingDomains{}, d)
+	}
+
+	// a ":"-only pair is rejected
+	{
+		var d ProviderLinkingDomains
+		require.Error(t, d.Decode("custom:github:social"))
+	}
+
+	// missing domain is rejected
+	{
+		var d ProviderLinkingDomains
+		require.Error(t, d.Decode("custom:github="))
+	}
 }

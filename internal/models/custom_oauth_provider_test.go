@@ -199,6 +199,46 @@ func (ts *CustomOAuthProviderTestSuite) TestStringSliceSerialization() {
 	assert.Empty(ts.T(), found.Scopes)
 }
 
+func (ts *CustomOAuthProviderTestSuite) TestCustomClaimsAllowlistSerialization() {
+	provider := &CustomOAuthProvider{
+		ProviderType:          ProviderTypeOAuth2,
+		Identifier:            "custom:allowlist-test",
+		Name:                  "Allowlist Test",
+		ClientID:              "client-id",
+		AuthorizationURL:      stringPtr("https://example.com/authorize"),
+		TokenURL:              stringPtr("https://example.com/token"),
+		UserinfoURL:           stringPtr("https://example.com/userinfo"),
+		CustomClaimsAllowlist: slices.String{"groups", "org_id", "mail", "sn"},
+		PKCEEnabled:           true,
+		Enabled:               true,
+	}
+
+	err := CreateCustomOAuthProvider(ts.db, provider)
+	require.NoError(ts.T(), err)
+
+	// Retrieve and verify the non-empty allowlist round-trips.
+	found, err := FindCustomOAuthProviderByID(ts.db, provider.ID)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), slices.String{"groups", "org_id", "mail", "sn"}, found.CustomClaimsAllowlist)
+
+	// Replacing with an empty allowlist round-trips to an empty slice.
+	provider.CustomClaimsAllowlist = slices.String{}
+	err = UpdateCustomOAuthProvider(ts.db, provider)
+	require.NoError(ts.T(), err)
+
+	found, err = FindCustomOAuthProviderByID(ts.db, provider.ID)
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), found.CustomClaimsAllowlist)
+}
+
+func (ts *CustomOAuthProviderTestSuite) TestCustomClaimsAllowlistDefaultsEmpty() {
+	provider := ts.createTestProvider(ProviderTypeOAuth2, "custom:allowlist-default")
+
+	found, err := FindCustomOAuthProviderByID(ts.db, provider.ID)
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), found.CustomClaimsAllowlist)
+}
+
 func (ts *CustomOAuthProviderTestSuite) TestAttributeMappingSerialization() {
 	mapping := slices.Map{
 		"email":      "user_email",
