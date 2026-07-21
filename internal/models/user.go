@@ -810,10 +810,15 @@ func FindUsersInAudienceKeyset(tx *storage.Connection, aud string, p *KeysetPagi
 	}
 
 	if p != nil && p.After != nil {
+		// Row-value comparison, NOT the equivalent
+		// (created_at <dir> ? OR (created_at = ? AND id <dir> ?)) form. Postgres
+		// can push a row comparison's leading column into the btree as a range
+		// bound (Index Cond: created_at <= ?) and seek straight to the cursor.
+		// The OR form forces a full index scan + filter
 		if dir == Ascending {
-			q = q.Where("(created_at > ? OR (created_at = ? AND id > ?))", p.After.CreatedAt, p.After.CreatedAt, p.After.ID)
+			q = q.Where("(created_at, id) > (?, ?)", p.After.CreatedAt, p.After.ID)
 		} else {
-			q = q.Where("(created_at < ? OR (created_at = ? AND id < ?))", p.After.CreatedAt, p.After.CreatedAt, p.After.ID)
+			q = q.Where("(created_at, id) < (?, ?)", p.After.CreatedAt, p.After.ID)
 		}
 	}
 
