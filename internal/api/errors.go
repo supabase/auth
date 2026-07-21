@@ -79,7 +79,6 @@ type HTTPErrorResponse20240101 struct {
 
 func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 	log := observability.GetLogEntry(r).Entry
-	errorID := utilities.GetRequestID(r.Context())
 
 	apiVersion, averr := DetermineClosestAPIVersion(r.Header.Get(APIVersionHeaderName))
 	if averr != nil {
@@ -91,6 +90,8 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 
 	switch e := err.(type) {
 	case *WeakPasswordError:
+		observability.LogEntrySetField(r, "error", e.Error())
+
 		if apiVersion.Compare(APIVersion20240101) >= 0 {
 			var output struct {
 				HTTPErrorResponse20240101
@@ -128,16 +129,10 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 		}
 
 	case *HTTPError:
-		switch {
-		case e.HTTPStatus >= http.StatusInternalServerError:
-			e.ErrorID = errorID
-			// this will get us the stack trace too
-			log.WithError(e.Cause()).Error(e.Error())
-		case e.HTTPStatus >= http.StatusBadRequest:
-			log.WithError(e.Cause()).Warn(e.Error())
-		default:
-			log.WithError(e.Cause()).Info(e.Error())
+		if e.HTTPStatus >= http.StatusInternalServerError {
+			e.ErrorID = utilities.GetRequestID(r.Context())
 		}
+		observability.LogEntrySetField(r, "error", e.Cause().Error())
 
 		if e.ErrorCode != "" {
 			w.Header().Set("x-sb-error-code", e.ErrorCode)
@@ -183,7 +178,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 		}
 
 	case *OAuthError:
-		log.WithError(e.Cause()).Info(e.Error())
+		observability.LogEntrySetField(r, "error", e.Cause().Error())
 		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 			log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 		}
@@ -192,7 +187,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 		HandleResponseError(e.Cause(), w, r)
 
 	default:
-		log.WithError(e).Errorf("Unhandled server error: %s", e.Error())
+		observability.LogEntrySetField(r, "error", fmt.Sprintf("Unhandled server error: %s", e.Error()))
 
 		if apiVersion.Compare(APIVersion20240101) >= 0 {
 			resp := HTTPErrorResponse20240101{

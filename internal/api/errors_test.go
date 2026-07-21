@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -103,4 +104,77 @@ func TestRecoverer(t *testing.T) {
 	require.Equal(t, "request panicked", logs["msg"])
 	require.Equal(t, "test panic", logs["panic"])
 	require.NotEmpty(t, logs["stack"])
+}
+
+func TestHandleResponseErrorConsolidatesLogs(t *testing.T) {
+	config, err := confload.LoadGlobal(apiTestConfig)
+	require.NoError(t, err)
+	require.NoError(t, observability.ConfigureLogging(&config.Logging))
+
+	cases := []struct {
+		name          string
+		err           error
+		expectedError string
+		expectedCode  string
+	}{
+		{
+			name:          "http error with internal error",
+			err:           apierrors.NewInternalServerError("boom").WithInternalError(errors.New("connection reset")),
+			expectedError: "connection reset",
+			expectedCode:  string(apierrors.ErrorCodeUnexpectedFailure),
+		},
+		{
+			name:          "http error without internal error",
+			err:           apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Unable to parse JSON"),
+			expectedError: "400: Unable to parse JSON",
+			expectedCode:  string(apierrors.ErrorCodeBadJSON),
+		},
+		{
+			name:          "oauth error",
+			err:           apierrors.NewOAuthError("invalid_request", "missing code").WithInternalError(errors.New("code param missing")),
+			expectedError: "code param missing",
+		},
+		{
+			name:          "weak password error",
+			err:           &WeakPasswordError{Message: "Password is too weak"},
+			expectedError: "Password is too weak",
+			expectedCode:  string(apierrors.ErrorCodeWeakPassword),
+		},
+		{
+			name:          "unhandled error",
+			err:           errors.New("unexpected failure"),
+			expectedError: "Unhandled server error: unexpected failure",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var logBuffer bytes.Buffer
+			logrus.SetOutput(&logBuffer)
+
+			logHandler := observability.NewStructuredLogger(logrus.StandardLogger(), config)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				HandleResponseError(c.err, w, r)
+			}))
+
+			req, err := http.NewRequest(http.MethodPost, "http://example.com", nil)
+			require.NoError(t, err)
+
+			rec := httptest.NewRecorder()
+			logHandler.ServeHTTP(rec, req)
+
+			decoder := json.NewDecoder(&logBuffer)
+
+			var logs map[string]interface{}
+			require.NoError(t, decoder.Decode(&logs))
+
+			require.Equal(t, "request completed", logs["msg"])
+			require.NotNil(t, logs["status"])
+			require.Equal(t, c.expectedError, logs["error"])
+			if c.expectedCode != "" {
+				require.Equal(t, c.expectedCode, logs["error_code"])
+			}
+
+			require.False(t, decoder.More(), "expected exactly one log entry for the request, found a second")
+		})
+	}
 }
