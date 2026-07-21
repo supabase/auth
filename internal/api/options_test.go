@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/supabase/auth/internal/api/apilimiter"
 	"github.com/supabase/auth/internal/conf"
 )
 
@@ -11,7 +12,7 @@ func TestNewLimiterOptions(t *testing.T) {
 	cfg := &conf.GlobalConfiguration{}
 	cfg.ApplyDefaults()
 
-	rl := NewLimiterOptions(cfg)
+	rl := apilimiter.New(cfg)
 	assert.NotNil(t, rl.Email)
 	assert.NotNil(t, rl.Phone)
 	assert.NotNil(t, rl.Signups)

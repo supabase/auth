@@ -195,6 +195,31 @@ func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) 
 		return nil, err
 	}
 
+	// If the token references a real user session, confirm the session
+	// still exists and is valid in the DB — a JWT remains usable past
+	// logout or revocation otherwise. Sessionless admin tokens (e.g.
+	// service_role) skip this check.
+	claims := getClaims(ctx)
+	if claims != nil && claims.SessionId != "" && claims.SessionId != uuid.Nil.String() {
+		ctx, err = a.maybeLoadUserOrSession(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		session := getSession(ctx)
+		user := getUser(ctx)
+		if session != nil && user != nil {
+			validity := session.CheckValidity(models.SessionValidityConfig{
+				Timebox:           a.config.Sessions.Timebox,
+				InactivityTimeout: a.config.Sessions.InactivityTimeout,
+				AllowLowAAL:       a.config.Sessions.AllowLowAAL,
+			}, time.Now(), nil, user.HighestPossibleAAL())
+			if validity != models.SessionValid {
+				return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeSessionExpired, "Session is no longer valid")
+			}
+		}
+	}
+
 	return a.requireAdmin(ctx)
 }
 

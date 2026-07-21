@@ -164,7 +164,27 @@ func FindFlowStateByID(tx *storage.Connection, id string) (*FlowState, error) {
 		}
 		return nil, errors.Wrap(err, "error finding flow state")
 	}
+	return obj, nil
+}
 
+// FindFlowStateByIDForUpdate finds a flow state by ID and locks the row with
+// FOR UPDATE SKIP LOCKED to prevent concurrent modifications. If the row is
+// already locked by another transaction, SKIP LOCKED causes the query to
+// return no rows instead of blocking, which surfaces as FlowStateNotFoundError.
+// The lock is held until the transaction commits or rolls back.
+func FindFlowStateByIDForUpdate(tx *storage.Connection, id string) (*FlowState, error) {
+	obj := &FlowState{}
+	// Pop does not provide a way to execute FOR UPDATE queries,
+	// so we use a raw query to lock the row first.
+	if err := tx.RawQuery(
+		fmt.Sprintf("SELECT * FROM %q WHERE id = ? LIMIT 1 FOR UPDATE SKIP LOCKED", obj.TableName()),
+		id,
+	).First(obj); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, FlowStateNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding flow state")
+	}
 	return obj, nil
 }
 

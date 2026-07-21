@@ -17,7 +17,8 @@ const (
 type Rate struct {
 	Events   float64       `json:"events,omitempty"`
 	OverTime time.Duration `json:"over_time,omitempty"`
-	typ      string
+	typ      string        `json:"-"`
+	val      string        `json:"-"`
 }
 
 func (r *Rate) GetRateType() string {
@@ -31,6 +32,7 @@ func (r *Rate) GetRateType() string {
 func (r *Rate) Decode(value string) error {
 	if f, err := strconv.ParseFloat(value, 64); err == nil {
 		r.typ = IntervalRateType
+		r.val = value
 		r.Events = f
 		r.OverTime = defaultOverTime
 		return nil
@@ -54,8 +56,11 @@ func (r *Rate) Decode(value string) error {
 	r.typ = BurstRateType
 	r.Events = float64(e)
 	r.OverTime = d
+	r.val = value
 	return nil
 }
+
+func (r Rate) GetRateValue() string { return r.val }
 
 func (r *Rate) String() string {
 	if r.OverTime == 0 {

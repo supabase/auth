@@ -35,8 +35,8 @@ func (ts *PasskeyTestSuite) TestRegisterPasskeyHappyPath() {
 
 	// Step 3: Verify the registration
 	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        optionsResp.ChallengeID,
-		"credential_response": json.RawMessage(credResp.JSON),
+		"challenge_id": optionsResp.ChallengeID,
+		"credential":   json.RawMessage(credResp.JSON),
 	}, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, w.Code)
 
@@ -109,8 +109,8 @@ func (ts *PasskeyTestSuite) TestRegistrationOptionsWithExistingPasskeys() {
 
 	// The exclusion list should contain the existing credential
 	ts.Require().NotNil(resp.Options)
-	ts.Require().NotNil(resp.Options.Response.CredentialExcludeList)
-	ts.Len(resp.Options.Response.CredentialExcludeList, 1)
+	ts.Require().NotNil(resp.Options.CredentialExcludeList)
+	ts.Len(resp.Options.CredentialExcludeList, 1)
 }
 
 // TestRegistrationOptionsTooManyPasskeys tests that the limit is enforced.
@@ -204,15 +204,15 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyCapEnforcedAtVerifyTime() {
 
 	// Verify the first challenge — should succeed
 	v1 := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        opts1.ChallengeID,
-		"credential_response": json.RawMessage(cred1.JSON),
+		"challenge_id": opts1.ChallengeID,
+		"credential":   json.RawMessage(cred1.JSON),
 	}, withBearerToken(token))
 	ts.Require().Equal(http.StatusOK, v1.Code)
 
 	// Verify the second challenge — should fail with too_many_passkeys
 	v2 := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        opts2.ChallengeID,
-		"credential_response": json.RawMessage(cred2.JSON),
+		"challenge_id": opts2.ChallengeID,
+		"credential":   json.RawMessage(cred2.JSON),
 	}, withBearerToken(token))
 	ts.Equal(http.StatusUnprocessableEntity, v2.Code)
 	var errResp map[string]any
@@ -224,8 +224,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyCapEnforcedAtVerifyTime() {
 func (ts *PasskeyTestSuite) TestRegisterVerifyChallengeNotFound() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        uuid.Must(uuid.NewV4()).String(),
-		"credential_response": map[string]any{},
+		"challenge_id": uuid.Must(uuid.NewV4()).String(),
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
@@ -246,8 +246,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyChallengeExpired() {
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        challenge.ID.String(),
-		"credential_response": map[string]any{},
+		"challenge_id": challenge.ID.String(),
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
@@ -272,8 +272,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyWrongUser() {
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        challenge.ID.String(),
-		"credential_response": map[string]any{},
+		"challenge_id": challenge.ID.String(),
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
@@ -293,11 +293,11 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyMissingFields() {
 		{
 			desc: "missing challenge_id",
 			body: map[string]any{
-				"credential_response": map[string]any{},
+				"credential": map[string]any{},
 			},
 		},
 		{
-			desc: "missing credential_response",
+			desc: "missing credential",
 			body: map[string]any{
 				"challenge_id": uuid.Must(uuid.NewV4()).String(),
 			},
@@ -316,8 +316,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyMissingFields() {
 func (ts *PasskeyTestSuite) TestRegisterVerifyInvalidChallengeID() {
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        "not-a-uuid",
-		"credential_response": map[string]any{},
+		"challenge_id": "not-a-uuid",
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
@@ -335,8 +335,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyWrongChallengeType() {
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        challenge.ID.String(),
-		"credential_response": map[string]any{},
+		"challenge_id": challenge.ID.String(),
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusBadRequest, w.Code)
@@ -345,8 +345,8 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyWrongChallengeType() {
 // TestRegisterVerifyUnauthenticated tests that unauthenticated requests are rejected.
 func (ts *PasskeyTestSuite) TestRegisterVerifyUnauthenticated() {
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        uuid.Must(uuid.NewV4()).String(),
-		"credential_response": map[string]any{},
+		"challenge_id": uuid.Must(uuid.NewV4()).String(),
+		"credential":   map[string]any{},
 	})
 	ts.Equal(http.StatusUnauthorized, w.Code)
 }
@@ -358,9 +358,89 @@ func (ts *PasskeyTestSuite) TestRegisterVerifySSOUser() {
 
 	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
-		"challenge_id":        uuid.Must(uuid.NewV4()).String(),
-		"credential_response": map[string]any{},
+		"challenge_id": uuid.Must(uuid.NewV4()).String(),
+		"credential":   map[string]any{},
 	}, withBearerToken(token))
 
 	ts.Equal(http.StatusUnprocessableEntity, w.Code)
+}
+
+// TestRegistrationOptionsBlockedAtAAL1WhenMFAEnabled verifies that a user enrolled
+// in a verified MFA factor cannot get registration options from an AAL1 session.
+func (ts *PasskeyTestSuite) TestRegistrationOptionsBlockedAtAAL1WhenMFAEnabled() {
+	ts.enrollVerifiedFactor(ts.TestUser)
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
+
+	ts.Equal(http.StatusForbidden, w.Code)
+	var errResp map[string]any
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResp))
+	ts.Equal("insufficient_aal", errResp["error_code"])
+}
+
+// TestRegistrationVerifyBlockedAtAAL1WhenMFAEnabled verifies that the AAL2 gate on
+// verify runs before the registration challenge is consumed, so a blocked request
+// leaves the challenge intact.
+func (ts *PasskeyTestSuite) TestRegistrationVerifyBlockedAtAAL1WhenMFAEnabled() {
+	ts.enrollVerifiedFactor(ts.TestUser)
+
+	challenge := models.NewWebAuthnChallenge(
+		&ts.TestUser.ID,
+		models.WebAuthnChallengeTypeRegistration,
+		dummySessionData(),
+		time.Now().Add(5*time.Minute),
+	)
+	require.NoError(ts.T(), ts.API.db.Create(challenge))
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
+		"challenge_id": challenge.ID.String(),
+		"credential":   map[string]any{},
+	}, withBearerToken(token))
+
+	ts.Equal(http.StatusForbidden, w.Code)
+	var errResp map[string]any
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResp))
+	ts.Equal("insufficient_aal", errResp["error_code"])
+
+	// The challenge must not have been consumed by a request that failed the gate.
+	_, err := models.FindWebAuthnChallengeByID(ts.API.db, challenge.ID)
+	require.NoError(ts.T(), err)
+}
+
+// TestRegisterPasskeyAAL2HappyPathWhenMFAEnabled verifies that a user with a
+// verified MFA factor who has stepped up to AAL2 can still register a passkey
+// end-to-end (both the options and verify endpoints pass the gate).
+func (ts *PasskeyTestSuite) TestRegisterPasskeyAAL2HappyPathWhenMFAEnabled() {
+	f := ts.enrollVerifiedFactor(ts.TestUser)
+	ts.elevateSessionToAAL2(ts.TestSession, f.ID)
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+
+	// Step 1: options succeed at AAL2
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
+	ts.Require().Equal(http.StatusOK, w.Code)
+
+	var optionsResp PasskeyRegistrationOptionsResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&optionsResp))
+
+	// Step 2: simulate the authenticator creating a credential
+	authenticator := &virtualAuthenticator{
+		rpID:   ts.Config.WebAuthn.RPID,
+		origin: ts.Config.WebAuthn.RPOrigins[0],
+	}
+	credResp, err := authenticator.createCredential(optionsResp.Options)
+	require.NoError(ts.T(), err)
+
+	// Step 3: verify succeeds at AAL2
+	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
+		"challenge_id": optionsResp.ChallengeID,
+		"credential":   json.RawMessage(credResp.JSON),
+	}, withBearerToken(token))
+	ts.Require().Equal(http.StatusOK, w.Code)
+
+	var passkeyResp PasskeyMetadataResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&passkeyResp))
+	ts.NotEmpty(passkeyResp.ID)
 }

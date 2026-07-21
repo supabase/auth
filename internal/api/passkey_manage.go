@@ -112,7 +112,12 @@ func (a *API) PasskeyDelete(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
 	user := getUser(ctx)
+	session := getSession(ctx)
 	db := a.db.WithContext(ctx)
+
+	if err := requirePasskeyManagementAAL(user, session); err != nil {
+		return err
+	}
 
 	passkeyID, err := uuid.FromString(chi.URLParam(r, "passkey_id"))
 	if err != nil {

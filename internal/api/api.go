@@ -9,6 +9,7 @@ import (
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/apilimiter"
 	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/api/oauthserver"
 	"github.com/supabase/auth/internal/api/provider"
@@ -54,7 +55,7 @@ type API struct {
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
 
-	limiterOpts *LimiterOptions
+	limiterOpts *apilimiter.Limiter
 }
 
 func (a *API) GetConfig() *conf.GlobalConfiguration { return a.config }
@@ -110,7 +111,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.captchaVerifier = security.NewCaptchaVerifier(&globalConfig.Security.Captcha)
 	}
 	if api.limiterOpts == nil {
-		api.limiterOpts = NewLimiterOptions(globalConfig)
+		api.limiterOpts = apilimiter.New(globalConfig)
 	}
 	if api.hooksMgr == nil {
 		httpDr := hookshttp.New()

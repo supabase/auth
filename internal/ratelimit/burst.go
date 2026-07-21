@@ -11,7 +11,8 @@ const defaultOverTime = time.Hour
 
 // BurstLimiter wraps the golang.org/x/time/rate package.
 type BurstLimiter struct {
-	rl *rate.Limiter
+	rl  *rate.Limiter
+	cfg conf.Rate
 }
 
 // NewBurstLimiter returns a rate limiter configured using the given conf.Rate.
@@ -25,7 +26,9 @@ type BurstLimiter struct {
 //   - 1/2s   is 1 events per 2  seconds with burst of 1.
 //   - 10/10s is 1 events per 10 seconds with burst of 10.
 //
-// If Rate.Events is <= 0, the burst amount will be set to 1.
+// If Rate.Events is <= 0, the burst amount will be set to 0. Since b is the
+// initial size of the token bucket this means no events will be permitted at
+// all.
 //
 // See Example_newBurstLimiter for a visualization.
 func NewBurstLimiter(r conf.Rate) *BurstLimiter {
@@ -43,7 +46,8 @@ func NewBurstLimiter(r conf.Rate) *BurstLimiter {
 	// BurstLimiter will have an initial token bucket of size `e`. It will
 	// be refilled at a rate of 1 per duration `d` indefinitely.
 	rl := &BurstLimiter{
-		rl: rate.NewLimiter(rate.Every(d), int(e)),
+		rl:  rate.NewLimiter(rate.Every(d), int(e)),
+		cfg: r,
 	}
 	return rl
 }
@@ -58,3 +62,7 @@ func (l *BurstLimiter) Allow() bool {
 func (l *BurstLimiter) AllowAt(at time.Time) bool {
 	return l.rl.AllowN(at, 1)
 }
+
+func (l *BurstLimiter) String() string { return "BurstLimiter" }
+
+func (l *BurstLimiter) Config() conf.Rate { return l.cfg }

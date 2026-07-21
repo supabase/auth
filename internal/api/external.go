@@ -28,7 +28,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	http.Redirect(w, r, rurl, http.StatusFound)
+	http.Redirect(w, r, rurl, http.StatusFound) // #nosec G710
 	return nil
 }
 
@@ -222,6 +222,13 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 		if flowState != nil && flowState.IsPKCE() {
 			// PKCE flow: update flow state with user ID and tokens
+			// Re-fetch with FOR UPDATE lock inside the transaction to prevent concurrent claims
+			if flowState, terr = models.FindFlowStateByIDForUpdate(tx, flowState.ID.String()); terr != nil {
+				return terr
+			}
+			if flowState.UserID != nil {
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeFlowStateAlreadyUsed, "State has already been used")
+			}
 			flowState.ProviderAccessToken = providerAccessToken
 			flowState.ProviderRefreshToken = providerRefreshToken
 			flowState.UserID = &(user.ID)
@@ -278,7 +285,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	}
 
-	http.Redirect(w, r, rurl, http.StatusFound)
+	http.Redirect(w, r, rurl, http.StatusFound) // #nosec G710
 	return nil
 }
 
@@ -336,7 +343,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		// surface change. It therefore set to true for other linking
 		// domains, not just SSO ones. This enables different linking
 		// domains to co-exist, such as when using
-		// GOTRUE_EXPERIMENTAL_PROVIDERS_WITH_OWN_LINKING_DOMAIN="provider_a,provider_b".
+		// GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="provider_a=social,provider_b=social".
 		isSSOUser := decision.LinkingDomain != "default"
 
 		// because params above sets no password, this method is not
@@ -543,6 +550,11 @@ func (a *API) loadExternalStateFromUUID(ctx context.Context, db *storage.Connect
 		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth state has expired")
 	}
 
+	// UserID is nil at creation and set during callback, so non-nil means already consumed.
+	if flowState.IsPKCE() && flowState.UserID != nil {
+		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeFlowStateAlreadyUsed, "State has already been used")
+	}
+
 	ctx = withExternalProviderType(ctx, flowState.ProviderType, flowState.EmailOptional)
 
 	if flowState.InviteToken != nil && *flowState.InviteToken != "" {
@@ -678,8 +690,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	config := a.config
 	var pConfig conf.OAuthProviderConfiguration
 
-	// Build the redirect URL
-	redirectURL := config.API.ExternalURL + "/callback"
+	redirectURL := strings.TrimRight(config.API.ExternalURL, "/") + "/callback"
 
 	// Parse scopes (space-separated per RFC 6749)
 	var scopeList []string
@@ -732,6 +743,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 			customProvider.AcceptableClientIDs,
 			customProvider.AttributeMapping,
 			customProvider.AuthorizationParams,
+			customProvider.CustomClaimsAllowlist,
 		)
 
 		// Build provider configuration
@@ -753,7 +765,6 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	}
 
 	// Create custom OIDC provider instance
-	// oidc.NewProvider() will automatically fetch discovery document
 	p, err := provider.NewCustomOIDCProvider(
 		ctx,
 		customProvider.ClientID,
@@ -761,10 +772,12 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		redirectURL,
 		scopeList,
 		*customProvider.Issuer,
+		customProvider.GetDiscoveryURL(),
 		customProvider.PKCEEnabled,
 		customProvider.AcceptableClientIDs,
 		customProvider.AttributeMapping,
 		customProvider.AuthorizationParams,
+		customProvider.CustomClaimsAllowlist,
 		a.oidcCache,
 	)
 	if err != nil {
@@ -807,7 +820,7 @@ func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, 
 		// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
 		hq.Set("sb", "")
 		u.Fragment = hq.Encode()
-		http.Redirect(w, r, u.String(), http.StatusFound)
+		http.Redirect(w, r, u.String(), http.StatusFound) // #nosec G710
 	}
 }
 

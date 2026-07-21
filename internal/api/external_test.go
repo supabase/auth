@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -407,4 +409,56 @@ func (ts *ExternalTestSuite) TestOAuthState_InvalidFormat() {
 
 	// Should redirect to site URL with error since state is invalid
 	ts.Require().Equal(http.StatusSeeOther, w.Code)
+}
+
+// TestPKCEFlowStateReuseRejected verifies that a PKCE flow state cannot be reused
+// after the OAuth callback has been completed
+func (ts *ExternalTestSuite) TestPKCEFlowStateReuseRejected() {
+	code := "authcode"
+	server := setupGenericOAuthServer(ts, code)
+	defer server.Close()
+
+	codeVerifier := "testtesttesttesttesttesttesttesttesttesttesttesttesttest"
+	hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
+	codeChallenge := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
+
+	// Step 1: Initiate PKCE authorization flow and extract the state parameter
+	w := performPKCEAuthorizationRequest(ts, "github", codeChallenge, "s256")
+	ts.Require().Equal(http.StatusFound, w.Code)
+	u, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err)
+	state := u.Query().Get("state")
+	ts.Require().NotEmpty(state)
+
+	// Step 2: First callback completes successfully (sets UserID on the flow state)
+	callbackURL, err := url.Parse("http://localhost/callback")
+	ts.Require().NoError(err)
+	v := callbackURL.Query()
+	v.Set("code", code)
+	v.Set("state", state)
+	callbackURL.RawQuery = v.Encode()
+
+	req := httptest.NewRequest(http.MethodGet, callbackURL.String(), nil)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.Require().Equal(http.StatusFound, w.Code)
+
+	firstRedirect, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err)
+	firstQuery, err := url.ParseQuery(firstRedirect.RawQuery)
+	ts.Require().NoError(err)
+	ts.Require().NotEmpty(firstQuery.Get("code"), "first callback should return an auth code")
+
+	// Step 3: Second callback with the same state must be rejected
+	req = httptest.NewRequest(http.MethodGet, callbackURL.String(), nil)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	// The callback redirects errors to the redirect URL with error parameters
+	redirectURL, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err)
+	errorQuery, err := url.ParseQuery(redirectURL.RawQuery)
+	ts.Require().NoError(err)
+	ts.Contains(errorQuery.Get("error_description"), "already been used",
+		"second callback with same state should be rejected as already used")
 }

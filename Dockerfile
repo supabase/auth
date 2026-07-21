@@ -1,4 +1,4 @@
-FROM golang:1.25.8-alpine3.23 as build
+FROM golang:1.25.12-alpine3.23 as build
 ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 ENV GOOS=linux
@@ -9,6 +9,7 @@ WORKDIR /go/src/github.com/supabase/auth
 
 # Pulling dependencies
 COPY ./Makefile ./go.* ./
+COPY ./internal/forks/godotenv ./internal/forks/godotenv
 RUN make deps
 
 # Building stuff

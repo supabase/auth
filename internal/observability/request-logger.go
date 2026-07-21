@@ -90,7 +90,7 @@ func (e *logEntry) Write(status, bytes int, header http.Header, elapsed time.Dur
 	}
 
 	entry := e.Entry.WithFields(fields)
-	entry.Info("request completed")
+	entry.Log(LogLevelForHttp(status), "request completed")
 	e.Entry = entry
 }
 
@@ -135,5 +135,16 @@ func LogEntrySetField(r *http.Request, key string, value interface{}) {
 func LogEntrySetFields(r *http.Request, fields logrus.Fields) {
 	if l, ok := r.Context().Value(chimiddleware.LogEntryCtxKey).(*logEntry); ok {
 		l.Entry = l.Entry.WithFields(fields)
+	}
+}
+
+func LogLevelForHttp(status int) logrus.Level {
+	switch {
+	case status >= http.StatusInternalServerError:
+		return logrus.ErrorLevel
+	case status >= http.StatusBadRequest:
+		return logrus.WarnLevel
+	default:
+		return logrus.InfoLevel
 	}
 }

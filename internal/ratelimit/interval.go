@@ -9,9 +9,10 @@ import (
 
 // IntervalLimiter will limit the number of calls to Allow per interval.
 type IntervalLimiter struct {
-	mu    sync.Mutex
-	ival  time.Duration // Count is reset and time updated every ival.
-	limit int           // Limit calls to Allow() per ival.
+	mu     sync.Mutex
+	cfg    conf.Rate
+	ival   time.Duration // Count is reset and time updated every ival.
+	events int           // Events allowed per ival.
 
 	// Guarded by mu.
 	last  time.Time // When the limiter was last reset.
@@ -21,9 +22,10 @@ type IntervalLimiter struct {
 // NewIntervalLimiter returns a rate limiter using the given conf.Rate.
 func NewIntervalLimiter(r conf.Rate) *IntervalLimiter {
 	return &IntervalLimiter{
-		ival:  r.OverTime,
-		limit: int(r.Events),
-		last:  time.Now(),
+		ival:   r.OverTime,
+		events: int(r.Events),
+		last:   time.Now(),
+		cfg:    r,
 	}
 }
 
@@ -55,9 +57,13 @@ func (rl *IntervalLimiter) allowAt(at time.Time) bool {
 		rl.last = rl.last.Add(time.Duration(ivals) * rl.ival)
 		rl.count = 0
 	}
-	if rl.count < rl.limit {
+	if rl.count < rl.events {
 		rl.count++
 		return true
 	}
 	return false
 }
+
+func (l *IntervalLimiter) String() string { return "IntervalLimiter" }
+
+func (l *IntervalLimiter) Config() conf.Rate { return l.cfg }

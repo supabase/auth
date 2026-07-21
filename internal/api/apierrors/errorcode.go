@@ -23,6 +23,7 @@ const (
 	ErrorCodeRefreshTokenAlreadyUsed           ErrorCode = "refresh_token_already_used"
 	ErrorCodeFlowStateNotFound                 ErrorCode = "flow_state_not_found"
 	ErrorCodeFlowStateExpired                  ErrorCode = "flow_state_expired"
+	ErrorCodeFlowStateAlreadyUsed              ErrorCode = "flow_state_already_used"
 	ErrorCodeOAuthClientStateNotFound          ErrorCode = "oauth_client_state_not_found"
 	ErrorCodeOAuthClientStateExpired           ErrorCode = "oauth_client_state_expired"
 	ErrorCodeOAuthInvalidState                 ErrorCode = "oauth_invalid_state"

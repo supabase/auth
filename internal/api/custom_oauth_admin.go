@@ -2,12 +2,9 @@ package api
 
 import (
 	"context"
-	"encoding/json"
-	"io"
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	popslices "github.com/gobuffalo/pop/v6/slices"
@@ -56,9 +53,11 @@ type AdminCustomOAuthProviderParams struct {
 	Scopes              []string               `json:"scopes"`
 	PKCEEnabled         *bool                  `json:"pkce_enabled,omitempty"`
 	AttributeMapping    map[string]interface{} `json:"attribute_mapping,omitempty"`
-	AuthorizationParams map[string]interface{} `json:"authorization_params,omitempty"`
-	Enabled             *bool                  `json:"enabled,omitempty"`
-	EmailOptional       *bool                  `json:"email_optional,omitempty"`
+	// CustomClaimsAllowlist lists raw IdP claim keys to copy verbatim into custom_claims.
+	CustomClaimsAllowlist []string               `json:"custom_claims_allowlist,omitempty"`
+	AuthorizationParams   map[string]interface{} `json:"authorization_params,omitempty"`
+	Enabled               *bool                  `json:"enabled,omitempty"`
+	EmailOptional         *bool                  `json:"email_optional,omitempty"`
 
 	// OIDC-specific fields
 	Issuer         string  `json:"issuer,omitempty"`
@@ -173,6 +172,11 @@ func (a *API) adminCustomOAuthProviderCreate(w http.ResponseWriter, r *http.Requ
 		return err
 	}
 
+	// Validate custom claims allowlist (non-empty source keys)
+	if err := validateCustomClaimsAllowlist(params.CustomClaimsAllowlist); err != nil {
+		return err
+	}
+
 	// Check quota if configured
 	if config.CustomOAuth.MaxProviders > 0 {
 		totalCount, err := models.CountCustomOAuthProviders(db)
@@ -277,6 +281,13 @@ func (a *API) adminCustomOAuthProviderUpdate(w http.ResponseWriter, r *http.Requ
 	// Validate attribute mapping if provided
 	if params.AttributeMapping != nil {
 		if err := validateAttributeMapping(params.AttributeMapping); err != nil {
+			return err
+		}
+	}
+
+	// Validate custom claims allowlist if provided
+	if params.CustomClaimsAllowlist != nil {
+		if err := validateCustomClaimsAllowlist(params.CustomClaimsAllowlist); err != nil {
 			return err
 		}
 	}
@@ -480,18 +491,19 @@ func buildProviderFromParams(params *AdminCustomOAuthProviderParams, providerTyp
 	// Generate ID upfront so it's available for client secret encryption (used as AAD)
 	id, _ := uuid.NewV4()
 	provider := &models.CustomOAuthProvider{
-		ID:                  id,
-		ProviderType:        providerType,
-		Identifier:          params.Identifier,
-		Name:                params.Name,
-		ClientID:            params.ClientID,
-		AcceptableClientIDs: popslices.String(params.AcceptableClientIDs),
-		Scopes:              popslices.String(params.Scopes),
-		PKCEEnabled:         getBoolOrDefault(params.PKCEEnabled, true),
-		AttributeMapping:    popslices.Map(params.AttributeMapping),
-		AuthorizationParams: popslices.Map(params.AuthorizationParams),
-		Enabled:             getBoolOrDefault(params.Enabled, true),
-		EmailOptional:       getBoolOrDefault(params.EmailOptional, false),
+		ID:                    id,
+		ProviderType:          providerType,
+		Identifier:            params.Identifier,
+		Name:                  params.Name,
+		ClientID:              params.ClientID,
+		AcceptableClientIDs:   popslices.String(params.AcceptableClientIDs),
+		Scopes:                popslices.String(params.Scopes),
+		PKCEEnabled:           getBoolOrDefault(params.PKCEEnabled, true),
+		AttributeMapping:      popslices.Map(params.AttributeMapping),
+		CustomClaimsAllowlist: popslices.String(params.CustomClaimsAllowlist),
+		AuthorizationParams:   popslices.Map(params.AuthorizationParams),
+		Enabled:               getBoolOrDefault(params.Enabled, true),
+		EmailOptional:         getBoolOrDefault(params.EmailOptional, false),
 	}
 
 	// Set type-specific fields
@@ -562,6 +574,9 @@ func updateProviderFromParams(provider *models.CustomOAuthProvider, params *Admi
 	}
 	if params.AttributeMapping != nil {
 		provider.AttributeMapping = popslices.Map(params.AttributeMapping)
+	}
+	if params.CustomClaimsAllowlist != nil {
+		provider.CustomClaimsAllowlist = popslices.String(params.CustomClaimsAllowlist)
 	}
 	if params.AuthorizationParams != nil {
 		provider.AuthorizationParams = popslices.Map(params.AuthorizationParams)
@@ -666,61 +681,34 @@ func validateAuthorizationParams(params map[string]interface{}) error {
 	return nil
 }
 
-// maxDiscoveryResponseSize is the maximum size of an OIDC discovery response body (1 MB).
-const maxDiscoveryResponseSize = 1 << 20
-
-// discoveryFetchTimeout is the timeout for fetching an OIDC discovery document.
-const discoveryFetchTimeout = 10 * time.Second
-
-// fetchAndValidateDiscovery fetches the OIDC discovery document from the
-// provider's discovery URL and validates that it contains the required fields
-// per the OpenID Connect Discovery 1.0 specification. It also verifies that
-// the issuer in the discovery document matches the expected issuer.
+// fetchAndValidateDiscovery fetches the OIDC discovery document via the shared
+// utility, then applies admin-only validation: required fields per the OpenID
+// Connect Discovery 1.0 spec must be present before we persist the document.
+// Returns *models.OIDCDiscovery so the caller can store it directly.
 func fetchAndValidateDiscovery(ctx context.Context, discoveryURL, expectedIssuer string) (*models.OIDCDiscovery, error) {
-	resp, err := utilities.FetchURLWithTimeout(ctx, discoveryURL, discoveryFetchTimeout)
+	doc, err := utilities.FetchAndValidateOIDCDiscovery(ctx, discoveryURL, expectedIssuer)
 	if err != nil {
 		return nil, apierrors.NewBadRequestError(
 			apierrors.ErrorCodeValidationFailed,
-			"Failed to fetch OIDC discovery document from %q: %v", discoveryURL, err,
-		)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, apierrors.NewBadRequestError(
-			apierrors.ErrorCodeValidationFailed,
-			"OIDC discovery endpoint %q returned HTTP %d, expected 200", discoveryURL, resp.StatusCode,
+			"OIDC discovery from %q failed: %v", discoveryURL, err,
 		)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryResponseSize))
-	if err != nil {
-		return nil, apierrors.NewBadRequestError(
-			apierrors.ErrorCodeValidationFailed,
-			"Failed to read OIDC discovery response from %q", discoveryURL,
-		)
-	}
-
-	var discovery models.OIDCDiscovery
-	if err := json.Unmarshal(body, &discovery); err != nil {
-		return nil, apierrors.NewBadRequestError(
-			apierrors.ErrorCodeValidationFailed,
-			"OIDC discovery document from %q is not valid JSON", discoveryURL,
-		)
-	}
-
-	// Validate required fields per OpenID Connect Discovery 1.0 spec
+	// Validate required fields per OpenID Connect Discovery 1.0 spec.
+	// Stricter than the runtime path needs — runtime can tolerate missing
+	// fields and surface a less helpful error at login; admin should reject
+	// the configuration up front.
 	var missing []string
-	if discovery.Issuer == "" {
+	if doc.Issuer == "" {
 		missing = append(missing, "issuer")
 	}
-	if discovery.AuthorizationEndpoint == "" {
+	if doc.AuthorizationEndpoint == "" {
 		missing = append(missing, "authorization_endpoint")
 	}
-	if discovery.TokenEndpoint == "" {
+	if doc.TokenEndpoint == "" {
 		missing = append(missing, "token_endpoint")
 	}
-	if discovery.JwksURI == "" {
+	if doc.JwksURI == "" {
 		missing = append(missing, "jwks_uri")
 	}
 	if len(missing) > 0 {
@@ -730,16 +718,17 @@ func fetchAndValidateDiscovery(ctx context.Context, discoveryURL, expectedIssuer
 		)
 	}
 
-	// The issuer in the discovery document MUST exactly match the expected issuer
-	// per OpenID Connect Discovery 1.0, Section 4.3.
-	if discovery.Issuer != expectedIssuer {
-		return nil, apierrors.NewBadRequestError(
-			apierrors.ErrorCodeValidationFailed,
-			"OIDC discovery issuer mismatch: discovery document reports %q but expected %q", discovery.Issuer, expectedIssuer,
-		)
-	}
-
-	return &discovery, nil
+	return &models.OIDCDiscovery{
+		Issuer:                 doc.Issuer,
+		AuthorizationEndpoint:  doc.AuthorizationEndpoint,
+		TokenEndpoint:          doc.TokenEndpoint,
+		UserinfoEndpoint:       doc.UserinfoEndpoint,
+		JwksURI:                doc.JwksURI,
+		ScopesSupported:        doc.ScopesSupported,
+		ResponseTypesSupported: doc.ResponseTypesSupported,
+		GrantTypesSupported:    doc.GrantTypesSupported,
+		SubjectTypesSupported:  doc.SubjectTypesSupported,
+	}, nil
 }
 
 // validateAttributeMapping ensures no sensitive system fields are targeted
@@ -778,3 +767,18 @@ func validateAttributeMapping(mapping map[string]interface{}) error {
 	return nil
 }
 
+// validateCustomClaimsAllowlist ensures every allowlist entry is a non-empty
+// source claim key. Unlike attribute_mapping, these are opaque source keys
+// copied into custom_claims (not typed targets)
+func validateCustomClaimsAllowlist(allowlist []string) error {
+	for _, key := range allowlist {
+		if strings.TrimSpace(key) == "" {
+			return apierrors.NewBadRequestError(
+				apierrors.ErrorCodeValidationFailed,
+				"custom_claims_allowlist entries must be non-empty strings",
+			)
+		}
+	}
+
+	return nil
+}
