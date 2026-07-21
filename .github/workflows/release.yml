@@ -47,11 +47,16 @@ jobs:
 
       - if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         id: versions
+        env:
+          MAJOR: ${{ steps.release.outputs.major }}
+          MINOR: ${{ steps.release.outputs.minor }}
+          NOT_RELEASE_CANDIDATE: '${{ steps.release.outputs.release_created }}'
+          PATCH: ${{ steps.release.outputs.patch }}
+          RELEASE_TITLE: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).title }}
         run: |
           set -ex
 
           RELEASE_CANDIDATE=true
-          NOT_RELEASE_CANDIDATE='${{ steps.release.outputs.release_created }}'
           if [ "$NOT_RELEASE_CANDIDATE" == "true" ]
           then
             RELEASE_CANDIDATE=false
@@ -64,17 +69,22 @@ jobs:
           then
             # Release please doesn't tell you the candidate version when it
             # creates the PR, so we have to take it from the title.
-            MAIN_RELEASE_VERSION=$(node -e "console.log('${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).title }}'.split(' ').reverse().find(x => x.match(/[0-9]+[.][0-9]+[.][0-9]+/)))")
+            MAIN_RELEASE_VERSION=$(node -e "
+                  const title = process.env.RELEASE_TITLE;
+                  console.log(title.split(' ').reverse().find(x => x.match(/[0-9]+[.][0-9]+[.][0-9]+/)));
+                ")
 
             # Use git describe tags to identify the number of commits the branch
             # is ahead of the most recent non-release-candidate tag, which is
             # part of the rc.<commits> value.
-            RELEASE_VERSION=$MAIN_RELEASE_VERSION-rc.$(node -e "console.log('$(git describe --tags --exclude rc*)'.split('-')[1])")
+            GIT_DESC=$(git describe --tags --exclude 'rc*')
+            COMMIT_COUNT="${GIT_DESC##*-}"
+            RELEASE_VERSION="$MAIN_RELEASE_VERSION-rc.$COMMIT_COUNT"
 
             # release-please only ignores releases that have a form like [A-Z0-9]<version>, so prefixing with rc<version>
             RELEASE_NAME="rc$RELEASE_VERSION"
           else
-            MAIN_RELEASE_VERSION=${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}
+            MAIN_RELEASE_VERSION="$MAJOR.$MINOR.$PATCH"
             RELEASE_VERSION="$MAIN_RELEASE_VERSION"
             RELEASE_NAME="v$RELEASE_VERSION"
           fi
@@ -145,12 +155,13 @@ jobs:
 
       - name: Upload release artifacts
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        env:
+          PR_NUMBER: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }}
         run: |
           set -ex
 
           if [ "$RELEASE_CANDIDATE" == "true" ]
           then
-            PR_NUMBER='${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }}'
             CHECKSUM_CONTENT=$(cat checksums.txt)
 
             RELEASE_NOTES=$(printf "This is a release candidate. See release-please PR #%s for context.\n\n%s\n" "$PR_NUMBER" "$CHECKSUM_CONTENT")
@@ -166,9 +177,8 @@ jobs:
           else
             if [ "$GITHUB_REF" == "refs/heads/main" ] || [ "$GITHUB_REF" == "refs/heads/master" ]
             then
-              IS_PATCH_ZERO=$(node -e "console.log('$RELEASE_VERSION'.endsWith('.0'))")
 
-              if [ "$IS_PATCH_ZERO" == "true" ]
+              if [[ "$RELEASE_VERSION" == *.0 ]];
               then
                 # Only create release branch if patch version is 0, as this
                 # means that the release can be patched in the future.
@@ -185,21 +195,21 @@ jobs:
           fi
 
           # Append checksums to existing release notes
-          EXISTING_NOTES=$(GH_TOKEN='${{ github.token }}' gh release view $RELEASE_NAME --json body -q .body)
+          EXISTING_NOTES=$(GH_TOKEN='${{ github.token }}' gh release view "$RELEASE_NAME" --json body -q .body)
           CHECKSUM_CONTENT=$(cat checksums.txt)
           FULL_NOTES=$(printf "%s\n\n%s\n" "$EXISTING_NOTES" "$CHECKSUM_CONTENT")
-          GH_TOKEN='${{ github.token }}' gh release edit $RELEASE_NAME -n "$FULL_NOTES"
+          GH_TOKEN='${{ github.token }}' gh release edit "$RELEASE_NAME" -n "$FULL_NOTES"
 
-          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME \
-            ./auth-v$RELEASE_VERSION-x86.tar.gz \
-            ./auth-v$RELEASE_VERSION-arm64.tar.gz \
-            ./auth-v$RELEASE_VERSION-darwin-arm64.tar.gz \
-            ./auth-v$RELEASE_VERSION-amd64.tar.xz \
-            ./auth-v$RELEASE_VERSION-arm64.tar.xz
+          GH_TOKEN='${{ github.token }}' gh release upload "$RELEASE_NAME" \
+            "./auth-v$RELEASE_VERSION-x86.tar.gz" \
+            "./auth-v$RELEASE_VERSION-arm64.tar.gz" \
+            "./auth-v$RELEASE_VERSION-darwin-arm64.tar.gz" \
+            "./auth-v$RELEASE_VERSION-amd64.tar.xz" \
+            "./auth-v$RELEASE_VERSION-arm64.tar.xz"
 
           # Upload to Supabase internal bucket
-          aws s3 cp ./auth-v$RELEASE_VERSION-amd64.tar.xz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/
-          aws s3 cp ./auth-v$RELEASE_VERSION-arm64.tar.xz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/
+          aws s3 cp "./auth-v$RELEASE_VERSION-amd64.tar.xz" "s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/"
+          aws s3 cp "./auth-v$RELEASE_VERSION-arm64.tar.xz" "s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/"
 
   publish:
     needs:
