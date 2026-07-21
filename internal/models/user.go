@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -773,6 +774,66 @@ func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Paginat
 	}
 
 	return users, err
+}
+
+// FindUsersInAudienceKeyset finds users with the matching audience using
+// keyset (cursor-based) pagination. Unlike FindUsersInAudience it issues no
+// COUNT(*) and no OFFSET: it resumes from the cursor in p.After (if any) and
+// fetches p.Limit+1 rows so the caller can detect whether another page exists.
+//
+// Ordering is (created_at, id) in the direction of the first sort field
+// (default DESC). The id tiebreaker is required because created_at is not
+// unique; without it a page boundary inside a same-timestamp group would skip
+// or duplicate rows.
+func FindUsersInAudienceKeyset(tx *storage.Connection, aud string, p *KeysetPagination, sortParams *SortParams, filter string) ([]*User, error) {
+	users := []*User{}
+	q := tx.Q().Where("instance_id = ? and aud = ?", uuid.Nil, aud)
+
+	if filter != "" {
+		lf := "%" + filter + "%"
+		// we must specify the collation in order to get case insensitive search for the JSON column
+		q = q.Where("(email LIKE ? OR raw_user_meta_data->>'full_name' ILIKE ?)", lf, lf)
+	}
+
+	dir := Descending
+	if sortParams != nil && len(sortParams.Fields) > 0 {
+		// Keyset pagination is only valid over created_at, which is exactly
+		// what the cursor encodes; ordering by any other column would compare
+		// rows against the cursor's timestamp value, which is meaningless.
+		// Restricting the sort field is the caller's responsibility (e.g. the
+		// admin handler's sort allowlist) — this guard makes misuse fail loudly
+		// instead of silently mis-sorting.
+		if sortParams.Fields[0].Name != CreatedAt {
+			return nil, errors.Errorf("keyset pagination only supports ordering by %q", CreatedAt)
+		}
+		dir = sortParams.Fields[0].Dir
+	}
+
+	if p != nil && p.After != nil {
+		if dir == Ascending {
+			q = q.Where("(created_at > ? OR (created_at = ? AND id > ?))", p.After.CreatedAt, p.After.CreatedAt, p.After.ID)
+		} else {
+			q = q.Where("(created_at < ? OR (created_at = ? AND id < ?))", p.After.CreatedAt, p.After.CreatedAt, p.After.ID)
+		}
+	}
+
+	q = q.Order("created_at " + string(dir)).Order("id " + string(dir))
+
+	if p != nil {
+		limit := p.Limit
+		// callers cap the page size well below this; the guard keeps the +1
+		// below from overflowing if one ever doesn't
+		if limit > math.MaxInt-1 {
+			limit = math.MaxInt - 1
+		}
+		q = q.Limit(int(limit + 1)) // #nosec G115 -- bounded above
+	}
+
+	if err := q.All(&users); err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and
