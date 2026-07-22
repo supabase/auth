@@ -353,6 +353,12 @@ type ExperimentalConfiguration struct {
 	// it belongs to. See the ProviderLinkingDomains type for the env format.
 	// Env: GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="custom:github=social,custom:google=social"
 	ProviderLinkingDomains ProviderLinkingDomains `split_words:"true"`
+
+	// CursorPaginationEnabled turns on cursor-based (keyset) pagination for the
+	// admin user list endpoint. When enabled and no `page` query param is
+	// provided, GET /admin/users serves fast, count-free cursor pages.
+	// Env: GOTRUE_EXPERIMENTAL_CURSOR_PAGINATION_ENABLED=true
+	CursorPaginationEnabled bool `split_words:"true" default:"false"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime

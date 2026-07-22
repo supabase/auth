@@ -2,7 +2,9 @@ package models
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -130,6 +132,131 @@ func (ts *UserTestSuite) TestFindUsersInAudience() {
 	n, err = FindUsersInAudience(ts.db, u.Aud, nil, sp, "")
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), n, 1)
+}
+
+// createUserAt inserts a user in the "test" audience with an exact created_at.
+// pop sets created_at on insert, so we force it afterwards and reload to get
+// the microsecond-truncated value Postgres actually stores.
+func (ts *UserTestSuite) createUserAt(email string, createdAt time.Time) *User {
+	user, err := NewUser("", email, "secret", "test", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
+	require.NoError(ts.T(), ts.db.RawQuery("UPDATE users SET created_at = ? WHERE id = ?", createdAt, user.ID).Exec())
+	reloaded, err := FindUserByID(ts.db, user.ID)
+	require.NoError(ts.T(), err)
+	return reloaded
+}
+
+func (ts *UserTestSuite) TestFindUsersInAudienceKeyset() {
+	base := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	ts.Run("first page fetches Limit+1 when more rows exist", func() {
+		TruncateAll(ts.db)
+		for i := 0; i < 5; i++ {
+			ts.createUserAt(fmt.Sprintf("u%d@example.com", i), base.Add(time.Duration(i)*time.Minute))
+		}
+
+		p := &KeysetPagination{Limit: 2}
+		users, err := FindUsersInAudienceKeyset(ts.db, "test", p, nil, "")
+		require.NoError(ts.T(), err)
+		// Limit+1 fetched so the caller can detect there is a next page.
+		require.Len(ts.T(), users, 3)
+		// default direction is DESC on created_at: newest first, non-increasing.
+		for i := 1; i < len(users); i++ {
+			require.False(ts.T(), users[i-1].CreatedAt.Before(users[i].CreatedAt),
+				"rows must be ordered created_at DESC")
+		}
+	})
+
+	ts.Run("tiebreaker walks same-created_at rows exactly once", func() {
+		TruncateAll(ts.db)
+		same := base
+		want := map[string]bool{}
+		for i := 0; i < 3; i++ {
+			u := ts.createUserAt(fmt.Sprintf("tie%d@example.com", i), same)
+			want[u.ID.String()] = true
+		}
+
+		seen := map[string]bool{}
+		var after *KeysetCursor
+		for page := 0; page < 10; page++ {
+			p := &KeysetPagination{Limit: 1, After: after}
+			users, err := FindUsersInAudienceKeyset(ts.db, "test", p, nil, "")
+			require.NoError(ts.T(), err)
+			if len(users) == 0 {
+				break
+			}
+
+			hasMore := uint64(len(users)) > p.Limit
+			rows := users
+			if hasMore {
+				rows = users[:p.Limit]
+			}
+			for _, u := range rows {
+				require.False(ts.T(), seen[u.ID.String()], "row returned twice: %s", u.ID)
+				seen[u.ID.String()] = true
+			}
+			if !hasMore {
+				break
+			}
+			last := rows[len(rows)-1]
+			after = &KeysetCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+		}
+		require.Equal(ts.T(), want, seen, "every same-created_at row returned exactly once")
+	})
+
+	ts.Run("last page returns <= Limit", func() {
+		TruncateAll(ts.db)
+		for i := 0; i < 2; i++ {
+			ts.createUserAt(fmt.Sprintf("last%d@example.com", i), base.Add(time.Duration(i)*time.Minute))
+		}
+
+		p := &KeysetPagination{Limit: 50}
+		users, err := FindUsersInAudienceKeyset(ts.db, "test", p, nil, "")
+		require.NoError(ts.T(), err)
+		require.Len(ts.T(), users, 2)
+	})
+
+	ts.Run("filter still applies alongside keyset", func() {
+		TruncateAll(ts.db)
+		ts.createUserAt("needle@example.com", base)
+		ts.createUserAt("haystack@example.com", base.Add(time.Minute))
+
+		p := &KeysetPagination{Limit: 50}
+		users, err := FindUsersInAudienceKeyset(ts.db, "test", p, nil, "needle")
+		require.NoError(ts.T(), err)
+		require.Len(ts.T(), users, 1)
+		require.Equal(ts.T(), "needle@example.com", users[0].GetEmail())
+	})
+
+	ts.Run("non-created_at sort field is rejected", func() {
+		TruncateAll(ts.db)
+		ts.createUserAt("x@example.com", base)
+
+		sp := &SortParams{Fields: []SortField{{Name: "email", Dir: Ascending}}}
+		_, err := FindUsersInAudienceKeyset(ts.db, "test", &KeysetPagination{Limit: 10}, sp, "")
+		require.Error(ts.T(), err)
+	})
+
+	ts.Run("ascending direction resumes with > comparison", func() {
+		TruncateAll(ts.db)
+		for i := 0; i < 3; i++ {
+			ts.createUserAt(fmt.Sprintf("asc%d@example.com", i), base.Add(time.Duration(i)*time.Minute))
+		}
+
+		sp := &SortParams{Fields: []SortField{{Name: CreatedAt, Dir: Ascending}}}
+		p := &KeysetPagination{Limit: 1}
+		first, err := FindUsersInAudienceKeyset(ts.db, "test", p, sp, "")
+		require.NoError(ts.T(), err)
+		require.Len(ts.T(), first, 2) // Limit+1
+		require.Equal(ts.T(), "asc0@example.com", first[0].GetEmail())
+
+		after := &KeysetCursor{CreatedAt: first[0].CreatedAt, ID: first[0].ID}
+		next, err := FindUsersInAudienceKeyset(ts.db, "test", &KeysetPagination{Limit: 1, After: after}, sp, "")
+		require.NoError(ts.T(), err)
+		require.Len(ts.T(), next, 2)
+		require.Equal(ts.T(), "asc1@example.com", next[0].GetEmail())
+	})
 }
 
 func (ts *UserTestSuite) TestFindUserByID() {
