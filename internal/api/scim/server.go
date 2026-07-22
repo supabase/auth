@@ -19,14 +19,13 @@ func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", mediaType)
 	w.WriteHeader(http.StatusOK)
 	return ToJSON(w, &ServiceProviderConfiguration{
-		Schemas:          []string{schemaServiceProviderConfig},
-		DocumentationURI: "https://supabase.com/docs/guides/auth/enterprise-sso/scim",
-		Patch:            SupportedFeature{Supported: false},
-		Bulk:             BulkFeature{Supported: false, MaxOperations: 0, MaxPayloadSize: 0},
-		Filter:           FilterFeature{Supported: false, MaxResults: 0},
-		ChangePassword:   SupportedFeature{Supported: false},
-		Sort:             SupportedFeature{Supported: false},
-		ETag:             SupportedFeature{Supported: false},
+		Schemas:        []string{schemaServiceProviderConfig},
+		Patch:          SupportedFeature{Supported: false},
+		Bulk:           BulkFeature{Supported: false, MaxOperations: 0, MaxPayloadSize: 0},
+		Filter:         FilterFeature{Supported: false, MaxResults: 0},
+		ChangePassword: SupportedFeature{Supported: false},
+		Sort:           SupportedFeature{Supported: false},
+		ETag:           SupportedFeature{Supported: false},
 		AuthenticationSchemes: []AuthenticationScheme{
 			{
 				Type:        "httpbearertoken",

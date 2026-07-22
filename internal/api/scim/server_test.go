@@ -51,7 +51,7 @@ func TestServer(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, []string{"urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"}, cfg.Schemas)
-		assert.Equal(t, "https://supabase.com/docs/guides/auth/enterprise-sso/scim", cfg.DocumentationURI)
+		assert.Empty(t, cfg.DocumentationURI)
 		assert.False(t, cfg.Patch.Supported)
 		assert.False(t, cfg.Bulk.Supported)
 		assert.False(t, cfg.Filter.Supported)

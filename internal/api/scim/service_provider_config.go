@@ -2,7 +2,7 @@ package scim
 
 type ServiceProviderConfiguration struct {
 	Schemas               []string               `json:"schemas"`
-	DocumentationURI      string                 `json:"documentationUri"`
+	DocumentationURI      string                 `json:"documentationUri,omitempty"`
 	Patch                 SupportedFeature       `json:"patch"`
 	Bulk                  BulkFeature            `json:"bulk"`
 	Filter                FilterFeature          `json:"filter"`
