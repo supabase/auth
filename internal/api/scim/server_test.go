@@ -47,7 +47,7 @@ func TestServer(t *testing.T) {
 		require.Equal(t, w.Code, http.StatusOK)
 		require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
 
-		cfg, err := FromJSON[*ServiceProviderConfiguration](w.Body)
+		cfg, err := FromJSON[*ServiceProviderConfig](w.Body)
 		require.NoError(t, err)
 
 		assert.Equal(t, []string{"urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"}, cfg.Schemas)

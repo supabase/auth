@@ -18,7 +18,7 @@ func NewServer() *Server {
 func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", mediaType)
 	w.WriteHeader(http.StatusOK)
-	return ToJSON(w, &ServiceProviderConfiguration{
+	return ToJSON(w, &ServiceProviderConfig{
 		Schemas:        []string{schemaServiceProviderConfig},
 		Patch:          SupportedFeature{Supported: false},
 		Bulk:           BulkFeature{Supported: false, MaxOperations: 0, MaxPayloadSize: 0},

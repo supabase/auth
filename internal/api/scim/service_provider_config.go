@@ -1,6 +1,6 @@
 package scim
 
-type ServiceProviderConfiguration struct {
+type ServiceProviderConfig struct {
 	Schemas               []string               `json:"schemas"`
 	DocumentationURI      string                 `json:"documentationUri,omitempty"`
 	Patch                 SupportedFeature       `json:"patch"`
