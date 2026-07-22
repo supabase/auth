@@ -27,8 +27,15 @@ func TestServer(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			require.NoError(t, tc.handler(w, r))
-			require.Equal(t, w.Code, http.StatusNotImplemented)
+			require.Equal(t, w.Code, http.StatusOK)
 			require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
+
+			list, err := FromJSON[*ListResponse[any]](w.Body)
+			require.NoError(t, err)
+
+			assert.Equal(t, []string{"urn:ietf:params:scim:api:messages:2.0:ListResponse"}, list.Schemas)
+			assert.Equal(t, 0, list.TotalResults)
+			assert.Empty(t, list.Resources)
 		})
 	}
 
@@ -45,5 +52,12 @@ func TestServer(t *testing.T) {
 
 		assert.Equal(t, []string{"urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"}, cfg.Schemas)
 		assert.Equal(t, "https://supabase.com/docs/guides/auth/enterprise-sso/scim", cfg.DocumentationURI)
+		assert.False(t, cfg.Patch.Supported)
+		assert.False(t, cfg.Bulk.Supported)
+		assert.False(t, cfg.Filter.Supported)
+		assert.False(t, cfg.ChangePassword.Supported)
+		assert.False(t, cfg.Sort.Supported)
+		assert.False(t, cfg.ETag.Supported)
+		assert.NotEmpty(t, cfg.AuthenticationSchemes)
 	})
 }

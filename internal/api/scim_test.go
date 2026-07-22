@@ -58,7 +58,7 @@ func TestSCIM(t *testing.T) {
 			w := httptest.NewRecorder()
 			api.handler.ServeHTTP(w, r)
 
-			require.Equal(t, w.Code, http.StatusNotImplemented)
+			require.Equal(t, w.Code, http.StatusOK)
 		})
 	}
 }
