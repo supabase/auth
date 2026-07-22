@@ -2,6 +2,8 @@ package scim
 
 import (
 	"net/http"
+
+	"github.com/supabase/auth/internal/api/shared"
 )
 
 const mediaType = "application/scim+json"
@@ -16,9 +18,7 @@ func NewServer() *Server {
 }
 
 func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request) error {
-	w.Header().Set("Content-Type", mediaType)
-	w.WriteHeader(http.StatusOK)
-	return ToJSON(w, &ServiceProviderConfig{
+	return shared.SendJSONAs(w, http.StatusOK, mediaType, &ServiceProviderConfig{
 		Schemas:        []string{schemaServiceProviderConfig},
 		Patch:          SupportedFeature{Supported: false},
 		Bulk:           BulkFeature{Supported: false, MaxOperations: 0, MaxPayloadSize: 0},
@@ -39,13 +39,9 @@ func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request)
 }
 
 func (srv *Server) ResourceTypes(w http.ResponseWriter, r *http.Request) error {
-	w.Header().Set("Content-Type", mediaType)
-	w.WriteHeader(http.StatusOK)
-	return ToJSON(w, NewListResponse([]any{}))
+	return shared.SendJSONAs(w, http.StatusOK, mediaType, NewListResponse([]any{}))
 }
 
 func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
-	w.Header().Set("Content-Type", mediaType)
-	w.WriteHeader(http.StatusOK)
-	return ToJSON(w, NewListResponse([]any{}))
+	return shared.SendJSONAs(w, http.StatusOK, mediaType, NewListResponse([]any{}))
 }

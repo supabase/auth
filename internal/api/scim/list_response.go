@@ -11,6 +11,9 @@ type ListResponse[T any] struct {
 }
 
 func NewListResponse[T any](resources []T) *ListResponse[T] {
+	if resources == nil {
+		resources = []T{}
+	}
 	return &ListResponse[T]{
 		Schemas:      []string{schemaListResponse},
 		TotalResults: len(resources),
