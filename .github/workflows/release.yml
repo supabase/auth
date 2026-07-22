@@ -77,9 +77,16 @@ jobs:
             # Use git describe tags to identify the number of commits the branch
             # is ahead of the most recent non-release-candidate tag, which is
             # part of the rc.<commits> value.
-            GIT_DESC=$(git describe --tags --exclude 'rc*')
-            COMMIT_COUNT="${GIT_DESC##*-}"
-            RELEASE_VERSION="$MAIN_RELEASE_VERSION-rc.$COMMIT_COUNT"
+            GIT_DESC="$(git describe --tags --exclude 'rc*')"
+            GIT_DESC_WITHOUT_HASH="${GIT_DESC%-g*}"
+            COMMIT_COUNT="${GIT_DESC_WITHOUT_HASH##*-}"
+
+            if [[ ! "$COMMIT_COUNT" =~ ^[0-9]+$ ]]; then
+              echo "Unexpected git describe output: $GIT_DESC" >&2
+              exit 1
+            fi
+
+            RELEASE_VERSION="${MAIN_RELEASE_VERSION}-rc.${COMMIT_COUNT}"
 
             # release-please only ignores releases that have a form like [A-Z0-9]<version>, so prefixing with rc<version>
             RELEASE_NAME="rc$RELEASE_VERSION"
