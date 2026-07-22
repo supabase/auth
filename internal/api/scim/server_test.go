@@ -1,6 +1,7 @@
 package scim
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,8 +31,8 @@ func TestServer(t *testing.T) {
 			require.Equal(t, w.Code, http.StatusOK)
 			require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
 
-			list, err := FromJSON[*ListResponse[any]](w.Body)
-			require.NoError(t, err)
+			var list ListResponse[any]
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&list))
 
 			assert.Equal(t, []string{"urn:ietf:params:scim:api:messages:2.0:ListResponse"}, list.Schemas)
 			assert.Equal(t, 0, list.TotalResults)
@@ -47,8 +48,8 @@ func TestServer(t *testing.T) {
 		require.Equal(t, w.Code, http.StatusOK)
 		require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
 
-		cfg, err := FromJSON[*ServiceProviderConfig](w.Body)
-		require.NoError(t, err)
+		var cfg ServiceProviderConfig
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&cfg))
 
 		assert.Equal(t, []string{"urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"}, cfg.Schemas)
 		assert.Empty(t, cfg.DocumentationURI)
