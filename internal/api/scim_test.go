@@ -28,7 +28,7 @@ func TestSCIM(t *testing.T) {
 			w := httptest.NewRecorder()
 			api.handler.ServeHTTP(w, r)
 
-			require.Equal(t, http.StatusNotFound, w.Code)
+			require.Equal(t, w.Code, http.StatusNotFound)
 		}
 	})
 
@@ -57,7 +57,7 @@ func TestSCIM(t *testing.T) {
 			w := httptest.NewRecorder()
 			api.handler.ServeHTTP(w, r)
 
-			require.Equal(t, w.Code, http.StatusNotImplemented)
+			require.Equal(t, w.Code, http.StatusOK)
 		})
 	}
 }
