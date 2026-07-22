@@ -1,46 +1,60 @@
 package scim
 
 import (
-	"context"
 	"net/http"
+	"strings"
 
-	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/scim/core"
+	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/conf"
 )
 
-const mediaType = "application/scim+json"
+const BasePath = "/scim/v2"
 
 type Server struct {
-	config *conf.GlobalConfiguration
+	config *core.ServiceProviderConfig
 }
 
 func NewServer(config *conf.GlobalConfiguration) *Server {
 	return &Server{
-		config: config,
+		config: core.NewServiceProviderConfig(
+			strings.TrimRight(config.API.ExternalURL, "/")+BasePath,
+			[]core.AuthenticationScheme{core.OAuthBearerToken().AsPrimary()},
+		),
 	}
-}
-
-func (srv *Server) Middleware(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	if !srv.config.Experimental.ScimEnabled {
-		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeFeatureDisabled, "SCIM server is disabled")
-	}
-	return r.Context(), nil
 }
 
 func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request) error {
-	return srv.notImplemented(w, r)
+	return protocol.Send(w, http.StatusOK, srv.config)
 }
 
 func (srv *Server) ResourceTypes(w http.ResponseWriter, r *http.Request) error {
-	return srv.notImplemented(w, r)
+	if hasFilter(r) {
+		return filterForbidden()
+	}
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse([]any{}))
 }
 
 func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
-	return srv.notImplemented(w, r)
+	if hasFilter(r) {
+		return filterForbidden()
+	}
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse([]any{}))
 }
 
-func (srv *Server) notImplemented(w http.ResponseWriter, r *http.Request) error {
-	w.Header().Set("Content-Type", mediaType)
-	w.WriteHeader(http.StatusNotImplemented)
-	return nil
+func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
+	return protocol.NewError(http.StatusNotFound, "", "Endpoint or resource does not exist")
+}
+
+func (srv *Server) MethodNotAllowed(w http.ResponseWriter, r *http.Request) error {
+	w.Header().Set("Allow", http.MethodGet)
+	return protocol.NewError(http.StatusMethodNotAllowed, "", "The request method is not supported by this endpoint")
+}
+
+func hasFilter(r *http.Request) bool {
+	return r.URL.Query().Get("filter") != ""
+}
+
+func filterForbidden() error {
+	return protocol.NewError(http.StatusForbidden, "", "Filtering is not supported on this endpoint")
 }

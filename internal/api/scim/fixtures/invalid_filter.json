@@ -1,0 +1,8 @@
+{
+  "schemas": [
+    "urn:ietf:params:scim:api:messages:2.0:Error"
+  ],
+  "scimType": "invalidFilter",
+  "detail": "The specified filter syntax was invalid",
+  "status": "400"
+}

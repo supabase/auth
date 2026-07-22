@@ -1,0 +1,4 @@
+{
+  "resourceType": "ServiceProviderConfig",
+  "location": "http://localhost:9999/scim/v2/ServiceProviderConfig"
+}

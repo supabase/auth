@@ -412,6 +412,14 @@ func (a *API) requireCustomOAuthEnabled(w http.ResponseWriter, req *http.Request
 	return ctx, nil
 }
 
+func (a *API) requireScimEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.Experimental.ScimEnabled {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeFeatureDisabled, "SCIM server is disabled")
+	}
+	return ctx, nil
+}
+
 func (a *API) requirePasskeyEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.Passkey.Enabled {
