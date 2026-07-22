@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +19,6 @@ func TestServer(t *testing.T) {
 		path    string
 		handler func(http.ResponseWriter, *http.Request) error
 	}{
-		{"ServiceProviderConfig", srv.ServiceProviderConfig},
 		{"ResourceTypes", srv.ResourceTypes},
 		{"Schemas", srv.Schemas},
 	} {
@@ -31,4 +31,19 @@ func TestServer(t *testing.T) {
 			require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
 		})
 	}
+
+	t.Run("/scim/v2/ServiceProviderConfig", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/scim/v2/ServiceProviderConfig", nil)
+		w := httptest.NewRecorder()
+
+		require.NoError(t, srv.ServiceProviderConfig(w, r))
+		require.Equal(t, w.Code, http.StatusOK)
+		require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
+
+		cfg, err := FromJSON[*ServiceProviderConfiguration](w.Body)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"}, cfg.Schemas)
+		assert.Equal(t, "https://supabase.com/docs/guides/auth/enterprise-sso/scim", cfg.DocumentationURI)
+	})
 }
