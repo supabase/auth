@@ -28,6 +28,7 @@ func TestServer(t *testing.T) {
 
 			require.NoError(t, tc.handler(w, r))
 			require.Equal(t, w.Code, http.StatusNotImplemented)
+			require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
 		})
 	}
 }
