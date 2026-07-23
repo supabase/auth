@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -673,6 +674,40 @@ func (ts *CustomOAuthAdminTestSuite) TestDeleteProvider() {
 	ts.API.handler.ServeHTTP(w, req)
 
 	require.Equal(ts.T(), http.StatusNotFound, w.Code)
+}
+
+// TestLoadCustomProviderRedirectURLFallsBackToAPIExternalURL verifies that,
+// absent a CustomOAuth.ExternalURL override, the redirect URI is built from
+// config.API.ExternalURL exactly as before this feature existed.
+func (ts *CustomOAuthAdminTestSuite) TestLoadCustomProviderRedirectURLFallsBackToAPIExternalURL() {
+	ts.Config.CustomOAuth.ExternalURL = ""
+
+	w := ts.createProvider(ts.createTestOAuth2Payload("redirect-fallback"), http.StatusCreated)
+	var created models.CustomOAuthProvider
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&created))
+
+	_, pConfig, err := ts.API.loadCustomProvider(context.Background(), ts.API.db, created.Identifier, "")
+	require.NoError(ts.T(), err)
+
+	expected := strings.TrimRight(ts.Config.API.ExternalURL, "/") + "/callback"
+	require.Equal(ts.T(), expected, pConfig.RedirectURI)
+}
+
+// TestLoadCustomProviderRedirectURLUsesOverride verifies that, when
+// CustomOAuth.ExternalURL is set, it takes precedence over
+// config.API.ExternalURL when building the redirect URI.
+func (ts *CustomOAuthAdminTestSuite) TestLoadCustomProviderRedirectURLUsesOverride() {
+	ts.Config.CustomOAuth.ExternalURL = "https://custom.example.com/"
+	defer func() { ts.Config.CustomOAuth.ExternalURL = "" }()
+
+	w := ts.createProvider(ts.createTestOAuth2Payload("redirect-override"), http.StatusCreated)
+	var created models.CustomOAuthProvider
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&created))
+
+	_, pConfig, err := ts.API.loadCustomProvider(context.Background(), ts.API.db, created.Identifier, "")
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), "https://custom.example.com/callback", pConfig.RedirectURI)
 }
 
 // Helper methods

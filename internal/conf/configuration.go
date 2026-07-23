@@ -85,8 +85,19 @@ type AnonymousProviderConfiguration struct {
 
 // CustomOAuthConfiguration holds configuration for custom OAuth and OIDC providers
 type CustomOAuthConfiguration struct {
-	Enabled      bool `json:"enabled" split_words:"true" default:"true"`
-	MaxProviders int  `json:"max_providers" split_words:"true" default:"0"`
+	Enabled      bool   `json:"enabled" split_words:"true" default:"true"`
+	MaxProviders int    `json:"max_providers" split_words:"true" default:"0"`
+	ExternalURL  string `json:"external_url,omitempty" split_words:"true"`
+}
+
+func (c *CustomOAuthConfiguration) Validate() error {
+	if c.ExternalURL != "" {
+		if _, err := url.ParseRequestURI(c.ExternalURL); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type EmailProviderConfiguration struct {
@@ -1294,6 +1305,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Sessions,
 		&c.Hook,
 		&c.JWT.Keys,
+		&c.CustomOAuth,
 	}
 
 	for _, validatable := range validatables {
