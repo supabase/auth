@@ -690,7 +690,11 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	config := a.config
 	var pConfig conf.OAuthProviderConfiguration
 
-	redirectURL := strings.TrimRight(config.API.ExternalURL, "/") + "/callback"
+	externalURL := config.API.ExternalURL
+	if config.CustomOAuth.ExternalURL != "" {
+		externalURL = config.CustomOAuth.ExternalURL
+	}
+	redirectURL := strings.TrimRight(externalURL, "/") + "/callback"
 
 	// Parse scopes (space-separated per RFC 6749)
 	var scopeList []string
