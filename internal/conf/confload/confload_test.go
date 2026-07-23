@@ -266,6 +266,34 @@ func TestExperimentalCursorPaginationEnabled(t *testing.T) {
 	}
 }
 
+func TestExperimentalScimEndpoints(t *testing.T) {
+	baseEnv := func() {
+		os.Clearenv()
+		os.Setenv("GOTRUE_SITE_URL", "http://localhost:8080")
+		os.Setenv("GOTRUE_DB_DRIVER", "postgres")
+		os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
+		os.Setenv("GOTRUE_JWT_SECRET", "secret")
+		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
+	}
+
+	{
+		baseEnv()
+		cfg, err := LoadGlobalFromEnv()
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, false, cfg.Experimental.ScimEnabled)
+	}
+
+	{
+		baseEnv()
+		os.Setenv("GOTRUE_EXPERIMENTAL_SCIM_ENABLED", "true")
+		cfg, err := LoadGlobalFromEnv()
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, true, cfg.Experimental.ScimEnabled)
+	}
+}
+
 func TestLoading(t *testing.T) {
 	os.Clearenv()
 
