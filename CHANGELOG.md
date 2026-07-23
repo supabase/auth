@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.194.0](https://github.com/supabase/auth/compare/v2.193.1...v2.194.0) (2026-07-23)
+
+
+### Features
+
+* add cursor-based pagination for admin users list ([#2633](https://github.com/supabase/auth/issues/2633)) ([76e2aac](https://github.com/supabase/auth/commit/76e2aace4899f71bfc6038c8a00c913936a4561e))
+* add optional override for custom provider redirect URIs ([#2641](https://github.com/supabase/auth/issues/2641)) ([67c55c0](https://github.com/supabase/auth/commit/67c55c00789d69505881e3143dc248a2a1d2ab55))
+
+
+### Bug Fixes
+
+* consolidate error logs into single log entry ([#2635](https://github.com/supabase/auth/issues/2635)) ([47b3d94](https://github.com/supabase/auth/commit/47b3d9429f22412a01c0e7a02aaa76156a9ea7e7))
+* upgrade to x/text@v0.39.0 GO-2026-5970 ([#2636](https://github.com/supabase/auth/issues/2636)) ([66421c6](https://github.com/supabase/auth/commit/66421c6f77bc045fb83dab1fc38d97158418f5aa))
+
 ## [2.193.1](https://github.com/supabase/auth/compare/v2.193.0...v2.193.1) (2026-07-16)
 
 
