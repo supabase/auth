@@ -1,9 +1,11 @@
 package models
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"reflect"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 type SSOProvider struct {
@@ -22,6 +25,9 @@ type SSOProvider struct {
 	Disabled     *bool        `db:"disabled" json:"disabled"`
 	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
 	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
+
+	SCIMEnabled         *bool   `db:"scim_enabled" json:"scim_enabled,omitempty"`
+	SCIMBearerTokenHash *string `db:"scim_bearer_token_hash" json:"-"`
 
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
@@ -37,6 +43,31 @@ func (p SSOProvider) TableName() string {
 
 func (p SSOProvider) Type() string {
 	return "saml"
+}
+
+func (p SSOProvider) IsSCIMEnabled() bool {
+	return p.SCIMEnabled != nil && *p.SCIMEnabled
+}
+
+func (p SSOProvider) SCIMProviderType() string {
+	return "sso:" + p.ID.String()
+}
+
+func scimTokenHash(token string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(token)))
+}
+
+func (p *SSOProvider) SetSCIMToken(token string) {
+	hash := scimTokenHash(token)
+	p.SCIMBearerTokenHash = &hash
+	enabled := true
+	p.SCIMEnabled = &enabled
+}
+
+func (p *SSOProvider) ClearSCIMToken() {
+	p.SCIMBearerTokenHash = nil
+	enabled := false
+	p.SCIMEnabled = &enabled
 }
 
 type SAMLAttribute struct {
@@ -266,12 +297,24 @@ func FindAllSSOProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	return providers, nil
 }
 
+func FindSSOProviderBySCIMToken(tx *storage.Connection, token string) (*SSOProvider, error) {
+	hash := scimTokenHash(token)
+
+	var provider SSOProvider
+	if err := tx.Q().Where("scim_enabled = ? AND scim_bearer_token_hash = ?", true, hash).First(&provider); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SSOProviderNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding SSO provider by SCIM token")
+	}
+	return &provider, nil
+}
+
 const (
 	resourceIDFilter       = "resource_id"
 	resourceIDPrefixFilter = "resource_id_prefix"
 )
 
-// FindAllSSOProvidersByFilter finds SSO Providers with the matching filter.
 func FindAllSSOProvidersByFilter(
 	tx *storage.Connection,
 	queryValues url.Values,
@@ -282,7 +325,7 @@ func FindAllSSOProvidersByFilter(
 	if v := queryValues.Get(resourceIDFilter); v != "" {
 		q = q.Where("resource_id = ?", v)
 	} else if v := queryValues.Get(resourceIDPrefixFilter); v != "" {
-		q = q.Where("resource_id LIKE ?", v+"%")
+		q = q.Where("resource_id LIKE ? ESCAPE '\\'", utilities.EscapeLikePattern(v)+"%")
 	}
 	if err := q.All(&ssoProviders); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {

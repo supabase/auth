@@ -72,6 +72,8 @@ func TruncateAll(conn *storage.Connection) error {
 			(&pop.Model{Value: CustomOAuthProvider{}}).TableName(),
 			(&pop.Model{Value: WebAuthnCredential{}}).TableName(),
 			(&pop.Model{Value: WebAuthnChallenge{}}).TableName(),
+			(&pop.Model{Value: SCIMGroup{}}).TableName(),
+			(&pop.Model{Value: SCIMGroupMember{}}).TableName(),
 		}
 
 		for _, tableName := range tables {
