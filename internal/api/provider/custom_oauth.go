@@ -36,8 +36,9 @@ func NewCustomOAuthProvider(
 		RedirectURL:  redirectURL,
 		Scopes:       scopes,
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  authorizationURL,
-			TokenURL: tokenURL,
+			AuthURL:   authorizationURL,
+			TokenURL:  tokenURL,
+			AuthStyle: oauth2.AuthStyleInHeader,
 		},
 	}
 
@@ -66,7 +67,7 @@ func (p *CustomOAuthProvider) AuthCodeURL(state string, opts ...oauth2.AuthCodeO
 
 // GetOAuthToken exchanges the authorization code for an access token
 func (p *CustomOAuthProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
-	return p.config.Exchange(ctx, code, opts...)
+	return exchangeAuthorizationCode(ctx, p.config, code, opts...)
 }
 
 // GetUserData fetches user data from the provider's userinfo endpoint
@@ -152,6 +153,7 @@ func NewCustomOIDCProvider(
 
 	// Get endpoints from the OIDC provider
 	endpoint := oidcProvider.Endpoint()
+	endpoint.AuthStyle = oauth2.AuthStyleInHeader
 	userinfoEndpoint := oidcProvider.UserInfoEndpoint()
 
 	config := &oauth2.Config{
@@ -188,7 +190,7 @@ func (p *CustomOIDCProvider) AuthCodeURL(state string, opts ...oauth2.AuthCodeOp
 
 // GetOAuthToken exchanges the authorization code for an access token
 func (p *CustomOIDCProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
-	return p.config.Exchange(ctx, code, opts...)
+	return exchangeAuthorizationCode(ctx, p.config, code, opts...)
 }
 
 // GetUserData fetches user data from the provider's userinfo endpoint or ID token
