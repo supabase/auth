@@ -873,6 +873,21 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
+		if grantParams.Provider != "" {
+			if terr = tx.Load(user, "Identities"); terr != nil {
+				return apierrors.NewInternalServerError("Error loading user identities").WithInternalError(terr)
+			}
+			for i := range user.Identities {
+				if user.Identities[i].Provider == grantParams.Provider {
+					user.Identities[i].LastSignInAt = &now
+					if terr = tx.UpdateOnly(&user.Identities[i], "last_sign_in_at"); terr != nil {
+						return apierrors.NewInternalServerError("Error updating identity last_sign_in_at").WithInternalError(terr)
+					}
+					break
+				}
+			}
+		}
+
 		if config.Security.RefreshTokenAlgorithmVersion == 2 {
 			session, terr := models.NewSession(user.ID, grantParams.FactorID)
 			if terr != nil {

@@ -51,6 +51,7 @@ type GrantParams struct {
 
 	UserAgent string
 	IP        string
+	Provider  string
 }
 
 func (g *GrantParams) FillGrantParams(r *http.Request) {
