@@ -144,7 +144,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 			return nil, terr
 		}
 		if !userData.Metadata.EmailVerified {
-			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
+			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow, ""); terr != nil {
 				return nil, terr
 			}
 			return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))
