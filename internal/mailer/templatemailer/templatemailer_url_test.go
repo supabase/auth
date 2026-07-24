@@ -36,7 +36,7 @@ func TestGetPath(t *testing.T) {
 			SiteURL:  "https://test.example.com/removedpath",
 			Path:     "/templates/confirm.html",
 			Params:   nil,
-			Expected: "https://test.example.com/templates/confirm.html",
+			Expected: "https://test.example.com/removedpath/templates/confirm.html",
 		},
 		{
 			SiteURL:  "https://test.example.com/",
@@ -56,6 +56,12 @@ func TestGetPath(t *testing.T) {
 			Params:   &params,
 			Expected: "https://test.example.com?token=token&type=signup&redirect_to=https://example.com",
 		},
+		{
+			SiteURL:  "http://127.0.0.1:54321/auth/v1",
+			Path:     "/verify",
+			Params:   nil,
+			Expected: "http://127.0.0.1:54321/auth/v1/verify",
+		},
 	}
 
 	for _, c := range cases {
@@ -65,7 +71,7 @@ func TestGetPath(t *testing.T) {
 		path, err := getPath(c.Path, c.Params)
 
 		assert.NoError(t, err)
-		assert.Equal(t, c.Expected, u.ResolveReference(path).String())
+		assert.Equal(t, c.Expected, resolveWithBasePath(u, path).String())
 	}
 }
 
