@@ -1141,6 +1141,62 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 	}
 }
 
+func (ts *VerifyTestSuite) TestSecureEmailChangeNotBypassedByAutoconfirm() {
+	ts.Config.Mailer.SecureEmailChangeEnabled = true
+	ts.Config.Mailer.Autoconfirm = true
+	defer func() { ts.Config.Mailer.Autoconfirm = false }()
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	u.EmailChange = "new@example.com"
+	currentEmailChangeToken := crypto.GenerateTokenHash(string(u.Email), "123456")
+	newEmailChangeToken := crypto.GenerateTokenHash(u.EmailChange, "654321")
+	u.EmailChangeTokenCurrent = currentEmailChangeToken
+	u.EmailChangeTokenNew = newEmailChangeToken
+	u.EmailChangeConfirmStatus = zeroConfirmation
+	currentTime := time.Now()
+	u.EmailChangeSentAt = &currentTime
+	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, string(u.Email), currentEmailChangeToken, models.EmailChangeTokenCurrent))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.EmailChange, newEmailChangeToken, models.EmailChangeTokenNew))
+
+	// Step 1: verify new email — should NOT commit the change yet
+	var buf bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buf).Encode(map[string]interface{}{
+		"type":       mail.EmailChangeVerification,
+		"token_hash": newEmailChangeToken,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buf)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// Email must still be the old address — change should not have committed yet
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err, "user should still have old email after first verification")
+	assert.Equal(ts.T(), singleConfirmation, u.EmailChangeConfirmStatus, "status should be singleConfirmation after first verify")
+
+	// Step 2: verify old email — should now commit the change
+	buf.Reset()
+	require.NoError(ts.T(), json.NewEncoder(&buf).Encode(map[string]interface{}{
+		"type":       mail.EmailChangeVerification,
+		"token_hash": currentEmailChangeToken,
+	}))
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buf)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// Email must now be the new address
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "new@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err, "user should have new email after both verifications")
+	assert.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
+}
+
 func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 	escapedMessage := url.QueryEscape(singleConfirmationAccepted)
 	cases := []struct {
