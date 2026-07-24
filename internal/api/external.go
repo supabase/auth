@@ -28,7 +28,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	http.Redirect(w, r, rurl, http.StatusFound) // #nosec G710
+	a.redirect(w, r, rurl, http.StatusFound) // #nosec G710
 	return nil
 }
 
@@ -134,7 +134,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	redirectErrors(a.internalExternalProviderCallback, w, r, u)
+	a.redirectErrors(a.internalExternalProviderCallback, w, r, u)
 	return nil
 }
 
@@ -285,7 +285,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	}
 
-	http.Redirect(w, r, rurl, http.StatusFound) // #nosec G710
+	a.redirect(w, r, rurl, http.StatusFound) // #nosec G710
 	return nil
 }
 
@@ -801,7 +801,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	return p, pConfig, nil
 }
 
-func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
+func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
 	ctx := r.Context()
 	log := observability.GetLogEntry(r).Entry
 	errorID := utilities.GetRequestID(ctx)
@@ -824,7 +824,11 @@ func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, 
 		// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
 		hq.Set("sb", "")
 		u.Fragment = hq.Encode()
-		http.Redirect(w, r, u.String(), http.StatusFound) // #nosec G710
+		res := u.String()
+		if u.Scheme != "" && strings.HasPrefix(res, u.Scheme+":") && !strings.HasPrefix(res, u.Scheme+"://") {
+			res = u.Scheme + "://" + strings.TrimPrefix(res, u.Scheme+":")
+		}
+		a.redirect(w, r, res, http.StatusFound)
 	}
 }
 

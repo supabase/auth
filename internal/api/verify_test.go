@@ -676,7 +676,7 @@ func (ts *VerifyTestSuite) TestVerifySignupWithRedirectURLContainedPath() {
 			siteURL:             "http://localhost:3000",
 			uriAllowList:        []string{"com.myapp://**"},
 			requestredirectURL:  "com.myapp://",
-			expectedredirectURL: "com.myapp:",
+			expectedredirectURL: "com.myapp://",
 		},
 	}
 
@@ -703,8 +703,8 @@ func (ts *VerifyTestSuite) TestVerifySignupWithRedirectURLContainedPath() {
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
 			assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
-			rURL, _ := w.Result().Location()
-			assert.Contains(ts.T(), rURL.String(), tC.expectedredirectURL) // redirected url starts with per test value
+			loc := w.Header().Get("Location")
+			assert.Contains(ts.T(), loc, tC.expectedredirectURL) // redirected url starts with per test value
 
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
@@ -1177,6 +1177,20 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 			rurl:     "https://example.com/?first=another",
 			flowType: models.ImplicitFlow,
 			expected: fmt.Sprintf("https://example.com/?first=another#message=%s&sb=", escapedMessage),
+		},
+		{
+			desc:     "(Implicit): custom scheme preserved",
+			message:  singleConfirmationAccepted,
+			rurl:     "com.myapp://",
+			flowType: models.ImplicitFlow,
+			expected: fmt.Sprintf("com.myapp://#message=%s&sb=", escapedMessage),
+		},
+		{
+			desc:     "(PKCE): custom scheme preserved",
+			message:  singleConfirmationAccepted,
+			rurl:     "com.myapp://",
+			flowType: models.PKCEFlow,
+			expected: fmt.Sprintf("com.myapp://?message=%s#message=%s&sb=", escapedMessage, escapedMessage),
 		},
 	}
 	for _, c := range cases {
