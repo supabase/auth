@@ -111,6 +111,44 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 	require.Nil(ts.T(), u)
 }
 
+func (ts *IdentityTestSuite) TestLinkIdentityToUser_PhoneOnlyNoEmail() {
+	// Confirmed phone-only user linking an email-optional OIDC identity with no email.
+	u, err := models.NewUser("15551234567", "", "", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u))
+	require.NoError(ts.T(), u.ConfirmPhone(ts.API.db))
+
+	phoneIdentity, err := models.NewIdentity(u, "phone", map[string]interface{}{
+		"sub":   u.ID.String(),
+		"phone": u.GetPhone(),
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(phoneIdentity))
+
+	ctx := withTargetUser(context.Background(), u)
+	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
+	userData := &provider.UserProvidedData{
+		Metadata: &provider.Claims{
+			Subject:       "oidc-subject-no-email",
+			EmailVerified: false,
+		},
+	}
+
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, userData, "custom:line")
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), u)
+	require.Empty(ts.T(), u.GetEmail())
+	require.Equal(ts.T(), "15551234567", u.GetPhone())
+
+	require.NoError(ts.T(), ts.API.db.Load(u, "Identities"))
+	require.Len(ts.T(), u.Identities, 2)
+	providers := make([]string, 0, len(u.Identities))
+	for _, identity := range u.Identities {
+		providers = append(providers, identity.Provider)
+	}
+	require.ElementsMatch(ts.T(), []string{"phone", "custom:line"}, providers)
+}
+
 func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
 	ts.Config.Security.ManualLinkingEnabled = true
 	userWithOneIdentity, err := models.FindUserByEmailAndAudience(ts.API.db, "one@example.com", ts.Config.JWT.Aud)

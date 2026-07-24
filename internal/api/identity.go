@@ -143,14 +143,19 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 			}
 			return nil, terr
 		}
-		if !userData.Metadata.EmailVerified {
-			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
+		// Only confirm/verify when linking claimed an email. Phone-only users
+		// linking an email-optional identity with no email must not enter the
+		// confirmation path (see https://github.com/supabase/auth/issues/2640).
+		if targetUser.GetEmail() != "" {
+			if !userData.Metadata.EmailVerified {
+				if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
+					return nil, terr
+				}
+				return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))
+			}
+			if terr := targetUser.Confirm(tx); terr != nil {
 				return nil, terr
 			}
-			return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))
-		}
-		if terr := targetUser.Confirm(tx); terr != nil {
-			return nil, terr
 		}
 
 		if targetUser.IsAnonymous {
