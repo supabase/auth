@@ -225,6 +225,11 @@ func TestIsSupportedScope(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "offline_access scope is supported",
+			scope:    ScopeOfflineAccess,
+			expected: true,
+		},
+		{
 			name:     "unsupported scope address",
 			scope:    "address",
 			expected: false,
