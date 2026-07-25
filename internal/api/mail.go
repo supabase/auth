@@ -832,7 +832,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			Token:           otp,
 			EmailActionType: params.emailActionType,
 			RedirectTo:      referrerURL,
-			SiteURL:         externalURL.String(),
+			SiteURL:         config.SiteURL,
 			TokenHash:       params.tokenHashWithPrefix,
 		}
 		if params.emailActionType == mail.EmailChangeVerification {
