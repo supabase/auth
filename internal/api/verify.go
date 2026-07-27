@@ -46,6 +46,23 @@ type VerifyParams struct {
 	Email      string `json:"email"`
 	Phone      string `json:"phone"`
 	RedirectTo string `json:"redirect_to"`
+
+	// legacyTokenHash is only set when TokenHash was recomputed from a raw
+	// Token in Validate (never for a passthrough token_hash/magic-link
+	// value) and a Security.TokenHashSalt is configured. It holds the same
+	// hash computed under the legacy unsalted formula, so verification can
+	// fall back to it for tokens issued before the salt was configured.
+	legacyTokenHash string
+}
+
+// tokenHashCandidates returns every token hash that should be accepted for
+// this request: just TokenHash, or TokenHash plus the legacy fallback when
+// one was computed.
+func (p *VerifyParams) tokenHashCandidates() []string {
+	if p.legacyTokenHash == "" {
+		return []string{p.TokenHash}
+	}
+	return []string{p.TokenHash, p.legacyTokenHash}
 }
 
 func (p *VerifyParams) Validate(r *http.Request, a *API) error {
@@ -65,18 +82,25 @@ func (p *VerifyParams) Validate(r *http.Request, a *API) error {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Verify requires either a token or a token hash")
 		}
 		if p.Token != "" {
+			salt := a.config.Security.TokenHashSalt
 			if isPhoneOtpVerification(p) {
 				p.Phone, err = validatePhone(p.Phone)
 				if err != nil {
 					return err
 				}
-				p.TokenHash = crypto.GenerateTokenHash(p.Phone, p.Token)
+				p.TokenHash = crypto.GenerateTokenHash(salt, p.Phone, p.Token)
+				if salt != "" {
+					p.legacyTokenHash = crypto.GenerateTokenHash("", p.Phone, p.Token)
+				}
 			} else if isEmailOtpVerification(p) {
 				p.Email, err = a.validateEmail(p.Email)
 				if err != nil {
 					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeValidationFailed, "Invalid email format").WithInternalError(err)
 				}
-				p.TokenHash = crypto.GenerateTokenHash(p.Email, p.Token)
+				p.TokenHash = crypto.GenerateTokenHash(salt, p.Email, p.Token)
+				if salt != "" {
+					p.legacyTokenHash = crypto.GenerateTokenHash("", p.Email, p.Token)
+				}
 			} else {
 				return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided on verify")
 			}
@@ -549,24 +573,39 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 		user.EmailChangeConfirmStatus == zeroConfirmation &&
 		user.GetEmail() != "" {
 		err := conn.Transaction(func(tx *storage.Connection) error {
-			currentOTT, terr := models.FindOneTimeToken(tx, params.TokenHash, models.EmailChangeTokenCurrent)
+			candidates := params.tokenHashCandidates()
+
+			currentOTT, terr := models.FindOneTimeToken(tx, candidates, models.EmailChangeTokenCurrent)
 			if terr != nil && !models.IsNotFoundError(terr) {
 				return terr
 			}
 
-			newOTT, terr := models.FindOneTimeToken(tx, params.TokenHash, models.EmailChangeTokenNew)
+			newOTT, terr := models.FindOneTimeToken(tx, candidates, models.EmailChangeTokenNew)
 			if terr != nil && !models.IsNotFoundError(terr) {
 				return terr
 			}
 
 			user.EmailChangeConfirmStatus = singleConfirmation
 
-			if params.Token == user.EmailChangeTokenCurrent || params.TokenHash == user.EmailChangeTokenCurrent || (currentOTT != nil && params.TokenHash == currentOTT.TokenHash) {
+			// matchesStoredToken accepts the raw token, the primary
+			// (salted) hash, or - during a salt cut-over - the legacy
+			// unsalted hash, against a stored token field.
+			matchesStoredToken := func(stored string) bool {
+				if stored == "" {
+					return false
+				}
+				if params.Token == stored || params.TokenHash == stored {
+					return true
+				}
+				return params.legacyTokenHash != "" && params.legacyTokenHash == stored
+			}
+
+			if matchesStoredToken(user.EmailChangeTokenCurrent) || currentOTT != nil {
 				user.EmailChangeTokenCurrent = ""
 				if terr := models.ClearOneTimeTokenForUser(tx, user.ID, models.EmailChangeTokenCurrent); terr != nil {
 					return terr
 				}
-			} else if params.Token == user.EmailChangeTokenNew || params.TokenHash == user.EmailChangeTokenNew || (newOTT != nil && params.TokenHash == newOTT.TokenHash) {
+			} else if matchesStoredToken(user.EmailChangeTokenNew) || newOTT != nil {
 				user.EmailChangeTokenNew = ""
 				if terr := models.ClearOneTimeTokenForUser(tx, user.ID, models.EmailChangeTokenNew); terr != nil {
 					return terr
@@ -701,7 +740,6 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 	var user *models.User
 	var err error
-	tokenHash := params.TokenHash
 
 	switch params.Type {
 	case phoneChangeVerification:
@@ -711,7 +749,7 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 	case mail.EmailChangeVerification:
 		// Since the email change could be trigger via the implicit or PKCE flow,
 		// the query used has to also check if the token saved in the db contains the pkce_ prefix
-		user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
+		user, err = models.FindUserForEmailChange(conn, params.Email, params.tokenHashCandidates(), aud, config.Mailer.SecureEmailChangeEnabled)
 	default:
 		user, err = models.FindUserByEmailAndAudience(conn, params.Email, aud)
 	}
@@ -733,22 +771,22 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 	switch params.Type {
 	case mail.EmailOTPVerification:
 		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
-		if isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
+		if otpValidWithFallback(params, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
 			isValid = true
 			params.Type = mail.SignupVerification
-		} else if isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
+		} else if otpValidWithFallback(params, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
 			isValid = true
 			params.Type = mail.MagicLinkVerification
 		} else {
 			isValid = false
 		}
 	case mail.SignupVerification, mail.InviteVerification:
-		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
+		isValid = otpValidWithFallback(params, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
 	case mail.RecoveryVerification, mail.MagicLinkVerification:
-		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
+		isValid = otpValidWithFallback(params, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
 	case mail.EmailChangeVerification:
-		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
-			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
+		isValid = otpValidWithFallback(params, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
+			otpValidWithFallback(params, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification, smsVerification:
 		if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
 			if params.Token == testOTP {
@@ -771,7 +809,7 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 			}
 			return user, nil
 		}
-		isValid = isOtpValid(tokenHash, expectedToken, sentAt, config.Sms.OtpExp)
+		isValid = otpValidWithFallback(params, expectedToken, sentAt, config.Sms.OtpExp)
 	}
 
 	if !isValid {
@@ -786,6 +824,21 @@ func isOtpValid(actual, expected string, sentAt *time.Time, otpExp uint) bool {
 		return false
 	}
 	return !isOtpExpired(sentAt, otpExp) && ((actual == expected) || ("pkce_"+actual == expected))
+}
+
+// otpValidWithFallback checks the primary (salted) token hash against
+// expected and, only while a salt is configured, also tries the legacy
+// unsalted hash as a fallback, so tokens issued before Security.TokenHashSalt
+// was set keep verifying until they expire or are consumed.
+func otpValidWithFallback(params *VerifyParams, expected string, sentAt *time.Time, otpExp uint) bool {
+	if isOtpValid(params.TokenHash, expected, sentAt, otpExp) {
+		return true
+	}
+	if params.legacyTokenHash != "" && isOtpValid(params.legacyTokenHash, expected, sentAt, otpExp) {
+		logrus.WithField("type", params.Type).Info("one-time token verified using legacy (pre-salt) token hash fallback")
+		return true
+	}
+	return false
 }
 
 func isOtpExpired(sentAt *time.Time, otpExp uint) bool {

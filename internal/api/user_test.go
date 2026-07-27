@@ -586,7 +586,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
 
 	// update reauthentication token to a known token
-	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), "123456")
+	u.ReauthenticationToken = crypto.GenerateTokenHash("", u.GetEmail(), "123456")
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	// update password with reauthentication token

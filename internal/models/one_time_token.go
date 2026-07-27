@@ -152,17 +152,38 @@ func CreateOneTimeToken(tx *storage.Connection, userID uuid.UUID, relatesTo, tok
 	return nil
 }
 
-func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
+// FindOneTimeToken looks up a token by any of the provided tokenHashes
+// (accepts more than one so a caller can verify a hash generated under the
+// current formula alongside a legacy fallback hash, without needing
+// multiple round trips).
+func FindOneTimeToken(tx *storage.Connection, tokenHashes []string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
+	if len(tokenHashes) == 0 {
+		panic("at least one token hash is required")
+	}
+
 	oneTimeToken := &OneTimeToken{}
 
 	query := tx.Eager().Q()
 
+	hashPlaceholders := make([]string, len(tokenHashes))
+	hashArgs := make([]interface{}, len(tokenHashes))
+	for i, hash := range tokenHashes {
+		hashPlaceholders[i] = "?"
+		hashArgs[i] = hash
+	}
+	// Built manually (not via pop's `in (?)` auto-expand) because that
+	// expansion is based on the *total* arg count passed to Where(), which
+	// would be wrong once combined with the token_type args below.
+	tokenHashIn := "token_hash in (" + strings.Join(hashPlaceholders, ",") + ")"
+
 	switch len(tokenTypes) {
 	case 2:
-		query = query.Where("(token_type = ? or token_type = ?) and token_hash = ?", tokenTypes[0], tokenTypes[1], tokenHash) // #nosec G602
+		args := append([]interface{}{tokenTypes[0], tokenTypes[1]}, hashArgs...)
+		query = query.Where("(token_type = ? or token_type = ?) and "+tokenHashIn, args...) // #nosec G602
 
 	case 1:
-		query = query.Where("token_type = ? and token_hash = ?", tokenTypes[0], tokenHash)
+		args := append([]interface{}{tokenTypes[0]}, hashArgs...)
+		query = query.Where("token_type = ? and "+tokenHashIn, args...)
 
 	default:
 		panic("at most 2 token types are accepted")
@@ -181,7 +202,7 @@ func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...On
 
 // FindUserByConfirmationToken finds users with the matching confirmation token.
 func FindUserByConfirmationOrRecoveryToken(tx *storage.Connection, token string) (*User, error) {
-	ott, err := FindOneTimeToken(tx, token, ConfirmationToken, RecoveryToken)
+	ott, err := FindOneTimeToken(tx, []string{token}, ConfirmationToken, RecoveryToken)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +212,7 @@ func FindUserByConfirmationOrRecoveryToken(tx *storage.Connection, token string)
 
 // FindUserByConfirmationToken finds users with the matching confirmation token.
 func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, error) {
-	ott, err := FindOneTimeToken(tx, token, ConfirmationToken)
+	ott, err := FindOneTimeToken(tx, []string{token}, ConfirmationToken)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +222,7 @@ func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, e
 
 // FindUserByRecoveryToken finds a user with the matching recovery token.
 func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error) {
-	ott, err := FindOneTimeToken(tx, token, RecoveryToken)
+	ott, err := FindOneTimeToken(tx, []string{token}, RecoveryToken)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +232,7 @@ func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error
 
 // FindUserByEmailChangeToken finds a user with the matching email change token.
 func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, error) {
-	ott, err := FindOneTimeToken(tx, token, EmailChangeTokenCurrent, EmailChangeTokenNew)
+	ott, err := FindOneTimeToken(tx, []string{token}, EmailChangeTokenCurrent, EmailChangeTokenNew)
 	if err != nil {
 		return nil, err
 	}
@@ -219,20 +240,21 @@ func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, er
 	return FindUserByID(tx, ott.UserID)
 }
 
-// FindUserByEmailChangeCurrentAndAudience finds a user with the matching email change and audience.
-func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
-	ott, err := FindOneTimeToken(tx, token, EmailChangeTokenCurrent)
-	if err != nil && !IsNotFoundError(err) {
-		return nil, err
+// tokenHashesWithPKCEVariants expands each candidate hash into itself plus
+// its "pkce_"-prefixed form, so a single FindOneTimeToken call can match
+// either variant of every candidate in one query.
+func tokenHashesWithPKCEVariants(tokenHashes []string) []string {
+	variants := make([]string, 0, len(tokenHashes)*2)
+	for _, hash := range tokenHashes {
+		variants = append(variants, hash, "pkce_"+hash)
 	}
+	return variants
+}
 
-	if ott == nil {
-		ott, err = FindOneTimeToken(tx, "pkce_"+token, EmailChangeTokenCurrent)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if ott == nil {
+// FindUserByEmailChangeCurrentAndAudience finds a user with the matching email change and audience.
+func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email string, tokenHashes []string, aud string) (*User, error) {
+	ott, err := FindOneTimeToken(tx, tokenHashesWithPKCEVariants(tokenHashes), EmailChangeTokenCurrent)
+	if err != nil {
 		return nil, err
 	}
 
@@ -249,19 +271,9 @@ func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, toke
 }
 
 // FindUserByEmailChangeNewAndAudience finds a user with the matching email change and audience.
-func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
-	ott, err := FindOneTimeToken(tx, token, EmailChangeTokenNew)
-	if err != nil && !IsNotFoundError(err) {
-		return nil, err
-	}
-
-	if ott == nil {
-		ott, err = FindOneTimeToken(tx, "pkce_"+token, EmailChangeTokenNew)
-		if err != nil && !IsNotFoundError(err) {
-			return nil, err
-		}
-	}
-	if ott == nil {
+func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email string, tokenHashes []string, aud string) (*User, error) {
+	ott, err := FindOneTimeToken(tx, tokenHashesWithPKCEVariants(tokenHashes), EmailChangeTokenNew)
+	if err != nil {
 		return nil, err
 	}
 
@@ -278,13 +290,13 @@ func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, a
 }
 
 // FindUserForEmailChange finds a user requesting for an email change
-func FindUserForEmailChange(tx *storage.Connection, email, token, aud string, secureEmailChangeEnabled bool) (*User, error) {
+func FindUserForEmailChange(tx *storage.Connection, email string, tokenHashes []string, aud string, secureEmailChangeEnabled bool) (*User, error) {
 	if secureEmailChangeEnabled {
-		if user, err := FindUserByEmailChangeCurrentAndAudience(tx, email, token, aud); err == nil {
+		if user, err := FindUserByEmailChangeCurrentAndAudience(tx, email, tokenHashes, aud); err == nil {
 			return user, err
 		} else if !IsNotFoundError(err) {
 			return nil, err
 		}
 	}
-	return FindUserByEmailChangeNewAndAudience(tx, email, token, aud)
+	return FindUserByEmailChangeNewAndAudience(tx, email, tokenHashes, aud)
 }

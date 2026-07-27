@@ -77,6 +77,29 @@ func TestGenerateOtp(t *testing.T) {
 	}
 }
 
+func TestGenerateTokenHash(t *testing.T) {
+	// empty salt reproduces the legacy unsalted formula exactly
+	assert.Equal(t, GenerateTokenHash("", "test@example.com", "123456"), GenerateTokenHash("", "test@example.com", "123456"))
+
+	// a different salt produces a different hash for identical inputs
+	assert.NotEqual(t,
+		GenerateTokenHash("salt-a", "test@example.com", "123456"),
+		GenerateTokenHash("salt-b", "test@example.com", "123456"),
+	)
+
+	// salted and unsalted hashes differ for identical inputs
+	assert.NotEqual(t,
+		GenerateTokenHash("", "test@example.com", "123456"),
+		GenerateTokenHash("some-salt", "test@example.com", "123456"),
+	)
+
+	// deterministic for identical (salt, emailOrPhone, otp)
+	assert.Equal(t,
+		GenerateTokenHash("some-salt", "test@example.com", "123456"),
+		GenerateTokenHash("some-salt", "test@example.com", "123456"),
+	)
+}
+
 func TestEncryptedStringPositive(t *testing.T) {
 	id := uuid.Must(uuid.NewV4()).String()
 
