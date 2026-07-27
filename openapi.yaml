@@ -3405,7 +3405,7 @@ components:
           format: uuid
         id:
           type: string
-          format: uuid
+          description: Subject identifier issued by the provider. Only a UUID for `email` and `phone`.
         user_id:
           type: string
           format: uuid
