@@ -1489,13 +1489,11 @@ paths:
                             - user_updated_password
                             - token_revoked
                             - token_refreshed
-                            - generate_recovery_codes
                             - factor_in_progress
                             - factor_unenrolled
                             - challenge_created
                             - verification_attempted
                             - factor_deleted
-                            - recovery_codes_deleted
                             - factor_updated
                             - mfa_code_login
                         log_type:
@@ -1507,7 +1505,6 @@ paths:
                             - token
                             - user
                             - factor
-                            - recovery_codes
                     created_at:
                       type: string
                       format: date-time
