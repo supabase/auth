@@ -625,3 +625,27 @@ func (ts *UserTestSuite) TestAuthenticate() {
 		})
 	}
 }
+
+func (ts *UserTestSuite) TestLock() {
+	u := ts.createUser()
+	require.False(ts.T(), u.IsLocked())
+	require.True(ts.T(), u.IsActive())
+
+	reason := LockReasonSCIMDeprovisioned
+	require.NoError(ts.T(), u.Lock(ts.db, time.Hour, &reason))
+	require.True(ts.T(), u.IsLocked())
+	require.False(ts.T(), u.IsActive())
+	require.Equal(ts.T(), reason, *u.LockedReason)
+	require.False(ts.T(), u.IsBanned())
+
+	reloaded, err := FindUserByID(ts.db, u.ID)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), reloaded.IsLocked())
+	require.Equal(ts.T(), reason, *reloaded.LockedReason)
+
+	require.NoError(ts.T(), u.Lock(ts.db, 0, nil))
+	require.False(ts.T(), u.IsLocked())
+	require.True(ts.T(), u.IsActive())
+	require.Nil(ts.T(), u.LockedUntil)
+	require.Nil(ts.T(), u.LockedReason)
+}

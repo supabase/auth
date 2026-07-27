@@ -218,6 +218,10 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeUserBanned, "Invalid Refresh Token: User Banned")
 		}
 
+		if user.IsLocked() {
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeUserLocked, "Invalid Refresh Token: User Locked")
+		}
+
 		if session == nil {
 			if token, ok := anyToken.(*models.RefreshToken); ok {
 				// a refresh token won't have a session if it's created prior to the sessions table introduced

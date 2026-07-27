@@ -389,6 +389,10 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return 0, nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
+	if user.IsLocked() {
+		return 0, nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserLocked, "User account is locked")
+	}
+
 	hasEmails := providerType != "web3" && !(emailOptional && decision.CandidateEmail.Email == "")
 
 	if hasEmails && !user.IsConfirmed() {

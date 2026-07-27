@@ -13,11 +13,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
 )
+
+const SCIMTokenPrefix = "scim_"
+
+func generateSCIMToken() string {
+	return SCIMTokenPrefix + crypto.SecureAlphanumeric(32)
+}
 
 // loadSSOProvider looks for an idp_id and first checks it for a "resource_"
 // prefix, if present the provider is loaded by resource_id. Otherwise the
@@ -459,4 +466,84 @@ func (a *API) adminSSOProvidersDelete(w http.ResponseWriter, r *http.Request) er
 	}
 
 	return sendJSON(w, http.StatusOK, provider)
+}
+
+// adminSSOProviderGetSCIM returns the SCIM configuration for an SSO provider.
+func (a *API) adminSSOProviderGetSCIM(w http.ResponseWriter, r *http.Request) error {
+	provider := getSSOProvider(r.Context())
+
+	return sendJSON(w, http.StatusOK, map[string]interface{}{
+		"enabled":   provider.IsSCIMEnabled(),
+		"token_set": provider.SCIMBearerTokenHash != nil,
+		"base_url":  a.getSCIMBaseURL() + "/scim/v2",
+	})
+}
+
+// adminSSOProviderEnableSCIM enables SCIM for an SSO provider and generates a new token.
+func (a *API) adminSSOProviderEnableSCIM(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
+	provider := getSSOProvider(ctx)
+
+	token := generateSCIMToken()
+
+	if err := db.Transaction(func(tx *storage.Connection) error {
+		provider.SetSCIMToken(token)
+		return tx.UpdateOnly(provider, "scim_enabled", "scim_bearer_token_hash")
+	}); err != nil {
+		return err
+	}
+
+	return sendJSON(w, http.StatusOK, map[string]interface{}{
+		"enabled":  true,
+		"token":    token,
+		"base_url": a.getSCIMBaseURL() + "/scim/v2",
+	})
+}
+
+// adminSSOProviderDisableSCIM disables SCIM for an SSO provider.
+func (a *API) adminSSOProviderDisableSCIM(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
+	provider := getSSOProvider(ctx)
+	provider.ClearSCIMToken()
+
+	if err := db.Transaction(func(tx *storage.Connection) error {
+		return tx.UpdateOnly(provider, "scim_enabled", "scim_bearer_token_hash")
+	}); err != nil {
+		return err
+	}
+
+	return sendJSON(w, http.StatusOK, map[string]interface{}{
+		"enabled": false,
+	})
+}
+
+// adminSSOProviderRotateSCIMToken rotates the SCIM token for an SSO provider.
+func (a *API) adminSSOProviderRotateSCIMToken(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
+	provider := getSSOProvider(ctx)
+
+	if !provider.IsSCIMEnabled() {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeSCIMDisabled, "SCIM is not enabled for this provider")
+	}
+
+	token := generateSCIMToken()
+
+	if err := db.Transaction(func(tx *storage.Connection) error {
+		provider.SetSCIMToken(token)
+		return tx.UpdateOnly(provider, "scim_bearer_token_hash")
+	}); err != nil {
+		return err
+	}
+
+	return sendJSON(w, http.StatusOK, map[string]interface{}{
+		"enabled":  true,
+		"token":    token,
+		"base_url": a.getSCIMBaseURL() + "/scim/v2",
+	})
 }

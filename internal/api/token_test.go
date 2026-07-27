@@ -332,6 +332,43 @@ func (ts *TokenTestSuite) TestTokenPasswordGrantFailure() {
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
 }
 
+func (ts *TokenTestSuite) TestTokenPasswordGrantLockedUser() {
+	u := ts.createLockedUser()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    u.GetEmail(),
+		"password": "password",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+
+	var data map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	assert.Equal(ts.T(), string(apierrors.ErrorCodeUserLocked), data["error_code"])
+}
+
+func (ts *TokenTestSuite) TestTokenRefreshGrantLockedUser() {
+	ts.createLockedUser()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": ts.RefreshToken.Token,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
 func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	authCode := "1234563"
 	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
@@ -521,6 +558,21 @@ func (ts *TokenTestSuite) createBannedUser() *models.User {
 	t = t.Add(24 * time.Hour)
 	u.BannedUntil = &t
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test banned user")
+
+	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
+	require.NoError(ts.T(), err, "Error creating refresh token")
+
+	return u
+}
+
+func (ts *TokenTestSuite) createLockedUser() *models.User {
+	u, err := models.NewUser("", "locked@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	t := time.Now()
+	u.EmailConfirmedAt = &t
+	t = t.Add(24 * time.Hour)
+	u.LockedUntil = &t
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test locked user")
 
 	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
 	require.NoError(ts.T(), err, "Error creating refresh token")

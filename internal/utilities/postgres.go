@@ -9,6 +9,16 @@ import (
 	"github.com/jackc/pgerrcode"
 )
 
+// EscapeLikePattern escapes SQL LIKE metacharacters (%, _, \) so they are
+// treated as literals.  Every query that uses this helper must also include
+// an ESCAPE '\' clause for the escaping to take effect.
+func EscapeLikePattern(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "%", "\\%")
+	s = strings.ReplaceAll(s, "_", "\\_")
+	return s
+}
+
 // PostgresError is a custom error struct for marshalling Postgres errors to JSON.
 type PostgresError struct {
 	Code           string `json:"code"`

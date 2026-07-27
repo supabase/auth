@@ -121,6 +121,10 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
+	if user.IsLocked() {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeUserLocked, "User account is locked")
+	}
+
 	isValidPassword, shouldReEncrypt, err := user.Authenticate(ctx, db, params.Password, config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
 	if err != nil {
 		return err

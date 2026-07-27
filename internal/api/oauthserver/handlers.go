@@ -383,6 +383,10 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 		return apierrors.NewOAuthError("access_denied", "User is banned")
 	}
 
+	if user.IsLocked() {
+		return apierrors.NewOAuthError("access_denied", "User account is locked")
+	}
+
 	// Exchange the authorization code for tokens
 	var tokenResponse *tokens.AccessTokenResponse
 	var grantParams models.GrantParams
