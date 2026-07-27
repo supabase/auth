@@ -41,7 +41,6 @@ const (
 	VerifyFactorAction              AuditAction = "verification_attempted"
 	DeleteFactorAction              AuditAction = "factor_deleted"
 	UpdateFactorAction              AuditAction = "factor_updated"
-	MFACodeLoginAction              AuditAction = "mfa_code_login"
 	IdentityUnlinkAction            AuditAction = "identity_unlinked"
 	PasskeyCreatedAction            AuditAction = "passkey_created"
 	PasskeyUpdatedAction            AuditAction = "passkey_updated"
@@ -74,7 +73,6 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	VerifyFactorAction:              factor,
 	DeleteFactorAction:              factor,
 	UpdateFactorAction:              factor,
-	MFACodeLoginAction:              factor,
 	PasskeyCreatedAction:            user,
 	PasskeyUpdatedAction:            user,
 	PasskeyDeletedAction:            user,

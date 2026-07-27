@@ -1396,7 +1396,6 @@ type GetAdminAuditResponse struct {
 			// - verification_attempted
 			// - factor_deleted
 			// - factor_updated
-			// - mfa_code_login
 			Action        *string `json:"action,omitempty"`
 			ActorId       *string `json:"actor_id,omitempty"`
 			ActorName     *string `json:"actor_name,omitempty"`
@@ -2020,7 +2019,6 @@ func ParseGetAdminAuditResponse(rsp *http.Response) (*GetAdminAuditResponse, err
 				// - verification_attempted
 				// - factor_deleted
 				// - factor_updated
-				// - mfa_code_login
 				Action        *string `json:"action,omitempty"`
 				ActorId       *string `json:"actor_id,omitempty"`
 				ActorName     *string `json:"actor_name,omitempty"`

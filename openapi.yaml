@@ -1495,7 +1495,6 @@ paths:
                             - verification_attempted
                             - factor_deleted
                             - factor_updated
-                            - mfa_code_login
                         log_type:
                           type: string
                           description: |-
