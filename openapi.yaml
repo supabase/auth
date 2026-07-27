@@ -1561,6 +1561,31 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
           $ref: "#/components/responses/ForbiddenResponse"
+    post:
+      summary: Create a user.
+      tags:
+        - admin
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateUserSchema"
+      responses:
+        200:
+          description: The user was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSchema"
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
 
   /admin/users/{userId}:
     parameters:
@@ -3276,6 +3301,43 @@ components:
           format: date-time
         is_anonymous:
           type: boolean
+
+    AdminCreateUserSchema:
+      type: object
+      description: Object describing the user to create. Either an email or a phone must be provided.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Generated when omitted.
+        aud:
+          type: string
+        role:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        password:
+          type: string
+          description: Mutually exclusive with `password_hash`. A random password is generated when neither is given.
+        password_hash:
+          type: string
+          description: Mutually exclusive with `password`.
+        email_confirm:
+          type: boolean
+          description: Marks the email confirmed, skipping the confirmation email.
+        phone_confirm:
+          type: boolean
+          description: Marks the phone confirmed, skipping the confirmation SMS.
+        user_metadata:
+          type: object
+        app_metadata:
+          type: object
+        ban_duration:
+          type: string
+          description: Duration such as `24h` (units `ns`, `us`, `ms`, `s`, `m`, `h`), or `none`.
 
     SAMLAttributeMappingSchema:
       type: object
