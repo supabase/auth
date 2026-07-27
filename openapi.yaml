@@ -3500,8 +3500,6 @@ components:
                   properties:
                     publicKey:
                       $ref: '#/components/schemas/CredentialRequestOptions'
-          discriminator:
-            propertyName: type
 
     CredentialRequestOptions:
       type: object
