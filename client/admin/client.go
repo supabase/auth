@@ -1390,13 +1390,11 @@ type GetAdminAuditResponse struct {
 			// - user_updated_password
 			// - token_revoked
 			// - token_refreshed
-			// - generate_recovery_codes
 			// - factor_in_progress
 			// - factor_unenrolled
 			// - challenge_created
 			// - verification_attempted
 			// - factor_deleted
-			// - recovery_codes_deleted
 			// - factor_updated
 			// - mfa_code_login
 			Action        *string `json:"action,omitempty"`
@@ -1413,7 +1411,6 @@ type GetAdminAuditResponse struct {
 			// - token
 			// - user
 			// - factor
-			// - recovery_codes
 			LogType *string                 `json:"log_type,omitempty"`
 			Traits  *map[string]interface{} `json:"traits,omitempty"`
 		} `json:"payload,omitempty"`
@@ -2017,13 +2014,11 @@ func ParseGetAdminAuditResponse(rsp *http.Response) (*GetAdminAuditResponse, err
 				// - user_updated_password
 				// - token_revoked
 				// - token_refreshed
-				// - generate_recovery_codes
 				// - factor_in_progress
 				// - factor_unenrolled
 				// - challenge_created
 				// - verification_attempted
 				// - factor_deleted
-				// - recovery_codes_deleted
 				// - factor_updated
 				// - mfa_code_login
 				Action        *string `json:"action,omitempty"`
@@ -2040,7 +2035,6 @@ func ParseGetAdminAuditResponse(rsp *http.Response) (*GetAdminAuditResponse, err
 				// - token
 				// - user
 				// - factor
-				// - recovery_codes
 				LogType *string                 `json:"log_type,omitempty"`
 				Traits  *map[string]interface{} `json:"traits,omitempty"`
 			} `json:"payload,omitempty"`
