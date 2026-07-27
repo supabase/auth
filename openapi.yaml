@@ -667,6 +667,9 @@ paths:
                   format: phone
                 password:
                   type: string
+                current_password:
+                  type: string
+                  description: Required when setting a new password and `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_CURRENT_PASSWORD` is enabled.
                 nonce:
                   type: string
                 data:
