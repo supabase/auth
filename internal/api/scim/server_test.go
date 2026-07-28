@@ -11,6 +11,7 @@ import (
 
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
+	"github.com/supabase/auth/internal/models"
 )
 
 func TestServer(t *testing.T) {
@@ -29,7 +30,7 @@ func TestServer(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			require.NoError(t, tc.handler(w, r))
-			require.Equal(t, w.Code, http.StatusOK)
+			require.Equal(t, http.StatusOK, w.Code)
 			require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
 
 			var list protocol.ListResponse[any]
@@ -46,7 +47,7 @@ func TestServer(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		require.NoError(t, srv.ServiceProviderConfig(w, r))
-		require.Equal(t, w.Code, http.StatusOK)
+		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
 
 		var cfg core.ServiceProviderConfig
@@ -67,5 +68,17 @@ func TestServer(t *testing.T) {
 		assert.Equal(t, "http://www.rfc-editor.org/info/rfc6750", scheme.SpecURI)
 		assert.NotEmpty(t, scheme.Description)
 		assert.True(t, scheme.Primary)
+	})
+
+	t.Run("/scim/v2/Users/:id", func(t *testing.T) {
+		user, err := models.NewUser("12345678", "test1@example.com", "test", "", nil)
+		require.NoError(t, err)
+
+		r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users"+user.ID.String(), nil)
+		w := httptest.NewRecorder()
+
+		require.NoError(t, srv.GetUser(w, r))
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
 	})
 }
