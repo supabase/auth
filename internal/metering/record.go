@@ -22,6 +22,10 @@ const (
 	LoginTypeToken     LoginType = "token" // for refresh token flows, to be backward-compatible with existing data
 	LoginTypeMFA       LoginType = "mfa"   // for MFA verifications
 	LoginTypePasskey   LoginType = "passkey"
+
+	// LoginTypeTokenExchange is the token-exchange grant, where sign-in relies
+	// on a provider-issued access token rather than an OAuth authorization flow.
+	LoginTypeTokenExchange LoginType = "token_exchange"
 )
 
 // Provider constants for consistent login analytics
