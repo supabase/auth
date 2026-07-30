@@ -453,6 +453,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Route(scim.BasePath, func(r *router) {
 			r.Use(api.requireScimServerEnabled)
+			r.NotFound(api.scim.NotFound)
 
 			r.Get("/ServiceProviderConfig", api.scim.ServiceProviderConfig)
 			r.Get("/ResourceTypes", api.scim.ResourceTypes)
