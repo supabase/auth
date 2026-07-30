@@ -29,17 +29,20 @@ func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request)
 }
 
 func (srv *Server) ResourceTypes(w http.ResponseWriter, r *http.Request) error {
-	return srv.notImplemented(w)
+	return list(w, r, []any{})
 }
 
 func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
-	return srv.notImplemented(w)
+	return list(w, r, []any{})
 }
 
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
 	return protocol.SendError(w, http.StatusNotFound, "", "Endpoint or resource does not exist")
 }
 
-func (srv *Server) notImplemented(w http.ResponseWriter) error {
-	return protocol.SendError(w, http.StatusNotImplemented, "", "The request endpoint is not implemented")
+func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
+	if r.URL.Query().Get("filter") != "" {
+		return protocol.SendError(w, http.StatusForbidden, "", "Filtering is not supported on this endpoint")
+	}
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(resources))
 }
