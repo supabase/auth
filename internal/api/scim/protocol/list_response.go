@@ -1,7 +1,5 @@
 package protocol
 
-const SchemaListResponse = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
-
 type ListResponse[T any] struct {
 	Schemas      []string `json:"schemas"`
 	TotalResults int      `json:"totalResults"`

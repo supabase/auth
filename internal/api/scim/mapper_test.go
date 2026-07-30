@@ -61,6 +61,50 @@ func TestUserMapper(t *testing.T) {
 		require.Equal(t, updatedAt, user.Meta.LastModified)
 	})
 
+	t.Run("reports active unless the user is banned", func(t *testing.T) {
+		require.True(t, mapper.MapFrom(newModel("bjensen@example.com")).Active)
+
+		banned := newModel("bjensen@example.com")
+		bannedUntil := time.Now().Add(time.Hour)
+		banned.BannedUntil = &bannedUntil
+
+		require.False(t, mapper.MapFrom(banned).Active)
+	})
+
+	t.Run("maps name from user metadata, preferring the SCIM spelling", func(t *testing.T) {
+		model := newModel("bjensen@example.com")
+		model.UserMetaData = models.JSONMap{
+			"given_name": "Barbara", "first_name": "ignored",
+			"family_name": "Jensen", "full_name": "Ms. Barbara J Jensen",
+		}
+
+		name := mapper.MapFrom(model).Name
+
+		require.NotNil(t, name)
+		require.Equal(t, "Barbara", name.GivenName)
+		require.Equal(t, "Jensen", name.FamilyName)
+		require.Equal(t, "Ms. Barbara J Jensen", name.Formatted)
+	})
+
+	t.Run("falls back to the alternate metadata keys", func(t *testing.T) {
+		model := newModel("bjensen@example.com")
+		model.UserMetaData = models.JSONMap{"first_name": "Barbara", "last_name": "Jensen", "name": "Barbara Jensen"}
+
+		name := mapper.MapFrom(model).Name
+
+		require.NotNil(t, name)
+		require.Equal(t, "Barbara", name.GivenName)
+		require.Equal(t, "Jensen", name.FamilyName)
+		require.Equal(t, "Barbara Jensen", name.Formatted)
+	})
+
+	t.Run("omits name when no metadata key resolves", func(t *testing.T) {
+		model := newModel("bjensen@example.com")
+		model.UserMetaData = models.JSONMap{"unrelated": "value"}
+
+		require.Nil(t, mapper.MapFrom(model).Name)
+	})
+
 	t.Run("satisfies the Mapper interface", func(t *testing.T) {
 		var _ Mapper[*models.User, *core.User] = NewUserMapper("")
 	})

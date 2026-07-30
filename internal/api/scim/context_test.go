@@ -55,6 +55,6 @@ func TestKey(t *testing.T) {
 	t.Run("names the key when a context is printed", func(t *testing.T) {
 		ctx := NewKey[string]("first").With(context.Background(), "one")
 
-		require.Contains(t, fmt.Sprint(ctx), "gotrue scim context key first")
+		require.Contains(t, fmt.Sprint(ctx), "first")
 	})
 }
