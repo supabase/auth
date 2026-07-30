@@ -131,6 +131,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 	)
 
 	grantParams.FillGrantParams(r)
+	grantParams.Provider = "email"
 
 	flowType := models.ImplicitFlow
 	var authenticationMethod models.AuthenticationMethod
@@ -238,6 +239,11 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 	var isSingleConfirmationResponse = false
 
 	grantParams.FillGrantParams(r)
+	if params.Type == smsVerification || params.Type == phoneChangeVerification {
+		grantParams.Provider = "phone"
+	} else {
+		grantParams.Provider = "email"
+	}
 
 	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error

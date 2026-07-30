@@ -165,6 +165,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	grantParams.FillGrantParams(r)
 
 	providerType, emailOptional := getExternalProviderType(ctx)
+	grantParams.Provider = providerType
 	data, err := a.handleOAuthCallback(r)
 	if err != nil {
 		return err
@@ -367,6 +368,8 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		user = decision.User
 		identity = decision.Identities[0]
 
+		now := time.Now()
+		identity.LastSignInAt = &now
 		identity.IdentityData = identityData
 		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
 			return 0, nil, terr

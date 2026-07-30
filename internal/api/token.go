@@ -91,12 +91,14 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 	if params.Email != "" {
 		provider = "email"
+		grantParams.Provider = "email"
 		if !config.External.Email.Enabled {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 		}
 		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	} else if params.Phone != "" {
 		provider = "phone"
+		grantParams.Provider = "phone"
 		if !config.External.Phone.Enabled {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
 		}
@@ -238,6 +240,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	} else if err != nil {
 		return err
 	}
+	grantParams.Provider = flowState.ProviderType
 	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeFlowStateExpired, "invalid flow state, flow state has expired")
 	}
