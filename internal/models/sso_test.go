@@ -469,3 +469,76 @@ func (ts *SSOTestSuite) TestFindSSOProviderByResourceID() {
 		require.Nil(ts.T(), got)
 	}
 }
+
+func buildSSOProvider() *SSOProvider {
+	id := uuid.Must(uuid.NewV4()).String()
+
+	return &SSOProvider{
+		SAMLProvider: SAMLProvider{
+			EntityID:    "https://example.com/saml/metadata/" + id,
+			MetadataXML: "<example />",
+		},
+	}
+}
+
+func (ts *SSOTestSuite) TestUpdateSCIMToken() {
+	hashes := map[string]string{
+		"scim_test_token":    "dcbcd9ffd696ae1f2ee0f035fa17680d78175020a5fa1aadc758dbd681e0fe1d",
+		"scim_rotated_token": "289adb37f8946571bb4aea1e663281126c7f2d84d929ff09429fcaa1eb3f27bf",
+	}
+
+	provider := buildSSOProvider()
+	require.Nil(ts.T(), provider.SCIMTokenHash)
+
+	for token, hash := range hashes {
+		provider.UpdateSCIMToken(token)
+		require.NotNil(ts.T(), provider.SCIMTokenHash)
+		require.Equal(ts.T(), hash, *provider.SCIMTokenHash)
+	}
+}
+
+func (ts *SSOTestSuite) TestFindSSOProviderBySCIMToken() {
+	provider := buildSSOProvider()
+
+	token := "scim_test_token"
+	provider.UpdateSCIMToken(token)
+	require.NoError(ts.T(), ts.db.Eager().Create(provider))
+
+	withoutToken := buildSSOProvider()
+	require.NoError(ts.T(), ts.db.Eager().Create(withoutToken))
+
+	ts.Run("resolves the provider that owns the token", func() {
+		found, err := FindSSOProviderBySCIMToken(ts.db, token)
+
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), provider.ID, found.ID)
+	})
+
+	ts.Run("an unknown token resolves nothing", func() {
+		found, err := FindSSOProviderBySCIMToken(ts.db, "scim_unknown_token")
+
+		require.Nil(ts.T(), found)
+		require.True(ts.T(), IsNotFoundError(err))
+	})
+
+	ts.Run("an empty token does not match a provider without one", func() {
+		found, err := FindSSOProviderBySCIMToken(ts.db, "")
+
+		require.Nil(ts.T(), found)
+		require.True(ts.T(), IsNotFoundError(err))
+	})
+
+	ts.Run("rotation stops the previous token from resolving", func() {
+		newToken := "scim_rotated_token"
+		provider.UpdateSCIMToken(newToken)
+		require.NoError(ts.T(), ts.db.Update(provider))
+
+		found, err := FindSSOProviderBySCIMToken(ts.db, newToken)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), provider.ID, found.ID)
+
+		found, err = FindSSOProviderBySCIMToken(ts.db, token)
+		require.Nil(ts.T(), found)
+		require.True(ts.T(), IsNotFoundError(err))
+	})
+}
