@@ -152,6 +152,41 @@ func (ts *RefreshTokenV2Suite) TestNormalUse() {
 	}
 }
 
+func (ts *RefreshTokenV2Suite) TestUpdatesLastSignInAt() {
+	config := ts.config()
+	require.Equal(ts.T(), 2, config.Security.RefreshTokenAlgorithmVersion)
+
+	require.Nil(ts.T(), ts.User.LastSignInAt)
+
+	clock := time.Now()
+
+	srv := NewService(config, &panicHookManager{})
+	srv.SetTimeFunc(func() time.Time {
+		return clock
+	})
+
+	req, err := http.NewRequest("POST", "https://example.com/", nil)
+	require.NoError(ts.T(), err)
+
+	req = req.WithContext(context.Background())
+	responseHeaders := make(http.Header)
+
+	_, err = srv.IssueRefreshToken(
+		req,
+		responseHeaders,
+		ts.Conn,
+		ts.User,
+		models.PasswordGrant,
+		models.GrantParams{},
+	)
+	require.NoError(ts.T(), err)
+
+	dbUser, err := models.FindUserByID(ts.Conn, ts.User.ID)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), dbUser.LastSignInAt)
+	require.WithinDuration(ts.T(), clock, *dbUser.LastSignInAt, time.Second)
+}
+
 func (ts *RefreshTokenV2Suite) TestMaliciousReuse() {
 	config := ts.config()
 	require.Equal(ts.T(), 2, config.Security.RefreshTokenAlgorithmVersion)
