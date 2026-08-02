@@ -13,6 +13,7 @@ import (
 	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/api/oauthserver"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/api/scim"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
@@ -46,6 +47,7 @@ type API struct {
 	hooksMgr     *v0hooks.Manager
 	hibpClient   *hibp.PwnedClient
 	oauthServer  *oauthserver.Server
+	scim         *scim.Server
 	tokenService *tokens.Service
 	mailer       mailer.Mailer
 	oidcCache    *provider.OIDCProviderCache
@@ -209,6 +211,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Get("/", api.ExternalProviderCallback)
 		r.Post("/", api.ExternalProviderCallback)
+	})
+
+	api.scim = scim.NewServer(globalConfig)
+	r.Route("/scim/v2", func(r *router) {
+		r.Use(api.scim.Middleware)
+		r.Get("/ServiceProviderConfig", api.scim.ServiceProviderConfig)
+		r.Get("/ResourceTypes", api.scim.ResourceTypes)
+		r.Get("/Schemas", api.scim.Schemas)
 	})
 
 	r.Route("/", func(r *router) {

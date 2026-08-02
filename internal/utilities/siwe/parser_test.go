@@ -2,6 +2,7 @@ package siwe
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -131,6 +132,39 @@ func TestParseMessage(t *testing.T) {
 			// require.Equal(t, "abcdef", *parsed.RequestID)
 
 			require.Equal(t, true, parsed.VerifySignature((example.signature)))
+		})
+	}
+}
+
+// VerifySignature receives an attacker-controlled signature (via POST /token
+// grant_type=web3). It must return false for malformed input, not panic — a
+// panic is turned into an HTTP 500 + stack-trace log instead of the intended
+// clean 400. The sibling internal/utilities/siws implementation is the
+// reference: it returns false on every error path.
+func TestVerifySignatureRejectsMalformedInput(t *testing.T) {
+	message := "example.com wants you to sign in with your Ethereum account:\n0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E\n\nURI: https://example.com\nVersion: 1\nChain ID: 1\nNonce: 12345678\nIssued At: 2025-01-01T00:00:00.000Z"
+	parsed, err := ParseMessage(message)
+	require.Nil(t, err)
+
+	malformed := []struct {
+		name      string
+		signature string
+	}{
+		{"empty", ""},
+		// 130 hex chars but no 0x prefix -> hexutil.Decode errors (previously panicked).
+		{"missing 0x prefix", strings.Repeat("a", 130)},
+		// non-hex characters after the prefix -> decode errors.
+		{"non-hex characters", "0x" + strings.Repeat("z", 130)},
+		// decodes fine but is not 65 bytes.
+		{"wrong length", "0xdeadbeef"},
+		// valid 65-byte hex but unrecoverable -> crypto.Ecrecover errors (previously panicked).
+		{"unrecoverable signature", "0x" + strings.Repeat("0", 130)},
+	}
+	for _, tc := range malformed {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				require.False(t, parsed.VerifySignature(tc.signature))
+			})
 		})
 	}
 }

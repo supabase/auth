@@ -173,6 +173,145 @@ func (ts *AdminTestSuite) TestAdminUsers_SortDesc() {
 	assert.Equal(ts.T(), "test1@example.com", data.Users[1].GetEmail())
 }
 
+type adminUsersCursorResponse struct {
+	Users      []*models.User            `json:"users"`
+	Aud        string                    `json:"aud"`
+	Pagination *CursorPaginationResponse `json:"pagination"`
+}
+
+// TestAdminUsers_CursorPaginationDisabled ensures that with the flag off the
+// endpoint serves the unchanged offset response (X-Total-Count set, no
+// pagination block) even when a client passes cursor-style params.
+func (ts *AdminTestSuite) TestAdminUsers_CursorPaginationDisabled() {
+	ts.Config.Experimental.CursorPaginationEnabled = false
+
+	u, err := models.NewUser("", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/users?limit=1", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	assert.Equal(ts.T(), "1", w.Header().Get("X-Total-Count"))
+	assert.NotContains(ts.T(), w.Header().Get("Link"), `rel="next"`)
+
+	var data adminUsersCursorResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	assert.Nil(ts.T(), data.Pagination, "offset mode must not emit a pagination block")
+}
+
+// TestAdminUsers_CursorPaginationEnabled walks every page with cursor mode on
+// and asserts full coverage with no duplicates or skips.
+func (ts *AdminTestSuite) TestAdminUsers_CursorPaginationEnabled() {
+	ts.Config.Experimental.CursorPaginationEnabled = true
+	defer func() { ts.Config.Experimental.CursorPaginationEnabled = false }()
+
+	const total = 5
+	want := map[string]bool{}
+	for i := 0; i < total; i++ {
+		email := fmt.Sprintf("cursor%d@example.com", i)
+		u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.API.db.Create(u))
+		want[email] = true
+	}
+
+	seen := map[string]bool{}
+	cursor := ""
+	sawNextLink := false
+	for page := 0; page < 20; page++ {
+		target := "/admin/users?limit=2"
+		if cursor != "" {
+			target += "&cursor=" + cursor
+		}
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		// offset-only headers must be absent in cursor mode
+		assert.Empty(ts.T(), w.Header().Get("X-Total-Count"))
+
+		var data adminUsersCursorResponse
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+		require.NotNil(ts.T(), data.Pagination)
+
+		for _, u := range data.Users {
+			require.False(ts.T(), seen[u.GetEmail()], "user returned twice: %s", u.GetEmail())
+			seen[u.GetEmail()] = true
+		}
+
+		if data.Pagination.HasMore {
+			require.NotEmpty(ts.T(), data.Pagination.NextCursor)
+			require.Contains(ts.T(), w.Header().Get("Link"), `rel="next"`)
+			sawNextLink = true
+			cursor = data.Pagination.NextCursor
+			continue
+		}
+
+		require.Empty(ts.T(), data.Pagination.NextCursor)
+		assert.NotContains(ts.T(), w.Header().Get("Link"), `rel="next"`)
+		break
+	}
+
+	require.Equal(ts.T(), want, seen, "cursor walk must cover every user exactly once")
+	require.True(ts.T(), sawNextLink, "expected at least one intermediate page with a next cursor")
+}
+
+// TestAdminUsers_CursorPaginationBackwardCompat ensures that even with the flag
+// on, a client that still pages by number stays in offset mode.
+func (ts *AdminTestSuite) TestAdminUsers_CursorPaginationBackwardCompat() {
+	ts.Config.Experimental.CursorPaginationEnabled = true
+	defer func() { ts.Config.Experimental.CursorPaginationEnabled = false }()
+
+	for i := 0; i < 2; i++ {
+		u, err := models.NewUser("", fmt.Sprintf("compat%d@example.com", i), "test", ts.Config.JWT.Aud, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.API.db.Create(u))
+	}
+
+	// either offset-style param must keep the request in offset mode, even
+	// with the flag on
+	for _, target := range []string{
+		"/admin/users?page=1&per_page=1",
+		"/admin/users?per_page=1",
+	} {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		assert.Equal(ts.T(), "2", w.Header().Get("X-Total-Count"), "offset mode expected for %s", target)
+
+		var data adminUsersCursorResponse
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+		assert.Nil(ts.T(), data.Pagination)
+		require.Len(ts.T(), data.Users, 1, "per_page must be honored for %s", target)
+	}
+}
+
+// TestAdminUsers_CursorPaginationBadCursor ensures a malformed cursor is a 400.
+func (ts *AdminTestSuite) TestAdminUsers_CursorPaginationBadCursor() {
+	ts.Config.Experimental.CursorPaginationEnabled = true
+	defer func() { ts.Config.Experimental.CursorPaginationEnabled = false }()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/users?cursor=not-a-valid-cursor*", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
 // TestAdminUsers tests API /admin/users route
 func (ts *AdminTestSuite) TestAdminUsers_FilterEmail() {
 	u, err := models.NewUser("", "test1@example.com", "test", ts.Config.JWT.Aud, nil)

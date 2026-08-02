@@ -85,8 +85,19 @@ type AnonymousProviderConfiguration struct {
 
 // CustomOAuthConfiguration holds configuration for custom OAuth and OIDC providers
 type CustomOAuthConfiguration struct {
-	Enabled      bool `json:"enabled" split_words:"true" default:"true"`
-	MaxProviders int  `json:"max_providers" split_words:"true" default:"0"`
+	Enabled      bool   `json:"enabled" split_words:"true" default:"true"`
+	MaxProviders int    `json:"max_providers" split_words:"true" default:"0"`
+	ExternalURL  string `json:"external_url,omitempty" split_words:"true"`
+}
+
+func (c *CustomOAuthConfiguration) Validate() error {
+	if c.ExternalURL != "" {
+		if _, err := url.ParseRequestURI(c.ExternalURL); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type EmailProviderConfiguration struct {
@@ -353,6 +364,17 @@ type ExperimentalConfiguration struct {
 	// it belongs to. See the ProviderLinkingDomains type for the env format.
 	// Env: GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="custom:github=social,custom:google=social"
 	ProviderLinkingDomains ProviderLinkingDomains `split_words:"true"`
+
+	// CursorPaginationEnabled turns on cursor-based (keyset) pagination for the
+	// admin user list endpoint. When enabled and no `page` query param is
+	// provided, GET /admin/users serves fast, count-free cursor pages.
+	// Env: GOTRUE_EXPERIMENTAL_CURSOR_PAGINATION_ENABLED=true
+	CursorPaginationEnabled bool `split_words:"true" default:"false"`
+
+	// ScimEnabled gates the /scim/v2 router. Ships dark: no per-provider
+	// enablement yet, just a kill switch for internal verification.
+	// Env: GOTRUE_EXPERIMENTAL_SCIM_ENABLED=true
+	ScimEnabled bool `split_words:"true" default:"false"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime
@@ -1321,6 +1343,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Sessions,
 		&c.Hook,
 		&c.JWT.Keys,
+		&c.CustomOAuth,
 	}
 
 	for _, validatable := range validatables {

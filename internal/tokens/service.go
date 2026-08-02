@@ -888,6 +888,10 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 				return apierrors.NewInternalServerError("Database error creating new session").WithInternalError(terr)
 			}
 
+			if terr := user.UpdateLastSignInAt(tx); terr != nil {
+				return apierrors.NewInternalServerError("Database error updating user's last_sign_in_at").WithInternalError(terr)
+			}
+
 			signingKey, _, terr := session.GetRefreshTokenHmacKey(config.Security.DBEncryption)
 			if terr != nil {
 				return apierrors.NewInternalServerError("Failed to get session's refresh token key").WithInternalError(terr)

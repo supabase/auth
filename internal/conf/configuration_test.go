@@ -274,6 +274,17 @@ func TestValidate(t *testing.T) {
 		},
 
 		{
+			val: &CustomOAuthConfiguration{},
+		},
+		{
+			val: &CustomOAuthConfiguration{ExternalURL: "https://custom.example.com"},
+		},
+		{
+			val: &CustomOAuthConfiguration{ExternalURL: "invalid"},
+			err: `parse "invalid": invalid URI for request`,
+		},
+
+		{
 			val: &SessionsConfiguration{Timebox: nil},
 		},
 		{

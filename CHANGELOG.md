@@ -1,5 +1,43 @@
 # Changelog
 
+## [2.194.0](https://github.com/supabase/auth/compare/v2.193.1...v2.194.0) (2026-07-27)
+
+
+### Features
+
+* add cursor-based pagination for admin users list ([#2633](https://github.com/supabase/auth/issues/2633)) ([76e2aac](https://github.com/supabase/auth/commit/76e2aace4899f71bfc6038c8a00c913936a4561e))
+* add optional override for custom provider redirect URIs ([#2641](https://github.com/supabase/auth/issues/2641)) ([67c55c0](https://github.com/supabase/auth/commit/67c55c00789d69505881e3143dc248a2a1d2ab55))
+
+
+### Bug Fixes
+
+* consolidate error logs into single log entry ([#2635](https://github.com/supabase/auth/issues/2635)) ([47b3d94](https://github.com/supabase/auth/commit/47b3d9429f22412a01c0e7a02aaa76156a9ea7e7))
+* **deps:** bump otel versions for vulncheck ([#2648](https://github.com/supabase/auth/issues/2648)) ([4c2d691](https://github.com/supabase/auth/commit/4c2d691f7c2d2cebe7d4c9b37d78cd2fb564ea53))
+* upgrade to x/text@v0.39.0 GO-2026-5970 ([#2636](https://github.com/supabase/auth/issues/2636)) ([66421c6](https://github.com/supabase/auth/commit/66421c6f77bc045fb83dab1fc38d97158418f5aa))
+
+## [2.193.1](https://github.com/supabase/auth/compare/v2.193.0...v2.193.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* build darwin-arm64 release binaries with GOOS=darwin ([#2618](https://github.com/supabase/auth/issues/2618)) ([318b4d1](https://github.com/supabase/auth/commit/318b4d166ffc407e661dc99580082758a9b4e885))
+* ensure legacy refresh token revoked ([#2624](https://github.com/supabase/auth/issues/2624)) ([8748000](https://github.com/supabase/auth/commit/87480005e2c3a16e35e5f6eacb97ea22b82ac9a5))
+* **oauth:** prevent authorization-code replay race at /oauth/token ([#2612](https://github.com/supabase/auth/issues/2612)) ([bdbf01e](https://github.com/supabase/auth/commit/bdbf01eb99ac8750bfa6ec06626002673cf5479d))
+* **siwe:** return false instead of panicking on malformed signatures ([#2625](https://github.com/supabase/auth/issues/2625)) ([c3005a4](https://github.com/supabase/auth/commit/c3005a47c20240d21772bb5103843b15bbc472bb))
+
+## [2.193.0](https://github.com/supabase/auth/compare/v2.192.0...v2.193.0) (2026-07-07)
+
+
+### Features
+
+* **linking:** add experimental provider linking-domain groups ([#2604](https://github.com/supabase/auth/issues/2604)) ([c4f6964](https://github.com/supabase/auth/commit/c4f69649a0d95a86648b23657795b5430894f472))
+
+
+### Bug Fixes
+
+* downgrade session AAL after admin deletion of factor ([#2607](https://github.com/supabase/auth/issues/2607)) ([4d1d660](https://github.com/supabase/auth/commit/4d1d660674ce15d9858cc220a3deda0cf0088077))
+* **mfa:** use AMR method (not factor type) when downgrading sessions to AAL1 ([#2615](https://github.com/supabase/auth/issues/2615)) ([dfe62d0](https://github.com/supabase/auth/commit/dfe62d0fcc047099614c2eaff4b4d20d807671d9))
+
 ## [2.192.0](https://github.com/supabase/auth/compare/v2.191.0...v2.192.0) (2026-06-29)
 
 
