@@ -17,17 +17,19 @@ func TestVerifyPKCEChallenge(t *testing.T) {
 	}{
 		{
 			name:                "valid S256 PKCE",
-			codeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", // S256 of "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+			codeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
 			codeChallengeMethod: "S256",
 			codeVerifier:        "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
 			wantErr:             false,
 		},
 		{
-			name:                "valid plain PKCE",
+			// OAuth 2.1 Section 4.1.1: plain is not supported.
+			name:                "plain method rejected",
 			codeChallenge:       "test-challenge",
 			codeChallengeMethod: "plain",
 			codeVerifier:        "test-challenge",
-			wantErr:             false,
+			wantErr:             true,
+			errMsg:              PKCEInvalidCodeMethodError,
 		},
 		{
 			name:                "invalid S256 verifier",
@@ -38,12 +40,13 @@ func TestVerifyPKCEChallenge(t *testing.T) {
 			errMsg:              "code challenge does not match",
 		},
 		{
-			name:                "invalid plain verifier",
+			// plain is rejected at method level, not verifier level.
+			name:                "plain method rejected even with wrong verifier",
 			codeChallenge:       "test-challenge",
 			codeChallengeMethod: "plain",
 			codeVerifier:        "wrong-challenge",
 			wantErr:             true,
-			errMsg:              "code challenge does not match",
+			errMsg:              PKCEInvalidCodeMethodError,
 		},
 		{
 			name:                "invalid challenge method",
@@ -61,11 +64,13 @@ func TestVerifyPKCEChallenge(t *testing.T) {
 			wantErr:             false,
 		},
 		{
-			name:                "case insensitive plain method",
+			// Case-insensitive rejection.
+			name:                "PLAIN rejected case-insensitively",
 			codeChallenge:       "test-challenge",
 			codeChallengeMethod: "PLAIN",
 			codeVerifier:        "test-challenge",
-			wantErr:             false,
+			wantErr:             true,
+			errMsg:              PKCEInvalidCodeMethodError,
 		},
 		{
 			name:                "empty verifier with S256",
@@ -76,12 +81,12 @@ func TestVerifyPKCEChallenge(t *testing.T) {
 			errMsg:              "code challenge does not match",
 		},
 		{
-			name:                "empty verifier with plain",
+			name:                "plain method rejected with empty verifier",
 			codeChallenge:       "test-challenge",
 			codeChallengeMethod: "plain",
 			codeVerifier:        "",
 			wantErr:             true,
-			errMsg:              "code challenge does not match",
+			errMsg:              PKCEInvalidCodeMethodError,
 		},
 		{
 			name:                "empty challenge with S256",
@@ -92,26 +97,26 @@ func TestVerifyPKCEChallenge(t *testing.T) {
 			errMsg:              "code challenge does not match",
 		},
 		{
-			name:                "empty challenge with plain",
+			name:                "plain method rejected with empty challenge",
 			codeChallenge:       "",
 			codeChallengeMethod: "plain",
 			codeVerifier:        "test-challenge",
 			wantErr:             true,
-			errMsg:              "code challenge does not match",
+			errMsg:              PKCEInvalidCodeMethodError,
 		},
 		{
-			name:                "both empty with plain",
+			name:                "plain method rejected when both empty",
 			codeChallenge:       "",
 			codeChallengeMethod: "plain",
 			codeVerifier:        "",
-			wantErr:             false,
+			wantErr:             true,
+			errMsg:              PKCEInvalidCodeMethodError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := VerifyPKCEChallenge(tt.codeChallenge, tt.codeChallengeMethod, tt.codeVerifier)
-
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errMsg)
