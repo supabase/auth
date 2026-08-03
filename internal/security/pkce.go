@@ -11,17 +11,18 @@ import (
 const PKCEInvalidCodeChallengeError = "code challenge does not match previously saved code verifier"
 const PKCEInvalidCodeMethodError = "code challenge method not supported"
 
-// VerifyPKCEChallenge performs PKCE verification using the provided challenge, method, and verifier.
-// Only S256 is supported per OAuth 2.1 (draft-ietf-oauth-v2-1-12, Section 4.1.1).
-// The plain method is explicitly excluded: the code_challenge is transmitted in
-// the authorization URL and may appear in server logs, browser history, or Referer
-// headers — with plain, that leaks the code_verifier directly.
+// VerifyPKCEChallenge performs PKCE verification using the provided challenge, method, and verifier
+// This is a shared utility function used by both FlowState and OAuthServerAuthorization
 func VerifyPKCEChallenge(codeChallenge, codeChallengeMethod, codeVerifier string) error {
 	switch strings.ToLower(codeChallengeMethod) {
 	case "s256":
 		hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
 		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
 		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(encodedCodeVerifier)) != 1 {
+			return errors.New(PKCEInvalidCodeChallengeError)
+		}
+	case "plain":
+		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(codeVerifier)) != 1 {
 			return errors.New(PKCEInvalidCodeChallengeError)
 		}
 	default:
