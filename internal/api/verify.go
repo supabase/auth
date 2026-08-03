@@ -205,7 +205,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		}
 	}
 	if rurl != "" {
-		http.Redirect(w, r, rurl, http.StatusSeeOther)
+		a.redirect(w, r, rurl, http.StatusSeeOther)
 		return nil
 	}
 	rurl = params.RedirectTo
@@ -222,7 +222,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 			return err
 		}
 	}
-	http.Redirect(w, r, rurl, http.StatusSeeOther)
+	a.redirect(w, r, rurl, http.StatusSeeOther)
 	return nil
 }
 
@@ -528,7 +528,11 @@ func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowT
 	// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
 	hq.Set("sb", "")
 	u.Fragment = hq.Encode()
-	return u.String(), nil
+	res := u.String()
+	if u.Scheme != "" && strings.HasPrefix(rurl, u.Scheme+"://") && !strings.HasPrefix(res, u.Scheme+"://") {
+		res = u.Scheme + "://" + strings.TrimPrefix(res, u.Scheme+":")
+	}
+	return res, nil
 }
 
 func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
@@ -539,7 +543,11 @@ func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
 	q := u.Query()
 	q.Set("code", code)
 	u.RawQuery = q.Encode()
-	return u.String(), nil
+	res := u.String()
+	if u.Scheme != "" && strings.HasPrefix(rurl, u.Scheme+"://") && !strings.HasPrefix(res, u.Scheme+"://") {
+		res = u.Scheme + "://" + strings.TrimPrefix(res, u.Scheme+":")
+	}
+	return res, nil
 }
 
 func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {

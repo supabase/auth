@@ -94,3 +94,8 @@ func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
 	}
 	return nil
 }
+
+func (a *API) redirect(w http.ResponseWriter, r *http.Request, url string, status int) {
+	w.Header().Set("Location", url)
+	w.WriteHeader(status)
+}

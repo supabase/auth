@@ -54,7 +54,7 @@ func (a *API) SamlAcs(w http.ResponseWriter, r *http.Request) error {
 
 		q := getErrorQueryString(err, utilities.GetRequestID(r.Context()), observability.GetLogEntry(r).Entry, u.Query())
 		u.RawQuery = q.Encode()
-		http.Redirect(w, r, u.String(), http.StatusSeeOther)
+		a.redirect(w, r, u.String(), http.StatusSeeOther)
 	}
 	return nil
 }
@@ -370,7 +370,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		http.Redirect(w, r, redirectTo, http.StatusFound) // #nosec G710
+		a.redirect(w, r, redirectTo, http.StatusFound) // #nosec G710
 		return nil
 	}
 
@@ -382,7 +382,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// #nosec G710
-	http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
+	a.redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
 
 	return nil
 }
