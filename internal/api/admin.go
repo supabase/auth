@@ -230,6 +230,9 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		banDuration = &duration
 	}
 
+	// must be evaluated before setting password below (via user.SetPassword)
+	addingFirstPassword := params.Password != nil && *params.Password != "" && !user.HasPassword()
+
 	if params.Password != nil {
 		password := *params.Password
 
@@ -339,6 +342,12 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		user.Identities = append(user.Identities, identities...)
+
+		if addingFirstPassword {
+			if terr := a.ensureEmailIdentityForPassword(tx, user); terr != nil {
+				return terr
+			}
+		}
 
 		if params.AppMetaData != nil {
 			if terr := user.UpdateAppMetaData(tx, params.AppMetaData); terr != nil {
