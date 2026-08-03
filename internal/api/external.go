@@ -367,7 +367,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		user = decision.User
 		identity = decision.Identities[0]
 
+		now := time.Now()
 		identity.IdentityData = identityData
+		identity.LastSignInAt = &now
 		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
 			return 0, nil, terr
 		}
