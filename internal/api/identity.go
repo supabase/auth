@@ -101,6 +101,54 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
 }
 
+// ensureEmailIdentityForPassword creates the email provider identity for a user
+// if one does not already exist. The email for the identity is taken from users.email
+// and only created if the email is confirmed.
+func (a *API) ensureEmailIdentityForPassword(tx *storage.Connection, user *models.User) error {
+	if !a.config.Experimental.CreateEmailIdentityOnPasswordSetEnabled {
+		return nil
+	}
+
+	if user.IsSSOUser || user.IsAnonymous {
+		return nil
+	}
+
+	// To prevent an unverified email from being attached, we only take the email from users.email if it is confirmed
+	email := user.GetEmail()
+	if email == "" || !user.IsConfirmed() {
+		return nil
+	}
+
+	// We only add an email identity if the user doesn't already have one since
+	// currently a user can only have one email identity
+	identities, terr := models.FindIdentitiesByUserID(tx, user.ID)
+	if terr != nil {
+		return apierrors.NewInternalServerError("Database error finding identities").WithInternalError(terr)
+	}
+	for _, identity := range identities {
+		if identity.Provider == "email" {
+			return nil
+		}
+	}
+
+	identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+		Subject:       user.ID.String(),
+		Email:         email,
+		EmailVerified: true,
+	}))
+	if terr != nil {
+		return terr
+	}
+	user.Identities = append(user.Identities, *identity)
+
+	// Re-derive app_metadata.providers from the user's identities
+	if terr := user.UpdateAppMetaDataProviders(tx); terr != nil {
+		return apierrors.NewInternalServerError("Database error updating user providers").WithInternalError(terr)
+	}
+
+	return nil
+}
+
 func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
