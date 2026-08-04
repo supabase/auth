@@ -2,7 +2,6 @@ package shared
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/pkg/errors"
@@ -19,7 +18,7 @@ func SendJSONAs(w http.ResponseWriter, status int, contentType string, obj any) 
 		var err error
 		b, err = json.Marshal(obj)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Error encoding json response: %v", obj))
+			return errors.Wrapf(err, "Error encoding json response: %v", obj)
 		}
 	}
 	w.Header().Set("Content-Type", contentType)
