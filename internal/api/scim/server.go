@@ -5,10 +5,9 @@ import (
 	"net/http"
 
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/conf"
 )
-
-const mediaType = "application/scim+json"
 
 type Server struct {
 	config *conf.GlobalConfiguration
@@ -40,7 +39,5 @@ func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (srv *Server) notImplemented(w http.ResponseWriter, r *http.Request) error {
-	w.Header().Set("Content-Type", mediaType)
-	w.WriteHeader(http.StatusNotImplemented)
-	return nil
+	return protocol.Send(w, http.StatusNotImplemented, nil)
 }
