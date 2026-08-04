@@ -26,9 +26,12 @@ func TestSCIM(t *testing.T) {
 		for _, path := range scimPaths {
 			r := httptest.NewRequest(http.MethodGet, path, nil)
 			w := httptest.NewRecorder()
+
 			api.handler.ServeHTTP(w, r)
 
 			require.Equal(t, http.StatusNotFound, w.Code)
+			require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+			require.JSONEq(t, `{"code":404,"error_code":"feature_disabled","msg":"SCIM server is disabled"}`, w.Body.String())
 		}
 	})
 
@@ -55,6 +58,7 @@ func TestSCIM(t *testing.T) {
 
 			r := httptest.NewRequest(http.MethodGet, path, nil)
 			w := httptest.NewRecorder()
+
 			api.handler.ServeHTTP(w, r)
 
 			require.Equal(t, w.Code, http.StatusNotImplemented)

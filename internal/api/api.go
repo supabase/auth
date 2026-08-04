@@ -138,6 +138,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
 	}
 
+	api.scim = scim.NewServer(globalConfig)
+
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
 			// all HIBP API requests should finish quickly to avoid
@@ -211,14 +213,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Get("/", api.ExternalProviderCallback)
 		r.Post("/", api.ExternalProviderCallback)
-	})
-
-	api.scim = scim.NewServer(globalConfig)
-	r.Route("/scim/v2", func(r *router) {
-		r.Use(api.scim.Middleware)
-		r.Get("/ServiceProviderConfig", api.scim.ServiceProviderConfig)
-		r.Get("/ResourceTypes", api.scim.ResourceTypes)
-		r.Get("/Schemas", api.scim.Schemas)
 	})
 
 	r.Route("/", func(r *router) {
@@ -455,6 +449,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Get("/authorize", api.oauthServer.OAuthServerAuthorize)
 			r.With(api.requireAuthentication).Get("/authorizations/{authorization_id}", api.oauthServer.OAuthServerGetAuthorization)
 			r.With(api.requireAuthentication).Post("/authorizations/{authorization_id}/consent", api.oauthServer.OAuthServerConsent)
+		})
+
+		r.Route(scim.BasePath, func(r *router) {
+			r.Use(api.requireScimServerEnabled)
+
+			r.Get("/ServiceProviderConfig", api.scim.ServiceProviderConfig)
+			r.Get("/ResourceTypes", api.scim.ResourceTypes)
+			r.Get("/Schemas", api.scim.Schemas)
 		})
 	})
 

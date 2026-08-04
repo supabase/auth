@@ -10,5 +10,5 @@ import (
 const MediaType = "application/scim+json"
 
 func Send(w http.ResponseWriter, status int, obj any) error {
-	return shared.SendJSONAs(w, status, MediaType, obj)
+	return shared.JSON(w).ContentType(MediaType).Status(status).Send(obj)
 }
