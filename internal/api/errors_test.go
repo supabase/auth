@@ -11,6 +11,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/scim/fixtures"
+	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/observability"
 )
@@ -141,6 +143,21 @@ func TestHandleResponseErrorConsolidatesLogs(t *testing.T) {
 			expectedCode:  string(apierrors.ErrorCodeWeakPassword),
 		},
 		{
+			name:          "scim 404 error",
+			err:           protocol.NewError(http.StatusNotFound, "", "Endpoint or resource does not exist"),
+			expectedError: "404: Endpoint or resource does not exist",
+		},
+		{
+			name:          "scim 403 error",
+			err:           protocol.NewError(http.StatusForbidden, "", "Filtering is not supported on this endpoint"),
+			expectedError: "403: Filtering is not supported on this endpoint",
+		},
+		{
+			name:          "scim 400 error with a scimType",
+			err:           protocol.NewError(http.StatusBadRequest, protocol.ErrorInvalidFilter, "The specified filter syntax was invalid"),
+			expectedError: "400: The specified filter syntax was invalid",
+		},
+		{
 			name:          "unhandled error",
 			err:           errors.New("unexpected failure"),
 			expectedError: "Unhandled server error: unexpected failure",
@@ -175,6 +192,42 @@ func TestHandleResponseErrorConsolidatesLogs(t *testing.T) {
 			}
 
 			require.False(t, decoder.More(), "expected exactly one log entry for the request, found a second")
+		})
+	}
+}
+
+func TestHandleResponseErrorWithSCIMError(t *testing.T) {
+	for _, example := range []struct {
+		scimErr      *protocol.Error
+		expectedBody string
+	}{
+		{
+			scimErr:      protocol.NewError(http.StatusForbidden, "", "Filtering is not supported on this endpoint"),
+			expectedBody: fixtures.FilterForbidden,
+		},
+		{
+			scimErr:      protocol.NewError(http.StatusBadRequest, protocol.ErrorInvalidFilter, "The specified filter syntax was invalid"),
+			expectedBody: fixtures.InvalidFilter,
+		},
+		{
+			scimErr:      protocol.NewError(http.StatusNotFound, "", "Endpoint or resource does not exist"),
+			expectedBody: fixtures.NotFound,
+		},
+		{
+			scimErr:      protocol.NewError(http.StatusMethodNotAllowed, "", "The request method is not supported by this endpoint"),
+			expectedBody: fixtures.MethodNotAllowed,
+		},
+	} {
+		t.Run(example.scimErr.Status, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req, err := http.NewRequest(http.MethodGet, "http://example.com/scim/v2/Schemas", nil)
+			require.NoError(t, err)
+
+			HandleResponseError(example.scimErr, rec, req)
+
+			require.Equal(t, example.scimErr.StatusCode(), rec.Code)
+			require.Equal(t, protocol.MediaType, rec.Header().Get("Content-Type"))
+			require.JSONEq(t, example.expectedBody, rec.Body.String())
 		})
 	}
 }

@@ -36,7 +36,6 @@ func (r *router) Patch(pattern string, fn apiHandler) {
 func (r *router) Delete(pattern string, fn apiHandler) {
 	r.chi.Delete(pattern, handler(fn))
 }
-
 func (r *router) With(fn middlewareHandler) *router {
 	c := r.chi.With(middleware(fn))
 	return &router{c}
@@ -50,8 +49,17 @@ func (r *router) WithBypass(fn func(next http.Handler) http.Handler) *router {
 func (r *router) Use(fn middlewareHandler) {
 	r.chi.Use(middleware(fn))
 }
+
 func (r *router) UseBypass(fn func(next http.Handler) http.Handler) {
 	r.chi.Use(fn)
+}
+
+func (r *router) NotFound(fn apiHandler) {
+	r.chi.NotFound(handler(fn))
+}
+
+func (r *router) MethodNotAllowed(fn apiHandler) {
+	r.chi.MethodNotAllowed(handler(fn))
 }
 
 func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {

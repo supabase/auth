@@ -10,6 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/apierrors"
+	scimProtocol "github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
 )
@@ -38,6 +39,7 @@ var oauthErrorMap = map[int]string{
 type (
 	HTTPError  = apierrors.HTTPError
 	OAuthError = apierrors.OAuthError
+	SCIMError  = scimProtocol.Error
 )
 
 // Recoverer is a middleware that recovers from panics, logs the panic (and a
@@ -180,6 +182,13 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 	case *OAuthError:
 		observability.LogEntrySetField(r, "error", e.Cause().Error())
 		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil && jsonErr != context.DeadlineExceeded {
+			log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
+		}
+
+	case *SCIMError:
+		observability.LogEntrySetField(r, "error", e.Error())
+
+		if jsonErr := scimProtocol.Send(w, e.StatusCode(), e); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 			log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 		}
 
