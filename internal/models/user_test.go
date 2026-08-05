@@ -608,6 +608,73 @@ func (ts *UserTestSuite) TestUpdateUserEmailVerifiedConflictFallsBack() {
 	require.Equal(ts.T(), false, userA.UserMetaData["email_verified"])
 }
 
+func (ts *UserTestSuite) TestUpdateUserEmailClearsStaleTokens() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]interface{}{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// simulate outstanding tokens sent to the previous email
+	now := time.Now()
+	userA.ConfirmationToken = "confirmation-token-hash"
+	userA.ConfirmationSentAt = &now
+	userA.RecoveryToken = "recovery-token-hash"
+	userA.RecoverySentAt = &now
+	userA.EmailChange = "baz@example.com"
+	userA.EmailChangeTokenCurrent = "email-change-current-hash"
+	userA.EmailChangeTokenNew = "email-change-new-hash"
+	userA.EmailChangeSentAt = &now
+	userA.EmailChangeConfirmStatus = 1
+	userA.ReauthenticationToken = "reauthentication-token-hash"
+	userA.ReauthenticationSentAt = &now
+	require.NoError(ts.T(), ts.db.UpdateOnly(
+		userA,
+		"confirmation_token",
+		"confirmation_sent_at",
+		"recovery_token",
+		"recovery_sent_at",
+		"email_change",
+		"email_change_token_current",
+		"email_change_token_new",
+		"email_change_sent_at",
+		"email_change_confirm_status",
+		"reauthentication_token",
+		"reauthentication_sent_at",
+	))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, userA.ID, userA.GetEmail(), userA.ConfirmationToken, ConfirmationToken))
+
+	// promoting another identity's email must revoke every outstanding
+	// token addressed to the previous email
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+
+	userA, err = FindUserByID(ts.db, userA.ID)
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), userA.ConfirmationToken)
+	require.Nil(ts.T(), userA.ConfirmationSentAt)
+	require.Empty(ts.T(), userA.RecoveryToken)
+	require.Nil(ts.T(), userA.RecoverySentAt)
+	require.Empty(ts.T(), userA.EmailChange)
+	require.Empty(ts.T(), userA.EmailChangeTokenCurrent)
+	require.Empty(ts.T(), userA.EmailChangeTokenNew)
+	require.Nil(ts.T(), userA.EmailChangeSentAt)
+	require.Equal(ts.T(), 0, userA.EmailChangeConfirmStatus)
+	require.Empty(ts.T(), userA.ReauthenticationToken)
+	require.Nil(ts.T(), userA.ReauthenticationSentAt)
+
+	// the one-time token must no longer be redeemable
+	_, err = FindUserByConfirmationToken(ts.db, "confirmation-token-hash")
+	require.Error(ts.T(), err)
+}
+
 func (ts *UserTestSuite) TestUpdateUserEmailFailure() {
 	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
 	require.NoError(ts.T(), err)
