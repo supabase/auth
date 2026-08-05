@@ -469,15 +469,17 @@ func (ts *UserTestSuite) TestUpdateUserEmailSuccess() {
 	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
 
-	primaryIdentity, err := NewIdentity(userA, "email", map[string]interface{}{
+	primaryIdentity, err := NewIdentity(userA, "email", map[string]any{
 		"sub":   userA.ID.String(),
 		"email": "foo@example.com",
 	})
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(primaryIdentity))
 
-	secondaryIdentity, err := NewIdentity(userA, "google", map[string]interface{}{
+	// secondary identity without an email_verified key, must be treated as unverified
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]any{
 		"sub":   userA.ID.String(),
 		"email": "bar@example.com",
 	})
@@ -487,13 +489,123 @@ func (ts *UserTestSuite) TestUpdateUserEmailSuccess() {
 	// UpdateUserEmail should not do anything and the user's email should still use the primaryIdentity
 	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
 	require.Equal(ts.T(), primaryIdentity.GetEmail(), userA.GetEmail())
+	require.NotNil(ts.T(), userA.EmailConfirmedAt)
 
 	// remove primary identity
 	require.NoError(ts.T(), ts.db.Destroy(primaryIdentity))
 
 	// UpdateUserEmail should update the user to use the secondary identity's email
+	// and clear the confirmation state since the promoted email was never verified
 	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
 	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+	require.Nil(ts.T(), userA.EmailConfirmedAt)
+	require.Equal(ts.T(), false, userA.UserMetaData["email_verified"])
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFromVerifiedIdentity() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// the promoted email was verified by the identity provider so the
+	// user's confirmation state should be kept
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+	require.NotNil(ts.T(), userA.EmailConfirmedAt)
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFromUnverifiedIdentity() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// the promoted email was never verified so the user should no longer
+	// be considered confirmed
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+	require.Nil(ts.T(), userA.EmailConfirmedAt)
+	require.Equal(ts.T(), false, userA.UserMetaData["email_verified"])
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailPrefersVerifiedIdentity() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	unverifiedIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "unverified@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(unverifiedIdentity))
+
+	verifiedIdentity, err := NewIdentity(userA, "github", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "verified@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(verifiedIdentity))
+
+	// the verified identity should be promoted even though the unverified
+	// identity was created first
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), verifiedIdentity.GetEmail(), userA.GetEmail())
+	require.NotNil(ts.T(), userA.EmailConfirmedAt)
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailVerifiedConflictFallsBack() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	verifiedIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(verifiedIdentity))
+
+	unverifiedIdentity, err := NewIdentity(userA, "github", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "baz@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(unverifiedIdentity))
+
+	userB, err := NewUser("", "bar@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userB))
+
+	// the verified identity's email is taken by userB so the unverified
+	// identity is promoted instead, which unconfirms the user
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), unverifiedIdentity.GetEmail(), userA.GetEmail())
+	require.Nil(ts.T(), userA.EmailConfirmedAt)
+	require.Equal(ts.T(), false, userA.UserMetaData["email_verified"])
 }
 
 func (ts *UserTestSuite) TestUpdateUserEmailFailure() {

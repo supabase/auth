@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -287,6 +288,31 @@ func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 		}
 	}
 
+	// We select identities in the following order of priority:
+	// 	1. identities whose email was verified by the identity provider
+	// 	2. identities with an unverified email
+	// 	3. identities without an email (e.g. phone)
+	identityRank := func(i *Identity) int {
+		switch {
+		case i.GetEmail() == "":
+			return 2
+		case !i.IsEmailVerified():
+			return 1
+		default:
+			return 0
+		}
+	}
+	sort.SliceStable(identities, func(a, b int) bool {
+		ia, ib := identities[a], identities[b]
+		if ra, rb := identityRank(ia), identityRank(ib); ra != rb {
+			return ra < rb
+		}
+		if !ia.CreatedAt.Equal(ib.CreatedAt) {
+			return ia.CreatedAt.Before(ib.CreatedAt)
+		}
+		return ia.ID.String() < ib.ID.String()
+	})
+
 	var primaryIdentity *Identity
 	for _, i := range identities {
 		if _, terr := FindUserByEmailAndAudience(tx, i.GetEmail(), u.Aud); terr != nil {
@@ -306,9 +332,16 @@ func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 	if terr := u.SetEmail(tx, primaryIdentity.GetEmail()); terr != nil {
 		return terr
 	}
-	if primaryIdentity.GetEmail() == "" {
+	if primaryIdentity.GetEmail() == "" || !primaryIdentity.IsEmailVerified() {
+		// the promoted email was never verified by the IdP or ourselves,
+		// so the user's email can no longer be considered confirmed
 		u.EmailConfirmedAt = nil
 		if terr := tx.UpdateOnly(u, "email_confirmed_at"); terr != nil {
+			return terr
+		}
+		if terr := u.UpdateUserMetaData(tx, map[string]any{
+			"email_verified": false,
+		}); terr != nil {
 			return terr
 		}
 	}
