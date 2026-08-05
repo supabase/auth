@@ -220,6 +220,132 @@ func (ts *IdentityTestSuite) TestUnlinkIdentity() {
 
 }
 
+func (ts *IdentityTestSuite) TestUnlinkIdentityEmailVerification() {
+	ts.Config.Security.ManualLinkingEnabled = true
+
+	boolPtr := func(b bool) *bool { return &b }
+	cases := []struct {
+		desc string
+		// value of email_verified on the remaining identity; nil means
+		// the key is absent from identity_data
+		emailVerified     *bool
+		expectedConfirmed bool
+	}{
+		{
+			desc:              "Promoting an unverified identity email unconfirms the user",
+			emailVerified:     boolPtr(false),
+			expectedConfirmed: false,
+		},
+		{
+			desc:              "Promoting a verified identity email keeps the user confirmed",
+			emailVerified:     boolPtr(true),
+			expectedConfirmed: true,
+		},
+		{
+			desc:              "Promoting an identity without email_verified unconfirms the user",
+			emailVerified:     nil,
+			expectedConfirmed: false,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			ts.SetupTest()
+			u, err := models.NewUser("", "primary@example.com", "password", ts.Config.JWT.Aud, nil)
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), ts.API.db.Create(u))
+			require.NoError(ts.T(), u.Confirm(ts.API.db))
+
+			emailIdentity, err := models.NewIdentity(u, "email", map[string]any{
+				"sub":            u.ID.String(),
+				"email":          u.GetEmail(),
+				"email_verified": true,
+			})
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), ts.API.db.Create(emailIdentity))
+
+			googleData := map[string]any{
+				"sub":   u.ID.String(),
+				"email": "other@example.com",
+			}
+			if c.emailVerified != nil {
+				googleData["email_verified"] = *c.emailVerified
+			}
+			googleIdentity, err := models.NewIdentity(u, "google", googleData)
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), ts.API.db.Create(googleIdentity))
+
+			token := ts.generateAccessTokenAndSession(u)
+			req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/user/identities/%s", emailIdentity.ID), nil)
+			require.NoError(ts.T(), err)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+
+			u, err = models.FindUserByID(ts.API.db, u.ID)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), "other@example.com", u.GetEmail())
+			if c.expectedConfirmed {
+				require.NotNil(ts.T(), u.EmailConfirmedAt)
+				require.NotNil(ts.T(), u.ConfirmedAt)
+			} else {
+				require.Nil(ts.T(), u.EmailConfirmedAt)
+				require.Nil(ts.T(), u.ConfirmedAt)
+				require.Equal(ts.T(), false, u.UserMetaData["email_verified"])
+			}
+		})
+	}
+}
+
+func (ts *IdentityTestSuite) TestUnlinkIdentityPrefersVerifiedEmail() {
+	ts.Config.Security.ManualLinkingEnabled = true
+
+	u, err := models.NewUser("", "primary@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u))
+	require.NoError(ts.T(), u.Confirm(ts.API.db))
+
+	emailIdentity, err := models.NewIdentity(u, "email", map[string]any{
+		"sub":            u.ID.String(),
+		"email":          u.GetEmail(),
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(emailIdentity))
+
+	unverifiedIdentity, err := models.NewIdentity(u, "google", map[string]any{
+		"sub":            u.ID.String(),
+		"email":          "unverified@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(unverifiedIdentity))
+
+	verifiedIdentity, err := models.NewIdentity(u, "github", map[string]any{
+		"sub":            u.ID.String(),
+		"email":          "verified@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(verifiedIdentity))
+
+	token := ts.generateAccessTokenAndSession(u)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/user/identities/%s", emailIdentity.ID), nil)
+	require.NoError(ts.T(), err)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// the verified identity's email should be promoted even though the
+	// unverified identity was created first, keeping the user confirmed
+	u, err = models.FindUserByID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), "verified@example.com", u.GetEmail())
+	require.NotNil(ts.T(), u.EmailConfirmedAt)
+}
+
 func (ts *IdentityTestSuite) generateAccessTokenAndSession(u *models.User) string {
 	s, err := models.NewSession(u.ID, nil)
 	require.NoError(ts.T(), err)
