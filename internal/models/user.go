@@ -328,9 +328,44 @@ func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 	if primaryIdentity == nil {
 		return UserEmailUniqueConflictError{}
 	}
+	previousEmail := u.GetEmail()
 	// default to the first identity's email
 	if terr := u.SetEmail(tx, primaryIdentity.GetEmail()); terr != nil {
 		return terr
+	}
+	if previousEmail != "" {
+		// outstanding tokens were sent to the previous email which is no
+		// longer linked to the user so they can't be trusted anymore
+		u.ConfirmationToken = ""
+		u.ConfirmationSentAt = nil
+		u.RecoveryToken = ""
+		u.RecoverySentAt = nil
+		u.EmailChange = ""
+		u.EmailChangeTokenCurrent = ""
+		u.EmailChangeTokenNew = ""
+		u.EmailChangeSentAt = nil
+		u.EmailChangeConfirmStatus = 0
+		u.ReauthenticationToken = ""
+		u.ReauthenticationSentAt = nil
+		if terr := tx.UpdateOnly(
+			u,
+			"confirmation_token",
+			"confirmation_sent_at",
+			"recovery_token",
+			"recovery_sent_at",
+			"email_change",
+			"email_change_token_current",
+			"email_change_token_new",
+			"email_change_sent_at",
+			"email_change_confirm_status",
+			"reauthentication_token",
+			"reauthentication_sent_at",
+		); terr != nil {
+			return terr
+		}
+		if terr := ClearAllOneTimeTokensForUser(tx, u.ID); terr != nil {
+			return terr
+		}
 	}
 	if primaryIdentity.GetEmail() == "" || !primaryIdentity.IsEmailVerified() {
 		// the promoted email was never verified by the IdP or ourselves,
