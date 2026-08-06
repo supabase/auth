@@ -633,6 +633,9 @@ func (ts *UserTestSuite) TestUpdateUserEmailClearsStaleTokens() {
 	userA.EmailChangeTokenNew = "email-change-new-hash"
 	userA.EmailChangeSentAt = &now
 	userA.EmailChangeConfirmStatus = 1
+	userA.PhoneChange = "123456789"
+	userA.PhoneChangeToken = "phone-change-token-hash"
+	userA.PhoneChangeSentAt = &now
 	userA.ReauthenticationToken = "reauthentication-token-hash"
 	userA.ReauthenticationSentAt = &now
 	require.NoError(ts.T(), ts.db.UpdateOnly(
@@ -646,6 +649,9 @@ func (ts *UserTestSuite) TestUpdateUserEmailClearsStaleTokens() {
 		"email_change_token_new",
 		"email_change_sent_at",
 		"email_change_confirm_status",
+		"phone_change",
+		"phone_change_token",
+		"phone_change_sent_at",
 		"reauthentication_token",
 		"reauthentication_sent_at",
 	))
@@ -667,12 +673,58 @@ func (ts *UserTestSuite) TestUpdateUserEmailClearsStaleTokens() {
 	require.Empty(ts.T(), userA.EmailChangeTokenNew)
 	require.Nil(ts.T(), userA.EmailChangeSentAt)
 	require.Equal(ts.T(), 0, userA.EmailChangeConfirmStatus)
+	require.Empty(ts.T(), userA.PhoneChange)
+	require.Empty(ts.T(), userA.PhoneChangeToken)
+	require.Nil(ts.T(), userA.PhoneChangeSentAt)
 	require.Empty(ts.T(), userA.ReauthenticationToken)
 	require.Nil(ts.T(), userA.ReauthenticationSentAt)
 
 	// the one-time token must no longer be redeemable
 	_, err = FindUserByConfirmationToken(ts.db, "confirmation-token-hash")
 	require.Error(ts.T(), err)
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFromEmptyClearsStaleTokens() {
+	// a user without an email or identities, e.g. an anonymous user
+	userA, err := NewUser("", "", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+
+	identity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
+
+	// simulate a phone change requested before the identity was linked
+	now := time.Now()
+	userA.PhoneChange = "123456789"
+	userA.PhoneChangeToken = "phone-change-token-hash"
+	userA.PhoneChangeSentAt = &now
+	require.NoError(ts.T(), ts.db.UpdateOnly(
+		userA,
+		"phone_change",
+		"phone_change_token",
+		"phone_change_sent_at",
+	))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, userA.ID, userA.PhoneChange, userA.PhoneChangeToken, PhoneChangeToken))
+
+	// promoting an identity's email over an empty one is still a primary
+	// email transition, so outstanding tokens must be revoked
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), identity.GetEmail(), userA.GetEmail())
+
+	userA, err = FindUserByID(ts.db, userA.ID)
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), userA.PhoneChange)
+	require.Empty(ts.T(), userA.PhoneChangeToken)
+	require.Nil(ts.T(), userA.PhoneChangeSentAt)
+
+	_, err = FindOneTimeToken(ts.db, "phone-change-token-hash", PhoneChangeToken)
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err))
 }
 
 func (ts *UserTestSuite) TestUpdateUserEmailFailure() {
