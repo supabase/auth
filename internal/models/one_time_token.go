@@ -165,29 +165,28 @@ func FindOneTimeToken(tx *storage.Connection, tokenHashes []string, tokenTypes .
 
 	query := tx.Eager().Q()
 
-	hashPlaceholders := make([]string, len(tokenHashes))
-	hashArgs := make([]interface{}, len(tokenHashes))
-	for i, hash := range tokenHashes {
-		hashPlaceholders[i] = "?"
-		hashArgs[i] = hash
-	}
-	// Built manually (not via pop's `in (?)` auto-expand) because that
-	// expansion is based on the *total* arg count passed to Where(), which
-	// would be wrong once combined with the token_type args below.
-	tokenHashIn := "token_hash in (" + strings.Join(hashPlaceholders, ",") + ")"
-
 	switch len(tokenTypes) {
 	case 2:
-		args := append([]interface{}{tokenTypes[0], tokenTypes[1]}, hashArgs...)
-		query = query.Where("(token_type = ? or token_type = ?) and "+tokenHashIn, args...) // #nosec G602
+		query = query.Where("(token_type = ? or token_type = ?)", tokenTypes[0], tokenTypes[1]) // #nosec G602
 
 	case 1:
-		args := append([]interface{}{tokenTypes[0]}, hashArgs...)
-		query = query.Where("token_type = ? and "+tokenHashIn, args...)
+		query = query.Where("token_type = ?", tokenTypes[0])
 
 	default:
 		panic("at most 2 token types are accepted")
 	}
+
+	// A separate Where() call containing ONLY the hash args: pop's "in (?)"
+	// auto-expansion sizes itself off every arg passed to that SAME Where()
+	// call, so mixing it with the token_type args above caused a "expected N
+	// arguments, got M" driver error whenever there was exactly one
+	// candidate hash (the single "?" placeholder would additionally match
+	// pop's own regex-based expansion, which used the combined arg count).
+	hashArgs := make([]interface{}, len(tokenHashes))
+	for i, hash := range tokenHashes {
+		hashArgs[i] = hash
+	}
+	query = query.Where("token_hash in (?)", hashArgs...)
 
 	if err := query.First(oneTimeToken); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
