@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.195.0](https://github.com/supabase/auth/compare/v2.194.0...v2.195.0) (2026-07-30)
+
+
+### Features
+
+* gate SCIM router behind an experimental feature flag ([#2639](https://github.com/supabase/auth/issues/2639)) ([0fde049](https://github.com/supabase/auth/commit/0fde049ae7e60cdfa41daa6a52e7a1eb003f8733))
+
+
+### Bug Fixes
+
+* accept offline_access OAuth scope for MCP refresh clients ([#2630](https://github.com/supabase/auth/issues/2630)) ([059b86c](https://github.com/supabase/auth/commit/059b86c41fb622959c2cc8a82662462492f1e217))
+* **auditlogs:** add missing events to docs ([3e5d493](https://github.com/supabase/auth/commit/3e5d4935f3594fd4c90263c4b04c50482c9a09f8))
+* **auditlogs:** remove unused mfa code audit log events ([2909344](https://github.com/supabase/auth/commit/2909344fac21e1355a0a9f1c8316af654ec5aff3))
+* **auditlogs:** remove unused recovery codes audit log events ([d4ca02a](https://github.com/supabase/auth/commit/d4ca02acf217c1949fea5a356d855aac9dfeea5c))
+* persist last_sign_in_at on v2 refresh token issuance ([#2655](https://github.com/supabase/auth/issues/2655)) ([fc654b0](https://github.com/supabase/auth/commit/fc654b05e7a02a6a8c375b3a7895bcd563b790ca))
+* reject AT from banned users ([#2642](https://github.com/supabase/auth/issues/2642)) ([b6878c2](https://github.com/supabase/auth/commit/b6878c2fa63f805dbd27436c36ba7ebbc2b7e44d))
+* update google.golang.org/grpc to v1.82.1 ([#2651](https://github.com/supabase/auth/issues/2651)) ([4a596c0](https://github.com/supabase/auth/commit/4a596c0d556e7bed6874f87af18aab3f4fb4efa1))
+
 ## [2.194.0](https://github.com/supabase/auth/compare/v2.193.1...v2.194.0) (2026-07-27)
 
 

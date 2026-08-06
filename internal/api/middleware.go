@@ -420,6 +420,14 @@ func (a *API) requirePasskeyEnabled(w http.ResponseWriter, req *http.Request) (c
 	return ctx, nil
 }
 
+func (a *API) requireScimServerEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.Experimental.ScimEnabled {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeFeatureDisabled, "SCIM server is disabled")
+	}
+	return ctx, nil
+}
+
 func (a *API) databaseCleanup(cleanup models.Cleaner) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

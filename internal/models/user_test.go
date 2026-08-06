@@ -469,15 +469,17 @@ func (ts *UserTestSuite) TestUpdateUserEmailSuccess() {
 	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
 
-	primaryIdentity, err := NewIdentity(userA, "email", map[string]interface{}{
+	primaryIdentity, err := NewIdentity(userA, "email", map[string]any{
 		"sub":   userA.ID.String(),
 		"email": "foo@example.com",
 	})
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(primaryIdentity))
 
-	secondaryIdentity, err := NewIdentity(userA, "google", map[string]interface{}{
+	// secondary identity without an email_verified key, must be treated as unverified
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]any{
 		"sub":   userA.ID.String(),
 		"email": "bar@example.com",
 	})
@@ -487,13 +489,242 @@ func (ts *UserTestSuite) TestUpdateUserEmailSuccess() {
 	// UpdateUserEmail should not do anything and the user's email should still use the primaryIdentity
 	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
 	require.Equal(ts.T(), primaryIdentity.GetEmail(), userA.GetEmail())
+	require.NotNil(ts.T(), userA.EmailConfirmedAt)
 
 	// remove primary identity
 	require.NoError(ts.T(), ts.db.Destroy(primaryIdentity))
 
 	// UpdateUserEmail should update the user to use the secondary identity's email
+	// and clear the confirmation state since the promoted email was never verified
 	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
 	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+	require.Nil(ts.T(), userA.EmailConfirmedAt)
+	require.Equal(ts.T(), false, userA.UserMetaData["email_verified"])
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFromVerifiedIdentity() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// the promoted email was verified by the identity provider so the
+	// user's confirmation state should be kept
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+	require.NotNil(ts.T(), userA.EmailConfirmedAt)
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFromUnverifiedIdentity() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// the promoted email was never verified so the user should no longer
+	// be considered confirmed
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+	require.Nil(ts.T(), userA.EmailConfirmedAt)
+	require.Equal(ts.T(), false, userA.UserMetaData["email_verified"])
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailPrefersVerifiedIdentity() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	unverifiedIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "unverified@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(unverifiedIdentity))
+
+	verifiedIdentity, err := NewIdentity(userA, "github", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "verified@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(verifiedIdentity))
+
+	// the verified identity should be promoted even though the unverified
+	// identity was created first
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), verifiedIdentity.GetEmail(), userA.GetEmail())
+	require.NotNil(ts.T(), userA.EmailConfirmedAt)
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailVerifiedConflictFallsBack() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	verifiedIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(verifiedIdentity))
+
+	unverifiedIdentity, err := NewIdentity(userA, "github", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "baz@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(unverifiedIdentity))
+
+	userB, err := NewUser("", "bar@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userB))
+
+	// the verified identity's email is taken by userB so the unverified
+	// identity is promoted instead, which unconfirms the user
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), unverifiedIdentity.GetEmail(), userA.GetEmail())
+	require.Nil(ts.T(), userA.EmailConfirmedAt)
+	require.Equal(ts.T(), false, userA.UserMetaData["email_verified"])
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailClearsStaleTokens() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]interface{}{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// simulate outstanding tokens sent to the previous email
+	now := time.Now()
+	userA.ConfirmationToken = "confirmation-token-hash"
+	userA.ConfirmationSentAt = &now
+	userA.RecoveryToken = "recovery-token-hash"
+	userA.RecoverySentAt = &now
+	userA.EmailChange = "baz@example.com"
+	userA.EmailChangeTokenCurrent = "email-change-current-hash"
+	userA.EmailChangeTokenNew = "email-change-new-hash"
+	userA.EmailChangeSentAt = &now
+	userA.EmailChangeConfirmStatus = 1
+	userA.PhoneChange = "123456789"
+	userA.PhoneChangeToken = "phone-change-token-hash"
+	userA.PhoneChangeSentAt = &now
+	userA.ReauthenticationToken = "reauthentication-token-hash"
+	userA.ReauthenticationSentAt = &now
+	require.NoError(ts.T(), ts.db.UpdateOnly(
+		userA,
+		"confirmation_token",
+		"confirmation_sent_at",
+		"recovery_token",
+		"recovery_sent_at",
+		"email_change",
+		"email_change_token_current",
+		"email_change_token_new",
+		"email_change_sent_at",
+		"email_change_confirm_status",
+		"phone_change",
+		"phone_change_token",
+		"phone_change_sent_at",
+		"reauthentication_token",
+		"reauthentication_sent_at",
+	))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, userA.ID, userA.GetEmail(), userA.ConfirmationToken, ConfirmationToken))
+
+	// promoting another identity's email must revoke every outstanding
+	// token addressed to the previous email
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+
+	userA, err = FindUserByID(ts.db, userA.ID)
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), userA.ConfirmationToken)
+	require.Nil(ts.T(), userA.ConfirmationSentAt)
+	require.Empty(ts.T(), userA.RecoveryToken)
+	require.Nil(ts.T(), userA.RecoverySentAt)
+	require.Empty(ts.T(), userA.EmailChange)
+	require.Empty(ts.T(), userA.EmailChangeTokenCurrent)
+	require.Empty(ts.T(), userA.EmailChangeTokenNew)
+	require.Nil(ts.T(), userA.EmailChangeSentAt)
+	require.Equal(ts.T(), 0, userA.EmailChangeConfirmStatus)
+	require.Empty(ts.T(), userA.PhoneChange)
+	require.Empty(ts.T(), userA.PhoneChangeToken)
+	require.Nil(ts.T(), userA.PhoneChangeSentAt)
+	require.Empty(ts.T(), userA.ReauthenticationToken)
+	require.Nil(ts.T(), userA.ReauthenticationSentAt)
+
+	// the one-time token must no longer be redeemable
+	_, err = FindUserByConfirmationToken(ts.db, "confirmation-token-hash")
+	require.Error(ts.T(), err)
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFromEmptyClearsStaleTokens() {
+	// a user without an email or identities, e.g. an anonymous user
+	userA, err := NewUser("", "", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+
+	identity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
+
+	// simulate a phone change requested before the identity was linked
+	now := time.Now()
+	userA.PhoneChange = "123456789"
+	userA.PhoneChangeToken = "phone-change-token-hash"
+	userA.PhoneChangeSentAt = &now
+	require.NoError(ts.T(), ts.db.UpdateOnly(
+		userA,
+		"phone_change",
+		"phone_change_token",
+		"phone_change_sent_at",
+	))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, userA.ID, userA.PhoneChange, userA.PhoneChangeToken, PhoneChangeToken))
+
+	// promoting an identity's email over an empty one is still a primary
+	// email transition, so outstanding tokens must be revoked
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), identity.GetEmail(), userA.GetEmail())
+
+	userA, err = FindUserByID(ts.db, userA.ID)
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), userA.PhoneChange)
+	require.Empty(ts.T(), userA.PhoneChangeToken)
+	require.Nil(ts.T(), userA.PhoneChangeSentAt)
+
+	_, err = FindOneTimeToken(ts.db, "phone-change-token-hash", PhoneChangeToken)
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err))
 }
 
 func (ts *UserTestSuite) TestUpdateUserEmailFailure() {
