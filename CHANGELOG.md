@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.196.0](https://github.com/supabase/auth/compare/v2.195.0...v2.196.0) (2026-08-06)
+
+
+### Features
+
+* **admin:** create an email identity when an admin sets a first password ([f369cfa](https://github.com/supabase/auth/commit/f369cfa6a2b651e19b1247a8a67bf6a124c03984))
+* **conf:** add experimental flag for creating an email identity on password set ([8f19669](https://github.com/supabase/auth/commit/8f19669492e17e219bfda5a264a0af3f11940ffb))
+* create an email identity when a user adds their first password ([3afa027](https://github.com/supabase/auth/commit/3afa027c5cd0709ae82b46b461c8addbfd527be9))
+* **scim:** render SCIM errors in RFC 7644 form ([#2661](https://github.com/supabase/auth/issues/2661)) ([dc5bf8e](https://github.com/supabase/auth/commit/dc5bf8e843852d35fb0503ad7974c4ca71f80a85))
+
+
+### Bug Fixes
+
+* clear pending phone change when the user's email is replaced ([5ce63bb](https://github.com/supabase/auth/commit/5ce63bbe251970ac3eb2bbfb160f5954563db4fd))
+* correctly update email confirmation when an identity is unlinked ([e2fae4c](https://github.com/supabase/auth/commit/e2fae4cffc5763fc56d70a5a70c3bc8bd19f0bfe))
+* revoke outstanding email tokens when the user's email is replaced ([cf74a14](https://github.com/supabase/auth/commit/cf74a14fd7ed94645d318162f803bcb73da60662))
+
 ## [2.195.0](https://github.com/supabase/auth/compare/v2.194.0...v2.195.0) (2026-07-30)
 
 
