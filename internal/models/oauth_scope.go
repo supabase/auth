@@ -4,10 +4,11 @@ import "strings"
 
 // OAuth/OIDC scope constants
 const (
-	ScopeOpenID  = "openid"
-	ScopeEmail   = "email"
-	ScopeProfile = "profile"
-	ScopePhone   = "phone"
+	ScopeOpenID        = "openid"
+	ScopeEmail         = "email"
+	ScopeProfile       = "profile"
+	ScopePhone         = "phone"
+	ScopeOfflineAccess = "offline_access"
 )
 
 // SupportedOAuthScopes defines all OAuth/OIDC scopes supported by the server
@@ -16,6 +17,7 @@ var SupportedOAuthScopes = []string{
 	ScopeProfile,
 	ScopeEmail,
 	ScopePhone,
+	ScopeOfflineAccess,
 }
 
 // IsSupportedScope checks if a scope is in the supported scopes list

@@ -1,5 +1,38 @@
 # Changelog
 
+## [2.195.0](https://github.com/supabase/auth/compare/v2.194.0...v2.195.0) (2026-07-30)
+
+
+### Features
+
+* gate SCIM router behind an experimental feature flag ([#2639](https://github.com/supabase/auth/issues/2639)) ([0fde049](https://github.com/supabase/auth/commit/0fde049ae7e60cdfa41daa6a52e7a1eb003f8733))
+
+
+### Bug Fixes
+
+* accept offline_access OAuth scope for MCP refresh clients ([#2630](https://github.com/supabase/auth/issues/2630)) ([059b86c](https://github.com/supabase/auth/commit/059b86c41fb622959c2cc8a82662462492f1e217))
+* **auditlogs:** add missing events to docs ([3e5d493](https://github.com/supabase/auth/commit/3e5d4935f3594fd4c90263c4b04c50482c9a09f8))
+* **auditlogs:** remove unused mfa code audit log events ([2909344](https://github.com/supabase/auth/commit/2909344fac21e1355a0a9f1c8316af654ec5aff3))
+* **auditlogs:** remove unused recovery codes audit log events ([d4ca02a](https://github.com/supabase/auth/commit/d4ca02acf217c1949fea5a356d855aac9dfeea5c))
+* persist last_sign_in_at on v2 refresh token issuance ([#2655](https://github.com/supabase/auth/issues/2655)) ([fc654b0](https://github.com/supabase/auth/commit/fc654b05e7a02a6a8c375b3a7895bcd563b790ca))
+* reject AT from banned users ([#2642](https://github.com/supabase/auth/issues/2642)) ([b6878c2](https://github.com/supabase/auth/commit/b6878c2fa63f805dbd27436c36ba7ebbc2b7e44d))
+* update google.golang.org/grpc to v1.82.1 ([#2651](https://github.com/supabase/auth/issues/2651)) ([4a596c0](https://github.com/supabase/auth/commit/4a596c0d556e7bed6874f87af18aab3f4fb4efa1))
+
+## [2.194.0](https://github.com/supabase/auth/compare/v2.193.1...v2.194.0) (2026-07-27)
+
+
+### Features
+
+* add cursor-based pagination for admin users list ([#2633](https://github.com/supabase/auth/issues/2633)) ([76e2aac](https://github.com/supabase/auth/commit/76e2aace4899f71bfc6038c8a00c913936a4561e))
+* add optional override for custom provider redirect URIs ([#2641](https://github.com/supabase/auth/issues/2641)) ([67c55c0](https://github.com/supabase/auth/commit/67c55c00789d69505881e3143dc248a2a1d2ab55))
+
+
+### Bug Fixes
+
+* consolidate error logs into single log entry ([#2635](https://github.com/supabase/auth/issues/2635)) ([47b3d94](https://github.com/supabase/auth/commit/47b3d9429f22412a01c0e7a02aaa76156a9ea7e7))
+* **deps:** bump otel versions for vulncheck ([#2648](https://github.com/supabase/auth/issues/2648)) ([4c2d691](https://github.com/supabase/auth/commit/4c2d691f7c2d2cebe7d4c9b37d78cd2fb564ea53))
+* upgrade to x/text@v0.39.0 GO-2026-5970 ([#2636](https://github.com/supabase/auth/issues/2636)) ([66421c6](https://github.com/supabase/auth/commit/66421c6f77bc045fb83dab1fc38d97158418f5aa))
+
 ## [2.193.1](https://github.com/supabase/auth/compare/v2.193.0...v2.193.1) (2026-07-16)
 
 
