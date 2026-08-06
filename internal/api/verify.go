@@ -573,7 +573,11 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 		user.EmailChangeConfirmStatus == zeroConfirmation &&
 		user.GetEmail() != "" {
 		err := conn.Transaction(func(tx *storage.Connection) error {
-			candidates := params.tokenHashCandidates()
+			baseCandidates := params.tokenHashCandidates()
+			candidates := make([]string, 0, len(baseCandidates)*2)
+			for _, c := range baseCandidates {
+				candidates = append(candidates, c, PKCEPrefix+c)
+			}
 
 			currentOTT, terr := models.FindOneTimeToken(tx, candidates, models.EmailChangeTokenCurrent)
 			if terr != nil && !models.IsNotFoundError(terr) {
