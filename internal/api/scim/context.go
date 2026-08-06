@@ -10,11 +10,8 @@ func NewKey[T any](name string) Key[T] {
 	return Key[T]{name: name}
 }
 
-// String makes the key legible when a context is printed. Without it two
-// keys of the same T are indistinguishable, since context renders the key by
-// type name.
 func (k Key[T]) String() string {
-	return "gotrue scim context key " + k.name
+	return k.name
 }
 
 func (k Key[T]) With(ctx context.Context, value T) context.Context {
