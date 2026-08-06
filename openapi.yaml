@@ -667,6 +667,9 @@ paths:
                   format: phone
                 password:
                   type: string
+                current_password:
+                  type: string
+                  description: Required when setting a new password and `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_CURRENT_PASSWORD` is enabled.
                 nonce:
                   type: string
                 data:
@@ -760,7 +763,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/responses/UnauthorizedResponse"
+                $ref: "#/components/schemas/ErrorSchema"
               examples:
                 example:
                   summary: no_authorization
@@ -771,7 +774,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/responses/ForbiddenResponse"
+                $ref: "#/components/schemas/ErrorSchema"
               examples:
                 example:
                   summary: bad_jwt
@@ -1554,6 +1557,31 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/UserSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+    post:
+      summary: Create a user.
+      tags:
+        - admin
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateUserSchema"
+      responses:
+        200:
+          description: The user was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSchema"
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
@@ -3274,6 +3302,43 @@ components:
         is_anonymous:
           type: boolean
 
+    AdminCreateUserSchema:
+      type: object
+      description: Object describing the user to create. Either an email or a phone must be provided.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Generated when omitted.
+        aud:
+          type: string
+        role:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        password:
+          type: string
+          description: Mutually exclusive with `password_hash`. A random password is generated when neither is given.
+        password_hash:
+          type: string
+          description: Mutually exclusive with `password`.
+        email_confirm:
+          type: boolean
+          description: Marks the email confirmed, skipping the confirmation email.
+        phone_confirm:
+          type: boolean
+          description: Marks the phone confirmed, skipping the confirmation SMS.
+        user_metadata:
+          type: object
+        app_metadata:
+          type: object
+        ban_duration:
+          type: string
+          description: Duration such as `24h` (units `ns`, `us`, `ms`, `s`, `m`, `h`), or `none`.
+
     SAMLAttributeMappingSchema:
       type: object
       properties:
@@ -3405,7 +3470,7 @@ components:
           format: uuid
         id:
           type: string
-          format: uuid
+          description: Subject identifier issued by the provider. Only a UUID for `email` and `phone`.
         user_id:
           type: string
           format: uuid
@@ -3500,8 +3565,6 @@ components:
                   properties:
                     publicKey:
                       $ref: '#/components/schemas/CredentialRequestOptions'
-          discriminator:
-            propertyName: type
 
     CredentialRequestOptions:
       type: object
