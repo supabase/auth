@@ -1,8 +1,10 @@
 package models
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/hex"
 	"encoding/json"
 	"net/url"
 	"reflect"
@@ -23,6 +25,8 @@ type SSOProvider struct {
 	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
 	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
 
+	SCIMTokenHash *string `db:"scim_token_hash" json:"-"`
+
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
 }
@@ -37,6 +41,16 @@ func (p SSOProvider) TableName() string {
 
 func (p SSOProvider) Type() string {
 	return "saml"
+}
+
+func (p *SSOProvider) UpdateSCIMToken(token string) {
+	hash := toSHA256(token)
+	p.SCIMTokenHash = &hash
+}
+
+func toSHA256(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
 
 type SAMLAttribute struct {
@@ -217,6 +231,20 @@ func FindSSOProviderByResourceID(tx *storage.Connection, id string) (*SSOProvide
 		}
 
 		return nil, errors.Wrap(err, "error finding SAML SSO provider by Resource ID")
+	}
+
+	return &ssoProvider, nil
+}
+
+func FindSSOProviderBySCIMToken(tx *storage.Connection, token string) (*SSOProvider, error) {
+	var ssoProvider SSOProvider
+
+	if err := tx.Q().Where("scim_token_hash = ?", toSHA256(token)).First(&ssoProvider); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SSOProviderNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error finding SSO provider by SCIM token")
 	}
 
 	return &ssoProvider, nil
