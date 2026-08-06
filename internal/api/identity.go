@@ -74,7 +74,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 				return apierrors.NewInternalServerError("Database error updating user phone").WithInternalError(terr)
 			}
 		default:
-			if terr := user.UpdateUserEmailFromIdentities(tx); terr != nil {
+			if terr := user.UpdateUserEmailFromIdentities(tx, config.Mailer.Autoconfirm); terr != nil {
 				if models.IsUniqueConstraintViolatedError(terr) {
 					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailConflictIdentityNotDeletable, "Unable to unlink identity due to email conflict").WithInternalError(terr)
 				}
@@ -185,7 +185,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 	}
 
 	if targetUser.GetEmail() == "" {
-		if terr := targetUser.UpdateUserEmailFromIdentities(tx); terr != nil {
+		if terr := targetUser.UpdateUserEmailFromIdentities(tx, a.config.Mailer.Autoconfirm); terr != nil {
 			if models.IsUniqueConstraintViolatedError(terr) {
 				return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
