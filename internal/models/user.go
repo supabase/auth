@@ -274,8 +274,9 @@ func (u *User) UpdateAppMetaDataProviders(tx *storage.Connection) error {
 }
 
 // UpdateUserEmail updates the user's email to one of the identity's email
-// if the current email used doesn't match any of the identities email
-func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
+// if the current email used doesn't match any of the identities email.
+// Unverified identity emails remain confirmed when mailer autoconfirm is enabled.
+func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection, mailerAutoconfirm bool) error {
 	identities, terr := FindIdentitiesByUserID(tx, u.ID)
 	if terr != nil {
 		return terr
@@ -337,9 +338,9 @@ func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 	if terr := u.ClearAllPendingTokens(tx); terr != nil {
 		return terr
 	}
-	if primaryIdentity.GetEmail() == "" || !primaryIdentity.IsEmailVerified() {
-		// the promoted email was never verified by the IdP or ourselves,
-		// so the user's email can no longer be considered confirmed
+	if primaryIdentity.GetEmail() == "" || (!primaryIdentity.IsEmailVerified() && !mailerAutoconfirm) {
+		// the promoted email was neither verified by the IdP nor covered by
+		// the project's autoconfirm policy, so it can't remain confirmed
 		u.EmailConfirmedAt = nil
 		if terr := tx.UpdateOnly(u, "email_confirmed_at"); terr != nil {
 			return terr
