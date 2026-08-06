@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/scim/protocol"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -17,7 +18,8 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 		return userNotFound(w)
 	}
 
-	user, err := models.FindUserByIDAndSSOProviderID(srv.db.WithContext(ctx), id, providerKey.From(ctx).ID)
+	provider := shared.GetSSOProvider(ctx)
+	user, err := models.FindUserByIDAndSSOProviderID(srv.db.WithContext(ctx), id, provider.ID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return userNotFound(w)

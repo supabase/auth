@@ -5,11 +5,10 @@ import (
 	"net/http"
 
 	"github.com/supabase/auth/internal/api/scim/protocol"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 )
-
-var providerKey = NewKey[*models.SSOProvider]("sso_provider")
 
 func (srv *Server) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +46,7 @@ func (srv *Server) authenticate(w http.ResponseWriter, r *http.Request) (context
 
 	observability.LogEntrySetField(r, "sso_provider_id", provider.ID.String())
 
-	return providerKey.With(ctx, provider), true
+	return shared.WithSSOProvider(ctx, provider), true
 }
 
 func unauthorized(w http.ResponseWriter) error {
