@@ -42,8 +42,12 @@ func generateOtp(r io.Reader, digits int) string {
 	return otp
 }
 
-func GenerateTokenHash(emailOrPhone, otp string) string {
-	return fmt.Sprintf("%x", sha256.Sum224([]byte(emailOrPhone+otp)))
+// GenerateTokenHash computes a one-time-token/OTP hash. salt should be the
+// server's configured Security.TokenHashSalt (or "" to reproduce the legacy
+// unsalted formula, used as a fallback while verifying tokens issued before
+// a salt was configured).
+func GenerateTokenHash(salt, emailOrPhone, otp string) string {
+	return fmt.Sprintf("%x", sha256.Sum224([]byte(salt+emailOrPhone+otp)))
 }
 
 // Generated a random secure integer from [0, max[

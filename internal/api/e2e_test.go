@@ -193,7 +193,7 @@ func signupAndConfirmEmail(
 	require.False(t, hookReq.Metadata.Time.IsZero())
 
 	// verify that the latest user from find user matches OTP
-	otpHash := crypto.GenerateTokenHash(
+	otpHash := crypto.GenerateTokenHash("",
 		expUser.GetEmail(), hookReq.EmailData.Token)
 	require.NotEmpty(t, hookReq.EmailData.Token)
 	require.Equal(t, otpHash, hookReq.EmailData.TokenHash)
@@ -208,7 +208,7 @@ func signupAndConfirmEmail(
 	// otp matches the user id and email
 	ott, err := models.FindOneTimeToken(
 		inst.Conn,
-		hookReq.EmailData.TokenHash,
+		[]string{hookReq.EmailData.TokenHash},
 		models.ConfirmationToken)
 	require.NoError(t, err)
 	require.Equal(t, expUser.ID.String(), ott.UserID.String())
@@ -312,12 +312,12 @@ func TestE2EHooks(t *testing.T) {
 				require.NotNil(t, latestUser)
 
 				otp := hookReq.SMS.OTP
-				otpHash := crypto.GenerateTokenHash(
+				otpHash := crypto.GenerateTokenHash("",
 					signupUser.GetPhone(), hookReq.SMS.OTP)
 
 				ott, err := models.FindOneTimeToken(
 					inst.Conn,
-					otpHash,
+					[]string{otpHash},
 					models.ConfirmationToken)
 				require.NoError(t, err)
 				require.Equal(t, signupUser.ID.String(), ott.UserID.String())
@@ -417,12 +417,12 @@ func TestE2EHooks(t *testing.T) {
 					require.Equal(t, currentUser.AppMetaData, hookReq.User.AppMetaData)
 
 					otp = hookReq.SMS.OTP
-					otpHash := crypto.GenerateTokenHash(
+					otpHash := crypto.GenerateTokenHash("",
 						currentUser.PhoneChange, hookReq.SMS.OTP)
 
 					ott, err := models.FindOneTimeToken(
 						inst.Conn,
-						otpHash,
+						[]string{otpHash},
 						models.PhoneChangeToken)
 					require.NoError(t, err)
 					require.Equal(t, currentUser.ID.String(), ott.UserID.String())
@@ -1184,9 +1184,9 @@ func TestE2EHooks(t *testing.T) {
 				require.Equal(t, newEmail, hookReq.User.EmailChange)
 
 				// verify otps
-				curOtpHash := crypto.GenerateTokenHash(
+				curOtpHash := crypto.GenerateTokenHash("",
 					curEmail, hookReq.EmailData.Token)
-				newOtpHash := crypto.GenerateTokenHash(
+				newOtpHash := crypto.GenerateTokenHash("",
 					newEmail, hookReq.EmailData.TokenNew)
 
 				// The hashes are switched incorrectly in the current code, i.e.:
@@ -1208,7 +1208,7 @@ func TestE2EHooks(t *testing.T) {
 				// verify there is an ott generated
 				ott, err := models.FindOneTimeToken(
 					inst.Conn,
-					hookReq.EmailData.TokenHash,
+					[]string{hookReq.EmailData.TokenHash},
 					models.EmailChangeTokenNew)
 				require.NoError(t, err)
 				require.Equal(t, signupUser.ID.String(), ott.UserID.String())
@@ -1290,7 +1290,7 @@ func TestE2EHooks(t *testing.T) {
 				// verify there is an ott generated
 				ott, err := models.FindOneTimeToken(
 					inst.Conn,
-					hookReq.EmailData.TokenHash,
+					[]string{hookReq.EmailData.TokenHash},
 					models.EmailChangeTokenNew)
 				require.NoError(t, err)
 				require.Equal(t, signupUser.ID.String(), ott.UserID.String())
@@ -1313,7 +1313,7 @@ func TestE2EHooks(t *testing.T) {
 				require.Empty(t, hookReq.EmailData.TokenHashNew)
 
 				// verify otps
-				newOtpHash := crypto.GenerateTokenHash(
+				newOtpHash := crypto.GenerateTokenHash("",
 					newEmail, hookReq.EmailData.Token)
 
 				// The new email is stored on fields without _new suffix.
@@ -1413,7 +1413,7 @@ func TestE2EHooks(t *testing.T) {
 				require.Equal(t, newEmail, hookReq.User.EmailChange)
 
 				// verify otps
-				newOtpHash := crypto.GenerateTokenHash(
+				newOtpHash := crypto.GenerateTokenHash("",
 					newEmail, hookReq.EmailData.Token)
 
 				// The new email is stored on fields without _new suffix.
@@ -1433,7 +1433,7 @@ func TestE2EHooks(t *testing.T) {
 				// verify there is an ott generated
 				ott, err := models.FindOneTimeToken(
 					inst.Conn,
-					hookReq.EmailData.TokenHash,
+					[]string{hookReq.EmailData.TokenHash},
 					models.EmailChangeTokenNew)
 				require.NoError(t, err)
 				require.Equal(t, signupUser.ID.String(), ott.UserID.String())
@@ -1515,7 +1515,7 @@ func TestE2EHooks(t *testing.T) {
 				// verify there is an ott generated
 				ott, err := models.FindOneTimeToken(
 					inst.Conn,
-					hookReq.EmailData.TokenHash,
+					[]string{hookReq.EmailData.TokenHash},
 					models.EmailChangeTokenNew)
 				require.NoError(t, err)
 				require.Equal(t, signupUser.ID.String(), ott.UserID.String())
@@ -1538,7 +1538,7 @@ func TestE2EHooks(t *testing.T) {
 				require.Empty(t, hookReq.EmailData.TokenHashNew)
 
 				// verify otps
-				newOtpHash := crypto.GenerateTokenHash(
+				newOtpHash := crypto.GenerateTokenHash("",
 					newEmail, hookReq.EmailData.Token)
 
 				// The new email is stored on fields without _new suffix.

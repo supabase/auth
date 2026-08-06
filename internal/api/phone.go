@@ -124,7 +124,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		}
 	}
 
-	*token = crypto.GenerateTokenHash(phone, otp)
+	*token = crypto.GenerateTokenHash(config.Security.TokenHashSalt, phone, otp)
 
 	switch otpType {
 	case phoneConfirmationOtp:

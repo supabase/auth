@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
@@ -72,9 +73,17 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeReauthenticationNotValid, InvalidNonceMessage)
 	}
 	var isValid bool
+	salt := config.Security.TokenHashSalt
 	if user.GetEmail() != "" {
-		tokenHash := crypto.GenerateTokenHash(user.GetEmail(), nonce)
+		tokenHash := crypto.GenerateTokenHash(salt, user.GetEmail(), nonce)
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
+		if !isValid && salt != "" {
+			legacyHash := crypto.GenerateTokenHash("", user.GetEmail(), nonce)
+			if isOtpValid(legacyHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp) {
+				isValid = true
+				logrus.Info("reauthentication token verified using legacy (pre-salt) token hash fallback")
+			}
+		}
 	} else if user.GetPhone() != "" {
 		if config.Sms.IsTwilioVerifyProvider() {
 			smsProvider, _ := sms_provider.GetSmsProvider(*config)
@@ -83,8 +92,15 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 			}
 			return nil
 		} else {
-			tokenHash := crypto.GenerateTokenHash(user.GetPhone(), nonce)
+			tokenHash := crypto.GenerateTokenHash(salt, user.GetPhone(), nonce)
 			isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
+			if !isValid && salt != "" {
+				legacyHash := crypto.GenerateTokenHash("", user.GetPhone(), nonce)
+				if isOtpValid(legacyHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp) {
+					isValid = true
+					logrus.Info("reauthentication token verified using legacy (pre-salt) token hash fallback")
+				}
+			}
 		}
 	} else {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeReauthenticationNotValid, "Reauthentication requires an email or a phone number")
