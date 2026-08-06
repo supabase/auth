@@ -470,24 +470,18 @@ func (ts *SSOTestSuite) TestFindSSOProviderByResourceID() {
 	}
 }
 
-func buildSSOProvider() *SSOProvider {
-	id := uuid.Must(uuid.NewV4()).String()
-
-	return &SSOProvider{
-		SAMLProvider: SAMLProvider{
-			EntityID:    "https://example.com/saml/metadata/" + id,
-			MetadataXML: "<example />",
-		},
-	}
-}
-
 func (ts *SSOTestSuite) TestUpdateSCIMToken() {
 	hashes := map[string]string{
 		"scim_test_token":    "dcbcd9ffd696ae1f2ee0f035fa17680d78175020a5fa1aadc758dbd681e0fe1d",
 		"scim_rotated_token": "289adb37f8946571bb4aea1e663281126c7f2d84d929ff09429fcaa1eb3f27bf",
 	}
 
-	provider := buildSSOProvider()
+	provider := &SSOProvider{
+		SAMLProvider: SAMLProvider{
+			EntityID:    "https://example.com/saml/metadata/",
+			MetadataXML: "<example />",
+		},
+	}
 	require.Nil(ts.T(), provider.SCIMTokenHash)
 
 	for token, hash := range hashes {
@@ -498,13 +492,23 @@ func (ts *SSOTestSuite) TestUpdateSCIMToken() {
 }
 
 func (ts *SSOTestSuite) TestFindSSOProviderBySCIMToken() {
-	provider := buildSSOProvider()
-
 	token := "scim_test_token"
+	provider := &SSOProvider{
+		SAMLProvider: SAMLProvider{
+			EntityID:    "https://example.com/saml/metadata/1",
+			MetadataXML: "<example />",
+		},
+	}
+
 	provider.UpdateSCIMToken(token)
 	require.NoError(ts.T(), ts.db.Eager().Create(provider))
 
-	withoutToken := buildSSOProvider()
+	withoutToken := &SSOProvider{
+		SAMLProvider: SAMLProvider{
+			EntityID:    "https://example.com/saml/metadata/2",
+			MetadataXML: "<example />",
+		},
+	}
 	require.NoError(ts.T(), ts.db.Eager().Create(withoutToken))
 
 	ts.Run("resolves the provider that owns the token", func() {
