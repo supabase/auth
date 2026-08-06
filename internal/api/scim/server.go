@@ -14,18 +14,22 @@ import (
 
 const BasePath = "/scim/v2"
 
+type TokenExtractor func(r *http.Request) (string, error)
+
 type Server struct {
 	db                    *storage.Connection
+	extract               TokenExtractor
 	users                 Mapper[*models.User, *core.User]
 	serviceProviderConfig *core.ServiceProviderConfig
 }
 
-func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) *Server {
+func NewServer(config *conf.GlobalConfiguration, db *storage.Connection, extract TokenExtractor) *Server {
 	baseURL := strings.TrimRight(config.API.ExternalURL, "/") + BasePath
 
 	return &Server{
-		db:    db,
-		users: NewUserMapper(baseURL),
+		db:      db,
+		extract: extract,
+		users:   NewUserMapper(baseURL),
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),

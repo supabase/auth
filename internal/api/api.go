@@ -138,7 +138,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
 	}
 
-	api.scim = scim.NewServer(globalConfig, db)
+	api.scim = scim.NewServer(globalConfig, db, api.extractBearerToken)
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{

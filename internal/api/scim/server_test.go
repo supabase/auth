@@ -18,7 +18,7 @@ var fixtures embed.FS
 func newServerFor(externalURL string) *Server {
 	return NewServer(&conf.GlobalConfiguration{
 		API: conf.APIConfiguration{ExternalURL: externalURL},
-	}, nil)
+	}, nil, nil)
 }
 
 func testFixture(t *testing.T, file string) string {

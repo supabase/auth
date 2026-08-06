@@ -3,7 +3,6 @@ package scim
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/models"
@@ -25,8 +24,8 @@ func (srv *Server) Authenticate(next http.Handler) http.Handler {
 func (srv *Server) authenticate(w http.ResponseWriter, r *http.Request) (context.Context, bool) {
 	ctx := r.Context()
 
-	token, ok := parseBearerToken(r.Header.Get("Authorization"))
-	if !ok {
+	token, err := srv.extract(r)
+	if err != nil {
 		unauthorized(w)
 		return nil, false
 	}
@@ -49,20 +48,6 @@ func (srv *Server) authenticate(w http.ResponseWriter, r *http.Request) (context
 	observability.LogEntrySetField(r, "sso_provider_id", provider.ID.String())
 
 	return providerKey.With(ctx, provider), true
-}
-
-func parseBearerToken(header string) (string, bool) {
-	scheme, rest, found := strings.Cut(header, " ")
-	if !found || !strings.EqualFold(scheme, "Bearer") {
-		return "", false
-	}
-
-	token := strings.TrimSpace(rest)
-	if token == "" || strings.ContainsAny(token, " \t\r\n\v\f") {
-		return "", false
-	}
-
-	return token, true
 }
 
 func unauthorized(w http.ResponseWriter) error {
