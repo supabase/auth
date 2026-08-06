@@ -222,6 +222,8 @@ func (ts *IdentityTestSuite) TestUnlinkIdentity() {
 
 func (ts *IdentityTestSuite) TestUnlinkIdentityEmailVerification() {
 	ts.Config.Security.ManualLinkingEnabled = true
+	originalAutoconfirm := ts.Config.Mailer.Autoconfirm
+	defer func() { ts.Config.Mailer.Autoconfirm = originalAutoconfirm }()
 
 	boolPtr := func(b bool) *bool { return &b }
 	cases := []struct {
@@ -229,6 +231,7 @@ func (ts *IdentityTestSuite) TestUnlinkIdentityEmailVerification() {
 		// value of email_verified on the remaining identity; nil means
 		// the key is absent from identity_data
 		emailVerified     *bool
+		autoconfirm       bool
 		expectedConfirmed bool
 	}{
 		{
@@ -246,11 +249,24 @@ func (ts *IdentityTestSuite) TestUnlinkIdentityEmailVerification() {
 			emailVerified:     nil,
 			expectedConfirmed: false,
 		},
+		{
+			desc:              "Autoconfirm keeps an unverified identity email confirmed",
+			emailVerified:     boolPtr(false),
+			autoconfirm:       true,
+			expectedConfirmed: true,
+		},
+		{
+			desc:              "Autoconfirm keeps an identity without email_verified confirmed",
+			emailVerified:     nil,
+			autoconfirm:       true,
+			expectedConfirmed: true,
+		},
 	}
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			ts.SetupTest()
+			ts.Config.Mailer.Autoconfirm = c.autoconfirm
 			u, err := models.NewUser("", "primary@example.com", "password", ts.Config.JWT.Aud, nil)
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Create(u))
