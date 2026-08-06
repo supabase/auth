@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -855,4 +856,78 @@ func (ts *UserTestSuite) TestAuthenticate() {
 			require.Equal(ts.T(), c.expectedHashCost, hashCost)
 		})
 	}
+}
+
+func (ts *UserTestSuite) TestFindUserByIDAndSSOProviderID() {
+	providerA := uuid.Must(uuid.NewV4())
+	providerB := uuid.Must(uuid.NewV4())
+
+	createSSOUser := func(email string, providerID uuid.UUID) *User {
+		u, err := NewUser("", email, "", "authenticated", nil)
+		require.NoError(ts.T(), err)
+		u.IsSSOUser = true
+		require.NoError(ts.T(), ts.db.Create(u))
+
+		identity, err := NewIdentity(u, "sso:"+providerID.String(), map[string]interface{}{
+			"sub":   u.ID.String(),
+			"email": email,
+		})
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.db.Create(identity))
+
+		return u
+	}
+
+	userA := createSSOUser("a@example.com", providerA)
+	userB := createSSOUser("b@example.com", providerB)
+
+	ts.Run("finds a user belonging to the provider", func() {
+		found, err := FindUserByIDAndSSOProviderID(ts.db, userA.ID, providerA)
+
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), userA.ID, found.ID)
+	})
+
+	ts.Run("does not find a user belonging to another provider", func() {
+		found, err := FindUserByIDAndSSOProviderID(ts.db, userB.ID, providerA)
+
+		require.Nil(ts.T(), found)
+		require.True(ts.T(), IsNotFoundError(err))
+	})
+
+	ts.Run("does not find an unknown id", func() {
+		found, err := FindUserByIDAndSSOProviderID(ts.db, uuid.Must(uuid.NewV4()), providerA)
+
+		require.Nil(ts.T(), found)
+		require.True(ts.T(), IsNotFoundError(err))
+	})
+
+	ts.Run("does not find a non-SSO user", func() {
+		u, err := NewUser("", "plain@example.com", "", "authenticated", nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.db.Create(u))
+
+		identity, err := NewIdentity(u, "sso:"+providerA.String(), map[string]interface{}{
+			"sub":   u.ID.String(),
+			"email": "plain@example.com",
+		})
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.db.Create(identity))
+
+		found, err := FindUserByIDAndSSOProviderID(ts.db, u.ID, providerA)
+
+		require.Nil(ts.T(), found)
+		require.True(ts.T(), IsNotFoundError(err))
+	})
+
+	ts.Run("does not find a soft deleted user", func() {
+		deletedAt := time.Now()
+		userA.DeletedAt = &deletedAt
+		require.NoError(ts.T(), ts.db.Update(userA))
+
+		found, err := FindUserByIDAndSSOProviderID(ts.db, userA.ID, providerA)
+
+		require.Nil(ts.T(), found)
+		require.True(ts.T(), IsNotFoundError(err))
+	})
 }

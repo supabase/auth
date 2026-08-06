@@ -6,8 +6,10 @@ const (
 	schemaCore = schemaRoot + ":core:2.0"
 
 	SchemaServiceProviderConfig SchemaURI = schemaCore + ":ServiceProviderConfig"
+	SchemaUser                  SchemaURI = schemaCore + ":User"
 )
 
 const (
 	ResourceTypeServiceProviderConfig ResourceTypeName = "ServiceProviderConfig"
+	ResourceTypeUser                  ResourceTypeName = "User"
 )

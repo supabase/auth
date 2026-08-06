@@ -15,16 +15,16 @@ import (
 //go:embed testdata/*
 var fixtures embed.FS
 
+func newServerFor(externalURL string) *Server {
+	return NewServer(&conf.GlobalConfiguration{
+		API: conf.APIConfiguration{ExternalURL: externalURL},
+	}, nil)
+}
+
 func testFixture(t *testing.T, file string) string {
 	data, err := fixtures.ReadFile("testdata/" + file)
 	require.NoError(t, err)
 	return string(data)
-}
-
-func newServerFor(externalURL string) *Server {
-	return NewServer(&conf.GlobalConfiguration{
-		API: conf.APIConfiguration{ExternalURL: externalURL},
-	})
 }
 
 func TestServer(t *testing.T) {
