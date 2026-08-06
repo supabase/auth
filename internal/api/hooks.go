@@ -21,8 +21,6 @@ func (a *API) triggerAfterUserCreated(
 		return nil
 	}
 
-	// We still check tx because we want to make sure we aren't calling this
-	// trigger in code paths that haven't actually created the user yet.
 	if err := checkTX(conn); err != nil {
 		return err
 	}
@@ -113,6 +111,12 @@ func (a *API) triggerBeforeUserCreatedExternal(
 	if err != nil {
 		return err
 	}
+
+	// Attach pre-generated user ID to userData so downstream callbacks re-use it
+	if userData != nil && user != nil {
+		userData.UserID = user.ID
+	}
+
 	return a.triggerBeforeUserCreated(r, db, user)
 }
 
