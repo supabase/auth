@@ -44,7 +44,7 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 	u := getUser(ctx)
 
 	err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, u, models.LogoutAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, u, models.LogoutAction, nil); terr != nil {
 			return terr
 		}
 

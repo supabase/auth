@@ -38,7 +38,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 
 	messageID := ""
 	err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserReauthenticateAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserReauthenticateAction, nil); terr != nil {
 			return terr
 		}
 		if email != "" {
