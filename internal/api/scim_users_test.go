@@ -27,6 +27,7 @@ type tenant struct {
 	provider *models.SSOProvider
 	users    []*models.User
 	token    string
+	domain   string
 }
 
 type SCIMUsersTestSuite struct {
@@ -115,13 +116,47 @@ func (ts *SCIMUsersTestSuite) TestGetUser() {
 		require.Equal(ts.T(), http.StatusNotFound, ts.get(ts.TenantB.users[0].ID.String(), ts.TenantA.token).Code)
 	})
 
-	ts.Run("maps the attributes the provider supplied", func() {
+	ts.Run("omits name when the provider has no attribute mapping", func() {
+		user := ts.TenantA.users[0]
+
+		w := ts.get(user.ID.String(), ts.TenantA.token)
+
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+		require.NotContains(ts.T(), w.Body.String(), `"name"`)
+		require.Contains(ts.T(), w.Body.String(), fmt.Sprintf(`"userName":%q`, user.GetEmail()))
+	})
+
+	ts.Run("keeps custom claims out of the response", func() {
+		user := seedSCIMUser(ts.T(), ts.API.db, ts.TenantA.provider, "custom@"+ts.TenantA.domain, map[string]interface{}{
+			"custom_claims": map[string]interface{}{"department": "engineering"},
+		})
+
+		w := ts.get(user.ID.String(), ts.TenantA.token)
+
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+		require.NotContains(ts.T(), w.Body.String(), "department")
+		require.NotContains(ts.T(), w.Body.String(), "engineering")
+	})
+
+	ts.Run("identifies the resource by user id, not by the NameID", func() {
+		opaque := seedSCIMUser(ts.T(), ts.API.db, ts.TenantA.provider, "persistent@"+ts.TenantA.domain, map[string]interface{}{
+			"sub": uuid.Must(uuid.NewV4()).String(),
+		})
+
+		w := ts.get(opaque.ID.String(), ts.TenantA.token)
+
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+		require.Contains(ts.T(), w.Body.String(), fmt.Sprintf(`"id":%q`, opaque.ID))
+	})
+
+	ts.Run("maps the attributes when the provider has an attribute mapping", func() {
 		user := seedSCIMUser(ts.T(), ts.API.db, ts.TenantA.provider, "stale@example.com", map[string]interface{}{
 			"email":              "bjensen@example.com",
 			"preferred_username": "bjensen",
 			"name":               "Ms. Barbara Jane Jensen, III",
 			"family_name":        "Jensen",
 			"given_name":         "Barbara",
+			"middle_name":        "Jane",
 		})
 
 		w := ts.get(user.ID.String(), ts.TenantA.token)
@@ -134,7 +169,8 @@ func (ts *SCIMUsersTestSuite) TestGetUser() {
 			"name": {
 				"formatted": "Ms. Barbara Jane Jensen, III",
 				"familyName": "Jensen",
-				"givenName": "Barbara"
+				"givenName": "Barbara",
+				"middleName": "Jane"
 			},
 			"emails": [{"value": "bjensen@example.com", "primary": true}],
 			"meta": {
@@ -246,7 +282,7 @@ func seedSCIMTenant(t *testing.T, conn *storage.Connection, domain string) *tena
 		users = append(users, seedSCIMUser(t, conn, provider, email))
 	}
 
-	return &tenant{provider: provider, users: users, token: token}
+	return &tenant{provider: provider, users: users, token: token, domain: domain}
 }
 
 func seedSCIMUser(t *testing.T, conn *storage.Connection, provider *models.SSOProvider, email string, extraClaims ...map[string]interface{}) *models.User {
@@ -258,8 +294,12 @@ func seedSCIMUser(t *testing.T, conn *storage.Connection, provider *models.SSOPr
 	require.NoError(t, conn.Create(user))
 
 	claims := map[string]interface{}{
-		"sub":   user.ID.String(),
-		"email": email,
+		"iss":            provider.SAMLProvider.EntityID,
+		"sub":            email,
+		"email":          email,
+		"email_verified": true,
+		"phone_verified": false,
+		"custom_claims":  map[string]interface{}{},
 	}
 	for _, extra := range extraClaims {
 		for key, value := range extra {
