@@ -31,7 +31,6 @@ const (
 	adminUserKey        = contextKey("admin_user")
 	oauthTokenKey       = contextKey("oauth_token") // for OAuth1.0, also known as request token
 	oauthVerifierKey    = contextKey("oauth_verifier")
-	ssoProviderKey      = contextKey("sso_provider")
 	externalHostKey     = contextKey("external_host")
 	oauthClientStateKey = contextKey("oauth_client_state_id")
 	flowStateContextKey = contextKey("flow_state")
@@ -239,15 +238,11 @@ func getOAuthVerifier(ctx context.Context) string {
 }
 
 func withSSOProvider(ctx context.Context, provider *models.SSOProvider) context.Context {
-	return context.WithValue(ctx, ssoProviderKey, provider)
+	return shared.WithSSOProvider(ctx, provider)
 }
 
 func getSSOProvider(ctx context.Context) *models.SSOProvider {
-	obj := ctx.Value(ssoProviderKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.SSOProvider)
+	return shared.GetSSOProvider(ctx)
 }
 
 func withExternalHost(ctx context.Context, u *url.URL) context.Context {
