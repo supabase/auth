@@ -310,3 +310,37 @@ func (ts *OtpTestSuite) TestSubsequentOtp() {
 	require.Empty(ts.T(), user.RecoverySentAt)
 	require.Empty(ts.T(), user.EmailConfirmedAt)
 }
+
+// TestConcurrentOtpSignupSameEmail ensures a race on users_email_partial_key
+// does not surface as a raw 500 (issue #2675).
+func (ts *OtpTestSuite) TestConcurrentOtpSignupSameEmail() {
+	ts.Config.SMTP.MaxFrequency = 0
+	email := "concurrent-otp-race@example.com"
+
+	const n = 8
+	codes := make(chan int, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"email":       email,
+				"create_user": true,
+			}))
+			req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			codes <- w.Code
+		}()
+	}
+
+	for i := 0; i < n; i++ {
+		code := <-codes
+		require.NotEqual(ts.T(), http.StatusInternalServerError, code, "losing concurrent OTP must not return 500")
+		require.Equal(ts.T(), http.StatusOK, code)
+	}
+
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), user)
+}

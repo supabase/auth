@@ -188,94 +188,114 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	err = db.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		if user != nil {
-			if (params.Provider == "email" && user.IsConfirmed()) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
-				return UserExistsError
-			}
-			// do not update the user because we can't be sure of their claimed identity
-		} else {
-			user, terr = a.signupNewUser(tx, signupUser)
-			if terr != nil {
-				return terr
-			}
-		}
-		identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), params.Provider)
-		if terr != nil {
-			if !models.IsNotFoundError(terr) {
-				return terr
-			}
-			identityData := structs.Map(provider.Claims{
-				Subject: user.ID.String(),
-				Email:   user.GetEmail(),
-			})
-			for k, v := range params.Data {
-				if _, ok := identityData[k]; !ok {
-					identityData[k] = v
+	for attempt := 0; attempt < 2; attempt++ {
+		err = db.Transaction(func(tx *storage.Connection) error {
+			var terr error
+			if user != nil {
+				if (params.Provider == "email" && user.IsConfirmed()) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
+					return UserExistsError
 				}
-			}
-			identity, terr = a.createNewIdentity(tx, user, params.Provider, identityData)
-			if terr != nil {
-				return terr
-			}
-			if terr := user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
-				return terr
-			}
-		}
-		user.Identities = []models.Identity{*identity}
-
-		if params.Provider == "email" && !user.IsConfirmed() {
-			if config.Mailer.Autoconfirm {
-				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
-					"provider": params.Provider,
-				}); terr != nil {
-					return terr
-				}
-				if terr = user.Confirm(tx); terr != nil {
-					return apierrors.NewInternalServerError("Database error updating user").WithInternalError(terr)
-				}
+				// do not update the user because we can't be sure of their claimed identity
 			} else {
-				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
-					"provider": params.Provider,
-				}); terr != nil {
+				user, terr = a.signupNewUser(tx, signupUser)
+				if terr != nil {
 					return terr
 				}
-				if isPKCEFlow(flowType) {
-					_, terr := generateFlowState(tx, params.Provider, models.EmailSignup, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
-					if terr != nil {
+			}
+			identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), params.Provider)
+			if terr != nil {
+				if !models.IsNotFoundError(terr) {
+					return terr
+				}
+				identityData := structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Email:   user.GetEmail(),
+				})
+				for k, v := range params.Data {
+					if _, ok := identityData[k]; !ok {
+						identityData[k] = v
+					}
+				}
+				identity, terr = a.createNewIdentity(tx, user, params.Provider, identityData)
+				if terr != nil {
+					return terr
+				}
+				if terr := user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
+					return terr
+				}
+			}
+			user.Identities = []models.Identity{*identity}
+
+			if params.Provider == "email" && !user.IsConfirmed() {
+				if config.Mailer.Autoconfirm {
+					if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+						"provider": params.Provider,
+					}); terr != nil {
+						return terr
+					}
+					if terr = user.Confirm(tx); terr != nil {
+						return apierrors.NewInternalServerError("Database error updating user").WithInternalError(terr)
+					}
+				} else {
+					if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
+						"provider": params.Provider,
+					}); terr != nil {
+						return terr
+					}
+					if isPKCEFlow(flowType) {
+						_, terr := generateFlowState(tx, params.Provider, models.EmailSignup, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
+						if terr != nil {
+							return terr
+						}
+					}
+					if terr = a.sendConfirmation(r, tx, user, flowType); terr != nil {
 						return terr
 					}
 				}
-				if terr = a.sendConfirmation(r, tx, user, flowType); terr != nil {
-					return terr
+			} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {
+				if config.Sms.Autoconfirm {
+					if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+						"provider": params.Provider,
+						"channel":  params.Channel,
+					}); terr != nil {
+						return terr
+					}
+					if terr = user.ConfirmPhone(tx); terr != nil {
+						return apierrors.NewInternalServerError("Database error updating user").WithInternalError(terr)
+					}
+				} else {
+					if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
+						"provider": params.Provider,
+					}); terr != nil {
+						return terr
+					}
+					if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, params.Channel); terr != nil {
+						return terr
+					}
 				}
 			}
-		} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {
-			if config.Sms.Autoconfirm {
-				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
-					"provider": params.Provider,
-					"channel":  params.Channel,
-				}); terr != nil {
-					return terr
-				}
-				if terr = user.ConfirmPhone(tx); terr != nil {
-					return apierrors.NewInternalServerError("Database error updating user").WithInternalError(terr)
-				}
-			} else {
-				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
-					"provider": params.Provider,
-				}); terr != nil {
-					return terr
-				}
-				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, params.Channel); terr != nil {
-					return terr
-				}
-			}
-		}
 
-		return nil
-	})
+			return nil
+		})
+
+		if err == nil || errors.Is(err, UserExistsError) || !isUniqueConstraintError(err) {
+			break
+		}
+		// Concurrent signup for the same email/phone won the insert. Reload the
+		// user and retry once on the existing-user path (same as a later client retry).
+		var findErr error
+		switch params.Provider {
+		case "email":
+			user, findErr = models.FindUserByEmailAndAudience(db, params.Email, params.Aud)
+		case "phone":
+			user, findErr = models.FindUserByPhoneAndAudience(db, params.Phone, params.Aud)
+		default:
+			return err
+		}
+		if findErr != nil {
+			return apierrors.NewInternalServerError("Database error finding user").WithInternalError(findErr)
+		}
+	}
 
 	if err != nil {
 		if errors.Is(err, UserExistsError) {
@@ -383,6 +403,9 @@ func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*model
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = tx.Create(user); terr != nil {
+			if isUniqueConstraintError(terr) {
+				return models.UserEmailUniqueConflictError{}
+			}
 			return apierrors.NewInternalServerError("Database error saving new user").WithInternalError(terr)
 		}
 		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {

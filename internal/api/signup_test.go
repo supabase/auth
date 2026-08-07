@@ -169,3 +169,16 @@ func (ts *SignupTestSuite) TestSignupRequestBodyTooLarge() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 	require.Equal(ts.T(), "request_entity_too_large", data["error_code"])
 }
+
+func (ts *SignupTestSuite) TestSignupNewUserUniqueEmailConflict() {
+	u1, err := models.NewUser("", "dup@example.com", "password123", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	_, err = ts.API.signupNewUser(ts.API.db, u1)
+	require.NoError(ts.T(), err)
+
+	u2, err := models.NewUser("", "dup@example.com", "password123", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	_, err = ts.API.signupNewUser(ts.API.db, u2)
+	require.True(ts.T(), models.IsUniqueConstraintViolatedError(err), "got: %v", err)
+	require.True(ts.T(), isUniqueConstraintError(err))
+}
