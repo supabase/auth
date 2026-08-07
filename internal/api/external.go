@@ -412,7 +412,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		} else {
 			emailConfirmationSent := false
 			if decision.CandidateEmail.Email != "" {
-				if terr = a.sendConfirmation(r, tx, user, models.ImplicitFlow); terr != nil {
+				if terr = a.sendConfirmation(r, tx, user, models.ImplicitFlow, ""); terr != nil {
 					return 0, nil, terr
 				}
 				emailConfirmationSent = true

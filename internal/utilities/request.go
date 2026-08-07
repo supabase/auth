@@ -81,11 +81,26 @@ func GetReferrer(r *http.Request, config *conf.GlobalConfiguration) string {
 
 	// instead try referrer header value
 	reqref = r.Referer()
-	if IsRedirectURLValid(config, reqref) {
+	if IsRedirectURLValid(config, reqref) && !shouldPreferSiteURLOverReferer(config.SiteURL, reqref) {
 		return reqref
 	}
 
 	return config.SiteURL
+}
+
+// shouldPreferSiteURLOverReferer is true when Referer is origin-only (empty or "/")
+// but SiteURL includes a non-root path. Cross-origin browser requests often strip the
+// path from Referer (Referrer-Policy: strict-origin-when-cross-origin), which would
+// otherwise drop project paths such as GitHub Pages /repo/.
+func shouldPreferSiteURLOverReferer(siteURL, referer string) bool {
+	site, serr := url.Parse(siteURL)
+	ref, rerr := url.Parse(referer)
+	if serr != nil || rerr != nil {
+		return false
+	}
+	sitePath := strings.TrimSuffix(site.Path, "/")
+	refPath := strings.TrimSuffix(ref.Path, "/")
+	return sitePath != "" && refPath == ""
 }
 
 var decimalIPAddressPattern = regexp.MustCompile("^[0-9]+$")
