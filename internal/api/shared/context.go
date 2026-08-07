@@ -13,20 +13,20 @@ func (c ContextKey[T]) String() string {
 	return "gotrue api context key " + string(c)
 }
 
-func (key ContextKey[T]) Get(ctx context.Context) T {
+func (c ContextKey[T]) Get(ctx context.Context) T {
 	var zero T
 	if ctx == nil {
 		return zero
 	}
-	obj := ctx.Value(key)
+	obj := ctx.Value(c)
 	if obj == nil {
 		return zero
 	}
 	return obj.(T)
 }
 
-func (key ContextKey[T]) With(ctx context.Context, t T) context.Context {
-	return context.WithValue(ctx, key, t)
+func (c ContextKey[T]) With(ctx context.Context, t T) context.Context {
+	return context.WithValue(ctx, c, t)
 }
 
 // Context keys used across packages
