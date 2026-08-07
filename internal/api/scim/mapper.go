@@ -31,6 +31,6 @@ func (m UserMapper) MapFrom(in *models.ProvisionedUser) *core.User {
 			MiddleName: in.Claim("middle_name"),
 		},
 		Emails: []core.Email{{Value: in.PrimaryEmail(), Primary: true}},
-		Meta:   *core.NewMeta(m.baseURL, core.ResourceTypeUser, core.EndpointUsers, id).At(in.CreatedAt, in.UpdatedAt),
+		Meta:   core.NewMeta(m.baseURL, core.ResourceTypeUser, core.EndpointUsers, id).At(in.CreatedAt, in.UpdatedAt),
 	}
 }

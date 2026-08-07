@@ -65,6 +65,6 @@ func NewServiceProviderConfig(baseURL string, schemes ...*AuthenticationScheme) 
 	return &ServiceProviderConfig{
 		Schemas:               []SchemaURI{SchemaServiceProviderConfig},
 		AuthenticationSchemes: schemes,
-		Meta:                  *NewMeta(baseURL, ResourceTypeServiceProviderConfig, EndpointServiceProviderConfig, ""),
+		Meta:                  NewMeta(baseURL, ResourceTypeServiceProviderConfig, EndpointServiceProviderConfig, ""),
 	}
 }

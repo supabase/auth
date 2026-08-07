@@ -10,19 +10,19 @@ type Meta struct {
 	Location     string           `json:"location,omitempty"`
 }
 
-func NewMeta(baseURL string, resourceType ResourceTypeName, endpoint, id string) *Meta {
+func NewMeta(baseURL string, resourceType ResourceTypeName, endpoint, id string) Meta {
 	location := baseURL + endpoint
 	if id != "" {
 		location += "/" + id
 	}
 
-	return &Meta{
+	return Meta{
 		ResourceType: resourceType,
 		Location:     location,
 	}
 }
 
-func (m *Meta) At(created, updated time.Time) *Meta {
+func (m Meta) At(created, updated time.Time) Meta {
 	m.Created, m.LastModified = created.UTC(), updated.UTC()
 	return m
 }
