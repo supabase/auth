@@ -8,8 +8,3 @@ const (
 	SchemaServiceProviderConfig SchemaURI = schemaCore + ":ServiceProviderConfig"
 	SchemaUser                  SchemaURI = schemaCore + ":User"
 )
-
-const (
-	ResourceTypeServiceProviderConfig ResourceTypeName = "ServiceProviderConfig"
-	ResourceTypeUser                  ResourceTypeName = "User"
-)

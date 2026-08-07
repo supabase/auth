@@ -3,6 +3,3 @@ package core
 
 // SchemaURI identifies a SCIM schema
 type SchemaURI string
-
-// ResourceTypeName names a resource type
-type ResourceTypeName string

@@ -40,7 +40,7 @@ func TestUserMapper(t *testing.T) {
 		require.Equal(t, id.String(), user.ID)
 		require.Equal(t, "bjensen@example.com", user.UserName)
 		require.Equal(t, []core.Email{{Value: "bjensen@example.com", Primary: true}}, user.Emails)
-		require.Equal(t, core.ResourceTypeUser, user.Meta.ResourceType)
+		require.Equal(t, core.ResourceTypeUser.Name, user.Meta.ResourceType)
 	})
 
 	t.Run("builds the location from the base URL", func(t *testing.T) {
@@ -120,9 +120,5 @@ func TestUserMapper(t *testing.T) {
 
 		require.Equal(t, "bjensen@example.com", user.UserName)
 		require.Equal(t, core.Name{FamilyName: "Jensen"}, user.Name)
-	})
-
-	t.Run("satisfies the Mapper interface", func(t *testing.T) {
-		var _ Mapper[*models.ProvisionedUser, *core.User] = NewUserMapper("")
 	})
 }

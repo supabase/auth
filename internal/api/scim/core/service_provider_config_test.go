@@ -23,8 +23,8 @@ func TestNewServiceProviderConfig(t *testing.T) {
 
 		config := NewServiceProviderConfig(baseURL)
 
-		require.Equal(t, ResourceTypeServiceProviderConfig, config.Meta.ResourceType)
-		require.Equal(t, baseURL+EndpointServiceProviderConfig, config.Meta.Location)
+		require.Equal(t, ResourceTypeServiceProviderConfig.Name, config.Meta.ResourceType)
+		require.Equal(t, baseURL+"/ServiceProviderConfig", config.Meta.Location)
 	})
 
 	t.Run("supports none of the optional protocol features", func(t *testing.T) {

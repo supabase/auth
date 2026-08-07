@@ -68,12 +68,12 @@ func (p *SSOProvider) FindIdentityByUserID(tx *storage.Connection, userID uuid.U
 func (p *SSOProvider) FindProvisionedUserByID(tx *storage.Connection, id uuid.UUID) (*ProvisionedUser, error) {
 	user, err := p.FindUserByID(tx, id)
 	if err != nil {
-		return &ProvisionedUser{}, err
+		return nil, err
 	}
 
 	identity, err := p.FindIdentityByUserID(tx, user.ID)
 	if err != nil {
-		return &ProvisionedUser{}, err
+		return nil, err
 	}
 
 	return &ProvisionedUser{User: user, Identity: identity}, nil

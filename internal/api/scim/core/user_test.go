@@ -18,7 +18,7 @@ func TestUser(t *testing.T) {
 		UserName: "bjensen@example.com",
 		Emails:   []Email{{Value: "bjensen@example.com", Primary: true}},
 		Meta: Meta{
-			ResourceType: ResourceTypeUser,
+			ResourceType: ResourceTypeUser.Name,
 			Created:      created,
 			LastModified: lastModified,
 			Location:     "http://localhost:9999/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
