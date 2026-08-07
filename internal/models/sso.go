@@ -49,7 +49,12 @@ func (p *SSOProvider) UpdateSCIMToken(token string) {
 }
 
 func (p *SSOProvider) ProviderType() string {
-	return "sso:" + p.ID.String()
+	return SSOProviderType(p.ID)
+}
+
+// SSOProviderType is the identities.provider value for users of an SSO provider.
+func SSOProviderType(id uuid.UUID) string {
+	return "sso:" + id.String()
 }
 
 func (p *SSOProvider) FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {

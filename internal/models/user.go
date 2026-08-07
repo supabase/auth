@@ -715,7 +715,7 @@ func FindUserByIDAndSSOProviderID(tx *storage.Connection, id, ssoProviderID uuid
 	// Skip findUser's eager loading
 	query := tx.Q().Where(
 		"instance_id = ? and id = ? and deleted_at is null and is_sso_user = true and id in (select user_id from identities where provider = ?)",
-		uuid.Nil, id, "sso:"+ssoProviderID.String(),
+		uuid.Nil, id, SSOProviderType(ssoProviderID),
 	)
 
 	if err := query.First(obj); err != nil {
