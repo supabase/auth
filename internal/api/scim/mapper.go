@@ -20,9 +20,6 @@ func NewUserMapper(baseURL string) UserMapper {
 func (m UserMapper) MapFrom(in *models.ProvisionedUser) *core.User {
 	id := in.ID.String()
 
-	meta := core.NewMeta(m.baseURL, core.ResourceTypeUser, core.EndpointUsers, id)
-	meta.Created, meta.LastModified = in.CreatedAt.UTC(), in.UpdatedAt.UTC()
-
 	return &core.User{
 		Schemas:  []core.SchemaURI{core.SchemaUser},
 		ID:       id,
@@ -34,6 +31,6 @@ func (m UserMapper) MapFrom(in *models.ProvisionedUser) *core.User {
 			MiddleName: in.Claim("middle_name"),
 		},
 		Emails: []core.Email{{Value: in.PrimaryEmail(), Primary: true}},
-		Meta:   meta,
+		Meta:   *core.NewMeta(m.baseURL, core.ResourceTypeUser, core.EndpointUsers, id).At(in.CreatedAt, in.UpdatedAt),
 	}
 }
