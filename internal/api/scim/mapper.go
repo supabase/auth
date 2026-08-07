@@ -33,7 +33,7 @@ func (m UserMapper) MapFrom(in *models.ProvisionedUser) *core.User {
 			GivenName:  in.Claim("given_name"),
 			MiddleName: in.Claim("middle_name"),
 		},
-		Emails: []core.Email{{Value: in.Email(), Primary: true}},
+		Emails: []core.Email{{Value: in.PrimaryEmail(), Primary: true}},
 		Meta:   meta,
 	}
 }

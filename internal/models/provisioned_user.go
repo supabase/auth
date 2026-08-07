@@ -5,7 +5,7 @@ type ProvisionedUser struct {
 	Identity *Identity
 }
 
-func (u *ProvisionedUser) Email() string {
+func (u *ProvisionedUser) PrimaryEmail() string {
 	if email := u.Claim("email"); email != "" {
 		return email
 	}
@@ -16,7 +16,7 @@ func (u *ProvisionedUser) UserName() string {
 	if userName := u.Claim("preferred_username"); userName != "" {
 		return userName
 	}
-	return u.Email()
+	return u.PrimaryEmail()
 }
 
 func (p *ProvisionedUser) Claim(key string) string {
