@@ -1,17 +1,25 @@
 package models
 
-// ProvisionedUser is a user as seen through one SSO provider. The identity
-// carries the claims that provider supplied, so attributes read from it are
-// scoped to that provider rather than to the user record, which is shared
-// across every provider the user is linked to.
 type ProvisionedUser struct {
 	*User
 	Identity *Identity
 }
 
-// Claim returns the string claim the provider supplied under key, or an empty
-// string when it is absent or not a string.
-func (p ProvisionedUser) Claim(key string) string {
+func (u *ProvisionedUser) Email() string {
+	if email := u.Claim("email"); email != "" {
+		return email
+	}
+	return u.GetEmail()
+}
+
+func (u *ProvisionedUser) UserName() string {
+	if userName := u.Claim("preferred_username"); userName != "" {
+		return userName
+	}
+	return u.Email()
+}
+
+func (p *ProvisionedUser) Claim(key string) string {
 	if p.Identity == nil {
 		return ""
 	}

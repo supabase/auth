@@ -53,7 +53,7 @@ func TestUser(t *testing.T) {
 	})
 
 	t.Run("omits the name when there is none", func(t *testing.T) {
-		user.Name = nil
+		user.Name = Name{}
 
 		body, err := json.Marshal(user)
 
@@ -62,7 +62,7 @@ func TestUser(t *testing.T) {
 	})
 
 	t.Run("serializes only the name components that are set", func(t *testing.T) {
-		user.Name = &Name{FamilyName: "Jensen", GivenName: "Barbara"}
+		user.Name = Name{FamilyName: "Jensen", GivenName: "Barbara"}
 
 		body, err := json.Marshal(user)
 

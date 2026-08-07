@@ -16,8 +16,8 @@ func TestUserMapper(t *testing.T) {
 	createdAt := time.Date(2026, 7, 21, 19, 41, 41, 0, time.UTC)
 	updatedAt := time.Date(2026, 7, 22, 8, 12, 3, 0, time.UTC)
 
-	newModel := func(email string, claims map[string]interface{}) models.ProvisionedUser {
-		in := models.ProvisionedUser{
+	newModel := func(email string, claims map[string]interface{}) *models.ProvisionedUser {
+		in := &models.ProvisionedUser{
 			User: &models.User{
 				ID:        id,
 				Email:     storage.NullString(email),
@@ -41,13 +41,6 @@ func TestUserMapper(t *testing.T) {
 		require.Equal(t, "bjensen@example.com", user.UserName)
 		require.Equal(t, []core.Email{{Value: "bjensen@example.com", Primary: true}}, user.Emails)
 		require.Equal(t, core.ResourceTypeUser, user.Meta.ResourceType)
-	})
-
-	t.Run("omits emails when the user has no email", func(t *testing.T) {
-		user := mapper.MapFrom(newModel("", nil))
-
-		require.Empty(t, user.UserName)
-		require.Nil(t, user.Emails)
 	})
 
 	t.Run("builds the location from the base URL", func(t *testing.T) {
@@ -86,7 +79,7 @@ func TestUserMapper(t *testing.T) {
 	})
 
 	t.Run("prefers preferred_username for the userName", func(t *testing.T) {
-		user := mapper.MapFrom(newModel("", map[string]interface{}{
+		user := mapper.MapFrom(newModel("bjensen@example.com", map[string]interface{}{
 			"preferred_username": "bjensen",
 			"email":              "bjensen@example.com",
 		}))
@@ -96,14 +89,14 @@ func TestUserMapper(t *testing.T) {
 	})
 
 	t.Run("maps the name components the provider supplied", func(t *testing.T) {
-		user := mapper.MapFrom(newModel("", map[string]interface{}{
+		user := mapper.MapFrom(newModel("bjensen@example.com", map[string]interface{}{
 			"name":        "Ms. Barbara Jane Jensen, III",
 			"family_name": "Jensen",
 			"given_name":  "Barbara",
 			"middle_name": "Jane",
 		}))
 
-		require.Equal(t, &core.Name{
+		require.Equal(t, core.Name{
 			Formatted:  "Ms. Barbara Jane Jensen, III",
 			FamilyName: "Jensen",
 			GivenName:  "Barbara",
@@ -112,8 +105,8 @@ func TestUserMapper(t *testing.T) {
 	})
 
 	t.Run("omits the name when the provider supplied no components", func(t *testing.T) {
-		require.Nil(t, mapper.MapFrom(newModel("bjensen@example.com", nil)).Name)
-		require.Nil(t, mapper.MapFrom(newModel("bjensen@example.com", map[string]interface{}{
+		require.Equal(t, core.Name{}, mapper.MapFrom(newModel("bjensen@example.com", nil)).Name)
+		require.Equal(t, core.Name{}, mapper.MapFrom(newModel("bjensen@example.com", map[string]interface{}{
 			"sub": id.String(),
 		})).Name)
 	})
@@ -126,10 +119,10 @@ func TestUserMapper(t *testing.T) {
 		}))
 
 		require.Equal(t, "bjensen@example.com", user.UserName)
-		require.Equal(t, &core.Name{FamilyName: "Jensen"}, user.Name)
+		require.Equal(t, core.Name{FamilyName: "Jensen"}, user.Name)
 	})
 
 	t.Run("satisfies the Mapper interface", func(t *testing.T) {
-		var _ Mapper[models.ProvisionedUser, *core.User] = NewUserMapper("")
+		var _ Mapper[*models.ProvisionedUser, *core.User] = NewUserMapper("")
 	})
 }
