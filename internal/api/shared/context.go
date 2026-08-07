@@ -7,66 +7,70 @@ import (
 )
 
 // ContextKey is the type for context keys to avoid collisions
-type ContextKey string
+type ContextKey[T any] string
 
-func (c ContextKey) String() string {
+func (c ContextKey[T]) String() string {
 	return "gotrue api context key " + string(c)
+}
+
+func (key ContextKey[T]) Get(ctx context.Context) T {
+	var zero T
+	if ctx == nil {
+		return zero
+	}
+	obj := ctx.Value(key)
+	if obj == nil {
+		return zero
+	}
+	return obj.(T)
+}
+
+func (key ContextKey[T]) With(ctx context.Context, t T) context.Context {
+	return context.WithValue(ctx, key, t)
 }
 
 // Context keys used across packages
 const (
-	UserKey              ContextKey = "user"
-	SessionKey           ContextKey = "session"
-	OAuthServerClientKey ContextKey = "oauth_server_client"
+	UserKey              ContextKey[*models.User]              = "user"
+	SessionKey           ContextKey[*models.Session]           = "session"
+	OAuthServerClientKey ContextKey[*models.OAuthServerClient] = "oauth_server_client"
+	SSOProviderKey       ContextKey[*models.SSOProvider]       = "sso_provider"
 )
 
 // GetUser reads the user from the context - shared implementation
 func GetUser(ctx context.Context) *models.User {
-	if ctx == nil {
-		return nil
-	}
-	obj := ctx.Value(UserKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.User)
+	return UserKey.Get(ctx)
 }
 
 // WithUser adds the user to the context - shared implementation
 func WithUser(ctx context.Context, u *models.User) context.Context {
-	return context.WithValue(ctx, UserKey, u)
+	return UserKey.With(ctx, u)
 }
 
 // GetSession reads the session from the context - shared implementation
 func GetSession(ctx context.Context) *models.Session {
-	if ctx == nil {
-		return nil
-	}
-	obj := ctx.Value(SessionKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.Session)
+	return SessionKey.Get(ctx)
 }
 
 // WithSession adds the session to the context - shared implementation
 func WithSession(ctx context.Context, s *models.Session) context.Context {
-	return context.WithValue(ctx, SessionKey, s)
+	return SessionKey.With(ctx, s)
 }
 
 // WithOAuthServerClient adds an OAuth server client to the context
 func WithOAuthServerClient(ctx context.Context, client *models.OAuthServerClient) context.Context {
-	return context.WithValue(ctx, OAuthServerClientKey, client)
+	return OAuthServerClientKey.With(ctx, client)
 }
 
 // GetOAuthServerClient retrieves an OAuth server client from the context
 func GetOAuthServerClient(ctx context.Context) *models.OAuthServerClient {
-	if ctx == nil {
-		return nil
-	}
-	obj := ctx.Value(OAuthServerClientKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.OAuthServerClient)
+	return OAuthServerClientKey.Get(ctx)
+}
+
+func GetSSOProvider(ctx context.Context) *models.SSOProvider {
+	return SSOProviderKey.Get(ctx)
+}
+
+func WithSSOProvider(ctx context.Context, s *models.SSOProvider) context.Context {
+	return SSOProviderKey.With(ctx, s)
 }

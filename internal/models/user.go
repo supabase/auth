@@ -709,6 +709,25 @@ func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
 }
 
+// FindUserByIDAndSSOProviderID finds a user matching the provided SSO provider ID and ID
+func FindUserByIDAndSSOProviderID(tx *storage.Connection, id, ssoProviderID uuid.UUID) (*User, error) {
+	obj := &User{}
+	// Skip findUser's eager loading
+	query := tx.Q().Where(
+		"instance_id = ? and id = ? and deleted_at is null and is_sso_user = true and id in (select user_id from identities where provider = ?)",
+		uuid.Nil, id, "sso:"+ssoProviderID.String(),
+	)
+
+	if err := query.First(obj); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, UserNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding user")
+	}
+
+	return obj, nil
+}
+
 // FindUserWithRefreshToken finds a user from the provided refresh token. If
 // forUpdate is set to true, then the SELECT statement used by the query has
 // the form SELECT ... FOR UPDATE SKIP LOCKED. This means that a FOR UPDATE
