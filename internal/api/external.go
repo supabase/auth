@@ -70,8 +70,16 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
 	query.Del("provider")
-	query.Del("code_challenge")
-	query.Del("code_challenge_method")
+	// Strip OAuth params the auth server controls so a client cannot
+	// override redirect_uri, state, code_challenge, etc. by passing them
+	// through on the redirect URL. nonce is deliberately NOT stripped — some
+	// upstream OIDC providers expect the client to supply it.
+	for _, k := range reservedOAuthParams {
+		if k != "nonce" {
+			query.Del(k)
+		}
+	}
+
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
