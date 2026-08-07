@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,9 +18,14 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
-type scimTenant struct {
+const (
+	minTenantUsers = 2
+	maxTenantUsers = 5
+)
+
+type tenant struct {
 	provider *models.SSOProvider
-	user     *models.User
+	users    []*models.User
 	token    string
 }
 
@@ -27,8 +33,8 @@ type SCIMUsersTestSuite struct {
 	suite.Suite
 	API     *API
 	Config  *conf.GlobalConfiguration
-	TenantA *scimTenant
-	TenantB *scimTenant
+	TenantA *tenant
+	TenantB *tenant
 }
 
 func TestSCIMUsers(t *testing.T) {
@@ -46,8 +52,8 @@ func TestSCIMUsers(t *testing.T) {
 func (ts *SCIMUsersTestSuite) SetupTest() {
 	require.NoError(ts.T(), models.TruncateAll(ts.API.db))
 
-	ts.TenantA = seedSCIMTenant(ts.T(), ts.API.db, "scim_token_a", "a@example.com")
-	ts.TenantB = seedSCIMTenant(ts.T(), ts.API.db, "scim_token_b", "b@example.com")
+	ts.TenantA = seedSCIMTenant(ts.T(), ts.API.db, "example.com")
+	ts.TenantB = seedSCIMTenant(ts.T(), ts.API.db, "example.org")
 }
 
 func (ts *SCIMUsersTestSuite) get(id, token string) *httptest.ResponseRecorder {
@@ -62,15 +68,17 @@ func (ts *SCIMUsersTestSuite) get(id, token string) *httptest.ResponseRecorder {
 
 func (ts *SCIMUsersTestSuite) TestGetUser() {
 	ts.Run("returns the user that belongs to the token's provider", func() {
-		w := ts.get(ts.TenantA.user.ID.String(), ts.TenantA.token)
+		user := ts.TenantA.users[0]
+
+		w := ts.get(user.ID.String(), ts.TenantA.token)
 
 		require.Equal(ts.T(), http.StatusOK, w.Code)
 		require.Equal(ts.T(), scimProtocol.MediaType, w.Header().Get("Content-Type"))
 		require.JSONEq(ts.T(), fmt.Sprintf(`{
 			"schemas": [%q],
 			"id": %q,
-			"userName": "a@example.com",
-			"emails": [{"value": "a@example.com", "primary": true}],
+			"userName": %q,
+			"emails": [{"value": %q, "primary": true}],
 			"meta": {
 				"resourceType": "User",
 				"created": %q,
@@ -79,19 +87,36 @@ func (ts *SCIMUsersTestSuite) TestGetUser() {
 			}
 		}`,
 			scimCore.SchemaUser,
-			ts.TenantA.user.ID,
-			ts.TenantA.user.CreatedAt.UTC().Format(time.RFC3339Nano),
-			ts.TenantA.user.UpdatedAt.UTC().Format(time.RFC3339Nano),
-			ts.Config.API.ExternalURL, ts.TenantA.user.ID,
+			user.ID,
+			user.GetEmail(),
+			user.GetEmail(),
+			user.CreatedAt.UTC().Format(time.RFC3339Nano),
+			user.UpdatedAt.UTC().Format(time.RFC3339Nano),
+			ts.Config.API.ExternalURL, user.ID,
 		), w.Body.String())
 	})
 
+	ts.Run("returns every user the tenant provisioned", func() {
+		require.Greater(ts.T(), len(ts.TenantA.users), 1)
+
+		for _, user := range ts.TenantA.users {
+			w := ts.get(user.ID.String(), ts.TenantA.token)
+
+			require.Equal(ts.T(), http.StatusOK, w.Code, "user %s", user.ID)
+			require.Contains(ts.T(), w.Body.String(), user.GetEmail())
+		}
+	})
+
 	ts.Run("scopes each provider to its own users", func() {
-		require.Equal(ts.T(), http.StatusOK, ts.get(ts.TenantB.user.ID.String(), ts.TenantB.token).Code)
+		require.Equal(ts.T(), http.StatusOK, ts.get(ts.TenantA.users[0].ID.String(), ts.TenantA.token).Code)
+		require.Equal(ts.T(), http.StatusNotFound, ts.get(ts.TenantA.users[0].ID.String(), ts.TenantB.token).Code)
+
+		require.Equal(ts.T(), http.StatusOK, ts.get(ts.TenantB.users[0].ID.String(), ts.TenantB.token).Code)
+		require.Equal(ts.T(), http.StatusNotFound, ts.get(ts.TenantB.users[0].ID.String(), ts.TenantA.token).Code)
 	})
 
 	ts.Run("maps the attributes the provider supplied", func() {
-		c := seedSCIMTenant(ts.T(), ts.API.db, "scim_token_c", "stale@example.com", map[string]interface{}{
+		user := seedSCIMUser(ts.T(), ts.API.db, ts.TenantA.provider, "stale@example.com", map[string]interface{}{
 			"email":              "bjensen@example.com",
 			"preferred_username": "bjensen",
 			"name":               "Ms. Barbara Jane Jensen, III",
@@ -99,7 +124,7 @@ func (ts *SCIMUsersTestSuite) TestGetUser() {
 			"given_name":         "Barbara",
 		})
 
-		w := ts.get(c.user.ID.String(), c.token)
+		w := ts.get(user.ID.String(), ts.TenantA.token)
 
 		require.Equal(ts.T(), http.StatusOK, w.Code)
 		require.JSONEq(ts.T(), fmt.Sprintf(`{
@@ -120,26 +145,28 @@ func (ts *SCIMUsersTestSuite) TestGetUser() {
 			}
 		}`,
 			scimCore.SchemaUser,
-			c.user.ID,
-			c.user.CreatedAt.UTC().Format(time.RFC3339Nano),
-			c.user.UpdatedAt.UTC().Format(time.RFC3339Nano),
-			ts.Config.API.ExternalURL, c.user.ID,
+			user.ID,
+			user.CreatedAt.UTC().Format(time.RFC3339Nano),
+			user.UpdatedAt.UTC().Format(time.RFC3339Nano),
+			ts.Config.API.ExternalURL, user.ID,
 		), w.Body.String())
 	})
 }
 
 func (ts *SCIMUsersTestSuite) TestTenantIsolation() {
-	ts.Run("hides a user belonging to another provider", func() {
-		w := ts.get(ts.TenantB.user.ID.String(), ts.TenantA.token)
+	ts.Run("hides every user belonging to another provider", func() {
+		for _, user := range ts.TenantB.users {
+			w := ts.get(user.ID.String(), ts.TenantA.token)
 
-		require.Equal(ts.T(), http.StatusNotFound, w.Code)
-		require.Equal(ts.T(), scimProtocol.MediaType, w.Header().Get("Content-Type"))
-		require.Contains(ts.T(), w.Body.String(), scimProtocol.SchemaError)
+			require.Equal(ts.T(), http.StatusNotFound, w.Code, "user %s", user.ID)
+			require.Equal(ts.T(), scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(ts.T(), w.Body.String(), scimProtocol.SchemaError)
+		}
 	})
 
 	ts.Run("returns the same 404 for an unknown id", func() {
 		unknown := ts.get(uuid.Must(uuid.NewV4()).String(), ts.TenantA.token)
-		other := ts.get(ts.TenantB.user.ID.String(), ts.TenantA.token)
+		other := ts.get(ts.TenantB.users[0].ID.String(), ts.TenantA.token)
 
 		require.Equal(ts.T(), http.StatusNotFound, unknown.Code)
 		require.Equal(ts.T(), other.Body.String(), unknown.Body.String())
@@ -155,7 +182,7 @@ func (ts *SCIMUsersTestSuite) TestTenantIsolation() {
 
 func (ts *SCIMUsersTestSuite) TestAuthentication() {
 	ts.Run("requires a bearer token", func() {
-		w := ts.get(ts.TenantA.user.ID.String(), "")
+		w := ts.get(ts.TenantA.users[0].ID.String(), "")
 
 		require.Equal(ts.T(), http.StatusUnauthorized, w.Code)
 		require.Equal(ts.T(), scimProtocol.MediaType, w.Header().Get("Content-Type"))
@@ -164,21 +191,19 @@ func (ts *SCIMUsersTestSuite) TestAuthentication() {
 	})
 
 	ts.Run("rejects an unknown token", func() {
-		w := ts.get(ts.TenantA.user.ID.String(), "scim_nope")
+		w := ts.get(ts.TenantA.users[0].ID.String(), uuid.Must(uuid.NewV4()).String())
 
 		require.Equal(ts.T(), http.StatusUnauthorized, w.Code)
 		require.Equal(ts.T(), "Bearer", w.Header().Get("WWW-Authenticate"))
 	})
 }
 
-// Kept out of TestAuthentication because it mutates the seeded provider, which
-// SetupTest only restores between suite methods.
 func (ts *SCIMUsersTestSuite) TestRejectsADisabledProvider() {
 	disabled := true
 	ts.TenantB.provider.Disabled = &disabled
 	require.NoError(ts.T(), ts.API.db.Update(ts.TenantB.provider))
 
-	w := ts.get(ts.TenantB.user.ID.String(), ts.TenantB.token)
+	w := ts.get(ts.TenantB.users[0].ID.String(), ts.TenantB.token)
 
 	require.Equal(ts.T(), http.StatusForbidden, w.Code)
 	require.Equal(ts.T(), scimProtocol.MediaType, w.Header().Get("Content-Type"))
@@ -188,7 +213,7 @@ func (ts *SCIMUsersTestSuite) TestStaysHiddenWhenTheFeatureFlagIsOff() {
 	disabled, _, err := setupAPIForTest()
 	require.NoError(ts.T(), err)
 
-	r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users/"+ts.TenantA.user.ID.String(), nil)
+	r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users/"+ts.TenantA.users[0].ID.String(), nil)
 	r.Header.Set("Authorization", "Bearer "+ts.TenantA.token)
 	w := httptest.NewRecorder()
 	disabled.handler.ServeHTTP(w, r)
@@ -198,7 +223,7 @@ func (ts *SCIMUsersTestSuite) TestStaysHiddenWhenTheFeatureFlagIsOff() {
 	require.NotContains(ts.T(), w.Body.String(), scimProtocol.SchemaError)
 }
 
-func seedSCIMTenant(t *testing.T, conn *storage.Connection, token, email string, extraClaims ...map[string]interface{}) *scimTenant {
+func seedSCIMTenant(t *testing.T, conn *storage.Connection, domain string) *tenant {
 	t.Helper()
 
 	id := uuid.Must(uuid.NewV4()).String()
@@ -207,12 +232,25 @@ func seedSCIMTenant(t *testing.T, conn *storage.Connection, token, email string,
 			EntityID:    "https://example.com/saml/metadata/" + id,
 			MetadataXML: "<example />",
 		},
-		SSODomains: []models.SSODomain{
-			{Domain: id + ".local"},
-		},
+		SSODomains: []models.SSODomain{{Domain: domain}},
 	}
+	token := uuid.Must(uuid.NewV4()).String()
 	provider.UpdateSCIMToken(token)
 	require.NoError(t, conn.Eager().Create(provider))
+
+	count := minTenantUsers + rand.IntN(maxTenantUsers-minTenantUsers+1)
+
+	users := make([]*models.User, 0, count)
+	for range count {
+		email := uuid.Must(uuid.NewV4()).String() + "@" + domain
+		users = append(users, seedSCIMUser(t, conn, provider, email))
+	}
+
+	return &tenant{provider: provider, users: users, token: token}
+}
+
+func seedSCIMUser(t *testing.T, conn *storage.Connection, provider *models.SSOProvider, email string, extraClaims ...map[string]interface{}) *models.User {
+	t.Helper()
 
 	user, err := models.NewUser("", email, "", "authenticated", nil)
 	require.NoError(t, err)
@@ -233,5 +271,5 @@ func seedSCIMTenant(t *testing.T, conn *storage.Connection, token, email string,
 	require.NoError(t, err)
 	require.NoError(t, conn.Create(identity))
 
-	return &scimTenant{provider: provider, user: user, token: token}
+	return user
 }
