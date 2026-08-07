@@ -2,15 +2,19 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"runtime/debug"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
+	pkgerr "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
 )
@@ -22,8 +26,28 @@ const (
 )
 
 var (
-	UserExistsError error = errors.New("user already exists")
+	UserExistsError error = pkgerr.New("user already exists")
 )
+
+// isUniqueConstraintError reports whether err is (or wraps) a Postgres unique
+// violation, including HTTPError wrappers from signupNewUser.
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if models.IsUniqueConstraintViolatedError(err) {
+		return true
+	}
+	var httpErr *apierrors.HTTPError
+	if errors.As(err, &httpErr) && httpErr.InternalError != nil {
+		err = httpErr.InternalError
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == pgerrcode.UniqueViolation
+	}
+	return false
+}
 
 const InvalidChannelError = "Invalid channel, supported values are 'sms' or 'whatsapp'. 'whatsapp' is only supported if Twilio or Twilio Verify is used as the provider."
 
