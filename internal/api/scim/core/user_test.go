@@ -51,4 +51,22 @@ func TestUser(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, string(body), "emails")
 	})
+
+	t.Run("omits the name when there is none", func(t *testing.T) {
+		user.Name = nil
+
+		body, err := json.Marshal(user)
+
+		require.NoError(t, err)
+		require.NotContains(t, string(body), `"name"`)
+	})
+
+	t.Run("serializes only the name components that are set", func(t *testing.T) {
+		user.Name = &Name{FamilyName: "Jensen", GivenName: "Barbara"}
+
+		body, err := json.Marshal(user)
+
+		require.NoError(t, err)
+		require.Contains(t, string(body), `"name":{"familyName":"Jensen","givenName":"Barbara"}`)
+	})
 }

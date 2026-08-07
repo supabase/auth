@@ -48,6 +48,35 @@ func (p *SSOProvider) UpdateSCIMToken(token string) {
 	p.SCIMTokenHash = &hash
 }
 
+func (p *SSOProvider) ProviderType() string {
+	return "sso:" + p.ID.String()
+}
+
+func (p *SSOProvider) FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
+	return FindUserByIDAndSSOProviderID(tx, id, p.ID)
+}
+
+// FindIdentityByUserID returns the identity linking the user to this provider.
+func (p *SSOProvider) FindIdentityByUserID(tx *storage.Connection, userID uuid.UUID) (*Identity, error) {
+	return FindIdentityByUserIDAndProvider(tx, userID, p.ProviderType())
+}
+
+// FindProvisionedUserByID returns the user together with the identity linking
+// them to this provider.
+func (p *SSOProvider) FindProvisionedUserByID(tx *storage.Connection, id uuid.UUID) (ProvisionedUser, error) {
+	user, err := p.FindUserByID(tx, id)
+	if err != nil {
+		return ProvisionedUser{}, err
+	}
+
+	identity, err := p.FindIdentityByUserID(tx, user.ID)
+	if err != nil {
+		return ProvisionedUser{}, err
+	}
+
+	return ProvisionedUser{User: user, Identity: identity}, nil
+}
+
 func toSHA256(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])

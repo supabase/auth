@@ -93,6 +93,18 @@ func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider st
 	return identity, nil
 }
 
+// FindIdentityByUserIDAndProvider searches for the identity linking a user to a provider.
+func FindIdentityByUserIDAndProvider(tx *storage.Connection, userID uuid.UUID, provider string) (*Identity, error) {
+	identity := &Identity{}
+	if err := tx.Q().Where("user_id = ? AND provider = ?", userID, provider).First(identity); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, IdentityNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding identity")
+	}
+	return identity, nil
+}
+
 // FindIdentitiesByUserID returns all identities associated to a user ID.
 func FindIdentitiesByUserID(tx *storage.Connection, userID uuid.UUID) ([]*Identity, error) {
 	identities := []*Identity{}

@@ -139,7 +139,7 @@ type scimTenant struct {
 	token    string
 }
 
-func seedSCIMTenant(t *testing.T, conn *storage.Connection, token, email string) *scimTenant {
+func seedSCIMTenant(t *testing.T, conn *storage.Connection, token, email string, extraClaims ...map[string]interface{}) *scimTenant {
 	t.Helper()
 
 	id := uuid.Must(uuid.NewV4()).String()
@@ -160,10 +160,17 @@ func seedSCIMTenant(t *testing.T, conn *storage.Connection, token, email string)
 	user.IsSSOUser = true
 	require.NoError(t, conn.Create(user))
 
-	identity, err := models.NewIdentity(user, "sso:"+provider.ID.String(), map[string]interface{}{
+	claims := map[string]interface{}{
 		"sub":   user.ID.String(),
 		"email": email,
-	})
+	}
+	for _, extra := range extraClaims {
+		for key, value := range extra {
+			claims[key] = value
+		}
+	}
+
+	identity, err := models.NewIdentity(user, provider.ProviderType(), claims)
 	require.NoError(t, err)
 	require.NoError(t, conn.Create(identity))
 
@@ -223,6 +230,43 @@ func TestSCIMUsers(t *testing.T) {
 
 	t.Run("scopes each provider to its own users", func(t *testing.T) {
 		require.Equal(t, http.StatusOK, get(b.user.ID.String(), b.token).Code)
+	})
+
+	t.Run("maps the attributes the provider supplied", func(t *testing.T) {
+		c := seedSCIMTenant(t, conn, "scim_token_c", "stale@example.com", map[string]interface{}{
+			"email":              "bjensen@example.com",
+			"preferred_username": "bjensen",
+			"name":               "Ms. Barbara Jane Jensen, III",
+			"family_name":        "Jensen",
+			"given_name":         "Barbara",
+		})
+
+		w := get(c.user.ID.String(), c.token)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.JSONEq(t, fmt.Sprintf(`{
+			"schemas": [%q],
+			"id": %q,
+			"userName": "bjensen",
+			"name": {
+				"formatted": "Ms. Barbara Jane Jensen, III",
+				"familyName": "Jensen",
+				"givenName": "Barbara"
+			},
+			"emails": [{"value": "bjensen@example.com", "primary": true}],
+			"meta": {
+				"resourceType": "User",
+				"created": %q,
+				"lastModified": %q,
+				"location": "%s/scim/v2/Users/%s"
+			}
+		}`,
+			scimCore.SchemaUser,
+			c.user.ID,
+			c.user.CreatedAt.UTC().Format(time.RFC3339Nano),
+			c.user.UpdatedAt.UTC().Format(time.RFC3339Nano),
+			config.API.ExternalURL, c.user.ID,
+		), w.Body.String())
 	})
 
 	t.Run("hides a user belonging to another provider", func(t *testing.T) {

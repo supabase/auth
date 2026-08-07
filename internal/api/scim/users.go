@@ -19,7 +19,7 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	provider := shared.GetSSOProvider(ctx)
-	user, err := models.FindUserByIDAndSSOProviderID(srv.db.WithContext(ctx), id, provider.ID)
+	user, err := provider.FindProvisionedUserByID(srv.db.WithContext(ctx), id)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return userNotFound(w)

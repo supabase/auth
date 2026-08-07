@@ -19,7 +19,7 @@ type TokenExtractor func(r *http.Request) (string, error)
 type Server struct {
 	db                    *storage.Connection
 	extract               TokenExtractor
-	users                 Mapper[*models.User, *core.User]
+	users                 Mapper[models.ProvisionedUser, *core.User]
 	serviceProviderConfig *core.ServiceProviderConfig
 }
 

@@ -17,22 +17,51 @@ func NewUserMapper(baseURL string) UserMapper {
 	return UserMapper{baseURL: baseURL}
 }
 
-func (m UserMapper) MapFrom(u *models.User) *core.User {
-	id, email := u.ID.String(), u.GetEmail()
+func (m UserMapper) MapFrom(in models.ProvisionedUser) *core.User {
+	id := in.ID.String()
 
 	meta := core.NewMeta(m.baseURL, core.ResourceTypeUser, core.EndpointUsers, id)
-	meta.Created, meta.LastModified = u.CreatedAt.UTC(), u.UpdatedAt.UTC()
+	meta.Created, meta.LastModified = in.CreatedAt.UTC(), in.UpdatedAt.UTC()
 
 	user := &core.User{
 		Schemas:  []core.SchemaURI{core.SchemaUser},
 		ID:       id,
-		UserName: email,
+		UserName: userName(in),
+		Name:     name(in),
 		Meta:     meta,
 	}
 
-	if email != "" {
-		user.Emails = []core.Email{{Value: email, Primary: true}}
+	if address := email(in); address != "" {
+		user.Emails = []core.Email{{Value: address, Primary: true}}
 	}
 
 	return user
+}
+
+func email(in models.ProvisionedUser) string {
+	if email := in.Claim("email"); email != "" {
+		return email
+	}
+	return in.GetEmail()
+}
+
+func userName(in models.ProvisionedUser) string {
+	if userName := in.Claim("preferred_username"); userName != "" {
+		return userName
+	}
+	return email(in)
+}
+
+func name(in models.ProvisionedUser) *core.Name {
+	name := core.Name{
+		Formatted:  in.Claim("name"),
+		FamilyName: in.Claim("family_name"),
+		GivenName:  in.Claim("given_name"),
+		MiddleName: in.Claim("middle_name"),
+	}
+
+	if name.IsZero() {
+		return nil
+	}
+	return &name
 }
