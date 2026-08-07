@@ -245,7 +245,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 
 		if terr != nil {
-			return apierrors.NewOAuthError("server_error", terr.Error())
+			return apierrors.NewOAuthError(apierrors.OAuthErrorCodeServerError, terr.Error())
 		}
 		return nil
 	})
@@ -832,15 +832,15 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger, q ur
 	switch e := err.(type) {
 	case *HTTPError:
 		if e.ErrorCode == apierrors.ErrorCodeSignupDisabled {
-			q.Set("error", "access_denied")
+			q.Set("error", apierrors.OAuthErrorCodeAccessDenied)
 		} else if e.ErrorCode == apierrors.ErrorCodeUserBanned {
-			q.Set("error", "access_denied")
+			q.Set("error", apierrors.OAuthErrorCodeAccessDenied)
 		} else if e.ErrorCode == apierrors.ErrorCodeProviderEmailNeedsVerification {
-			q.Set("error", "access_denied")
+			q.Set("error", apierrors.OAuthErrorCodeAccessDenied)
 		} else if str, ok := oauthErrorMap[e.HTTPStatus]; ok {
 			q.Set("error", str)
 		} else {
-			q.Set("error", "server_error")
+			q.Set("error", apierrors.OAuthErrorCodeServerError)
 		}
 		if e.HTTPStatus >= http.StatusInternalServerError {
 			e.ErrorID = errorID
@@ -858,7 +858,7 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger, q ur
 	case ErrorCause:
 		return getErrorQueryString(e.Cause(), errorID, log, q)
 	default:
-		error_type, error_description := "server_error", err.Error()
+		error_type, error_description := apierrors.OAuthErrorCodeServerError, err.Error()
 
 		// Provide better error messages for certain user-triggered Postgres errors.
 		if pgErr := utilities.NewPostgresError(e); pgErr != nil {
