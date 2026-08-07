@@ -374,7 +374,7 @@ func TestSCIMInfrastructureFailure(t *testing.T) {
 			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
 			require.JSONEq(t, `{
 				"schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
-				"detail": "Unexpected failure, please check server logs for more information",
+				"detail": "Internal server error",
 				"status": "500"
 			}`, w.Body.String())
 		})
