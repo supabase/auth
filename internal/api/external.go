@@ -60,6 +60,11 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	hookData := query.Get("hook_data")
+	if err := validateHookData(hookData); err != nil {
+		return "", err
+	}
+
 	redirectURL := utilities.GetReferrer(r, config)
 	log := observability.GetLogEntry(r).Entry
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
@@ -72,6 +77,9 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	query.Del("provider")
 	query.Del("code_challenge")
 	query.Del("code_challenge_method")
+	// Whatever remains in the query is appended to the provider's authorize
+	// URL below. This is for us, not for them.
+	query.Del("hook_data")
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
@@ -101,6 +109,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		CodeChallenge:        codeChallenge,
 		CodeChallengeMethod:  codeChallengeMethod,
 		InviteToken:          inviteToken,
+		HookData:             hookData,
 		Referrer:             redirectURL,
 		OAuthClientStateID:   oauthClientStateID,
 		EmailOptional:        pConfig.EmailOptional,
@@ -559,6 +568,9 @@ func (a *API) loadExternalStateFromUUID(ctx context.Context, db *storage.Connect
 
 	if flowState.InviteToken != nil && *flowState.InviteToken != "" {
 		ctx = withInviteToken(ctx, *flowState.InviteToken)
+	}
+	if flowState.HookData != nil && *flowState.HookData != "" {
+		ctx = utilities.WithHookData(ctx, *flowState.HookData)
 	}
 	if flowState.Referrer != nil && *flowState.Referrer != "" {
 		ctx = withExternalReferrer(ctx, *flowState.Referrer)

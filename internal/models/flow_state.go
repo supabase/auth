@@ -29,6 +29,7 @@ type FlowState struct {
 
 	// OAuth context fields (previously stored in JWT state parameter)
 	InviteToken        *string    `json:"invite_token,omitempty" db:"invite_token"`
+	HookData           *string    `json:"hook_data,omitempty" db:"hook_data"`
 	Referrer           *string    `json:"referrer,omitempty" db:"referrer"`
 	OAuthClientStateID *uuid.UUID `json:"oauth_client_state_id,omitempty" db:"oauth_client_state_id"`
 	LinkingTargetID    *uuid.UUID `json:"linking_target_id,omitempty" db:"linking_target_id"`
@@ -43,6 +44,7 @@ type FlowStateParams struct {
 	CodeChallengeMethod  string // empty for implicit flow
 	UserID               *uuid.UUID
 	InviteToken          string
+	HookData             string
 	Referrer             string
 	OAuthClientStateID   *uuid.UUID
 	LinkingTargetID      *uuid.UUID
@@ -131,6 +133,9 @@ func NewFlowState(params FlowStateParams) (*FlowState, error) {
 	// Set optional context fields
 	if params.InviteToken != "" {
 		flowState.InviteToken = &params.InviteToken
+	}
+	if params.HookData != "" {
+		flowState.HookData = &params.HookData
 	}
 	if params.Referrer != "" {
 		flowState.Referrer = &params.Referrer

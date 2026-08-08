@@ -14,6 +14,7 @@ import (
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // SignupParams are the parameters the Signup endpoint accepts
@@ -22,6 +23,7 @@ type SignupParams struct {
 	Phone               string                 `json:"phone"`
 	Password            string                 `json:"password"`
 	Data                map[string]interface{} `json:"data"`
+	HookData            string                 `json:"hook_data"`
 	Provider            string                 `json:"-"`
 	Aud                 string                 `json:"-"`
 	Channel             string                 `json:"channel"`
@@ -48,6 +50,9 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 	// PKCE not needed as phone signups already return access token in body
 	if p.Phone != "" && p.CodeChallenge != "" {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "PKCE not supported for phone signups")
+	}
+	if err := validateHookData(p.HookData); err != nil {
+		return err
 	}
 	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
 		return err
@@ -125,6 +130,14 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 	if err := a.validateSignupParams(ctx, params); err != nil {
 		return err
+	}
+
+	// Carried on the context rather than passed down: every hook invoked while
+	// serving this request reads it from there, so no signature changes.
+	if params.HookData != "" {
+		ctx = utilities.WithHookData(ctx, params.HookData)
+		r = r.WithContext(ctx)
+		db = db.WithContext(ctx)
 	}
 
 	var err error

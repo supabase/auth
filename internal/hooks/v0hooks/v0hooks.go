@@ -43,6 +43,14 @@ type Metadata struct {
 
 	// IP Address of the request, if present
 	IPAddress string `json:"ip_address,omitempty"`
+
+	// HookData is an opaque value supplied by the caller that began the
+	// request, if any. It is never interpreted here and never stored on the
+	// user record; it exists so that a hook can act on something specific to
+	// the application, such as a code the caller had to present.
+	//
+	// It comes from the client and is therefore untrusted.
+	HookData string `json:"hook_data,omitempty"`
 }
 
 func NewMetadata(r *http.Request, name Name) *Metadata {
@@ -50,6 +58,7 @@ func NewMetadata(r *http.Request, name Name) *Metadata {
 		UUID:      uuid.Must(uuid.NewV4()),
 		Time:      time.Now(),
 		IPAddress: utilities.GetIPAddress(r),
+		HookData:  utilities.GetHookData(r.Context()),
 		Name:      name,
 	}
 }
