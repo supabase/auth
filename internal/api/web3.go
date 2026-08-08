@@ -88,7 +88,12 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using URI which is not allowed on this server, message was signed for another app")
 	}
 
-	if parsedMessage.URI.Hostname() != "localhost" && (parsedMessage.URI.Host != parsedMessage.Domain || !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/")) {
+	// Domain must always match URI authority (incl. localhost). Skipping this
+	// for localhost previously allowed Domain=attacker.com with URI=http://localhost...
+	if parsedMessage.URI.Host != parsedMessage.Domain {
+		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using a Domain that does not match the one in URI which is not allowed on this server")
+	}
+	if parsedMessage.URI.Hostname() != "localhost" && !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/") {
 		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using a Domain that does not match the one in URI which is not allowed on this server")
 	}
 
@@ -234,7 +239,12 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message is using URI which is not allowed on this server, message was signed for another app")
 	}
 
-	if parsedMessage.URI.Hostname() != "localhost" && (parsedMessage.URI.Host != parsedMessage.Domain || !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/")) {
+	// Domain must always match URI authority (incl. localhost). Skipping this
+	// for localhost previously allowed Domain=attacker.com with URI=http://localhost...
+	if parsedMessage.URI.Host != parsedMessage.Domain {
+		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message is using a Domain that does not match the one in URI which is not allowed on this server")
+	}
+	if parsedMessage.URI.Hostname() != "localhost" && !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/") {
 		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message is using a Domain that does not match the one in URI which is not allowed on this server")
 	}
 
