@@ -56,6 +56,12 @@ func TestGetPath(t *testing.T) {
 			Params:   &params,
 			Expected: "https://test.example.com?token=token&type=signup&redirect_to=https://example.com",
 		},
+		{
+			SiteURL:  "https://test.example.com/",
+			Path:     "/trailingslash?flow=test",
+			Params:   &params,
+			Expected: "https://test.example.com/trailingslash?token=token&type=signup&redirect_to=https://example.com&flow=test",
+		},
 	}
 
 	for _, c := range cases {
