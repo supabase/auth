@@ -149,6 +149,10 @@ paths:
                 issuer:
                   type: string
                   description: If `provider` is `azure` then you can specify any Azure OIDC issuer string here, which will be used for verification.
+                hook_data:
+                  type: string
+                  maxLength: 4096
+                  description: (Optional) Provide only when `grant_type` is `id_token`. An opaque value passed through to the auth hooks invoked while serving this request, such as `before-user-created`. It is never interpreted by the server and is not stored on the user record. Since it originates with the client, a hook acting on it must validate it.
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueSecurity"
                 auth_code:
@@ -334,6 +338,12 @@ paths:
           description: (Optional) A token representing a previous invitation of the user. A successful sign-in with OAuth will mark the invitation as completed.
           schema:
             type: string
+        - name: hook_data
+          in: query
+          description: (Optional) An opaque value passed through to the auth hooks invoked while serving this request, such as `before-user-created`. It is never interpreted by the server and is not stored on the user record. Since it originates with the client, a hook acting on it must validate it. Limited to 4096 bytes. It is stored with the flow state for the duration of the provider round trip and is not forwarded to the provider.
+          schema:
+            type: string
+            maxLength: 4096
         - name: redirect_to
           in: query
           description: >
@@ -403,6 +413,10 @@ paths:
                   type: string
                 data:
                   type: object
+                hook_data:
+                  type: string
+                  maxLength: 4096
+                  description: (Optional) An opaque value passed through to the auth hooks invoked while serving this request, such as `before-user-created`. It is never interpreted by the server and is not stored on the user record. Since it originates with the client, a hook acting on it must validate it. Limited to 4096 bytes.
                 code_challenge:
                   type: string
                 code_challenge_method:
@@ -600,6 +614,10 @@ paths:
                   type: boolean
                 data:
                   type: object
+                hook_data:
+                  type: string
+                  maxLength: 4096
+                  description: (Optional) An opaque value passed through to the auth hooks invoked while serving this request, such as `before-user-created`. It is never interpreted by the server and is not stored on the user record. Since it originates with the client, a hook acting on it must validate it. Limited to 4096 bytes.
                 code_challenge_method:
                   type: string
                   enum:
