@@ -8,6 +8,10 @@ package docs
 //   in: query
 //   description: The redirect url to return the user to after the `/callback` endpoint has completed.
 //   required: false
+// + name: hook_data
+//   in: query
+//   description: An opaque value passed through to the auth hooks invoked while serving this request, such as `before-user-created`. It is stored with the flow state for the duration of the provider round trip, is not forwarded to the provider, and is not stored on the user record. Since it originates with the client, a hook acting on it must validate it. Limited to 4096 bytes.
+//   required: false
 // responses:
 //   302: authorizeResponse
 
