@@ -112,7 +112,10 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
+	manualLinkingEnabled := ts.Config.Security.ManualLinkingEnabled
 	ts.Config.Security.ManualLinkingEnabled = true
+	defer func() { ts.Config.Security.ManualLinkingEnabled = manualLinkingEnabled }()
+
 	userWithOneIdentity, err := models.FindUserByEmailAndAudience(ts.API.db, "one@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
@@ -157,7 +160,9 @@ func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentity() {
+	manualLinkingEnabled := ts.Config.Security.ManualLinkingEnabled
 	ts.Config.Security.ManualLinkingEnabled = true
+	defer func() { ts.Config.Security.ManualLinkingEnabled = manualLinkingEnabled }()
 
 	// we want to test 2 cases here: unlinking a phone identity and email identity from a user
 	cases := []struct {
@@ -221,9 +226,13 @@ func (ts *IdentityTestSuite) TestUnlinkIdentity() {
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentityEmailVerification() {
-	ts.Config.Security.ManualLinkingEnabled = true
+	manualLinkingEnabled := ts.Config.Security.ManualLinkingEnabled
 	originalAutoconfirm := ts.Config.Mailer.Autoconfirm
-	defer func() { ts.Config.Mailer.Autoconfirm = originalAutoconfirm }()
+	ts.Config.Security.ManualLinkingEnabled = true
+	defer func() {
+		ts.Config.Security.ManualLinkingEnabled = manualLinkingEnabled
+		ts.Config.Mailer.Autoconfirm = originalAutoconfirm
+	}()
 
 	boolPtr := func(b bool) *bool { return &b }
 	cases := []struct {
@@ -315,7 +324,9 @@ func (ts *IdentityTestSuite) TestUnlinkIdentityEmailVerification() {
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentityPrefersVerifiedEmail() {
+	manualLinkingEnabled := ts.Config.Security.ManualLinkingEnabled
 	ts.Config.Security.ManualLinkingEnabled = true
+	defer func() { ts.Config.Security.ManualLinkingEnabled = manualLinkingEnabled }()
 
 	u, err := models.NewUser("", "primary@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err)
@@ -375,7 +386,9 @@ func (ts *IdentityTestSuite) generateAccessTokenAndSession(u *models.User) strin
 }
 
 func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailEnabled() {
+	identityLinkedEnabled := ts.Config.Mailer.Notifications.IdentityLinkedEnabled
 	ts.Config.Mailer.Notifications.IdentityLinkedEnabled = true
+	defer func() { ts.Config.Mailer.Notifications.IdentityLinkedEnabled = identityLinkedEnabled }()
 
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "one@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -404,7 +417,9 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailEnabled() {
 }
 
 func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailDisabled() {
+	identityLinkedEnabled := ts.Config.Mailer.Notifications.IdentityLinkedEnabled
 	ts.Config.Mailer.Notifications.IdentityLinkedEnabled = false
+	defer func() { ts.Config.Mailer.Notifications.IdentityLinkedEnabled = identityLinkedEnabled }()
 
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "one@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -430,8 +445,14 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailDisabled() {
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentitySendsNotificationEmailEnabled() {
+	identityUnlinkedEnabled := ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled
+	manualLinkingEnabled := ts.Config.Security.ManualLinkingEnabled
 	ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = true
 	ts.Config.Security.ManualLinkingEnabled = true
+	defer func() {
+		ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = identityUnlinkedEnabled
+		ts.Config.Security.ManualLinkingEnabled = manualLinkingEnabled
+	}()
 
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "two@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -457,11 +478,63 @@ func (ts *IdentityTestSuite) TestUnlinkIdentitySendsNotificationEmailEnabled() {
 	require.Equal(ts.T(), u.ID, mockMailer.IdentityUnlinkedMailCalls[0].User.ID, "Email should be sent to the correct user")
 	require.Equal(ts.T(), "phone", mockMailer.IdentityUnlinkedMailCalls[0].Provider, "Provider should match")
 	require.Equal(ts.T(), "two@example.com", mockMailer.IdentityUnlinkedMailCalls[0].User.GetEmail(), "Email should be sent to the correct email address")
+	require.Equal(ts.T(), "two@example.com", mockMailer.IdentityUnlinkedMailCalls[0].RecipientEmail, "Notification should be sent to the correct email address")
+}
+
+func (ts *IdentityTestSuite) TestUnlinkIdentitySendsNotificationToPreviousEmail() {
+	identityUnlinkedEnabled := ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled
+	manualLinkingEnabled := ts.Config.Security.ManualLinkingEnabled
+	ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = true
+	ts.Config.Security.ManualLinkingEnabled = true
+	defer func() {
+		ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = identityUnlinkedEnabled
+		ts.Config.Security.ManualLinkingEnabled = manualLinkingEnabled
+	}()
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "two@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, u.ID.String(), "email")
+	require.NoError(ts.T(), err)
+
+	replacementIdentity, err := models.NewIdentity(u, "google", map[string]interface{}{
+		"sub":            u.ID.String(),
+		"email":          "new@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(replacementIdentity))
+
+	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
+	require.True(ts.T(), ok, "Mailer is not of type *MockMailer")
+	mockMailer.Reset()
+
+	token := ts.generateAccessTokenAndSession(u)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/user/identities/%s", identity.ID), nil)
+	require.NoError(ts.T(), err)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	updatedUser, err := models.FindUserByID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), "new@example.com", updatedUser.GetEmail())
+	require.Len(ts.T(), mockMailer.IdentityUnlinkedMailCalls, 1)
+	require.Equal(ts.T(), "new@example.com", mockMailer.IdentityUnlinkedMailCalls[0].User.GetEmail(), "Notification should receive the updated user")
+	require.Equal(ts.T(), "two@example.com", mockMailer.IdentityUnlinkedMailCalls[0].RecipientEmail, "Email should be sent to the address on the user before unlinking")
+	require.Equal(ts.T(), "email", mockMailer.IdentityUnlinkedMailCalls[0].Provider)
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentitySendsNotificationEmailDisabled() {
+	identityUnlinkedEnabled := ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled
+	manualLinkingEnabled := ts.Config.Security.ManualLinkingEnabled
 	ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = false
 	ts.Config.Security.ManualLinkingEnabled = true
+	defer func() {
+		ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = identityUnlinkedEnabled
+		ts.Config.Security.ManualLinkingEnabled = manualLinkingEnabled
+	}()
 
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "two@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
