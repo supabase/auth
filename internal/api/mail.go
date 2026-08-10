@@ -107,7 +107,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			Email:    params.Email,
 			Password: params.Password,
 			Data:     params.Data,
-			Provider: "email",
+			Provider: EmailProvider,
 			Aud:      aud,
 		}
 
@@ -127,7 +127,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		signupParams := &SignupParams{
 			Email:    params.Email,
 			Data:     params.Data,
-			Provider: "email",
+			Provider: EmailProvider,
 			Aud:      aud,
 		}
 
@@ -171,7 +171,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return terr
 				}
-				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				identity, terr := a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Email:   user.GetEmail(),
 				}))
@@ -217,7 +217,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return terr
 				}
-				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				identity, terr := a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Email:   user.GetEmail(),
 				}))
