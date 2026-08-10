@@ -52,6 +52,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	provider := identityToBeDeleted.Provider
+	recipientEmail := user.GetEmail()
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, "", map[string]interface{}{
 			"identity_id": identityToBeDeleted.ID,
@@ -90,9 +91,11 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// Send identity unlinked notification email if enabled and user has an email
-	if config.Mailer.Notifications.IdentityUnlinkedEnabled && user.GetEmail() != "" {
-		if err := a.sendIdentityUnlinkedNotification(r, db, user, provider); err != nil {
+	// Send the identity unlinked notification to the email address that was on
+	// the user before unlinking. Removing an identity may promote another
+	// identity's email onto the user record.
+	if config.Mailer.Notifications.IdentityUnlinkedEnabled && recipientEmail != "" {
+		if err := a.sendIdentityUnlinkedNotification(r, db, user, provider, recipientEmail); err != nil {
 			// Log the error but don't fail the unlinking
 			logrus.WithError(err).Warn("Unable to send identity unlinked notification email")
 		}

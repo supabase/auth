@@ -441,6 +441,46 @@ func (ts *IdentityTestSuite) TestUnlinkIdentitySendsNotificationEmailEnabled() {
 	require.Equal(ts.T(), u.ID, mockMailer.IdentityUnlinkedMailCalls[0].User.ID, "Email should be sent to the correct user")
 	require.Equal(ts.T(), "phone", mockMailer.IdentityUnlinkedMailCalls[0].Provider, "Provider should match")
 	require.Equal(ts.T(), "two@example.com", mockMailer.IdentityUnlinkedMailCalls[0].User.GetEmail(), "Email should be sent to the correct email address")
+	require.Equal(ts.T(), "two@example.com", mockMailer.IdentityUnlinkedMailCalls[0].RecipientEmail, "Notification should be sent to the correct email address")
+}
+
+func (ts *IdentityTestSuite) TestUnlinkIdentitySendsNotificationToPreviousEmail() {
+	ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = true
+	ts.Config.Security.ManualLinkingEnabled = true
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "two@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, u.ID.String(), "email")
+	require.NoError(ts.T(), err)
+
+	replacementIdentity, err := models.NewIdentity(u, "google", map[string]interface{}{
+		"sub":            u.ID.String(),
+		"email":          "new@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(replacementIdentity))
+
+	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
+	require.True(ts.T(), ok, "Mailer is not of type *MockMailer")
+	mockMailer.Reset()
+
+	token := ts.generateAccessTokenAndSession(u)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/user/identities/%s", identity.ID), nil)
+	require.NoError(ts.T(), err)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	updatedUser, err := models.FindUserByID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), "new@example.com", updatedUser.GetEmail())
+	require.Len(ts.T(), mockMailer.IdentityUnlinkedMailCalls, 1)
+	require.Equal(ts.T(), "new@example.com", mockMailer.IdentityUnlinkedMailCalls[0].User.GetEmail(), "Notification should receive the updated user")
+	require.Equal(ts.T(), "two@example.com", mockMailer.IdentityUnlinkedMailCalls[0].RecipientEmail, "Email should be sent to the address on the user before unlinking")
+	require.Equal(ts.T(), "email", mockMailer.IdentityUnlinkedMailCalls[0].Provider)
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentitySendsNotificationEmailDisabled() {
