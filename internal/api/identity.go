@@ -65,7 +65,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		switch identityToBeDeleted.Provider {
-		case "phone":
+		case PhoneProvider:
 			user.PhoneConfirmedAt = nil
 			if terr := user.SetPhone(tx, ""); terr != nil {
 				return apierrors.NewInternalServerError("Database error updating user phone").WithInternalError(terr)
@@ -126,12 +126,12 @@ func (a *API) ensureEmailIdentityForPassword(tx *storage.Connection, user *model
 		return apierrors.NewInternalServerError("Database error finding identities").WithInternalError(terr)
 	}
 	for _, identity := range identities {
-		if identity.Provider == "email" {
+		if identity.Provider == EmailProvider {
 			return nil
 		}
 	}
 
-	identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+	identity, terr := a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 		Subject:       user.ID.String(),
 		Email:         email,
 		EmailVerified: true,

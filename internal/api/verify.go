@@ -419,12 +419,12 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 				return terr
 			}
-			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), PhoneProvider); terr != nil {
 				if !models.IsNotFoundError(terr) {
 					return terr
 				}
 				// confirming the phone change should create a new phone identity if the user doesn't have one
-				if _, terr = a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+				if _, terr = a.createNewIdentity(tx, user, PhoneProvider, structs.Map(provider.Claims{
 					Subject:       user.ID.String(),
 					Phone:         params.Phone,
 					PhoneVerified: true,
@@ -471,7 +471,7 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 
 	// Send identity linked notification email if a new phone identity was created
 	if phoneIdentityWasCreated && config.Mailer.Notifications.IdentityLinkedEnabled && user.GetEmail() != "" {
-		if err := a.sendIdentityLinkedNotification(r, conn, user, "phone"); err != nil {
+		if err := a.sendIdentityLinkedNotification(r, conn, user, PhoneProvider); err != nil {
 			// Log the error but don't fail the verification
 			logrus.WithError(err).Warn("Unable to send identity linked notification email")
 		}
@@ -590,12 +590,12 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 			return terr
 		}
 
-		if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil {
+		if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), EmailProvider); terr != nil {
 			if !models.IsNotFoundError(terr) {
 				return terr
 			}
 			// confirming the email change should create a new email identity if the user doesn't have one
-			if _, terr = a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+			if _, terr = a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 				Subject:       user.ID.String(),
 				Email:         user.EmailChange,
 				EmailVerified: true,
