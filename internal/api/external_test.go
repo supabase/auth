@@ -309,7 +309,7 @@ func (ts *ExternalTestSuite) TestRedirectErrorsShouldPreserveParams() {
 		parsedURL, err := url.Parse(c.RedirectURL)
 		require.Equal(ts.T(), err, nil)
 
-		redirectErrors(ts.API.internalExternalProviderCallback, w, req, parsedURL)
+		ts.API.redirectErrors(ts.API.internalExternalProviderCallback, w, req, parsedURL)
 
 		parsedParams, err := url.ParseQuery(parsedURL.RawQuery)
 		require.Equal(ts.T(), err, nil)
