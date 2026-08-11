@@ -154,7 +154,7 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		}
 		createdUser = decision == models.CreateAccount
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, map[string]interface{}{
 			"provider": providerType,
 			"chain":    params.Chain,
 			"network":  parsedMessage.ChainID,
@@ -300,7 +300,7 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 		}
 		createdUser = decision == models.CreateAccount
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, map[string]interface{}{
 			"provider": providerType,
 			"chain":    params.Chain,
 			"network":  parsedMessage.ChainID,

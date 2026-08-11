@@ -8,7 +8,6 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // AdminPasskeyList handles GET /admin/users/{user_id}/passkeys.
@@ -58,7 +57,7 @@ func (a *API) AdminPasskeyDelete(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.PasskeyDeletedAction, utilities.GetIPAddress(r), map[string]any{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.PasskeyDeletedAction, map[string]any{
 			"user_id":    user.ID,
 			"passkey_id": cred.ID,
 		}); terr != nil {

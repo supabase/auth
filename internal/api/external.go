@@ -400,7 +400,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return 0, nil, apierrors.NewInternalServerError("Error updating user").WithInternalError(terr)
 		}
 		if decision.CandidateEmail.Verified || config.Mailer.Autoconfirm {
-			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, map[string]interface{}{
 				"provider": providerType,
 			}); terr != nil {
 				return 0, nil, terr
@@ -436,7 +436,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			}
 		}
 	} else {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, map[string]interface{}{
 			"provider": providerType,
 		}); terr != nil {
 			return 0, nil, terr
@@ -491,7 +491,7 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 		return nil, apierrors.NewInternalServerError("Database error updating user").WithInternalError(err)
 	}
 
-	if err := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.InviteAcceptedAction, "", map[string]interface{}{
+	if err := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.InviteAcceptedAction, map[string]interface{}{
 		"provider": providerType,
 	}); err != nil {
 		return nil, err
