@@ -272,12 +272,12 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		var identities []models.Identity
 		if params.Email != "" {
-			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil && !models.IsNotFoundError(terr) {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), EmailProvider); terr != nil && !models.IsNotFoundError(terr) {
 				return terr
 			} else if identity == nil {
 				// if the user doesn't have an existing email
 				// then updating the user's email should create a new email identity
-				i, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				i, terr := a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 					Subject:       user.ID.String(),
 					Email:         params.Email,
 					EmailVerified: params.EmailConfirm,
@@ -308,12 +308,12 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" {
-			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil && !models.IsNotFoundError(terr) {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), PhoneProvider); terr != nil && !models.IsNotFoundError(terr) {
 				return terr
 			} else if identity == nil {
 				// if the user doesn't have an existing phone
 				// then updating the user's phone should create a new phone identity
-				identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+				identity, terr := a.createNewIdentity(tx, user, PhoneProvider, structs.Map(provider.Claims{
 					Subject:       user.ID.String(),
 					Phone:         params.Phone,
 					PhoneVerified: params.PhoneConfirm,
@@ -416,7 +416,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		} else if user != nil {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 		}
-		providers = append(providers, "email")
+		providers = append(providers, EmailProvider)
 	}
 
 	if params.Phone != "" {
@@ -429,7 +429,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		} else if exists {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodePhoneExists, "Phone number already registered by another user")
 		}
-		providers = append(providers, "phone")
+		providers = append(providers, PhoneProvider)
 	}
 
 	if params.Password != nil && params.PasswordHash != "" {
@@ -495,7 +495,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 
 		var identities []models.Identity
 		if user.GetEmail() != "" {
-			identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+			identity, terr := a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 				Subject: user.ID.String(),
 				Email:   user.GetEmail(),
 			}))
@@ -507,7 +507,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if user.GetPhone() != "" {
-			identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+			identity, terr := a.createNewIdentity(tx, user, PhoneProvider, structs.Map(provider.Claims{
 				Subject: user.ID.String(),
 				Phone:   user.GetPhone(),
 			}))

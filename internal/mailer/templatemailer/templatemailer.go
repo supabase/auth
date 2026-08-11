@@ -461,14 +461,14 @@ func (m *Mailer) IdentityLinkedNotificationMail(r *http.Request, user *models.Us
 	return m.mail(r.Context(), m.cfg, IdentityLinkedNotificationTemplate, user.GetEmail(), data)
 }
 
-func (m *Mailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
+func (m *Mailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider, recipientEmail string) error {
 	data := map[string]any{
 		"SiteURL":  m.cfg.SiteURL,
-		"Email":    user.GetEmail(),
+		"Email":    recipientEmail,
 		"Provider": provider, // the provider of the unlinked identity
 		"Data":     user.UserMetaData,
 	}
-	return m.mail(r.Context(), m.cfg, IdentityUnlinkedNotificationTemplate, user.GetEmail(), data)
+	return m.mail(r.Context(), m.cfg, IdentityUnlinkedNotificationTemplate, recipientEmail, data)
 }
 
 func (m *Mailer) MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
