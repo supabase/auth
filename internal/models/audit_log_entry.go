@@ -64,6 +64,7 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	TokenRefreshedAction:            token,
 	UserModifiedAction:              user,
 	UserRecoveryRequestedAction:     user,
+	UserReauthenticateAction:        user,
 	UserConfirmationRequestedAction: user,
 	UserRepeatedSignUpAction:        user,
 	UserUpdatePasswordAction:        user,
