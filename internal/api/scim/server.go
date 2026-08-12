@@ -41,7 +41,7 @@ func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
 }
 
 func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
-	if r.URL.Query().Get("filter") != "" {
+	if r.URL.Query().Has("filter") {
 		return protocol.SendError(w, http.StatusForbidden, "", "Filtering is not supported on this endpoint")
 	}
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(resources))
