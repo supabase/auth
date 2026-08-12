@@ -2,7 +2,9 @@ package scim
 
 import (
 	"net/http"
+	"strings"
 
+	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/conf"
 )
@@ -10,17 +12,20 @@ import (
 const BasePath = "/scim/v2"
 
 type Server struct {
-	config *conf.GlobalConfiguration
+	serviceProviderConfig *core.ServiceProviderConfig
 }
 
 func NewServer(config *conf.GlobalConfiguration) *Server {
 	return &Server{
-		config: config,
+		serviceProviderConfig: core.NewServiceProviderConfig(
+			strings.TrimRight(config.API.ExternalURL, "/")+BasePath,
+			core.NewOAuthBearerToken().AsPrimary(),
+		),
 	}
 }
 
 func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request) error {
-	return srv.notImplemented(w)
+	return protocol.Send(w, http.StatusOK, srv.serviceProviderConfig)
 }
 
 func (srv *Server) ResourceTypes(w http.ResponseWriter, r *http.Request) error {
