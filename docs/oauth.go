@@ -10,7 +10,7 @@ package docs
 //   required: false
 // + name: hook_data
 //   in: query
-//   description: An opaque value passed through to the auth hooks invoked while serving this request, such as `before-user-created`. It is stored with the flow state for the duration of the provider round trip, is not forwarded to the provider, and is not stored on the user record. Since it originates with the client, a hook acting on it must validate it. Limited to 4096 bytes.
+//   description: An opaque value passed through to the auth hooks invoked while serving this request, such as `before-user-created`. It is stored with the flow state for the duration of the provider round trip, cleared once consumed, not forwarded to the provider, and never stored on the user record. It travels in this URL, so it reaches browser history, referrer headers and proxy logs: it must not be a long-lived bearer secret, and a hook must validate what arrives rather than treat its presence as proof of anything. A reference the hook can check against its own records is the intended shape. Limited to 4096 bytes.
 //   required: false
 // responses:
 //   302: authorizeResponse

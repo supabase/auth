@@ -49,7 +49,16 @@ type Metadata struct {
 	// user record; it exists so that a hook can act on something specific to
 	// the application, such as a code the caller had to present.
 	//
-	// It comes from the client and is therefore untrusted.
+	// It comes from the client and is therefore UNTRUSTED. A hook must validate
+	// it rather than treat its presence as proof of anything: on /authorize it
+	// travels in a URL, so it reaches browser history, referrer headers and
+	// proxy logs, and it is held in the flow state for the duration of the
+	// provider round trip.
+	//
+	// Which makes it the wrong place for a long-lived bearer secret. What
+	// belongs here is a reference the hook can check against the integrator's
+	// own records -- and mark used there -- so that a copy recovered from a log
+	// or a backup buys nothing.
 	HookData string `json:"hook_data,omitempty"`
 }
 

@@ -60,6 +60,20 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	/*
+	 * Carried in the URL, and therefore not a place for a secret.
+	 *
+	 * This is a GET the browser navigates to, so whatever is put here reaches
+	 * browser history, bookmarks, referrer headers and every proxy log on the
+	 * way. It is removed before the redirect so the provider never sees it, and
+	 * cleared from the flow state once consumed -- but neither undoes the trip
+	 * it already made through the address bar.
+	 *
+	 * So a hook must validate what arrives rather than trust that it arrived.
+	 * The intended shape is a REFERENCE the integrator checks against their own
+	 * records and can mark used there, not a bearer grant that authorises by
+	 * existing.
+	 */
 	hookData := query.Get("hook_data")
 	if err := validateHookData(hookData); err != nil {
 		return "", err
@@ -243,6 +257,13 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			flowState.UserID = &(user.ID)
 			issueTime := time.Now()
 			flowState.AuthCodeIssuedAt = &issueTime
+
+			// Spent: the hooks for this request have run and nothing reads it
+			// again, so there is no reason for it to sit in the row afterwards
+			// or in any backup taken later. Cleared HERE rather than where it is
+			// restored, because that happens before the user exists -- a callback
+			// that failed after it would have destroyed a value it still needed.
+			flowState.HookData = nil
 
 			terr = tx.Update(flowState)
 		} else {
