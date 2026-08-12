@@ -68,6 +68,7 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	UserConfirmationRequestedAction: user,
 	UserRepeatedSignUpAction:        user,
 	UserUpdatePasswordAction:        user,
+	IdentityUnlinkAction:            user,
 	EnrollFactorAction:              factor,
 	UnenrollFactorAction:            factor,
 	CreateChallengeAction:           factor,
