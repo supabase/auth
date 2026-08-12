@@ -4,6 +4,7 @@ import (
 	"embed"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -59,9 +60,21 @@ func TestServer(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			require.NoError(t, tc.handler(w, r))
-			require.Equal(t, http.StatusNotImplemented, w.Code)
-			require.Equal(t, "application/scim+json", w.Header().Get("Content-Type"))
-			require.JSONEq(t, testFixture(t, "not_implemented.json"), w.Body.String())
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+			require.JSONEq(t, testFixture(t, "empty_list_response.json"), w.Body.String())
+		})
+
+		t.Run(tc.path+" rejects filter query parameter", func(t *testing.T) {
+			filter := url.Values{"filter": {`name eq "User"`}}.Encode()
+			r := httptest.NewRequest(http.MethodGet, BasePath+"/"+tc.path+"?"+filter, nil)
+			w := httptest.NewRecorder()
+
+			require.NoError(t, tc.handler(w, r))
+
+			require.Equal(t, http.StatusForbidden, w.Code)
+			require.JSONEq(t, testFixture(t, "filter_forbidden.json"), w.Body.String())
 		})
 	}
 
