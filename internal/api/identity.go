@@ -184,8 +184,16 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 		}
 		return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked to another user")
 	}
-	if _, terr := a.createNewIdentity(tx, targetUser, providerType, structs.Map(userData.Metadata)); terr != nil {
+	identity, terr = a.createNewIdentity(tx, targetUser, providerType, structs.Map(userData.Metadata))
+	if terr != nil {
 		return nil, terr
+	}
+	if terr := models.NewAuditLogEntry(a.config.AuditLog, r, tx, targetUser, models.IdentityLinkAction, utilities.GetIPAddress(r), map[string]any{
+		"identity_id": identity.ID,
+		"provider":    identity.Provider,
+		"provider_id": identity.ProviderID,
+	}); terr != nil {
+		return nil, apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
 	}
 
 	if targetUser.GetEmail() == "" {

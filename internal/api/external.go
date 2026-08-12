@@ -322,6 +322,14 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return 0, nil, terr
 		}
 
+		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityLinkAction, utilities.GetIPAddress(r), map[string]any{
+			"identity_id": identity.ID,
+			"provider":    identity.Provider,
+			"provider_id": identity.ProviderID,
+		}); terr != nil {
+			return 0, nil, terr
+		}
+
 	case models.CreateAccount:
 		if config.DisableSignup {
 			return 0, nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSignupDisabled, "Signups not allowed for this instance")
