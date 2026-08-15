@@ -288,3 +288,37 @@ func FindUserForEmailChange(tx *storage.Connection, email, token, aud string, se
 	}
 	return FindUserByEmailChangeNewAndAudience(tx, email, token, aud)
 }
+
+// FindUserForPhoneChange finds the user requesting a change to the given phone
+// number, identifying them by their one-time token rather than by the phone
+// number alone.
+//
+// The phone_change column carries no uniqueness constraint, so several users
+// can hold the same pending value at once (abandoned or still-unverified change
+// requests). Selecting on phone_change alone returns an arbitrary one of them,
+// which can be a different user than the one the token was issued to. Email
+// change already resolves its user through the one-time token for this reason
+// (see FindUserForEmailChange); this does the same for phone change.
+//
+// Falls back to the phone_change lookup when no one-time token matches, so
+// verification paths that do not go through the one_time_tokens table (test
+// OTPs, rows predating it) keep working exactly as before.
+func FindUserForPhoneChange(tx *storage.Connection, phone, tokenHash, aud string) (*User, error) {
+	if tokenHash != "" {
+		ott, err := FindOneTimeToken(tx, tokenHash, PhoneChangeToken)
+		if err != nil && !IsNotFoundError(err) {
+			return nil, err
+		}
+		if ott != nil {
+			user, err := FindUserByID(tx, ott.UserID)
+			if err != nil {
+				return nil, err
+			}
+			if user.Aud == aud && user.PhoneChange == phone {
+				return user, nil
+			}
+		}
+	}
+
+	return FindUserByPhoneChangeAndAudience(tx, phone, aud)
+}
