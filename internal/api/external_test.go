@@ -39,6 +39,9 @@ func TestExternal(t *testing.T) {
 func (ts *ExternalTestSuite) SetupTest() {
 	ts.Config.DisableSignup = false
 	ts.Config.Mailer.Autoconfirm = false
+	ts.Config.External.Google.SyncEmail = false
+	ts.Config.External.Github.SyncEmail = false
+	ts.Config.External.Google.EmailOptional = false
 
 	models.TruncateAll(ts.API.db)
 }

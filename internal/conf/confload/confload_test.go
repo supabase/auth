@@ -235,6 +235,27 @@ func TestExperimentalProviderLinkingDomains(t *testing.T) {
 	}, cfg.Experimental.ProviderLinkingDomains)
 }
 
+func TestOAuthProviderSyncEmail(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("GOTRUE_SITE_URL", "http://localhost:8080")
+	os.Setenv("GOTRUE_DB_DRIVER", "postgres")
+	os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
+	os.Setenv("GOTRUE_OPERATOR_TOKEN", "token")
+	os.Setenv("GOTRUE_JWT_SECRET", "secret")
+	os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
+
+	cfg, err := LoadGlobalFromEnv()
+	require.NoError(t, err)
+	require.False(t, cfg.External.Google.SyncEmail)
+	require.False(t, cfg.External.Github.SyncEmail)
+
+	os.Setenv("GOTRUE_EXTERNAL_GOOGLE_SYNC_EMAIL", "true")
+	cfg, err = LoadGlobalFromEnv()
+	require.NoError(t, err)
+	require.True(t, cfg.External.Google.SyncEmail)
+	require.False(t, cfg.External.Github.SyncEmail)
+}
+
 func TestExperimentalCursorPaginationEnabled(t *testing.T) {
 	baseEnv := func() {
 		os.Clearenv()

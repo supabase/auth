@@ -375,6 +375,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		user = decision.User
 		identity = decision.Identities[0]
 
+		// Capture the identity email before refreshing claims so ownership
+		// checks can see whether this identity previously owned users.email.
+		previousIdentityEmail := identity.GetEmail()
 		identity.IdentityData = identityData
 		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
 			return 0, nil, terr
@@ -383,6 +386,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return 0, nil, terr
 		}
 		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
+			return 0, nil, terr
+		}
+		if terr = a.syncOAuthUserEmail(tx, r, user, identity, previousIdentityEmail, providerType); terr != nil {
 			return 0, nil, terr
 		}
 
