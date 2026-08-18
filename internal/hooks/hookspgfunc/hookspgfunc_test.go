@@ -95,7 +95,9 @@ func TestDispatch(t *testing.T) {
 		},
 
 		{
-			desc: "fail - small sleep of 50ms within timeout (40ms)",
+			// 50ms vs 40ms is inside Postgres statement_timeout timer
+			// granularity on some hosts, so the sleep can finish first.
+			desc: "fail - sleep of 200ms exceeds timeout (40ms)",
 			cfg: conf.ExtensibilityPointConfiguration{
 				URI:      `pg-functions://postgres/auth/v0pgfunc_test_sleep_timeout`,
 				HookName: `"auth"."v0pgfunc_test_sleep_timeout"`,
@@ -110,7 +112,7 @@ func TestDispatch(t *testing.T) {
 				create or replace function v0pgfunc_test_sleep_timeout(input jsonb)
 				returns json as $$
 				begin
-					PERFORM pg_sleep(0.05);
+					PERFORM pg_sleep(0.2);
 					return input;
 				end; $$ language plpgsql;`,
 			errStr:  `ERROR: canceling statement due to statement timeout`,
