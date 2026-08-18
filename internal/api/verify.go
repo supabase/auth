@@ -544,8 +544,7 @@ func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
 
 func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
 	config := a.config
-	if !config.Mailer.Autoconfirm &&
-		config.Mailer.SecureEmailChangeEnabled &&
+	if config.Mailer.SecureEmailChangeEnabled &&
 		user.EmailChangeConfirmStatus == zeroConfirmation &&
 		user.GetEmail() != "" {
 		err := conn.Transaction(func(tx *storage.Connection) error {
