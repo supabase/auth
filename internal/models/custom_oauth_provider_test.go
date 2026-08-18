@@ -69,6 +69,18 @@ func (ts *CustomOAuthProviderTestSuite) TestCreateCustomOAuthProvider() {
 	}
 }
 
+func (ts *CustomOAuthProviderTestSuite) TestSyncEmailPersisted() {
+	provider := ts.createTestProvider(ProviderTypeOAuth2, "custom:sync-email")
+	require.False(ts.T(), provider.SyncEmail)
+
+	provider.SyncEmail = true
+	require.NoError(ts.T(), UpdateCustomOAuthProvider(ts.db, provider))
+
+	found, err := FindCustomOAuthProviderByID(ts.db, provider.ID)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), found.SyncEmail)
+}
+
 func (ts *CustomOAuthProviderTestSuite) TestFindCustomOAuthProviderByID() {
 	provider := ts.createTestProvider(ProviderTypeOAuth2, "custom:test-oauth2")
 

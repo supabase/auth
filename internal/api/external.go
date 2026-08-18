@@ -104,6 +104,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		Referrer:             redirectURL,
 		OAuthClientStateID:   oauthClientStateID,
 		EmailOptional:        pConfig.EmailOptional,
+		SyncEmail:            pConfig.SyncEmail,
 	}
 
 	if linkingTargetUser != nil {
@@ -140,7 +141,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 
 func (a *API) handleOAuthCallback(r *http.Request) (*OAuthProviderData, error) {
 	ctx := r.Context()
-	providerType, _ := getExternalProviderType(ctx)
+	providerType, _, _ := getExternalProviderType(ctx)
 
 	var oAuthResponseData *OAuthProviderData
 	var err error
@@ -164,7 +165,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
-	providerType, emailOptional := getExternalProviderType(ctx)
+	providerType, emailOptional, syncEmail := getExternalProviderType(ctx)
 	data, err := a.handleOAuthCallback(r)
 	if err != nil {
 		return err
@@ -216,7 +217,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 		} else {
 			createdUser = true
-			if _, user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional); terr != nil {
+			if _, user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional, syncEmail); terr != nil {
 				return terr
 			}
 		}
@@ -289,7 +290,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string, emailOptional bool) (models.AccountLinkingDecision, *models.User, error) {
+func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string, emailOptional, syncEmail bool) (models.AccountLinkingDecision, *models.User, error) {
 	ctx := r.Context()
 	aud := a.requestAud(ctx, r)
 	config := a.config
@@ -388,8 +389,10 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
 			return 0, nil, terr
 		}
-		if terr = a.syncOAuthUserEmail(tx, r, user, identity, previousIdentityEmail, providerType); terr != nil {
-			return 0, nil, terr
+		if syncEmail {
+			if terr = a.syncOAuthUserEmail(tx, r, user, identity, previousIdentityEmail, providerType); terr != nil {
+				return 0, nil, terr
+			}
 		}
 
 	case models.MultipleAccounts:
@@ -569,7 +572,7 @@ func (a *API) loadExternalStateFromUUID(ctx context.Context, db *storage.Connect
 		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeFlowStateAlreadyUsed, "State has already been used")
 	}
 
-	ctx = withExternalProviderType(ctx, flowState.ProviderType, flowState.EmailOptional)
+	ctx = withExternalProviderType(ctx, flowState.ProviderType, flowState.EmailOptional, flowState.SyncEmail)
 
 	if flowState.InviteToken != nil && *flowState.InviteToken != "" {
 		ctx = withInviteToken(ctx, *flowState.InviteToken)
@@ -772,6 +775,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 			RedirectURI:   redirectURL,
 			URL:           *customProvider.AuthorizationURL,
 			EmailOptional: customProvider.EmailOptional,
+			SyncEmail:     customProvider.SyncEmail,
 		}
 
 		return p, pConfig, nil
@@ -810,6 +814,7 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		RedirectURI:   redirectURL,
 		URL:           p.Config().Endpoint.AuthURL,
 		EmailOptional: customProvider.EmailOptional,
+		SyncEmail:     customProvider.SyncEmail,
 	}
 
 	return p, pConfig, nil

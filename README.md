@@ -470,7 +470,7 @@ The base URL used for constructing the URLs to request authorization and access 
 
 When `true`, an already-linked OAuth identity may update `auth.users.email` if the provider reports a different **verified** email for the same `provider` + `provider_id` (`sub`). Defaults to `false`.
 
-Unverified provider emails are ignored. If the user has an independent `email` identity (password, magic link, or OTP), the canonical email is left unchanged. If the new address already belongs to another user, Auth does not merge accounts or move identities; the OAuth identity metadata is still refreshed and login succeeds. Custom OAuth, SAML, and Web3 providers are not covered by this setting.
+Unverified provider emails are ignored. If the user has an independent `email` identity (password, magic link, or OTP), the canonical email is left unchanged. If the new address already belongs to another user, Auth does not merge accounts or move identities; the OAuth identity metadata is still refreshed and login succeeds. Custom OAuth and OIDC providers expose the same option as `sync_email` on the admin API. SAML and Web3 providers are not covered by this setting.
 
 This path does not send the interactive "email changed" notification. A `user_modified` audit event is recorded when the canonical email actually changes.
 

@@ -19,6 +19,7 @@ func (c contextKey) String() string {
 const (
 	externalProviderTypeKey          = contextKey("external_provider_type")
 	externalProviderEmailOptionalKey = contextKey("external_provider_allow_no_email")
+	externalProviderSyncEmailKey     = contextKey("external_provider_sync_email")
 
 	tokenKey            = contextKey("jwt")
 	inviteTokenKey      = contextKey("invite_token")
@@ -163,27 +164,37 @@ func getInviteToken(ctx context.Context) string {
 	return obj.(string)
 }
 
-// withExternalProviderType adds the provided request ID to the context.
-func withExternalProviderType(ctx context.Context, id string, emailOptional bool) context.Context {
-	return context.WithValue(context.WithValue(ctx, externalProviderTypeKey, id), externalProviderEmailOptionalKey, emailOptional)
+// withExternalProviderType adds the provider type and per-provider OAuth flags to the context.
+func withExternalProviderType(ctx context.Context, id string, emailOptional, syncEmail bool) context.Context {
+	ctx = context.WithValue(ctx, externalProviderTypeKey, id)
+	ctx = context.WithValue(ctx, externalProviderEmailOptionalKey, emailOptional)
+	ctx = context.WithValue(ctx, externalProviderSyncEmailKey, syncEmail)
+	return ctx
 }
 
-// getExternalProviderType returns the provider type and whether user data without email address should be allowed.
-func getExternalProviderType(ctx context.Context) (string, bool) {
+// getExternalProviderType returns the provider type, whether user data without
+// email is allowed, and whether a verified OAuth email change may sync to users.email.
+func getExternalProviderType(ctx context.Context) (string, bool, bool) {
 	idValue := ctx.Value(externalProviderTypeKey)
 	emailOptionalValue := ctx.Value(externalProviderEmailOptionalKey)
+	syncEmailValue := ctx.Value(externalProviderSyncEmailKey)
 
 	id, okID := idValue.(string)
 	if !okID {
-		return "", false
+		return "", false, false
 	}
 
 	emailOptional, okEmailOptional := emailOptionalValue.(bool)
 	if !okEmailOptional {
-		return "", false
+		return "", false, false
 	}
 
-	return id, emailOptional
+	syncEmail, okSyncEmail := syncEmailValue.(bool)
+	if !okSyncEmail {
+		return "", false, false
+	}
+
+	return id, emailOptional, syncEmail
 }
 
 func withExternalReferrer(ctx context.Context, token string) context.Context {

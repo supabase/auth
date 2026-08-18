@@ -324,7 +324,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 
 		// accounts potentially created via SAML can contain non-unique email addresses in the auth.users table
 		var decision models.AccountLinkingDecision
-		if decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, providerType, false); terr != nil {
+		if decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, providerType, false, false); terr != nil {
 			return terr
 		}
 		createdUser = decision == models.CreateAccount

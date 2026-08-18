@@ -29,7 +29,7 @@ type IdTokenGrantParams struct {
 	LinkIdentity bool   `json:"link_identity"`
 }
 
-func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connection, config *conf.GlobalConfiguration, r *http.Request, cache *provider.OIDCProviderCache) (*oidc.Provider, bool, string, []string, bool, error) {
+func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connection, config *conf.GlobalConfiguration, r *http.Request, cache *provider.OIDCProviderCache) (*oidc.Provider, bool, string, []string, bool, bool, error) {
 	log := observability.GetLogEntry(r).Entry
 
 	var cfg *conf.OAuthProviderConfiguration
@@ -48,15 +48,15 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 
 		detectedIssuer, err := provider.DetectAppleIDTokenIssuer(ctx, p.IdToken)
 		if err != nil {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Apple provider").WithInternalError(err)
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Apple provider").WithInternalError(err)
 		}
 
 		if !provider.IsAppleIssuer(detectedIssuer) {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
 		}
 
 		if p.Issuer != "" && p.Issuer != detectedIssuer {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Provided issuer does not match ID token issuer")
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Provided issuer does not match ID token issuer")
 		}
 
 		issuer = detectedIssuer
@@ -75,15 +75,15 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 	case p.Provider == AzureProvider || provider.IsAzureIssuer(p.Issuer):
 		detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
 		if err != nil {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
 		}
 
 		if !strings.HasPrefix(detectedIssuer, "https://login.microsoftonline.com/") && !strings.HasPrefix(detectedIssuer, "https://sts.windows.net/") {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Azure ID token issuer")
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Azure ID token issuer")
 		}
 
 		if p.Issuer != "" && p.Issuer != detectedIssuer {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Provided issuer does not match ID token issuer")
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Provided issuer does not match ID token issuer")
 		}
 
 		issuer = detectedIssuer
@@ -125,28 +125,28 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 
 	case strings.HasPrefix(p.Provider, "custom:"):
 		if !config.CustomOAuth.Enabled {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Custom OAuth providers are disabled")
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Custom OAuth providers are disabled")
 		}
 		// Custom OIDC provider - identifier already includes 'custom:' prefix
 		customProvider, err := models.FindCustomOAuthProviderByIdentifier(db, p.Provider)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Custom provider %q not found", p.Provider)
+				return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Custom provider %q not found", p.Provider)
 			}
-			return nil, false, "", nil, false, apierrors.NewInternalServerError("Error finding custom provider").WithInternalError(err)
+			return nil, false, "", nil, false, false, apierrors.NewInternalServerError("Error finding custom provider").WithInternalError(err)
 		}
 
 		if !customProvider.Enabled {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, "Custom provider %q is disabled", p.Provider)
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, "Custom provider %q is disabled", p.Provider)
 		}
 
 		// Ensure it's an OIDC provider
 		if !customProvider.IsOIDC() {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Provider %q is not an OIDC provider", p.Provider)
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Provider %q is not an OIDC provider", p.Provider)
 		}
 
 		if customProvider.Issuer == nil {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "OIDC provider %q missing issuer", p.Provider)
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "OIDC provider %q missing issuer", p.Provider)
 		}
 
 		providerType = p.Provider
@@ -158,6 +158,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 			Enabled:        true, // already checked above
 			SkipNonceCheck: customProvider.SkipNonceCheck,
 			EmailOptional:  customProvider.EmailOptional,
+			SyncEmail:      customProvider.SyncEmail,
 		}
 
 	default:
@@ -172,7 +173,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 		}
 
 		if !allowed {
-			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Custom OIDC provider %q not allowed", p.Provider)
+			return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Custom OIDC provider %q not allowed", p.Provider)
 		}
 
 		cfg = &conf.OAuthProviderConfiguration{
@@ -182,7 +183,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 	}
 
 	if !cfg.Enabled {
-		return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, "Provider (issuer %q) is not enabled", issuer)
+		return nil, false, "", nil, false, false, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, "Provider (issuer %q) is not enabled", issuer)
 	}
 
 	oidcCtx := ctx
@@ -192,10 +193,10 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 
 	oidcProvider, err := cache.GetProvider(oidcCtx, issuer)
 	if err != nil {
-		return nil, false, "", nil, cfg.EmailOptional, err
+		return nil, false, "", nil, cfg.EmailOptional, cfg.SyncEmail, err
 	}
 
-	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, cfg.EmailOptional, nil
+	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, cfg.EmailOptional, cfg.SyncEmail, nil
 }
 
 // IdTokenGrant implements the id_token grant type flow
@@ -237,7 +238,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		ctx = withTargetUser(ctx, targetUser)
 	}
 
-	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, emailOptional, err := params.getProvider(ctx, db, config, r, a.oidcCache)
+	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, emailOptional, syncEmail, err := params.getProvider(ctx, db, config, r, a.oidcCache)
 	if err != nil {
 		return err
 	}
@@ -336,7 +337,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		if params.LinkIdentity {
 			user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType)
 		} else {
-			decision, user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional)
+			decision, user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional, syncEmail)
 		}
 		createdUser = decision == models.CreateAccount
 		if terr != nil {

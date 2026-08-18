@@ -33,6 +33,7 @@ type FlowState struct {
 	OAuthClientStateID *uuid.UUID `json:"oauth_client_state_id,omitempty" db:"oauth_client_state_id"`
 	LinkingTargetID    *uuid.UUID `json:"linking_target_id,omitempty" db:"linking_target_id"`
 	EmailOptional      bool       `json:"email_optional" db:"email_optional"`
+	SyncEmail          bool       `json:"sync_email" db:"sync_email"`
 }
 
 // FlowStateParams contains all parameters for creating a flow state
@@ -47,6 +48,7 @@ type FlowStateParams struct {
 	OAuthClientStateID   *uuid.UUID
 	LinkingTargetID      *uuid.UUID
 	EmailOptional        bool
+	SyncEmail            bool
 }
 
 type CodeChallengeMethod int
@@ -111,6 +113,7 @@ func NewFlowState(params FlowStateParams) (*FlowState, error) {
 		AuthenticationMethod: params.AuthenticationMethod.String(),
 		UserID:               params.UserID,
 		EmailOptional:        params.EmailOptional,
+		SyncEmail:            params.SyncEmail,
 		OAuthClientStateID:   params.OAuthClientStateID,
 		LinkingTargetID:      params.LinkingTargetID,
 	}

@@ -37,8 +37,10 @@ func oauthVerifiedEmail(identity *models.Identity) (string, bool) {
 // auth.users.email for an already-linked identity.
 //
 // Policy skips (login still succeeds; identity metadata has already been
-// refreshed):
-//   - provider SyncEmail is false or the provider has no env config
+// refreshed). The caller must only invoke this when the provider's SyncEmail
+// flag is true.
+//
+// Remaining skips:
 //   - provider email is missing or not attested as verified
 //   - new email equals the current canonical email (after lowercasing)
 //   - the user has an independent provider=email identity
@@ -49,11 +51,6 @@ func oauthVerifiedEmail(identity *models.Identity) (string, bool) {
 //
 // Unexpected database errors are returned; uniqueness conflicts are skipped.
 func (a *API) syncOAuthUserEmail(tx *storage.Connection, r *http.Request, user *models.User, identity *models.Identity, previousIdentityEmail, providerType string) error {
-	pConfig, ok := a.config.External.OAuthConfig(providerType)
-	if !ok || !pConfig.SyncEmail {
-		return nil
-	}
-
 	newEmail, verified := oauthVerifiedEmail(identity)
 	if !verified {
 		return nil
