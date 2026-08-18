@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.196.0](https://github.com/supabase/auth/compare/v2.195.0...v2.196.0) (2026-08-12)
+
+
+### Features
+
+* **admin:** create an email identity when an admin sets a first password ([f369cfa](https://github.com/supabase/auth/commit/f369cfa6a2b651e19b1247a8a67bf6a124c03984))
+* **auditlogs:** introduce identity linked action ([2d4680e](https://github.com/supabase/auth/commit/2d4680ef054bedc898da1dbac1b6a7cb9cf5b5af))
+* **conf:** add experimental flag for creating an email identity on password set ([8f19669](https://github.com/supabase/auth/commit/8f19669492e17e219bfda5a264a0af3f11940ffb))
+* create an email identity when a user adds their first password ([3afa027](https://github.com/supabase/auth/commit/3afa027c5cd0709ae82b46b461c8addbfd527be9))
+* **scim:** Add /ResourceTypes and /Schemas ([#2664](https://github.com/supabase/auth/issues/2664)) ([0fb56ca](https://github.com/supabase/auth/commit/0fb56ca93fcbe033bc2b0309bafbd86ef97aa468))
+* **scim:** implement `/scim/v2/ServiceProviderConfig` ([#2662](https://github.com/supabase/auth/issues/2662)) ([3ac3620](https://github.com/supabase/auth/commit/3ac362071760982ad9064b67e5f5e514ab7b2a89))
+* **scim:** render SCIM errors in RFC 7644 form ([#2661](https://github.com/supabase/auth/issues/2661)) ([dc5bf8e](https://github.com/supabase/auth/commit/dc5bf8e843852d35fb0503ad7974c4ca71f80a85))
+
+
+### Bug Fixes
+
+* **auditlogs:** add IP address to IdentityUnlinkAction entires ([1a3a477](https://github.com/supabase/auth/commit/1a3a4773f1c59c3aa25d2d06b5be0c734f391a1a))
+* **auditlogs:** add missing IdentityUnlinkAction action ([9c45038](https://github.com/supabase/auth/commit/9c45038bb27079ac9dc31aa3ee41f69eebfb6f16))
+* **auditlogs:** add missing UserReauthenticateAction action ([dcc140f](https://github.com/supabase/auth/commit/dcc140f1fd7dd4d529c8ee116970a087cc4761d5))
+* clear pending phone change when the user's email is replaced ([5ce63bb](https://github.com/supabase/auth/commit/5ce63bbe251970ac3eb2bbfb160f5954563db4fd))
+* correctly update email confirmation when an identity is unlinked ([e2fae4c](https://github.com/supabase/auth/commit/e2fae4cffc5763fc56d70a5a70c3bc8bd19f0bfe))
+* **mailer:** send identity unlinked notification to pre-unlink email ([#2692](https://github.com/supabase/auth/issues/2692)) ([2399fe5](https://github.com/supabase/auth/commit/2399fe5875cf0718eec54b614c3b2a227277c1b5))
+* **oauth:** ignore unsupported signing alg in JWKS ([#2696](https://github.com/supabase/auth/issues/2696)) ([713a0d9](https://github.com/supabase/auth/commit/713a0d9e37a0a12b9d0e97d8b9919addffa2356e))
+* revoke outstanding email tokens when the user's email is replaced ([cf74a14](https://github.com/supabase/auth/commit/cf74a14fd7ed94645d318162f803bcb73da60662))
+* unlinking an identity should respect the autoconfirm behaviour ([83df1d9](https://github.com/supabase/auth/commit/83df1d930f61fd64c3ea0578de182f09d82b13d4))
+* use provider constants ([d6dec26](https://github.com/supabase/auth/commit/d6dec2640f047a42873e64ccec2f7288043d511f))
+
 ## [2.195.0](https://github.com/supabase/auth/compare/v2.194.0...v2.195.0) (2026-07-30)
 
 
