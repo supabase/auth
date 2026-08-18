@@ -83,6 +83,7 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	PasskeyCreatedAction:            user,
 	PasskeyUpdatedAction:            user,
 	PasskeyDeletedAction:            user,
+	IdentityUnlinkAction:            user,
 }
 
 // AuditLogEntry is the database model for audit log entries.
