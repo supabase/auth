@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/fatih/structs"
 	"golang.org/x/oauth2"
 )
 
@@ -68,9 +69,27 @@ func (p *CustomOAuthProvider) GetOAuthToken(ctx context.Context, code string, op
 
 // GetUserData fetches user data from the provider's userinfo endpoint
 func (p *CustomOAuthProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var claims Claims
-	if err := makeRequest(ctx, tok, p.config, p.userinfoURL, &claims); err != nil {
+	var rawClaims map[string]interface{}
+	if err := makeRequest(ctx, tok, p.config, p.userinfoURL, &rawClaims); err != nil {
 		return nil, err
+	}
+
+	claimsBytes, err := json.Marshal(rawClaims)
+	if err != nil {
+		return nil, err
+	}
+
+	var claims Claims
+	if err := json.Unmarshal(claimsBytes, &claims); err != nil {
+		return nil, err
+	}
+
+	// Preserve non-standard claims in CustomClaims
+	for key := range structs.Map(claims) {
+		delete(rawClaims, key)
+	}
+	if len(rawClaims) > 0 {
+		claims.CustomClaims = rawClaims
 	}
 
 	// Apply attribute mapping if configured
@@ -208,9 +227,27 @@ func (p *CustomOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token)
 
 	// No ID token, use userinfo endpoint
 	if p.userinfoEndpoint != "" {
-		var claims Claims
-		if err := makeRequest(ctx, tok, p.config, p.userinfoEndpoint, &claims); err != nil {
+		var rawClaims map[string]interface{}
+		if err := makeRequest(ctx, tok, p.config, p.userinfoEndpoint, &rawClaims); err != nil {
 			return nil, err
+		}
+
+		claimsBytes, err := json.Marshal(rawClaims)
+		if err != nil {
+			return nil, err
+		}
+
+		var claims Claims
+		if err := json.Unmarshal(claimsBytes, &claims); err != nil {
+			return nil, err
+		}
+
+		// Preserve non-standard claims in CustomClaims
+		for key := range structs.Map(claims) {
+			delete(rawClaims, key)
+		}
+		if len(rawClaims) > 0 {
+			claims.CustomClaims = rawClaims
 		}
 
 		// Apply attribute mapping

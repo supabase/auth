@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/fatih/structs"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -455,6 +456,23 @@ func parseGenericIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData,
 			Verified: data.Metadata.EmailVerified,
 			Primary:  true,
 		})
+	}
+
+	var rawClaims map[string]interface{}
+	if err := token.Claims(&rawClaims); err != nil {
+		return nil, nil, err
+	}
+
+	// Preserve non-standard claims in CustomClaims, consistent with the
+	// keycloak provider (#1917) and SAML assertion handling: any claim the
+	// Claims struct does not consume is kept so providers can pass through
+	// arbitrary claims (e.g. national identifiers) to the application.
+	claimsMap := structs.Map(data.Metadata)
+	for key := range claimsMap {
+		delete(rawClaims, key)
+	}
+	if len(rawClaims) > 0 {
+		data.Metadata.CustomClaims = rawClaims
 	}
 
 	return token, &data, nil
