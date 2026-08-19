@@ -375,6 +375,12 @@ type ExperimentalConfiguration struct {
 	// enablement yet, just a kill switch for internal verification.
 	// Env: GOTRUE_EXPERIMENTAL_SCIM_ENABLED=true
 	ScimEnabled bool `split_words:"true" default:"false"`
+
+	// CreateEmailIdentityOnPasswordSetEnabled creates the missing email provider
+	// identity for a user when a password is added to an account that didn't have
+	// one (e.g. a user who signed up with an external provider and later sets a password).
+	// Env: GOTRUE_EXPERIMENTAL_CREATE_EMAIL_IDENTITY_ON_PASSWORD_SET_ENABLED=true
+	CreateEmailIdentityOnPasswordSetEnabled bool `split_words:"true" default:"false"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime

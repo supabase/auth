@@ -90,13 +90,13 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	grantParams.FillGrantParams(r)
 
 	if params.Email != "" {
-		provider = "email"
+		provider = EmailProvider
 		if !config.External.Email.Enabled {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 		}
 		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	} else if params.Phone != "" {
-		provider = "phone"
+		provider = PhoneProvider
 		if !config.External.Phone.Enabled {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
 		}

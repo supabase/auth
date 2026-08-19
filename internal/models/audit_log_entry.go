@@ -41,6 +41,7 @@ const (
 	VerifyFactorAction              AuditAction = "verification_attempted"
 	DeleteFactorAction              AuditAction = "factor_deleted"
 	UpdateFactorAction              AuditAction = "factor_updated"
+	IdentityLinkAction              AuditAction = "identity_linked"
 	IdentityUnlinkAction            AuditAction = "identity_unlinked"
 	PasskeyCreatedAction            AuditAction = "passkey_created"
 	PasskeyUpdatedAction            AuditAction = "passkey_updated"
@@ -64,9 +65,12 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	TokenRefreshedAction:            token,
 	UserModifiedAction:              user,
 	UserRecoveryRequestedAction:     user,
+	UserReauthenticateAction:        user,
 	UserConfirmationRequestedAction: user,
 	UserRepeatedSignUpAction:        user,
 	UserUpdatePasswordAction:        user,
+	IdentityLinkAction:              user,
+	IdentityUnlinkAction:            user,
 	EnrollFactorAction:              factor,
 	UnenrollFactorAction:            factor,
 	CreateChallengeAction:           factor,
