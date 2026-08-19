@@ -104,6 +104,8 @@ func (ts *CustomOAuthAdminTestSuite) TestCreateOAuth2Provider() {
 	assert.Equal(ts.T(), "GitHub Enterprise", provider.Name)
 	assert.True(ts.T(), provider.PKCEEnabled)
 	assert.True(ts.T(), provider.Enabled)
+	assert.False(ts.T(), provider.EmailOptional)
+	assert.False(ts.T(), provider.SyncEmail)
 
 	// Ensure client secret is not exposed in JSON and is stored encrypted
 	assert.Empty(ts.T(), provider.ClientSecret)
@@ -571,10 +573,11 @@ func (ts *CustomOAuthAdminTestSuite) TestUpdateProvider() {
 	json.NewDecoder(w.Body).Decode(&created)
 
 	updatePayload := map[string]interface{}{
-		"name":      "Updated Name",
-		"client_id": "new-client-id",
-		"enabled":   false,
-		"scopes":    []string{"openid", "profile", "email"},
+		"name":       "Updated Name",
+		"client_id":  "new-client-id",
+		"enabled":    false,
+		"scopes":     []string{"openid", "profile", "email"},
+		"sync_email": true,
 	}
 
 	var body bytes.Buffer
@@ -595,6 +598,7 @@ func (ts *CustomOAuthAdminTestSuite) TestUpdateProvider() {
 	assert.Equal(ts.T(), "new-client-id", updated.ClientID)
 	assert.False(ts.T(), updated.Enabled)
 	assert.Equal(ts.T(), popslices.String{"openid", "profile", "email"}, updated.Scopes)
+	assert.True(ts.T(), updated.SyncEmail)
 }
 
 func (ts *CustomOAuthAdminTestSuite) TestCustomClaimsAllowlistCreateUpdateGet() {
@@ -691,6 +695,23 @@ func (ts *CustomOAuthAdminTestSuite) TestLoadCustomProviderRedirectURLFallsBackT
 
 	expected := strings.TrimRight(ts.Config.API.ExternalURL, "/") + "/callback"
 	require.Equal(ts.T(), expected, pConfig.RedirectURI)
+}
+
+func (ts *CustomOAuthAdminTestSuite) TestLoadCustomProviderCopiesEmailFlags() {
+	payload := ts.createTestOAuth2Payload("sync-email")
+	payload["email_optional"] = true
+	payload["sync_email"] = true
+
+	w := ts.createProvider(payload, http.StatusCreated)
+	var created models.CustomOAuthProvider
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&created))
+	require.True(ts.T(), created.EmailOptional)
+	require.True(ts.T(), created.SyncEmail)
+
+	_, pConfig, err := ts.API.loadCustomProvider(context.Background(), ts.API.db, created.Identifier, "")
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), pConfig.EmailOptional)
+	require.True(ts.T(), pConfig.SyncEmail)
 }
 
 // TestLoadCustomProviderRedirectURLUsesOverride verifies that, when

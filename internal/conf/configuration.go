@@ -67,6 +67,10 @@ type OAuthProviderConfiguration struct {
 	// SkipNonceCheck bypasses nonce verification during OIDC token validation.
 	// Note: Nonce verification helps prevent replay attacks; only disable when necessary.
 	SkipNonceCheck bool `json:"skip_nonce_check" split_words:"true"`
+	// SyncEmail, when true, updates auth.users.email if an already-linked
+	// identity reports a different verified email and doing so is safe.
+	// Default false. Identity matching remains provider + provider_id.
+	SyncEmail bool `json:"sync_email" split_words:"true"`
 }
 
 // OAuthServerConfiguration holds OAuth server configuration
