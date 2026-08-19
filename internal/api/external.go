@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -72,11 +73,11 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	query.Del("provider")
 	// Strip OAuth params the auth server controls so a client cannot
 	// override redirect_uri, state, code_challenge, etc. by passing them
-	// through on the redirect URL. nonce is deliberately NOT stripped — some
-	// upstream OIDC providers expect the client to supply it.
-	for _, k := range reservedOAuthParams {
-		if k != "nonce" {
-			query.Del(k)
+	// lowercase query keys for the comparison, URL.Query keeps casing
+	for key := range query {
+		lowerKey := strings.ToLower(key)
+		if lowerKey != "nonce" && slices.Contains(reservedOAuthParams, lowerKey) {
+			query.Del(key)
 		}
 	}
 

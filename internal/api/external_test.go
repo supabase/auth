@@ -331,6 +331,50 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	ts.Equal(w.Code, http.StatusBadRequest)
 }
 
+// TestAuthorizeStripsReservedOAuthParams verifies that OAuth params the auth
+// server controls (see reservedOAuthParams in custom_oauth_admin.go) cannot
+// be overridden by passing them as query params on the /authorize request -
+// they must be stripped before being forwarded to the provider's authorize
+// URL. code_challenge/code_challenge_method are exercised by the dedicated
+// PKCE tests instead, since they go through separate validation.
+func (ts *ExternalTestSuite) TestAuthorizeStripsReservedOAuthParams() {
+	authorizeURL := "http://localhost/authorize?" + url.Values{
+		"provider":      {"github"},
+		"client_id":     {"attacker-client-id"},
+		"client_secret": {"attacker-client-secret"},
+		"redirect_uri":  {"https://evil.example/callback"},
+		"response_type": {"token"},
+		"state":         {"attacker-controlled-state"},
+		"code_verifier": {"attacker-code-verifier"},
+		"login_hint":    {"user@example.com"}, // non-reserved: should still pass through
+	}.Encode()
+
+	req := httptest.NewRequest(http.MethodGet, authorizeURL, nil)
+	req.Header.Set("Referer", "https://example.netlify.com/admin")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.Require().Equal(http.StatusFound, w.Code)
+
+	u, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err, "redirect url parse failed")
+	q := u.Query()
+
+	// the auth server's own values are used, not the attacker-supplied ones
+	ts.Equal("testclientid", q.Get("client_id"))
+	ts.Equal("https://identity.services.netlify.com/callback", q.Get("redirect_uri"))
+	ts.Equal("code", q.Get("response_type"))
+	assertValidOAuthState(ts, q.Get("state"), "github")
+
+	// none of the attacker-supplied reserved values made it through
+	ts.Empty(q.Get("client_secret"), "client_secret should never be forwarded to the provider")
+	ts.NotEqual("attacker-code-verifier", q.Get("code_verifier"))
+
+	// a non-reserved param is still forwarded, proving the loop isn't
+	// stripping everything
+	ts.Equal("user@example.com", q.Get("login_hint"))
+}
+
 func (ts *ExternalTestSuite) TestRedirectErrorsShouldPreserveParams() {
 	// Request with invalid external provider
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=external", nil)
