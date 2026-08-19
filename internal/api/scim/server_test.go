@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
@@ -19,16 +20,16 @@ import (
 //go:embed testdata/*
 var fixtures embed.FS
 
+func newServerFor(externalURL string) *Server {
+	return NewServer(&conf.GlobalConfiguration{
+		API: conf.APIConfiguration{ExternalURL: externalURL},
+	}, nil, NewUserMemoryRepository())
+}
+
 func testFixture(t *testing.T, file string) string {
 	data, err := fixtures.ReadFile("testdata/" + file)
 	require.NoError(t, err)
 	return string(data)
-}
-
-func newServerFor(externalURL string) *Server {
-	return NewServer(&conf.GlobalConfiguration{
-		API: conf.APIConfiguration{ExternalURL: externalURL},
-	})
 }
 
 func TestServer(t *testing.T) {
@@ -120,6 +121,54 @@ func TestServer(t *testing.T) {
 		require.Equal(t, http.StatusNotFound, w.Code)
 		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 		require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
+	})
+
+	t.Run("Users rejects a filter it cannot honour", func(t *testing.T) {
+		filter := url.Values{"filter": {`userName eq "user@example.com"`}}.Encode()
+		r := httptest.NewRequest(http.MethodGet, BasePath+"/Users?"+filter, nil)
+		w := httptest.NewRecorder()
+
+		require.NoError(t, srv.Users(w, r))
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		require.JSONEq(t, testFixture(t, "filter_invalid.json"), w.Body.String())
+	})
+
+	t.Run("Users rejects pagination parameters that are not integers", func(t *testing.T) {
+		for _, query := range []string{"startIndex=first", "count=all"} {
+			t.Run(query, func(t *testing.T) {
+				r := httptest.NewRequest(http.MethodGet, BasePath+"/Users?"+query, nil)
+				w := httptest.NewRecorder()
+
+				require.NoError(t, srv.Users(w, r))
+
+				require.Equal(t, http.StatusBadRequest, w.Code)
+				require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+				require.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
+			})
+		}
+	})
+
+	t.Run("Users without a tenant on the context is a server error", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, BasePath+"/Users", nil)
+		w := httptest.NewRecorder()
+
+		require.NoError(t, srv.Users(w, r))
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+	})
+
+	t.Run("UserByID without a tenant on the context is a server error", func(t *testing.T) {
+		id := uuid.Must(uuid.NewV4()).String()
+		r := requestWithURLParam("Users/"+id, "id", id)
+		w := httptest.NewRecorder()
+
+		require.NoError(t, srv.UserByID(w, r))
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 	})
 }
 
