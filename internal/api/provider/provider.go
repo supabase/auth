@@ -92,24 +92,24 @@ type Claims struct {
 	Exp     float64  `json:"exp,omitempty" structs:"exp,omitempty"`
 
 	// Default profile claims
-	Name              string `json:"name,omitempty" structs:"name,omitempty"`
-	FamilyName        string `json:"family_name,omitempty" structs:"family_name,omitempty"`
-	GivenName         string `json:"given_name,omitempty" structs:"given_name,omitempty"`
-	MiddleName        string `json:"middle_name,omitempty" structs:"middle_name,omitempty"`
-	NickName          string `json:"nickname,omitempty" structs:"nickname,omitempty"`
-	PreferredUsername string `json:"preferred_username,omitempty" structs:"preferred_username,omitempty"`
-	Profile           string `json:"profile,omitempty" structs:"profile,omitempty"`
-	Picture           string `json:"picture,omitempty" structs:"picture,omitempty"`
-	Website           string `json:"website,omitempty" structs:"website,omitempty"`
-	Gender            string `json:"gender,omitempty" structs:"gender,omitempty"`
-	Birthdate         string `json:"birthdate,omitempty" structs:"birthdate,omitempty"`
-	ZoneInfo          string `json:"zoneinfo,omitempty" structs:"zoneinfo,omitempty"`
-	Locale            string `json:"locale,omitempty" structs:"locale,omitempty"`
+	Name              string            `json:"name,omitempty" structs:"name,omitempty"`
+	FamilyName        string            `json:"family_name,omitempty" structs:"family_name,omitempty"`
+	GivenName         string            `json:"given_name,omitempty" structs:"given_name,omitempty"`
+	MiddleName        string            `json:"middle_name,omitempty" structs:"middle_name,omitempty"`
+	NickName          string            `json:"nickname,omitempty" structs:"nickname,omitempty"`
+	PreferredUsername string            `json:"preferred_username,omitempty" structs:"preferred_username,omitempty"`
+	Profile           string            `json:"profile,omitempty" structs:"profile,omitempty"`
+	Picture           string            `json:"picture,omitempty" structs:"picture,omitempty"`
+	Website           string            `json:"website,omitempty" structs:"website,omitempty"`
+	Gender            string            `json:"gender,omitempty" structs:"gender,omitempty"`
+	Birthdate         string            `json:"birthdate,omitempty" structs:"birthdate,omitempty"`
+	ZoneInfo          string            `json:"zoneinfo,omitempty" structs:"zoneinfo,omitempty"`
+	Locale            string            `json:"locale,omitempty" structs:"locale,omitempty"`
 	UpdatedAt         *UnixTimeOrString `json:"updated_at,omitempty" structs:"updated_at,omitempty"`
-	Email             string `json:"email,omitempty" structs:"email,omitempty"`
-	EmailVerified     bool   `json:"email_verified,omitempty" structs:"email_verified"`
-	Phone             string `json:"phone,omitempty" structs:"phone,omitempty"`
-	PhoneVerified     bool   `json:"phone_verified,omitempty" structs:"phone_verified"`
+	Email             string            `json:"email,omitempty" structs:"email,omitempty"`
+	EmailVerified     bool              `json:"email_verified,omitempty" structs:"email_verified"`
+	Phone             string            `json:"phone,omitempty" structs:"phone,omitempty"`
+	PhoneVerified     bool              `json:"phone_verified,omitempty" structs:"phone_verified"`
 
 	// Custom profile claims that are provider specific
 	CustomClaims map[string]interface{} `json:"custom_claims,omitempty" structs:"custom_claims,omitempty"`

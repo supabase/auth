@@ -876,6 +876,8 @@ type SecurityConfiguration struct {
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
 	SbForwardedForEnabled                 bool                 `json:"sb_forwarded_for_enabled" split_words:"true" default:"false"`
 
+	TokenHashSalt string `json:"otp_token_hash_salt" split_words:"true"`
+
 	DBEncryption DatabaseEncryptionConfiguration `json:"database_encryption" split_words:"true"`
 }
 
@@ -894,6 +896,10 @@ func (c *SecurityConfiguration) Validate() error {
 
 	if c.RefreshTokenUpgradePercentage < 0 || c.RefreshTokenUpgradePercentage > 100 {
 		return fmt.Errorf("refresh token upgrade percentage must be between 0 and 100, but was %v", c.RefreshTokenUpgradePercentage)
+	}
+
+	if c.TokenHashSalt != "" && len(c.TokenHashSalt) < 16 {
+		logrus.Warn("GOTRUE_SECURITY_OTP_TOKEN_HASH_SALT is set but shorter than 16 characters, consider using a longer, random value")
 	}
 
 	return nil

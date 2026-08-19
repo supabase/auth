@@ -94,7 +94,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	now := time.Now()
 	otp := crypto.GenerateOtp(config.Mailer.OtpLength)
 
-	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
+	hashedToken := crypto.GenerateTokenHash(config.Security.TokenHashSalt, params.Email, otp)
 
 	var (
 		createdUser bool
@@ -258,7 +258,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if params.Type == "email_change_current" {
 				user.EmailChangeTokenCurrent = hashedToken
 			} else if params.Type == "email_change_new" {
-				user.EmailChangeTokenNew = crypto.GenerateTokenHash(params.NewEmail, otp)
+				user.EmailChangeTokenNew = crypto.GenerateTokenHash(config.Security.TokenHashSalt, params.NewEmail, otp)
 			}
 			terr = tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status")
 			if terr != nil {
@@ -328,7 +328,7 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 	oldToken := u.ConfirmationToken
 	otp := crypto.GenerateOtp(otpLength)
 
-	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
+	token := crypto.GenerateTokenHash(config.Security.TokenHashSalt, u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	if err = a.sendEmail(r, tx, u, sendEmailParams{
@@ -363,7 +363,7 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 	oldToken := u.ConfirmationToken
 	otp := crypto.GenerateOtp(otpLength)
 
-	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
+	u.ConfirmationToken = crypto.GenerateTokenHash(config.Security.TokenHashSalt, u.GetEmail(), otp)
 	now := time.Now()
 	err = a.sendEmail(r, tx, u, sendEmailParams{
 		emailActionType:     mail.InviteVerification,
@@ -405,7 +405,7 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 	oldToken := u.RecoveryToken
 	otp := crypto.GenerateOtp(otpLength)
 
-	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
+	token := crypto.GenerateTokenHash(config.Security.TokenHashSalt, u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	err := a.sendEmail(r, tx, u, sendEmailParams{
@@ -447,7 +447,7 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	oldToken := u.ReauthenticationToken
 	otp := crypto.GenerateOtp(otpLength)
 
-	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
+	u.ReauthenticationToken = crypto.GenerateTokenHash(config.Security.TokenHashSalt, u.GetEmail(), otp)
 	now := time.Now()
 
 	err := a.sendEmail(r, tx, u, sendEmailParams{
@@ -490,7 +490,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	oldToken := u.RecoveryToken
 	otp := crypto.GenerateOtp(otpLength)
 
-	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
+	token := crypto.GenerateTokenHash(config.Security.TokenHashSalt, u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
@@ -531,14 +531,14 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	otpNew := crypto.GenerateOtp(otpLength)
 
 	u.EmailChange = email
-	token := crypto.GenerateTokenHash(u.EmailChange, otpNew)
+	token := crypto.GenerateTokenHash(config.Security.TokenHashSalt, u.EmailChange, otpNew)
 	u.EmailChangeTokenNew = addFlowPrefixToToken(token, flowType)
 
 	otpCurrent := ""
 	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
 		otpCurrent = crypto.GenerateOtp(otpLength)
 
-		currentToken := crypto.GenerateTokenHash(u.GetEmail(), otpCurrent)
+		currentToken := crypto.GenerateTokenHash(config.Security.TokenHashSalt, u.GetEmail(), otpCurrent)
 		u.EmailChangeTokenCurrent = addFlowPrefixToToken(currentToken, flowType)
 	}
 

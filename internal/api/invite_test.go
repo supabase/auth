@@ -260,7 +260,7 @@ func (ts *InviteTestSuite) TestVerifyInvite() {
 			user.InvitedAt = &now
 			user.ConfirmationSentAt = &now
 			user.EncryptedPassword = nil
-			user.ConfirmationToken = crypto.GenerateTokenHash(c.email, c.requestBody["token"].(string))
+			user.ConfirmationToken = crypto.GenerateTokenHash("", c.email, c.requestBody["token"].(string))
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Create(user))
 			require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken))

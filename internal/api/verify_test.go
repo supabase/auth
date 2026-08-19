@@ -904,7 +904,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.GetPhone(), "123456"),
+				tokenHash: crypto.GenerateTokenHash("", u.GetPhone(), "123456"),
 			},
 		},
 		{
@@ -917,7 +917,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+				tokenHash: crypto.GenerateTokenHash("", u.GetEmail(), "123456"),
 			},
 		},
 		{
@@ -925,11 +925,11 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":       mail.SignupVerification,
-				"token_hash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+				"token_hash": crypto.GenerateTokenHash("", u.GetEmail(), "123456"),
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+				tokenHash: crypto.GenerateTokenHash("", u.GetEmail(), "123456"),
 			},
 		},
 		{
@@ -942,7 +942,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+				tokenHash: crypto.GenerateTokenHash("", u.GetEmail(), "123456"),
 			},
 		},
 		{
@@ -955,7 +955,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+				tokenHash: crypto.GenerateTokenHash("", u.GetEmail(), "123456"),
 			},
 		},
 		{
@@ -968,7 +968,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+				tokenHash: crypto.GenerateTokenHash("", u.GetEmail(), "123456"),
 			},
 		},
 		{
@@ -981,7 +981,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.EmailChange, "123456"),
+				tokenHash: crypto.GenerateTokenHash("", u.EmailChange, "123456"),
 			},
 		},
 		{
@@ -994,7 +994,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.PhoneChange, "123456"),
+				tokenHash: crypto.GenerateTokenHash("", u.PhoneChange, "123456"),
 			},
 		},
 		{
@@ -1002,11 +1002,11 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":       mail.EmailChangeVerification,
-				"token_hash": crypto.GenerateTokenHash(u.EmailChange, "123456"),
+				"token_hash": crypto.GenerateTokenHash("", u.EmailChange, "123456"),
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.EmailChange, "123456"),
+				tokenHash: crypto.GenerateTokenHash("", u.EmailChange, "123456"),
 			},
 		},
 		{
@@ -1014,11 +1014,11 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":       mail.EmailOTPVerification,
-				"token_hash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+				"token_hash": crypto.GenerateTokenHash("", u.GetEmail(), "123456"),
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+				tokenHash: crypto.GenerateTokenHash("", u.GetEmail(), "123456"),
 			},
 		},
 	}
@@ -1068,8 +1068,8 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 	u.EmailChange = "new@example.com"
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	currentEmailChangeToken := crypto.GenerateTokenHash(string(u.Email), "123456")
-	newEmailChangeToken := crypto.GenerateTokenHash(u.EmailChange, "123456")
+	currentEmailChangeToken := crypto.GenerateTokenHash("", string(u.Email), "123456")
+	newEmailChangeToken := crypto.GenerateTokenHash("", u.EmailChange, "123456")
 
 	cases := []struct {
 		desc                   string
@@ -1139,6 +1139,162 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 			assert.Equal(ts.T(), c.expectedStatus, w.Code)
 		})
 	}
+}
+
+// TestVerifyOtpTokenHashSaltCutover exercises Security.TokenHashSalt's
+// cut-over behavior for the raw-OTP verification path (verifyUserAndToken),
+// which recomputes the token hash from the submitted otp+email/phone rather
+// than passing through an already-hashed value.
+func (ts *VerifyTestSuite) TestVerifyOtpTokenHashSaltCutover() {
+	const testSalt = "test-salt-value-1234567890"
+	const otp = "654321"
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	setupConfirmationToken := func(tokenHash string, sentAt time.Time) {
+		require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
+		u.ConfirmationToken = tokenHash
+		sa := sentAt
+		u.ConfirmationSentAt = &sa
+		require.NoError(ts.T(), ts.API.db.Update(u))
+		require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, "relates_to not used", tokenHash, models.ConfirmationToken))
+	}
+
+	postVerify := func() int {
+		body := map[string]interface{}{
+			"type":  mail.SignupVerification,
+			"token": otp,
+			"email": u.GetEmail(),
+		}
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(body))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	ts.Run("new token verifies under the active salt", func() {
+		ts.Config.Security.TokenHashSalt = testSalt
+		defer func() { ts.Config.Security.TokenHashSalt = "" }()
+
+		setupConfirmationToken(crypto.GenerateTokenHash(testSalt, u.GetEmail(), otp), time.Now())
+
+		assert.Equal(ts.T(), http.StatusOK, postVerify())
+	})
+
+	ts.Run("pre-existing legacy (unsalted) token still verifies once a salt is configured", func() {
+		setupConfirmationToken(crypto.GenerateTokenHash("", u.GetEmail(), otp), time.Now())
+
+		ts.Config.Security.TokenHashSalt = testSalt
+		defer func() { ts.Config.Security.TokenHashSalt = "" }()
+
+		assert.Equal(ts.T(), http.StatusOK, postVerify())
+	})
+
+	ts.Run("legacy fallback does not resurrect an expired token", func() {
+		// well beyond Mailer.OtpExp's default of 1 day
+		setupConfirmationToken(crypto.GenerateTokenHash("", u.GetEmail(), otp), time.Now().Add(-72*time.Hour))
+
+		ts.Config.Security.TokenHashSalt = testSalt
+		defer func() { ts.Config.Security.TokenHashSalt = "" }()
+
+		assert.Equal(ts.T(), http.StatusForbidden, postVerify())
+	})
+}
+
+// TestEmailChangeVerifyRawOTPSaltCutover is a regression test: emailChangeVerify
+// (used when Mailer.SecureEmailChangeEnabled) does its own direct
+// models.FindOneTimeToken lookups separate from verifyUserAndToken's user
+// lookup. Both must honor the same salted/legacy candidate hashes, otherwise
+// a legacy-salt raw-OTP email-change confirmation would authenticate the
+// user but fail to find/clear the matching one-time-token row, corrupting
+// EmailChangeConfirmStatus bookkeeping.
+func (ts *VerifyTestSuite) TestEmailChangeVerifyRawOTPSaltCutover() {
+	const testSalt = "test-salt-value-1234567890"
+
+	ts.Config.Mailer.SecureEmailChangeEnabled = true
+
+	postVerify := func(otp, email string) int {
+		body := map[string]interface{}{
+			"type":  mail.EmailChangeVerification,
+			"token": otp,
+			"email": email,
+		}
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(body))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	ts.Run("legacy-salt current-email-change token clears its one-time-token row", func() {
+		u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+		require.NoError(ts.T(), err)
+
+		const otp = "112233"
+		legacyHash := crypto.GenerateTokenHash("", u.GetEmail(), otp)
+
+		require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
+		u.EmailChange = "new-current-arm@example.com"
+		u.EmailChangeTokenCurrent = legacyHash
+		u.EmailChangeTokenNew = ""
+		u.EmailChangeConfirmStatus = zeroConfirmation
+		now := time.Now()
+		u.EmailChangeSentAt = &now
+		require.NoError(ts.T(), ts.API.db.Update(u))
+		require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, "relates_to not used", legacyHash, models.EmailChangeTokenCurrent))
+
+		ts.Config.Security.TokenHashSalt = testSalt
+		defer func() { ts.Config.Security.TokenHashSalt = "" }()
+
+		require.Equal(ts.T(), http.StatusOK, postVerify(otp, u.GetEmail()))
+
+		reloaded, err := models.FindUserByEmailAndAudience(ts.API.db, u.GetEmail(), ts.Config.JWT.Aud)
+		require.NoError(ts.T(), err)
+		assert.Empty(ts.T(), reloaded.EmailChangeTokenCurrent)
+		assert.Equal(ts.T(), singleConfirmation, reloaded.EmailChangeConfirmStatus)
+
+		_, err = models.FindOneTimeToken(ts.API.db, []string{legacyHash}, models.EmailChangeTokenCurrent)
+		assert.True(ts.T(), models.IsNotFoundError(err), "expected the matching one-time-token row to have been cleared")
+	})
+
+	ts.Run("legacy-salt PKCE-prefixed new-email-change token clears its one-time-token row", func() {
+		u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+		require.NoError(ts.T(), err)
+
+		const otp = "998877"
+		newEmail := "new-pkce-arm@example.com"
+		legacyHash := crypto.GenerateTokenHash("", newEmail, otp)
+		prefixedLegacyHash := "pkce_" + legacyHash
+
+		require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
+		u.EmailChange = newEmail
+		u.EmailChangeTokenCurrent = ""
+		u.EmailChangeTokenNew = prefixedLegacyHash
+		u.EmailChangeConfirmStatus = zeroConfirmation
+		now := time.Now()
+		u.EmailChangeSentAt = &now
+		require.NoError(ts.T(), ts.API.db.Update(u))
+		require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, "relates_to not used", prefixedLegacyHash, models.EmailChangeTokenNew))
+
+		ts.Config.Security.TokenHashSalt = testSalt
+		defer func() { ts.Config.Security.TokenHashSalt = "" }()
+
+		require.Equal(ts.T(), http.StatusOK, postVerify(otp, newEmail))
+
+		reloaded, err := models.FindUserByEmailAndAudience(ts.API.db, u.GetEmail(), ts.Config.JWT.Aud)
+		require.NoError(ts.T(), err)
+		assert.Empty(ts.T(), reloaded.EmailChangeTokenNew)
+		assert.Equal(ts.T(), singleConfirmation, reloaded.EmailChangeConfirmStatus)
+
+		_, err = models.FindOneTimeToken(ts.API.db, []string{prefixedLegacyHash}, models.EmailChangeTokenNew)
+		assert.True(ts.T(), models.IsNotFoundError(err), "expected the matching one-time-token row to have been cleared")
+	})
 }
 
 func (ts *VerifyTestSuite) TestPrepRedirectURL() {
@@ -1454,7 +1610,7 @@ func (ts *VerifyTestSuite) TestVerifyPhoneChangeSendsNotificationEmailEnabled() 
 		"phone": u.PhoneChange,
 	}
 	sentTime := time.Now()
-	expectedTokenHash := crypto.GenerateTokenHash(u.PhoneChange, "123456")
+	expectedTokenHash := crypto.GenerateTokenHash("", u.PhoneChange, "123456")
 
 	// Get the mock mailer and reset it
 	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
@@ -1504,7 +1660,7 @@ func (ts *VerifyTestSuite) TestVerifyPhoneChangeSendsNotificationEmailEnabled_No
 		"phone": u.PhoneChange,
 	}
 	sentTime := time.Now()
-	expectedTokenHash := crypto.GenerateTokenHash(u.PhoneChange, "123456")
+	expectedTokenHash := crypto.GenerateTokenHash("", u.PhoneChange, "123456")
 
 	// Get the mock mailer and reset it
 	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
@@ -1551,7 +1707,7 @@ func (ts *VerifyTestSuite) TestVerifyPhoneChangeSendsNotificationEmailDisabled()
 		"phone": u.PhoneChange,
 	}
 	sentTime := time.Now()
-	expectedTokenHash := crypto.GenerateTokenHash(u.PhoneChange, "123456")
+	expectedTokenHash := crypto.GenerateTokenHash("", u.PhoneChange, "123456")
 
 	// Get the mock mailer and reset it
 	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
