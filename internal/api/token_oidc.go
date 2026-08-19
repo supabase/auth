@@ -16,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts
@@ -27,6 +28,7 @@ type IdTokenGrantParams struct {
 	ClientID     string `json:"client_id"`
 	Issuer       string `json:"issuer"`
 	LinkIdentity bool   `json:"link_identity"`
+	HookData     string `json:"hook_data"`
 }
 
 func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connection, config *conf.GlobalConfiguration, r *http.Request, cache *provider.OIDCProviderCache) (*oidc.Provider, bool, string, []string, bool, error) {
@@ -212,6 +214,15 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	if params.IdToken == "" {
 		return apierrors.NewOAuthError("invalid request", "id_token required")
+	}
+
+	if err := validateHookData(params.HookData); err != nil {
+		return err
+	}
+	if params.HookData != "" {
+		ctx = utilities.WithHookData(ctx, params.HookData)
+		r = r.WithContext(ctx)
+		db = db.WithContext(ctx)
 	}
 
 	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
