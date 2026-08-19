@@ -1,25 +1,28 @@
 package protocol
 
-const SchemaListResponse = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
+import "github.com/supabase/auth/internal/api/scim/core"
 
 type ListResponse[T any] struct {
-	Schemas      []string `json:"schemas"`
-	TotalResults int      `json:"totalResults"`
-	StartIndex   int      `json:"startIndex"`
-	ItemsPerPage int      `json:"itemsPerPage"`
-	Resources    []T      `json:"Resources"`
+	Schemas      []core.SchemaURI `json:"schemas"`
+	TotalResults int              `json:"totalResults"`
+	StartIndex   int              `json:"startIndex"`
+	ItemsPerPage int              `json:"itemsPerPage"`
+	Resources    []T              `json:"Resources"`
 }
 
-func NewListResponse[T any](resources []T) *ListResponse[T] {
+func NewPage[T any](resources []T, startIndex, totalResults int) *ListResponse[T] {
 	if resources == nil {
 		resources = []T{}
 	}
-	n := len(resources)
 	return &ListResponse[T]{
-		Schemas:      []string{SchemaListResponse},
-		TotalResults: n,
-		StartIndex:   1,
-		ItemsPerPage: n,
+		Schemas:      []core.SchemaURI{SchemaListResponse},
+		TotalResults: totalResults,
+		StartIndex:   startIndex,
+		ItemsPerPage: len(resources),
 		Resources:    resources,
 	}
+}
+
+func NewListResponse[T any](resources []T) *ListResponse[T] {
+	return NewPage(resources, 1, len(resources))
 }

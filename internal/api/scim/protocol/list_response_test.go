@@ -45,9 +45,23 @@ func TestNewListResponse(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body, err := json.Marshal(NewListResponse(tc.resources))
-
 			require.NoError(t, err)
 			require.JSONEq(t, tc.expected, string(body))
 		})
 	}
+}
+
+func TestNewPage(t *testing.T) {
+	t.Run("counts every match, not just the resources on the page", func(t *testing.T) {
+		body, err := json.Marshal(NewPage([]string{"c", "d"}, 3, 9))
+
+		require.NoError(t, err)
+		require.JSONEq(t, `{
+			"schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+			"totalResults": 9,
+			"startIndex": 3,
+			"itemsPerPage": 2,
+			"Resources": ["c", "d"]
+		}`, string(body))
+	})
 }

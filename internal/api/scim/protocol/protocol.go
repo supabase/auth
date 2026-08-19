@@ -13,6 +13,6 @@ func Send(w http.ResponseWriter, status int, obj any) error {
 	return shared.JSON(w).ContentType(MediaType).Status(status).Send(obj)
 }
 
-func SendError(w http.ResponseWriter, status int, scimType string, detail string) error {
+func SendError(w http.ResponseWriter, status int, scimType ScimType, detail string) error {
 	return Send(w, status, NewError(status, scimType, detail))
 }
