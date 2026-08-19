@@ -1,6 +1,6 @@
 module github.com/supabase/auth/tools
 
-go 1.26.5
+go 1.26.6
 
 tool (
 	github.com/securego/gosec/v2/cmd/gosec
