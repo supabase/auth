@@ -44,8 +44,9 @@ type adminUserUpdateFactorParams struct {
 }
 
 type AdminListUsersResponse struct {
-	Users []*models.User `json:"users"`
-	Aud   string         `json:"aud"`
+	Users      []*models.User            `json:"users"`
+	Aud        string                    `json:"aud"`
+	Pagination *CursorPaginationResponse `json:"pagination,omitempty"`
 }
 
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
@@ -101,16 +102,23 @@ func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {
 	return params, nil
 }
 
+// useCursorPagination reports whether the request should be served with
+// cursor-based (keyset) pagination. It requires the experimental flag to be on
+// and neither offset-style param (`page`, `per_page`) present, so existing
+// clients that page by number keep the offset behavior.
+func (a *API) useCursorPagination(r *http.Request) bool {
+	if !a.config.Experimental.CursorPaginationEnabled {
+		return false
+	}
+	query := r.URL.Query()
+	return query.Get("page") == "" && query.Get("per_page") == ""
+}
+
 // adminUsers responds with a list of all users in a given audience
 func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	aud := a.requestAud(ctx, r)
-
-	pageParams, err := paginate(r)
-	if err != nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Bad Pagination Parameters: %v", err).WithInternalError(err)
-	}
 
 	sortParams, err := sort(r, map[string]bool{models.CreatedAt: true}, []models.SortField{{Name: models.CreatedAt, Dir: models.Descending}})
 	if err != nil {
@@ -118,6 +126,15 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	filter := r.URL.Query().Get("filter")
+
+	if a.useCursorPagination(r) {
+		return a.adminUsersKeyset(w, r, db, aud, sortParams, filter)
+	}
+
+	pageParams, err := paginate(r)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Bad Pagination Parameters: %v", err).WithInternalError(err)
+	}
 
 	users, err := models.FindUsersInAudience(db, aud, pageParams, sortParams, filter)
 	if err != nil {
@@ -128,6 +145,43 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, AdminListUsersResponse{
 		Users: users,
 		Aud:   aud,
+	})
+}
+
+// adminUsersKeyset serves the admin user list with cursor-based pagination:
+// no COUNT(*) and no OFFSET. It fetches Limit+1 rows to detect whether another
+// page exists, trims to Limit, and emits the next cursor via both the response
+// body and a Link: rel="next" header.
+func (a *API) adminUsersKeyset(w http.ResponseWriter, r *http.Request, db *storage.Connection, aud string, sortParams *models.SortParams, filter string) error {
+	p, err := parseKeysetParams(r)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Bad Pagination Parameters: %v", err).WithInternalError(err)
+	}
+
+	users, err := models.FindUsersInAudienceKeyset(db, aud, p, sortParams, filter)
+	if err != nil {
+		return apierrors.NewInternalServerError("Database error finding users").WithInternalError(err)
+	}
+
+	hasMore := uint64(len(users)) > p.Limit
+	var nextCursor *Cursor
+	if hasMore {
+		users = users[:p.Limit]
+		last := users[len(users)-1]
+		nextCursor = &Cursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	}
+
+	addKeysetPaginationHeaders(w, r, nextCursor)
+
+	pagination := &CursorPaginationResponse{HasMore: hasMore}
+	if nextCursor != nil {
+		pagination.NextCursor = nextCursor.String()
+	}
+
+	return sendJSON(w, http.StatusOK, AdminListUsersResponse{
+		Users:      users,
+		Aud:        aud,
+		Pagination: pagination,
 	})
 }
 
@@ -176,6 +230,9 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		banDuration = &duration
 	}
 
+	// must be evaluated before setting password below (via user.SetPassword)
+	addingFirstPassword := params.Password != nil && *params.Password != "" && !user.HasPassword()
+
 	if params.Password != nil {
 		password := *params.Password
 
@@ -215,12 +272,12 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		var identities []models.Identity
 		if params.Email != "" {
-			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil && !models.IsNotFoundError(terr) {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), EmailProvider); terr != nil && !models.IsNotFoundError(terr) {
 				return terr
 			} else if identity == nil {
 				// if the user doesn't have an existing email
 				// then updating the user's email should create a new email identity
-				i, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				i, terr := a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 					Subject:       user.ID.String(),
 					Email:         params.Email,
 					EmailVerified: params.EmailConfirm,
@@ -251,12 +308,12 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" {
-			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil && !models.IsNotFoundError(terr) {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), PhoneProvider); terr != nil && !models.IsNotFoundError(terr) {
 				return terr
 			} else if identity == nil {
 				// if the user doesn't have an existing phone
 				// then updating the user's phone should create a new phone identity
-				identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+				identity, terr := a.createNewIdentity(tx, user, PhoneProvider, structs.Map(provider.Claims{
 					Subject:       user.ID.String(),
 					Phone:         params.Phone,
 					PhoneVerified: params.PhoneConfirm,
@@ -285,6 +342,12 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		user.Identities = append(user.Identities, identities...)
+
+		if addingFirstPassword {
+			if terr := a.ensureEmailIdentityForPassword(tx, user); terr != nil {
+				return terr
+			}
+		}
 
 		if params.AppMetaData != nil {
 			if terr := user.UpdateAppMetaData(tx, params.AppMetaData); terr != nil {
@@ -348,12 +411,12 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if user, err := models.IsDuplicatedEmail(db, params.Email, aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain); err != nil {
+		if user, err := models.IsDuplicatedEmail(db, params.Email, aud, nil, config.Experimental.ProviderLinkingDomains); err != nil {
 			return apierrors.NewInternalServerError("Database error checking email").WithInternalError(err)
 		} else if user != nil {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 		}
-		providers = append(providers, "email")
+		providers = append(providers, EmailProvider)
 	}
 
 	if params.Phone != "" {
@@ -366,7 +429,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		} else if exists {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodePhoneExists, "Phone number already registered by another user")
 		}
-		providers = append(providers, "phone")
+		providers = append(providers, PhoneProvider)
 	}
 
 	if params.Password != nil && params.PasswordHash != "" {
@@ -432,7 +495,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 
 		var identities []models.Identity
 		if user.GetEmail() != "" {
-			identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+			identity, terr := a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 				Subject: user.ID.String(),
 				Email:   user.GetEmail(),
 			}))
@@ -444,7 +507,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if user.GetPhone() != "" {
-			identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+			identity, terr := a.createNewIdentity(tx, user, PhoneProvider, structs.Map(provider.Claims{
 				Subject: user.ID.String(),
 				Phone:   user.GetPhone(),
 			}))
@@ -591,6 +654,9 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 		}
 		if terr := tx.Destroy(factor); terr != nil {
 			return apierrors.NewInternalServerError("Database error deleting factor").WithInternalError(terr)
+		}
+		if terr := factor.DowngradeSessionsToAAL1(tx); terr != nil {
+			return apierrors.NewInternalServerError("Database error downgrading sessions").WithInternalError(terr)
 		}
 		return nil
 	})

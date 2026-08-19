@@ -114,7 +114,7 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		return apierrors.NewOAuthError("invalid_grant", "Solana message was issued too far in the future")
 	}
 
-	const providerType = "web3"
+	const providerType = Web3Provider
 	providerId := strings.Join([]string{
 		providerType,
 		params.Chain,
@@ -260,7 +260,7 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 		return apierrors.NewOAuthError("invalid_grant", "Ethereum message was issued too far in the future")
 	}
 
-	const providerType = "web3"
+	const providerType = Web3Provider
 	providerId := strings.Join([]string{
 		providerType,
 		params.Chain,

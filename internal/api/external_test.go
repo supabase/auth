@@ -12,6 +12,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 )
@@ -40,6 +41,54 @@ func (ts *ExternalTestSuite) SetupTest() {
 	ts.Config.Mailer.Autoconfirm = false
 
 	models.TruncateAll(ts.API.db)
+}
+
+func (ts *ExternalTestSuite) TestAutomaticLinkIdentityWritesAuditLog() {
+	existingUser, err := ts.createUser("", "automatic-link@example.com", "", "", "")
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), existingUser.Confirm(ts.API.db))
+
+	userData := &provider.UserProvidedData{
+		Metadata: &provider.Claims{
+			Subject:       "automatic-link-subject",
+			Email:         existingUser.GetEmail(),
+			EmailVerified: true,
+		},
+		Emails: []provider.Email{{
+			Email:    existingUser.GetEmail(),
+			Primary:  true,
+			Verified: true,
+		}},
+	}
+	r := httptest.NewRequest(http.MethodGet, "/callback", nil)
+	r.RemoteAddr = "192.0.2.1:1234"
+
+	decision, user, err := ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.LinkAccount, decision)
+	require.Equal(ts.T(), existingUser.ID, user.ID)
+
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, userData.Metadata.Subject, "google")
+	require.NoError(ts.T(), err)
+	logs, err := models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1)
+	require.Equal(ts.T(), string(models.IdentityLinkAction), logs[0].Payload["action"])
+	require.Equal(ts.T(), "user", logs[0].Payload["log_type"])
+	traits, ok := logs[0].Payload["traits"].(map[string]any)
+	require.True(ts.T(), ok)
+	require.Equal(ts.T(), identity.ID.String(), traits["identity_id"])
+	require.Equal(ts.T(), "google", traits["provider"])
+	require.Equal(ts.T(), userData.Metadata.Subject, traits["provider_id"])
+	require.Equal(ts.T(), "192.0.2.1", logs[0].IPAddress)
+
+	decision, _, err = ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.AccountExists, decision)
+
+	logs, err = models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1, "signing in with an existing identity must not emit another audit log")
 }
 
 func (ts *ExternalTestSuite) createUser(providerId string, email string, name string, avatar string, confirmationToken string) (*models.User, error) {

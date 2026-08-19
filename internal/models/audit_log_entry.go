@@ -35,26 +35,23 @@ const (
 	UserUpdatePasswordAction        AuditAction = "user_updated_password"
 	TokenRevokedAction              AuditAction = "token_revoked"
 	TokenRefreshedAction            AuditAction = "token_refreshed"
-	GenerateRecoveryCodesAction     AuditAction = "generate_recovery_codes"
 	EnrollFactorAction              AuditAction = "factor_in_progress"
 	UnenrollFactorAction            AuditAction = "factor_unenrolled"
 	CreateChallengeAction           AuditAction = "challenge_created"
 	VerifyFactorAction              AuditAction = "verification_attempted"
 	DeleteFactorAction              AuditAction = "factor_deleted"
-	DeleteRecoveryCodesAction       AuditAction = "recovery_codes_deleted"
 	UpdateFactorAction              AuditAction = "factor_updated"
-	MFACodeLoginAction              AuditAction = "mfa_code_login"
+	IdentityLinkAction              AuditAction = "identity_linked"
 	IdentityUnlinkAction            AuditAction = "identity_unlinked"
 	PasskeyCreatedAction            AuditAction = "passkey_created"
 	PasskeyUpdatedAction            AuditAction = "passkey_updated"
 	PasskeyDeletedAction            AuditAction = "passkey_deleted"
 
-	account       auditLogType = "account"
-	team          auditLogType = "team"
-	token         auditLogType = "token"
-	user          auditLogType = "user"
-	factor        auditLogType = "factor"
-	recoveryCodes auditLogType = "recovery_codes"
+	account auditLogType = "account"
+	team    auditLogType = "team"
+	token   auditLogType = "token"
+	user    auditLogType = "user"
+	factor  auditLogType = "factor"
 )
 
 var ActionLogTypeMap = map[AuditAction]auditLogType{
@@ -68,18 +65,18 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	TokenRefreshedAction:            token,
 	UserModifiedAction:              user,
 	UserRecoveryRequestedAction:     user,
+	UserReauthenticateAction:        user,
 	UserConfirmationRequestedAction: user,
 	UserRepeatedSignUpAction:        user,
 	UserUpdatePasswordAction:        user,
-	GenerateRecoveryCodesAction:     user,
+	IdentityLinkAction:              user,
+	IdentityUnlinkAction:            user,
 	EnrollFactorAction:              factor,
 	UnenrollFactorAction:            factor,
 	CreateChallengeAction:           factor,
 	VerifyFactorAction:              factor,
 	DeleteFactorAction:              factor,
 	UpdateFactorAction:              factor,
-	MFACodeLoginAction:              factor,
-	DeleteRecoveryCodesAction:       recoveryCodes,
 	PasskeyCreatedAction:            user,
 	PasskeyUpdatedAction:            user,
 	PasskeyDeletedAction:            user,

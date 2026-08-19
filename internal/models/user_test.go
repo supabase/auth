@@ -2,7 +2,9 @@ package models
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,6 +134,131 @@ func (ts *UserTestSuite) TestFindUsersInAudience() {
 	require.Len(ts.T(), n, 1)
 }
 
+// createUserAt inserts a user in the "test" audience with an exact created_at.
+// pop sets created_at on insert, so we force it afterwards and reload to get
+// the microsecond-truncated value Postgres actually stores.
+func (ts *UserTestSuite) createUserAt(email string, createdAt time.Time) *User {
+	user, err := NewUser("", email, "secret", "test", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
+	require.NoError(ts.T(), ts.db.RawQuery("UPDATE users SET created_at = ? WHERE id = ?", createdAt, user.ID).Exec())
+	reloaded, err := FindUserByID(ts.db, user.ID)
+	require.NoError(ts.T(), err)
+	return reloaded
+}
+
+func (ts *UserTestSuite) TestFindUsersInAudienceKeyset() {
+	base := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	ts.Run("first page fetches Limit+1 when more rows exist", func() {
+		TruncateAll(ts.db)
+		for i := 0; i < 5; i++ {
+			ts.createUserAt(fmt.Sprintf("u%d@example.com", i), base.Add(time.Duration(i)*time.Minute))
+		}
+
+		p := &KeysetPagination{Limit: 2}
+		users, err := FindUsersInAudienceKeyset(ts.db, "test", p, nil, "")
+		require.NoError(ts.T(), err)
+		// Limit+1 fetched so the caller can detect there is a next page.
+		require.Len(ts.T(), users, 3)
+		// default direction is DESC on created_at: newest first, non-increasing.
+		for i := 1; i < len(users); i++ {
+			require.False(ts.T(), users[i-1].CreatedAt.Before(users[i].CreatedAt),
+				"rows must be ordered created_at DESC")
+		}
+	})
+
+	ts.Run("tiebreaker walks same-created_at rows exactly once", func() {
+		TruncateAll(ts.db)
+		same := base
+		want := map[string]bool{}
+		for i := 0; i < 3; i++ {
+			u := ts.createUserAt(fmt.Sprintf("tie%d@example.com", i), same)
+			want[u.ID.String()] = true
+		}
+
+		seen := map[string]bool{}
+		var after *KeysetCursor
+		for page := 0; page < 10; page++ {
+			p := &KeysetPagination{Limit: 1, After: after}
+			users, err := FindUsersInAudienceKeyset(ts.db, "test", p, nil, "")
+			require.NoError(ts.T(), err)
+			if len(users) == 0 {
+				break
+			}
+
+			hasMore := uint64(len(users)) > p.Limit
+			rows := users
+			if hasMore {
+				rows = users[:p.Limit]
+			}
+			for _, u := range rows {
+				require.False(ts.T(), seen[u.ID.String()], "row returned twice: %s", u.ID)
+				seen[u.ID.String()] = true
+			}
+			if !hasMore {
+				break
+			}
+			last := rows[len(rows)-1]
+			after = &KeysetCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+		}
+		require.Equal(ts.T(), want, seen, "every same-created_at row returned exactly once")
+	})
+
+	ts.Run("last page returns <= Limit", func() {
+		TruncateAll(ts.db)
+		for i := 0; i < 2; i++ {
+			ts.createUserAt(fmt.Sprintf("last%d@example.com", i), base.Add(time.Duration(i)*time.Minute))
+		}
+
+		p := &KeysetPagination{Limit: 50}
+		users, err := FindUsersInAudienceKeyset(ts.db, "test", p, nil, "")
+		require.NoError(ts.T(), err)
+		require.Len(ts.T(), users, 2)
+	})
+
+	ts.Run("filter still applies alongside keyset", func() {
+		TruncateAll(ts.db)
+		ts.createUserAt("needle@example.com", base)
+		ts.createUserAt("haystack@example.com", base.Add(time.Minute))
+
+		p := &KeysetPagination{Limit: 50}
+		users, err := FindUsersInAudienceKeyset(ts.db, "test", p, nil, "needle")
+		require.NoError(ts.T(), err)
+		require.Len(ts.T(), users, 1)
+		require.Equal(ts.T(), "needle@example.com", users[0].GetEmail())
+	})
+
+	ts.Run("non-created_at sort field is rejected", func() {
+		TruncateAll(ts.db)
+		ts.createUserAt("x@example.com", base)
+
+		sp := &SortParams{Fields: []SortField{{Name: "email", Dir: Ascending}}}
+		_, err := FindUsersInAudienceKeyset(ts.db, "test", &KeysetPagination{Limit: 10}, sp, "")
+		require.Error(ts.T(), err)
+	})
+
+	ts.Run("ascending direction resumes with > comparison", func() {
+		TruncateAll(ts.db)
+		for i := 0; i < 3; i++ {
+			ts.createUserAt(fmt.Sprintf("asc%d@example.com", i), base.Add(time.Duration(i)*time.Minute))
+		}
+
+		sp := &SortParams{Fields: []SortField{{Name: CreatedAt, Dir: Ascending}}}
+		p := &KeysetPagination{Limit: 1}
+		first, err := FindUsersInAudienceKeyset(ts.db, "test", p, sp, "")
+		require.NoError(ts.T(), err)
+		require.Len(ts.T(), first, 2) // Limit+1
+		require.Equal(ts.T(), "asc0@example.com", first[0].GetEmail())
+
+		after := &KeysetCursor{CreatedAt: first[0].CreatedAt, ID: first[0].ID}
+		next, err := FindUsersInAudienceKeyset(ts.db, "test", &KeysetPagination{Limit: 1, After: after}, sp, "")
+		require.NoError(ts.T(), err)
+		require.Len(ts.T(), next, 2)
+		require.Equal(ts.T(), "asc1@example.com", next[0].GetEmail())
+	})
+}
+
 func (ts *UserTestSuite) TestFindUserByID() {
 	u := ts.createUser()
 
@@ -183,6 +310,34 @@ func (ts *UserTestSuite) TestIsDuplicatedEmail() {
 	e, err = IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "other-aud", nil, nil)
 	require.NoError(ts.T(), err)
 	require.Nil(ts.T(), e, "expected same email to not be duplicated")
+}
+
+func (ts *UserTestSuite) TestIsDuplicatedEmailWithLinkingDomains() {
+	linkingDomains := map[string]string{"github": "social", "google": "social"}
+
+	// A grouped-provider user (its own "social" linking domain, is_sso_user=true)
+	// must NOT be treated as a default-pool duplicate: a default email signup with
+	// the same address is allowed to coexist with it.
+	githubUser, err := NewUser("", "grouped@example.com", "", "test", nil)
+	require.NoError(ts.T(), err)
+	githubUser.IsSSOUser = true
+	require.NoError(ts.T(), ts.db.Create(githubUser))
+	githubIdentity, err := NewIdentity(githubUser, "github", map[string]interface{}{
+		"sub":   githubUser.ID.String(),
+		"email": "grouped@example.com",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(githubIdentity))
+
+	e, err := IsDuplicatedEmail(ts.db, "grouped@example.com", "test", nil, linkingDomains)
+	require.NoError(ts.T(), err)
+	require.Nil(ts.T(), e, "grouped-provider email must not count as a default-pool duplicate")
+
+	// A default-pool email user with the same address IS still a duplicate.
+	_ = ts.createUserWithEmail("default@example.com")
+	e, err = IsDuplicatedEmail(ts.db, "default@example.com", "test", nil, linkingDomains)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), e, "default email must still count as a duplicate")
 }
 
 func (ts *UserTestSuite) createUser() *User {
@@ -314,15 +469,17 @@ func (ts *UserTestSuite) TestUpdateUserEmailSuccess() {
 	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
 
-	primaryIdentity, err := NewIdentity(userA, "email", map[string]interface{}{
+	primaryIdentity, err := NewIdentity(userA, "email", map[string]any{
 		"sub":   userA.ID.String(),
 		"email": "foo@example.com",
 	})
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(primaryIdentity))
 
-	secondaryIdentity, err := NewIdentity(userA, "google", map[string]interface{}{
+	// secondary identity without an email_verified key, must be treated as unverified
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]any{
 		"sub":   userA.ID.String(),
 		"email": "bar@example.com",
 	})
@@ -330,15 +487,266 @@ func (ts *UserTestSuite) TestUpdateUserEmailSuccess() {
 	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
 
 	// UpdateUserEmail should not do anything and the user's email should still use the primaryIdentity
-	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db, false))
 	require.Equal(ts.T(), primaryIdentity.GetEmail(), userA.GetEmail())
+	require.NotNil(ts.T(), userA.EmailConfirmedAt)
 
 	// remove primary identity
 	require.NoError(ts.T(), ts.db.Destroy(primaryIdentity))
 
 	// UpdateUserEmail should update the user to use the secondary identity's email
-	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	// and clear the confirmation state since the promoted email was never verified
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db, false))
 	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+	require.Nil(ts.T(), userA.EmailConfirmedAt)
+	require.Equal(ts.T(), false, userA.UserMetaData["email_verified"])
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFromVerifiedIdentity() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// the promoted email was verified by the identity provider so the
+	// user's confirmation state should be kept
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db, false))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+	require.NotNil(ts.T(), userA.EmailConfirmedAt)
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFromUnverifiedIdentity() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// the promoted email was never verified so the user should no longer
+	// be considered confirmed
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db, false))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+	require.Nil(ts.T(), userA.EmailConfirmedAt)
+	require.Equal(ts.T(), false, userA.UserMetaData["email_verified"])
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFromUnverifiedIdentityWithAutoconfirm() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// autoconfirm keeps the promoted email confirmed even when the identity
+	// provider did not verify it
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db, true))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+	require.NotNil(ts.T(), userA.EmailConfirmedAt)
+	require.Equal(ts.T(), true, userA.UserMetaData["email_verified"])
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailPrefersVerifiedIdentity() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	unverifiedIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "unverified@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(unverifiedIdentity))
+
+	verifiedIdentity, err := NewIdentity(userA, "github", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "verified@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(verifiedIdentity))
+
+	// the verified identity should be promoted even though the unverified
+	// identity was created first
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db, false))
+	require.Equal(ts.T(), verifiedIdentity.GetEmail(), userA.GetEmail())
+	require.NotNil(ts.T(), userA.EmailConfirmedAt)
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailVerifiedConflictFallsBack() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	verifiedIdentity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(verifiedIdentity))
+
+	unverifiedIdentity, err := NewIdentity(userA, "github", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "baz@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(unverifiedIdentity))
+
+	userB, err := NewUser("", "bar@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userB))
+
+	// the verified identity's email is taken by userB so the unverified
+	// identity is promoted instead, which unconfirms the user
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db, false))
+	require.Equal(ts.T(), unverifiedIdentity.GetEmail(), userA.GetEmail())
+	require.Nil(ts.T(), userA.EmailConfirmedAt)
+	require.Equal(ts.T(), false, userA.UserMetaData["email_verified"])
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailClearsStaleTokens() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), userA.Confirm(ts.db))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]interface{}{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// simulate outstanding tokens sent to the previous email
+	now := time.Now()
+	userA.ConfirmationToken = "confirmation-token-hash"
+	userA.ConfirmationSentAt = &now
+	userA.RecoveryToken = "recovery-token-hash"
+	userA.RecoverySentAt = &now
+	userA.EmailChange = "baz@example.com"
+	userA.EmailChangeTokenCurrent = "email-change-current-hash"
+	userA.EmailChangeTokenNew = "email-change-new-hash"
+	userA.EmailChangeSentAt = &now
+	userA.EmailChangeConfirmStatus = 1
+	userA.PhoneChange = "123456789"
+	userA.PhoneChangeToken = "phone-change-token-hash"
+	userA.PhoneChangeSentAt = &now
+	userA.ReauthenticationToken = "reauthentication-token-hash"
+	userA.ReauthenticationSentAt = &now
+	require.NoError(ts.T(), ts.db.UpdateOnly(
+		userA,
+		"confirmation_token",
+		"confirmation_sent_at",
+		"recovery_token",
+		"recovery_sent_at",
+		"email_change",
+		"email_change_token_current",
+		"email_change_token_new",
+		"email_change_sent_at",
+		"email_change_confirm_status",
+		"phone_change",
+		"phone_change_token",
+		"phone_change_sent_at",
+		"reauthentication_token",
+		"reauthentication_sent_at",
+	))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, userA.ID, userA.GetEmail(), userA.ConfirmationToken, ConfirmationToken))
+
+	// promoting another identity's email must revoke every outstanding
+	// token addressed to the previous email
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db, false))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+
+	userA, err = FindUserByID(ts.db, userA.ID)
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), userA.ConfirmationToken)
+	require.Nil(ts.T(), userA.ConfirmationSentAt)
+	require.Empty(ts.T(), userA.RecoveryToken)
+	require.Nil(ts.T(), userA.RecoverySentAt)
+	require.Empty(ts.T(), userA.EmailChange)
+	require.Empty(ts.T(), userA.EmailChangeTokenCurrent)
+	require.Empty(ts.T(), userA.EmailChangeTokenNew)
+	require.Nil(ts.T(), userA.EmailChangeSentAt)
+	require.Equal(ts.T(), 0, userA.EmailChangeConfirmStatus)
+	require.Empty(ts.T(), userA.PhoneChange)
+	require.Empty(ts.T(), userA.PhoneChangeToken)
+	require.Nil(ts.T(), userA.PhoneChangeSentAt)
+	require.Empty(ts.T(), userA.ReauthenticationToken)
+	require.Nil(ts.T(), userA.ReauthenticationSentAt)
+
+	// the one-time token must no longer be redeemable
+	_, err = FindUserByConfirmationToken(ts.db, "confirmation-token-hash")
+	require.Error(ts.T(), err)
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFromEmptyClearsStaleTokens() {
+	// a user without an email or identities, e.g. an anonymous user
+	userA, err := NewUser("", "", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+
+	identity, err := NewIdentity(userA, "google", map[string]any{
+		"sub":            userA.ID.String(),
+		"email":          "bar@example.com",
+		"email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
+
+	// simulate a phone change requested before the identity was linked
+	now := time.Now()
+	userA.PhoneChange = "123456789"
+	userA.PhoneChangeToken = "phone-change-token-hash"
+	userA.PhoneChangeSentAt = &now
+	require.NoError(ts.T(), ts.db.UpdateOnly(
+		userA,
+		"phone_change",
+		"phone_change_token",
+		"phone_change_sent_at",
+	))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, userA.ID, userA.PhoneChange, userA.PhoneChangeToken, PhoneChangeToken))
+
+	// promoting an identity's email over an empty one is still a primary
+	// email transition, so outstanding tokens must be revoked
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db, false))
+	require.Equal(ts.T(), identity.GetEmail(), userA.GetEmail())
+
+	userA, err = FindUserByID(ts.db, userA.ID)
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), userA.PhoneChange)
+	require.Empty(ts.T(), userA.PhoneChangeToken)
+	require.Nil(ts.T(), userA.PhoneChangeSentAt)
+
+	_, err = FindOneTimeToken(ts.db, "phone-change-token-hash", PhoneChangeToken)
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err))
 }
 
 func (ts *UserTestSuite) TestUpdateUserEmailFailure() {
@@ -369,7 +777,7 @@ func (ts *UserTestSuite) TestUpdateUserEmailFailure() {
 
 	// UpdateUserEmail should fail with the email unique constraint violation error
 	//  since userB is using the secondary identity's email
-	require.ErrorIs(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db), UserEmailUniqueConflictError{})
+	require.ErrorIs(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db, false), UserEmailUniqueConflictError{})
 	require.Equal(ts.T(), primaryIdentity.GetEmail(), userA.GetEmail())
 }
 

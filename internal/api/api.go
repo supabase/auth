@@ -13,6 +13,7 @@ import (
 	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/api/oauthserver"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/api/scim"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
@@ -46,6 +47,7 @@ type API struct {
 	hooksMgr     *v0hooks.Manager
 	hibpClient   *hibp.PwnedClient
 	oauthServer  *oauthserver.Server
+	scim         *scim.Server
 	tokenService *tokens.Service
 	mailer       mailer.Mailer
 	oidcCache    *provider.OIDCProviderCache
@@ -135,6 +137,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	if globalConfig.OAuthServer.Enabled {
 		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
 	}
+
+	api.scim = scim.NewServer(globalConfig)
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -445,6 +449,15 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Get("/authorize", api.oauthServer.OAuthServerAuthorize)
 			r.With(api.requireAuthentication).Get("/authorizations/{authorization_id}", api.oauthServer.OAuthServerGetAuthorization)
 			r.With(api.requireAuthentication).Post("/authorizations/{authorization_id}/consent", api.oauthServer.OAuthServerConsent)
+		})
+
+		r.Route(scim.BasePath, func(r *router) {
+			r.Use(api.requireScimServerEnabled)
+			r.NotFound(api.scim.NotFound)
+
+			r.Get("/ServiceProviderConfig", api.scim.ServiceProviderConfig)
+			r.Get("/ResourceTypes", api.scim.ResourceTypes)
+			r.Get("/Schemas", api.scim.Schemas)
 		})
 	})
 

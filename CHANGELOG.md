@@ -1,5 +1,101 @@
 # Changelog
 
+## [2.196.0](https://github.com/supabase/auth/compare/v2.195.0...v2.196.0) (2026-08-12)
+
+
+### Features
+
+* **admin:** create an email identity when an admin sets a first password ([f369cfa](https://github.com/supabase/auth/commit/f369cfa6a2b651e19b1247a8a67bf6a124c03984))
+* **auditlogs:** introduce identity linked action ([2d4680e](https://github.com/supabase/auth/commit/2d4680ef054bedc898da1dbac1b6a7cb9cf5b5af))
+* **conf:** add experimental flag for creating an email identity on password set ([8f19669](https://github.com/supabase/auth/commit/8f19669492e17e219bfda5a264a0af3f11940ffb))
+* create an email identity when a user adds their first password ([3afa027](https://github.com/supabase/auth/commit/3afa027c5cd0709ae82b46b461c8addbfd527be9))
+* **scim:** Add /ResourceTypes and /Schemas ([#2664](https://github.com/supabase/auth/issues/2664)) ([0fb56ca](https://github.com/supabase/auth/commit/0fb56ca93fcbe033bc2b0309bafbd86ef97aa468))
+* **scim:** implement `/scim/v2/ServiceProviderConfig` ([#2662](https://github.com/supabase/auth/issues/2662)) ([3ac3620](https://github.com/supabase/auth/commit/3ac362071760982ad9064b67e5f5e514ab7b2a89))
+* **scim:** render SCIM errors in RFC 7644 form ([#2661](https://github.com/supabase/auth/issues/2661)) ([dc5bf8e](https://github.com/supabase/auth/commit/dc5bf8e843852d35fb0503ad7974c4ca71f80a85))
+
+
+### Bug Fixes
+
+* **auditlogs:** add IP address to IdentityUnlinkAction entires ([1a3a477](https://github.com/supabase/auth/commit/1a3a4773f1c59c3aa25d2d06b5be0c734f391a1a))
+* **auditlogs:** add missing IdentityUnlinkAction action ([9c45038](https://github.com/supabase/auth/commit/9c45038bb27079ac9dc31aa3ee41f69eebfb6f16))
+* **auditlogs:** add missing UserReauthenticateAction action ([dcc140f](https://github.com/supabase/auth/commit/dcc140f1fd7dd4d529c8ee116970a087cc4761d5))
+* clear pending phone change when the user's email is replaced ([5ce63bb](https://github.com/supabase/auth/commit/5ce63bbe251970ac3eb2bbfb160f5954563db4fd))
+* correctly update email confirmation when an identity is unlinked ([e2fae4c](https://github.com/supabase/auth/commit/e2fae4cffc5763fc56d70a5a70c3bc8bd19f0bfe))
+* **mailer:** send identity unlinked notification to pre-unlink email ([#2692](https://github.com/supabase/auth/issues/2692)) ([2399fe5](https://github.com/supabase/auth/commit/2399fe5875cf0718eec54b614c3b2a227277c1b5))
+* **oauth:** ignore unsupported signing alg in JWKS ([#2696](https://github.com/supabase/auth/issues/2696)) ([713a0d9](https://github.com/supabase/auth/commit/713a0d9e37a0a12b9d0e97d8b9919addffa2356e))
+* revoke outstanding email tokens when the user's email is replaced ([cf74a14](https://github.com/supabase/auth/commit/cf74a14fd7ed94645d318162f803bcb73da60662))
+* unlinking an identity should respect the autoconfirm behaviour ([83df1d9](https://github.com/supabase/auth/commit/83df1d930f61fd64c3ea0578de182f09d82b13d4))
+* use provider constants ([d6dec26](https://github.com/supabase/auth/commit/d6dec2640f047a42873e64ccec2f7288043d511f))
+
+## [2.195.0](https://github.com/supabase/auth/compare/v2.194.0...v2.195.0) (2026-07-30)
+
+
+### Features
+
+* gate SCIM router behind an experimental feature flag ([#2639](https://github.com/supabase/auth/issues/2639)) ([0fde049](https://github.com/supabase/auth/commit/0fde049ae7e60cdfa41daa6a52e7a1eb003f8733))
+
+
+### Bug Fixes
+
+* accept offline_access OAuth scope for MCP refresh clients ([#2630](https://github.com/supabase/auth/issues/2630)) ([059b86c](https://github.com/supabase/auth/commit/059b86c41fb622959c2cc8a82662462492f1e217))
+* **auditlogs:** add missing events to docs ([3e5d493](https://github.com/supabase/auth/commit/3e5d4935f3594fd4c90263c4b04c50482c9a09f8))
+* **auditlogs:** remove unused mfa code audit log events ([2909344](https://github.com/supabase/auth/commit/2909344fac21e1355a0a9f1c8316af654ec5aff3))
+* **auditlogs:** remove unused recovery codes audit log events ([d4ca02a](https://github.com/supabase/auth/commit/d4ca02acf217c1949fea5a356d855aac9dfeea5c))
+* persist last_sign_in_at on v2 refresh token issuance ([#2655](https://github.com/supabase/auth/issues/2655)) ([fc654b0](https://github.com/supabase/auth/commit/fc654b05e7a02a6a8c375b3a7895bcd563b790ca))
+* reject AT from banned users ([#2642](https://github.com/supabase/auth/issues/2642)) ([b6878c2](https://github.com/supabase/auth/commit/b6878c2fa63f805dbd27436c36ba7ebbc2b7e44d))
+* update google.golang.org/grpc to v1.82.1 ([#2651](https://github.com/supabase/auth/issues/2651)) ([4a596c0](https://github.com/supabase/auth/commit/4a596c0d556e7bed6874f87af18aab3f4fb4efa1))
+
+## [2.194.0](https://github.com/supabase/auth/compare/v2.193.1...v2.194.0) (2026-07-27)
+
+
+### Features
+
+* add cursor-based pagination for admin users list ([#2633](https://github.com/supabase/auth/issues/2633)) ([76e2aac](https://github.com/supabase/auth/commit/76e2aace4899f71bfc6038c8a00c913936a4561e))
+* add optional override for custom provider redirect URIs ([#2641](https://github.com/supabase/auth/issues/2641)) ([67c55c0](https://github.com/supabase/auth/commit/67c55c00789d69505881e3143dc248a2a1d2ab55))
+
+
+### Bug Fixes
+
+* consolidate error logs into single log entry ([#2635](https://github.com/supabase/auth/issues/2635)) ([47b3d94](https://github.com/supabase/auth/commit/47b3d9429f22412a01c0e7a02aaa76156a9ea7e7))
+* **deps:** bump otel versions for vulncheck ([#2648](https://github.com/supabase/auth/issues/2648)) ([4c2d691](https://github.com/supabase/auth/commit/4c2d691f7c2d2cebe7d4c9b37d78cd2fb564ea53))
+* upgrade to x/text@v0.39.0 GO-2026-5970 ([#2636](https://github.com/supabase/auth/issues/2636)) ([66421c6](https://github.com/supabase/auth/commit/66421c6f77bc045fb83dab1fc38d97158418f5aa))
+
+## [2.193.1](https://github.com/supabase/auth/compare/v2.193.0...v2.193.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* build darwin-arm64 release binaries with GOOS=darwin ([#2618](https://github.com/supabase/auth/issues/2618)) ([318b4d1](https://github.com/supabase/auth/commit/318b4d166ffc407e661dc99580082758a9b4e885))
+* ensure legacy refresh token revoked ([#2624](https://github.com/supabase/auth/issues/2624)) ([8748000](https://github.com/supabase/auth/commit/87480005e2c3a16e35e5f6eacb97ea22b82ac9a5))
+* **oauth:** prevent authorization-code replay race at /oauth/token ([#2612](https://github.com/supabase/auth/issues/2612)) ([bdbf01e](https://github.com/supabase/auth/commit/bdbf01eb99ac8750bfa6ec06626002673cf5479d))
+* **siwe:** return false instead of panicking on malformed signatures ([#2625](https://github.com/supabase/auth/issues/2625)) ([c3005a4](https://github.com/supabase/auth/commit/c3005a47c20240d21772bb5103843b15bbc472bb))
+
+## [2.193.0](https://github.com/supabase/auth/compare/v2.192.0...v2.193.0) (2026-07-07)
+
+
+### Features
+
+* **linking:** add experimental provider linking-domain groups ([#2604](https://github.com/supabase/auth/issues/2604)) ([c4f6964](https://github.com/supabase/auth/commit/c4f69649a0d95a86648b23657795b5430894f472))
+
+
+### Bug Fixes
+
+* downgrade session AAL after admin deletion of factor ([#2607](https://github.com/supabase/auth/issues/2607)) ([4d1d660](https://github.com/supabase/auth/commit/4d1d660674ce15d9858cc220a3deda0cf0088077))
+* **mfa:** use AMR method (not factor type) when downgrading sessions to AAL1 ([#2615](https://github.com/supabase/auth/issues/2615)) ([dfe62d0](https://github.com/supabase/auth/commit/dfe62d0fcc047099614c2eaff4b4d20d807671d9))
+
+## [2.192.0](https://github.com/supabase/auth/compare/v2.191.0...v2.192.0) (2026-06-29)
+
+
+### Features
+
+* **custom-oauth:** add per-provider custom_claims_allowlist ([#2576](https://github.com/supabase/auth/issues/2576)) ([acecb06](https://github.com/supabase/auth/commit/acecb063b0d089d6329af04171b3bc3903508c3b))
+
+
+### Bug Fixes
+
+* **tests:** rely on error codes for hooks tests to work across PG backends ([ee91c5f](https://github.com/supabase/auth/commit/ee91c5fd31ce3fd6721cb40ae1795ba702b8c9b8))
+* **vulncheck:** ignore GO-2026-5004 (pgx/v4, not reachable) ([#2602](https://github.com/supabase/auth/issues/2602)) ([f1cc16f](https://github.com/supabase/auth/commit/f1cc16fbd54b41623b8d39b0663d410ebbe9c9e6))
+
 ## [2.191.0](https://github.com/supabase/auth/compare/v2.190.0...v2.191.0) (2026-06-17)
 
 

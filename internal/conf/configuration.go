@@ -85,8 +85,19 @@ type AnonymousProviderConfiguration struct {
 
 // CustomOAuthConfiguration holds configuration for custom OAuth and OIDC providers
 type CustomOAuthConfiguration struct {
-	Enabled      bool `json:"enabled" split_words:"true" default:"true"`
-	MaxProviders int  `json:"max_providers" split_words:"true" default:"0"`
+	Enabled      bool   `json:"enabled" split_words:"true" default:"true"`
+	MaxProviders int    `json:"max_providers" split_words:"true" default:"0"`
+	ExternalURL  string `json:"external_url,omitempty" split_words:"true"`
+}
+
+func (c *CustomOAuthConfiguration) Validate() error {
+	if c.ExternalURL != "" {
+		if _, err := url.ParseRequestURI(c.ExternalURL); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type EmailProviderConfiguration struct {
@@ -307,11 +318,69 @@ type AuditLogConfiguration struct {
 	DisablePostgres bool `split_words:"true" default:"false"`
 }
 
+// ProviderLinkingDomains maps a provider name to the account-linking domain it
+// belongs to. Providers mapped to the same domain link to one another (a
+// matching email lands on the same account) but stay isolated from the
+// "default" (email-linked) pool and from SSO.
+//
+// Provider names can themselves contain a colon (custom OAuth providers are
+// named "custom:<identifier>", e.g. "custom:github"), so the env format uses
+// "=" — not ":" — to separate the provider from its domain. Pairs are
+// comma-separated:
+//
+//	GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="custom:github=social,custom:google=social"
+type ProviderLinkingDomains map[string]string
+
+func (d *ProviderLinkingDomains) Decode(value string) error {
+	result := ProviderLinkingDomains{}
+	if value = strings.TrimSpace(value); value != "" {
+		for _, pair := range strings.Split(value, ",") {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) != 2 {
+				return fmt.Errorf("conf: invalid provider linking domain %q, expected format \"provider=domain\"", pair)
+			}
+			provider, domain := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
+			if provider == "" || domain == "" {
+				return fmt.Errorf("conf: invalid provider linking domain %q, provider and domain must be non-empty", pair)
+			}
+			result[provider] = domain
+		}
+	}
+	*d = result
+	return nil
+}
+
 type ExperimentalConfiguration struct {
+	// DEPRECATED: use ProviderLinkingDomains instead. Kept for backward
+	// compatibility; auto-migrated in ApplyDefaults into ProviderLinkingDomains as
+	// {provider: provider}.
+	//
 	// Names of providers (e.g. "google") which have their own identity
 	// linking domain, meaning that the ones listed here _will not
 	// participate_ in email similarity linking with other accounts.
 	ProvidersWithOwnLinkingDomain []string `split_words:"true"`
+
+	// ProviderLinkingDomains maps a provider name to the account-linking domain
+	// it belongs to. See the ProviderLinkingDomains type for the env format.
+	// Env: GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="custom:github=social,custom:google=social"
+	ProviderLinkingDomains ProviderLinkingDomains `split_words:"true"`
+
+	// CursorPaginationEnabled turns on cursor-based (keyset) pagination for the
+	// admin user list endpoint. When enabled and no `page` query param is
+	// provided, GET /admin/users serves fast, count-free cursor pages.
+	// Env: GOTRUE_EXPERIMENTAL_CURSOR_PAGINATION_ENABLED=true
+	CursorPaginationEnabled bool `split_words:"true" default:"false"`
+
+	// ScimEnabled gates the /scim/v2 router. Ships dark: no per-provider
+	// enablement yet, just a kill switch for internal verification.
+	// Env: GOTRUE_EXPERIMENTAL_SCIM_ENABLED=true
+	ScimEnabled bool `split_words:"true" default:"false"`
+
+	// CreateEmailIdentityOnPasswordSetEnabled creates the missing email provider
+	// identity for a user when a password is added to an account that didn't have
+	// one (e.g. a user who signed up with an external provider and later sets a password).
+	// Env: GOTRUE_EXPERIMENTAL_CREATE_EMAIL_IDENTITY_ON_PASSWORD_SET_ENABLED=true
+	CreateEmailIdentityOnPasswordSetEnabled bool `split_words:"true" default:"false"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime
@@ -1066,6 +1135,19 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	}
 
+	// Backfill the deprecated ProvidersWithOwnLinkingDomain list into the
+	// ProviderLinkingDomains map. A provider that owned its linking domain maps
+	// to a domain named after itself (own domain == own name). Explicit
+	// ProviderLinkingDomains entries win over the legacy backfill.
+	if config.Experimental.ProviderLinkingDomains == nil {
+		config.Experimental.ProviderLinkingDomains = map[string]string{}
+	}
+	for _, p := range config.Experimental.ProvidersWithOwnLinkingDomain {
+		if _, ok := config.Experimental.ProviderLinkingDomains[p]; !ok {
+			config.Experimental.ProviderLinkingDomains[p] = p
+		}
+	}
+
 	if config.Mailer.Autoconfirm && config.Mailer.AllowUnverifiedEmailSignIns {
 		return errors.New("cannot enable both GOTRUE_MAILER_AUTOCONFIRM and GOTRUE_MAILER_ALLOW_UNVERIFIED_EMAIL_SIGN_INS")
 	}
@@ -1234,6 +1316,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Sessions,
 		&c.Hook,
 		&c.JWT.Keys,
+		&c.CustomOAuth,
 	}
 
 	for _, validatable := range validatables {

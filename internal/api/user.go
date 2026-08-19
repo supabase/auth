@@ -132,7 +132,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Email != "" && user.GetEmail() != params.Email {
-		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user, config.Experimental.ProvidersWithOwnLinkingDomain); err != nil {
+		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user, config.Experimental.ProviderLinkingDomains); err != nil {
 			return apierrors.NewInternalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
@@ -146,6 +146,9 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodePhoneExists, DuplicatePhoneMsg)
 		}
 	}
+
+	// must be captured before setting password below (via user.SetPassword)
+	addingFirstPassword := params.Password != nil && *params.Password != "" && !user.HasPassword()
 
 	if params.Password != nil {
 		if config.Security.UpdatePasswordRequireReauthentication {
@@ -214,6 +217,14 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserUpdatePasswordAction, "", nil); terr != nil {
 				return terr
+			}
+
+			// this is the first time a user sets a password on their account
+			// TODO(fm): we may want to relax it to also create identities for existing passwords
+			if addingFirstPassword {
+				if terr := a.ensureEmailIdentityForPassword(tx, user); terr != nil {
+					return terr
+				}
 			}
 
 			// send a Password Changed email notification to the user to inform them that their password has been changed

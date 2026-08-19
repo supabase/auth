@@ -1,7 +1,10 @@
 package models
 
 import (
+	"time"
+
 	"github.com/gobuffalo/pop/v6"
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -13,6 +16,22 @@ type Pagination struct {
 
 func (p *Pagination) Offset() uint64 {
 	return (p.Page - 1) * p.PerPage
+}
+
+// KeysetCursor is the position of a row within a keyset-paginated result set.
+// It captures the ordering columns of the last row returned so the next page
+// can resume from just after it. The (CreatedAt, ID) tuple is used because
+// created_at is not unique, so ID acts as a stable tiebreaker.
+type KeysetCursor struct {
+	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+}
+
+// KeysetPagination describes a single keyset (cursor-based) page request.
+// After == nil requests the first page.
+type KeysetPagination struct {
+	Limit uint64
+	After *KeysetCursor
 }
 
 type SortDirection string
