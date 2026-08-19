@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -72,7 +73,7 @@ func TestSCIM(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, w.Code)
 			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
-			require.Contains(t, w.Body.String(), scimCore.SchemaServiceProviderConfig)
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaServiceProviderConfig))
 		})
 
 		for _, path := range []string{scimResourceTypesPath, scimSchemasPath} {
@@ -97,6 +98,28 @@ func TestSCIM(t *testing.T) {
 				require.Equal(t, http.StatusForbidden, w.Code)
 				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
 				require.Contains(t, w.Body.String(), scimProtocol.SchemaError)
+			})
+		}
+
+		for _, tc := range []struct {
+			path   string
+			schema string
+		}{
+			{scimResourceTypesPath + "/User", string(scimCore.SchemaResourceType)},
+			{scimSchemasPath + "/" + string(scimCore.SchemaUser), string(scimCore.SchemaSchema)},
+			// A URN's colons are legal to percent-encode in a path segment, and
+			// some clients do, so both spellings must reach the same schema.
+			{scimSchemasPath + "/" + strings.ReplaceAll(string(scimCore.SchemaUser), ":", "%3A"), string(scimCore.SchemaSchema)},
+		} {
+			t.Run(tc.path, func(t *testing.T) {
+				r := httptest.NewRequest(http.MethodGet, tc.path, nil)
+				w := httptest.NewRecorder()
+
+				api.handler.ServeHTTP(w, r)
+
+				require.Equal(t, http.StatusOK, w.Code)
+				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+				require.Contains(t, w.Body.String(), tc.schema)
 			})
 		}
 

@@ -2,8 +2,9 @@ package scim
 
 import (
 	"net/http"
-	"strings"
+	"net/url"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/conf"
@@ -12,15 +13,24 @@ import (
 const BasePath = "/scim/v2"
 
 type Server struct {
+	baseURL               string
 	serviceProviderConfig *core.ServiceProviderConfig
+	resourceTypes         []*core.ResourceType
+	schemas               []*core.Schema
 }
 
 func NewServer(config *conf.GlobalConfiguration) *Server {
+	baseURL := core.Join(config.API.ExternalURL, BasePath)
+	userSchema := newUserSchema(baseURL)
+
 	return &Server{
+		baseURL: baseURL,
 		serviceProviderConfig: core.NewServiceProviderConfig(
-			strings.TrimRight(config.API.ExternalURL, "/")+BasePath,
+			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
 		),
+		resourceTypes: []*core.ResourceType{core.NewResourceType(baseURL, core.KindUser, userSchema)},
+		schemas:       []*core.Schema{userSchema},
 	}
 }
 
@@ -29,11 +39,39 @@ func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request)
 }
 
 func (srv *Server) ResourceTypes(w http.ResponseWriter, r *http.Request) error {
-	return list(w, r, []any{})
+	return list(w, r, srv.resourceTypes)
+}
+
+func (srv *Server) ResourceTypeByID(w http.ResponseWriter, r *http.Request) error {
+	return byID(srv, w, r, srv.resourceTypes)
 }
 
 func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
-	return list(w, r, []any{})
+	return list(w, r, srv.schemas)
+}
+
+func (srv *Server) SchemaByID(w http.ResponseWriter, r *http.Request) error {
+	return byID(srv, w, r, srv.schemas)
+}
+
+func newUserSchema(baseURL string) *core.Schema {
+	return core.
+		NewSchema(baseURL, core.SchemaUser, core.KindUser.Name).
+		Describe("User Account").
+		With(
+			core.NewAttribute("userName", core.TypeString, "Unique identifier for the User.").
+				AsRequired().
+				UniqueOn(core.UniquenessServer),
+		)
+}
+
+func urlParam(r *http.Request, key string) string {
+	value := chi.URLParam(r, key)
+
+	if decoded, err := url.PathUnescape(value); err == nil {
+		return decoded
+	}
+	return value
 }
 
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
@@ -44,5 +82,17 @@ func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
 	if r.URL.Query().Has("filter") {
 		return protocol.SendError(w, http.StatusForbidden, "", "Filtering is not supported on this endpoint")
 	}
+
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(resources))
+}
+
+func byID[T core.Resource](srv *Server, w http.ResponseWriter, r *http.Request, resources []T) error {
+	id := urlParam(r, "id")
+
+	for _, resource := range resources {
+		if resource.ResourceID() == id {
+			return protocol.Send(w, http.StatusOK, resource)
+		}
+	}
+	return srv.NotFound(w, r)
 }

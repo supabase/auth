@@ -2,21 +2,37 @@ package protocol
 
 import (
 	"strconv"
+
+	"github.com/supabase/auth/internal/api/scim/core"
 )
 
-const SchemaError = "urn:ietf:params:scim:api:messages:2.0:Error"
+// ScimType is a detail error keyword from RFC 7644, Table 9.
+type ScimType string
+
+const (
+	ScimTypeInvalidFilter ScimType = "invalidFilter"
+	ScimTypeInvalidPath   ScimType = "invalidPath"
+	ScimTypeInvalidSyntax ScimType = "invalidSyntax"
+	ScimTypeInvalidValue  ScimType = "invalidValue"
+	ScimTypeInvalidVers   ScimType = "invalidVers"
+	ScimTypeMutability    ScimType = "mutability"
+	ScimTypeNoTarget      ScimType = "noTarget"
+	ScimTypeSensitive     ScimType = "sensitive"
+	ScimTypeTooMany       ScimType = "tooMany"
+	ScimTypeUniqueness    ScimType = "uniqueness"
+)
 
 // Error is the error message form defined in RFC 7644, Section 3.12.
 type Error struct {
-	Schemas  []string `json:"schemas"`
-	ScimType string   `json:"scimType,omitempty"`
-	Detail   string   `json:"detail,omitempty"`
-	Status   string   `json:"status"`
+	Schemas  []core.SchemaURI `json:"schemas"`
+	ScimType ScimType         `json:"scimType,omitempty"`
+	Detail   string           `json:"detail,omitempty"`
+	Status   string           `json:"status"`
 }
 
-func NewError(status int, scimType string, detail string) *Error {
+func NewError(status int, scimType ScimType, detail string) *Error {
 	return &Error{
-		Schemas:  []string{SchemaError},
+		Schemas:  []core.SchemaURI{SchemaError},
 		ScimType: scimType,
 		Detail:   detail,
 		Status:   strconv.Itoa(status),
