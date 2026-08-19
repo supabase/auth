@@ -271,12 +271,12 @@ func (s *Server) OAuthToken(w http.ResponseWriter, r *http.Request) error {
 	contentType := r.Header.Get("Content-Type")
 	if strings.Contains(contentType, "application/json") {
 		if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-			return apierrors.NewOAuthError("invalid_request", "Invalid JSON body")
+			return apierrors.NewOAuthError(oAuth2ErrorInvalidRequest, "Invalid JSON body")
 		}
 	} else {
 		// Parse form data
 		if err := r.ParseForm(); err != nil {
-			return apierrors.NewOAuthError("invalid_request", "Failed to parse form data")
+			return apierrors.NewOAuthError(oAuth2ErrorInvalidRequest, "Failed to parse form data")
 		}
 
 		params.GrantType = r.FormValue("grant_type")
@@ -290,17 +290,17 @@ func (s *Server) OAuthToken(w http.ResponseWriter, r *http.Request) error {
 
 	// Validate grant_type
 	if params.GrantType == "" {
-		return apierrors.NewOAuthError("invalid_request", "grant_type is required")
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidRequest, "grant_type is required")
 	}
 
 	client := shared.GetOAuthServerClient(ctx)
 	if client == nil {
-		return apierrors.NewOAuthError("invalid_client", "Client authentication required")
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidClient, "Client authentication required")
 	}
 
 	// Validate that the authenticated client is allowed to use the requested grant type
 	if !client.IsGrantTypeAllowed(params.GrantType) {
-		return apierrors.NewOAuthError("unsupported_grant_type", "Client is not allowed to use grant type: "+params.GrantType)
+		return apierrors.NewOAuthError(oAuth2ErrorUnsupportedGrantType, "Client is not allowed to use grant type: "+params.GrantType)
 	}
 
 	switch params.GrantType {
@@ -309,20 +309,20 @@ func (s *Server) OAuthToken(w http.ResponseWriter, r *http.Request) error {
 	case GrantTypeRefreshToken:
 		return s.handleRefreshTokenGrant(ctx, w, r, &params)
 	default:
-		return apierrors.NewOAuthError("unsupported_grant_type", "Unsupported grant type: "+params.GrantType)
+		return apierrors.NewOAuthError(oAuth2ErrorUnsupportedGrantType, "Unsupported grant type: "+params.GrantType)
 	}
 }
 
 // handleAuthorizationCodeGrant handles the authorization_code grant type
 func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.ResponseWriter, r *http.Request, params *OAuthTokenParams) error {
 	if params.Code == "" {
-		return apierrors.NewOAuthError("invalid_request", "code is required for authorization_code grant")
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidRequest, "code is required for authorization_code grant")
 	}
 
 	// Get authenticated client from middleware
 	client := shared.GetOAuthServerClient(ctx)
 	if client == nil {
-		return apierrors.NewOAuthError("invalid_client", "Client authentication required")
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidClient, "Client authentication required")
 	}
 
 	// Exchange authorization code for tokens
@@ -336,51 +336,51 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	authorization, err := models.FindOAuthServerAuthorizationByCode(db, params.Code)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return apierrors.NewOAuthError("invalid_grant", "Invalid authorization code")
+			return apierrors.NewOAuthError(oAuth2ErrorInvalidGrant, "Invalid authorization code")
 		}
 		return apierrors.NewInternalServerError("Error finding authorization code").WithInternalError(err)
 	}
 
 	// Check if the authorization has expired
 	if authorization.IsExpired() {
-		return apierrors.NewOAuthError("invalid_grant", "Authorization code has expired")
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidGrant, "Authorization code has expired")
 	}
 
 	// Validate that the authorization code was issued for this client
 	if authorization.ClientID != client.ID {
-		return apierrors.NewOAuthError("invalid_grant", "Authorization code was not issued for this client")
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidGrant, "Authorization code was not issued for this client")
 	}
 
 	// Validate that (if exists) the resource parameter matches the authorization code resource
 	if params.Resource != "" && params.Resource != utilities.StringValue(authorization.Resource) {
-		return apierrors.NewOAuthError("invalid_grant", "Authorization code resource does not match the resource parameter")
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidGrant, "Authorization code resource does not match the resource parameter")
 	}
 
 	// Validate redirect_uri if provided - must match the one used in authorization
 	if params.RedirectURI != "" && params.RedirectURI != authorization.RedirectURI {
-		return apierrors.NewOAuthError("invalid_grant", "Invalid redirect_uri")
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidGrant, "Invalid redirect_uri")
 	}
 
 	// Validate PKCE if used in the authorization
 	if err := authorization.VerifyPKCE(params.CodeVerifier); err != nil {
-		return apierrors.NewOAuthError("invalid_grant", "PKCE verification failed: "+err.Error())
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidGrant, "PKCE verification failed: "+err.Error())
 	}
 
 	// Get the user for the authorization code
 	if authorization.UserID == nil {
-		return apierrors.NewOAuthError("invalid_grant", "Authorization code has no associated user")
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidGrant, "Authorization code has no associated user")
 	}
 
 	user, err := models.FindUserByID(db, *authorization.UserID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return apierrors.NewOAuthError("invalid_grant", "User not found for authorization code")
+			return apierrors.NewOAuthError(oAuth2ErrorInvalidGrant, "User not found for authorization code")
 		}
 		return apierrors.NewInternalServerError("Error finding user").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
-		return apierrors.NewOAuthError("access_denied", "User is banned")
+		return apierrors.NewOAuthError(oAuth2ErrorAccessDenied, "User is banned")
 	}
 
 	// Exchange the authorization code for tokens
@@ -396,7 +396,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if _, terr := models.FindOAuthServerAuthorizationByIDForUpdate(tx, authorization.AuthorizationID); terr != nil {
 			if models.IsNotFoundError(terr) {
-				return apierrors.NewOAuthError("invalid_grant", "Invalid authorization code")
+				return apierrors.NewOAuthError(oAuth2ErrorInvalidGrant, "Invalid authorization code")
 			}
 			return apierrors.NewInternalServerError("Error locking authorization code").WithInternalError(terr)
 		}
@@ -429,7 +429,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 
 	if err != nil {
 		if httpErr, ok := err.(*apierrors.HTTPError); ok {
-			return httpErr
+			return oauthTokenError(httpErr)
 		}
 		if oauthErr, ok := err.(*apierrors.OAuthError); ok {
 			return oauthErr
@@ -478,7 +478,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 // handleRefreshTokenGrant handles the refresh_token grant type
 func (s *Server) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request, params *OAuthTokenParams) error {
 	if params.RefreshToken == "" {
-		return apierrors.NewOAuthError("invalid_request", "refresh_token is required for refresh_token grant")
+		return apierrors.NewOAuthError(oAuth2ErrorInvalidRequest, "refresh_token is required for refresh_token grant")
 	}
 
 	// Use the token service to handle refresh token grant
@@ -499,7 +499,7 @@ func (s *Server) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWri
 		ClientID:     clientID,
 	})
 	if err != nil {
-		return err
+		return oauthTokenError(err)
 	}
 
 	// Convert to OAuth-compliant response format (exclude user info for OAuth clients)
