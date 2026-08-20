@@ -37,5 +37,36 @@ func TestResourceType(t *testing.T) {
 			require.Contains(t, string(body),
 				`"schemaExtensions":[{"schema":"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User","required":true}]`)
 		})
+
+		t.Run("declares no schema extensions until it is extended", func(t *testing.T) {
+			body, err := json.Marshal(NewResourceType(baseURL, KindUser, schema))
+
+			require.NoError(t, err)
+			require.NotContains(t, string(body), "schemaExtensions")
+		})
+	})
+
+	t.Run("Extend", func(t *testing.T) {
+		schema := NewSchema(baseURL, KindUser)
+		enterprise := SchemaExtension{Schema: SchemaEnterpriseUser, Required: true}
+
+		t.Run("keeps the extensions of an earlier call", func(t *testing.T) {
+			resourceType := NewResourceType(baseURL, KindUser, schema).Extend(enterprise)
+
+			require.Same(t, resourceType, resourceType.Extend(SchemaExtension{Schema: SchemaGroup}))
+			require.Equal(t, []SchemaExtension{enterprise, {Schema: SchemaGroup}}, resourceType.SchemaExtensions)
+		})
+	})
+
+	t.Run("Kind", func(t *testing.T) {
+		t.Run("names the kind and endpoint it was built from", func(t *testing.T) {
+			resourceType := NewResourceType(baseURL, KindUser, NewSchema(baseURL, KindUser))
+
+			kind := resourceType.Kind()
+
+			require.Equal(t, KindUser.Name, kind.Name)
+			require.Equal(t, KindUser.Endpoint, kind.Endpoint)
+			require.Equal(t, baseURL+"/Users", kind.Location(baseURL))
+		})
 	})
 }
