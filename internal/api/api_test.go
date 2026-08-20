@@ -43,7 +43,7 @@ func setupAPIForTest(opts ...Option) (*API, *conf.GlobalConfiguration, error) {
 	return NewAPIWithVersion(config, conn, apiTestVersion, opts...), config, nil
 }
 
-func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Connection), opts ...Option) (*API, *conf.GlobalConfiguration, error) {
+func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Connection)) (*API, *conf.GlobalConfiguration, error) {
 	config, err := confload.LoadGlobal(apiTestConfig)
 	if err != nil {
 		return nil, nil, err

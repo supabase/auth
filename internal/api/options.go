@@ -2,7 +2,6 @@ package api
 
 import (
 	"github.com/supabase/auth/internal/api/apilimiter"
-	"github.com/supabase/auth/internal/api/scim"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/tokens"
@@ -37,11 +36,5 @@ func WithCaptchaVerifier(v security.CaptchaVerifier) Option {
 func WithLimiter(v *apilimiter.Limiter) Option {
 	return optionFunc(func(a *API) {
 		a.limiterOpts = v
-	})
-}
-
-func WithSCIMUserRepository(repo scim.UserRepository) Option {
-	return optionFunc(func(a *API) {
-		a.scimUsers = repo
 	})
 }

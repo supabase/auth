@@ -72,7 +72,7 @@ func TestSCIMUsers(t *testing.T) {
 		if cfg != nil {
 			cfg.Experimental.ScimEnabled = true
 		}
-	}, WithSCIMUserRepository(users))
+	})
 	require.NoError(t, err)
 	defer api.db.Close()
 
