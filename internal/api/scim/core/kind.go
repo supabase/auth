@@ -4,15 +4,16 @@ import "strings"
 
 type Kind struct {
 	Name     ResourceTypeName
+	Schema   SchemaURI
 	Endpoint string
 }
 
 var (
-	KindGroup                 = Kind{Name: "Group", Endpoint: "/Groups"}
-	KindResourceType          = Kind{Name: "ResourceType", Endpoint: "/ResourceTypes"}
-	KindSchema                = Kind{Name: "Schema", Endpoint: "/Schemas"}
-	KindServiceProviderConfig = Kind{Name: "ServiceProviderConfig", Endpoint: "/ServiceProviderConfig"}
-	KindUser                  = Kind{Name: "User", Endpoint: "/Users"}
+	KindGroup                 = Kind{Name: "Group", Schema: SchemaGroup, Endpoint: "/Groups"}
+	KindResourceType          = Kind{Name: "ResourceType", Schema: SchemaResourceType, Endpoint: "/ResourceTypes"}
+	KindSchema                = Kind{Name: "Schema", Schema: SchemaSchema, Endpoint: "/Schemas"}
+	KindServiceProviderConfig = Kind{Name: "ServiceProviderConfig", Schema: SchemaServiceProviderConfig, Endpoint: "/ServiceProviderConfig"}
+	KindUser                  = Kind{Name: "User", Schema: SchemaUser, Endpoint: "/Users"}
 )
 
 func (k Kind) Location(baseURL string) string {

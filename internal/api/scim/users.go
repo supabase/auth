@@ -61,7 +61,7 @@ func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
 
 func newUserSchema(baseURL string) *core.Schema {
 	return core.
-		NewSchema(baseURL, core.SchemaUser, core.KindUser.Name).
+		NewSchema(baseURL, core.KindUser).
 		Describe("User Account").
 		With(
 			core.NewAttribute("userName", core.TypeString, "Unique identifier for the User.").

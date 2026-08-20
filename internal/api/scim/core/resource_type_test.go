@@ -11,7 +11,7 @@ func TestResourceType(t *testing.T) {
 	baseURL := "http://localhost:9999/scim/v2"
 
 	t.Run("NewResourceType", func(t *testing.T) {
-		schema := NewSchema(baseURL, SchemaUser, KindUser.Name).Describe("User Account")
+		schema := NewSchema(baseURL, KindUser).Describe("User Account")
 
 		resourceType := NewResourceType(baseURL, KindUser, schema)
 

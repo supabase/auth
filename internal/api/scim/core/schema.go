@@ -12,11 +12,11 @@ type Schema struct {
 	Meta        Meta             `json:"meta"`
 }
 
-func NewSchema(baseURL string, id SchemaURI, name ResourceTypeName) *Schema {
+func NewSchema(baseURL string, kind Kind) *Schema {
 	schema := &Schema{
 		Schemas: []SchemaURI{SchemaSchema},
-		ID:      id,
-		Name:    name,
+		ID:      kind.Schema,
+		Name:    kind.Name,
 	}
 	schema.Meta = NewMetaFor(baseURL, KindSchema, schema)
 
