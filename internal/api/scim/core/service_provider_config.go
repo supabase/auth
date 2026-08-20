@@ -17,17 +17,22 @@ type FilterFeature struct {
 
 type AuthenticationSchemeType string
 
+// The authentication scheme types of RFC 7643, Section 5.
 const (
+	AuthenticationSchemeOAuth            AuthenticationSchemeType = "oauth"
+	AuthenticationSchemeOAuth2           AuthenticationSchemeType = "oauth2"
 	AuthenticationSchemeOAuthBearerToken AuthenticationSchemeType = "oauthbearertoken"
+	AuthenticationSchemeHTTPBasic        AuthenticationSchemeType = "httpbasic"
+	AuthenticationSchemeHTTPDigest       AuthenticationSchemeType = "httpdigest"
 )
 
-// AuthenticationScheme is the authentication scheme of RFC 7643, Section 5.
 type AuthenticationScheme struct {
-	Type        AuthenticationSchemeType `json:"type"`
-	Name        string                   `json:"name"`
-	Description string                   `json:"description"`
-	SpecURI     string                   `json:"specUri,omitempty"`
-	Primary     bool                     `json:"primary"`
+	Type             AuthenticationSchemeType `json:"type"`
+	Name             string                   `json:"name"`
+	Description      string                   `json:"description"`
+	SpecURI          string                   `json:"specUri,omitempty"`
+	DocumentationURI string                   `json:"documentationUri,omitempty"`
+	Primary          bool                     `json:"primary"`
 }
 
 func NewOAuthBearerToken() *AuthenticationScheme {
@@ -47,6 +52,7 @@ func (scheme *AuthenticationScheme) AsPrimary() *AuthenticationScheme {
 // ServiceProviderConfig is the schema defined in RFC 7643, Section 5.
 type ServiceProviderConfig struct {
 	Schemas               []SchemaURI             `json:"schemas"`
+	DocumentationURI      string                  `json:"documentationUri,omitempty"`
 	Patch                 SupportedFeature        `json:"patch"`
 	Bulk                  BulkFeature             `json:"bulk"`
 	Filter                FilterFeature           `json:"filter"`
@@ -61,10 +67,9 @@ func NewServiceProviderConfig(baseURL string, schemes ...*AuthenticationScheme) 
 	if schemes == nil {
 		schemes = []*AuthenticationScheme{}
 	}
-
 	return &ServiceProviderConfig{
 		Schemas:               []SchemaURI{SchemaServiceProviderConfig},
 		AuthenticationSchemes: schemes,
-		Meta:                  NewMeta(baseURL, ResourceTypeServiceProviderConfig, EndpointServiceProviderConfig),
+		Meta:                  NewMeta(baseURL, KindServiceProviderConfig),
 	}
 }

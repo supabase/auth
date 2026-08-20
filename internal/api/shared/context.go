@@ -18,6 +18,7 @@ const (
 	UserKey              ContextKey = "user"
 	SessionKey           ContextKey = "session"
 	OAuthServerClientKey ContextKey = "oauth_server_client"
+	SSOProviderKey       ContextKey = "sso_provider"
 )
 
 // GetUser reads the user from the context - shared implementation
@@ -69,4 +70,21 @@ func GetOAuthServerClient(ctx context.Context) *models.OAuthServerClient {
 		return nil
 	}
 	return obj.(*models.OAuthServerClient)
+}
+
+// GetSSOProvider reads the SSO provider from the context - shared implementation
+func GetSSOProvider(ctx context.Context) *models.SSOProvider {
+	if ctx == nil {
+		return nil
+	}
+	obj := ctx.Value(SSOProviderKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*models.SSOProvider)
+}
+
+// WithSSOProvider adds the SSO provider to the context - shared implementation
+func WithSSOProvider(ctx context.Context, provider *models.SSOProvider) context.Context {
+	return context.WithValue(ctx, SSOProviderKey, provider)
 }

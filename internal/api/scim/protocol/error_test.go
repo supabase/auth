@@ -15,9 +15,7 @@ func TestNewError(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.JSONEq(t, `{
-			"schemas": [
-				"urn:ietf:params:scim:api:messages:2.0:Error"
-			],
+			"schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
 			"status": "404",
 			"detail": "Endpoint or resource does not exist"
 		}`, string(body))

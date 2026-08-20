@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,12 +18,18 @@ const (
 	scimServiceProviderConfigPath = "/scim/v2/ServiceProviderConfig"
 	scimResourceTypesPath         = "/scim/v2/ResourceTypes"
 	scimSchemasPath               = "/scim/v2/Schemas"
+	scimUsersPath                 = "/scim/v2/Users"
 )
 
 var scimPaths = []string{
 	scimServiceProviderConfigPath,
 	scimResourceTypesPath,
 	scimSchemasPath,
+	// /Users is admin-gated, but chi resolves 405 and the disabled-feature 404
+	// before any per-route middleware runs, so both loops below reach it
+	// without credentials. It stays out of the enabled-200 loop, which asserts
+	// the 403 that only the metadata endpoints return for a filter.
+	scimUsersPath,
 }
 
 func TestSCIM(t *testing.T) {
@@ -72,7 +79,7 @@ func TestSCIM(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, w.Code)
 			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
-			require.Contains(t, w.Body.String(), scimCore.SchemaServiceProviderConfig)
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaServiceProviderConfig))
 		})
 
 		for _, path := range []string{scimResourceTypesPath, scimSchemasPath} {
@@ -97,6 +104,28 @@ func TestSCIM(t *testing.T) {
 				require.Equal(t, http.StatusForbidden, w.Code)
 				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
 				require.Contains(t, w.Body.String(), scimProtocol.SchemaError)
+			})
+		}
+
+		for _, tc := range []struct {
+			path   string
+			schema string
+		}{
+			{scimResourceTypesPath + "/User", string(scimCore.SchemaResourceType)},
+			{scimSchemasPath + "/" + string(scimCore.SchemaUser), string(scimCore.SchemaSchema)},
+			// A URN's colons are legal to percent-encode in a path segment, and
+			// some clients do, so both spellings must reach the same schema.
+			{scimSchemasPath + "/" + strings.ReplaceAll(string(scimCore.SchemaUser), ":", "%3A"), string(scimCore.SchemaSchema)},
+		} {
+			t.Run(tc.path, func(t *testing.T) {
+				r := httptest.NewRequest(http.MethodGet, tc.path, nil)
+				w := httptest.NewRecorder()
+
+				api.handler.ServeHTTP(w, r)
+
+				require.Equal(t, http.StatusOK, w.Code)
+				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+				require.Contains(t, w.Body.String(), tc.schema)
 			})
 		}
 
