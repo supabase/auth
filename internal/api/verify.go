@@ -510,7 +510,7 @@ func (a *API) prepErrorRedirectURL(err *HTTPError, r *http.Request, rurl string,
 	// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
 	hq.Set("sb", "")
 	u.Fragment = hq.Encode()
-	return u.String(), nil
+	return utilities.PreserveEmptyAuthority(rurl, u), nil
 }
 
 func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowType) (string, error) {
@@ -528,7 +528,7 @@ func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowT
 	// Add Supabase Auth identifier to help clients distinguish Supabase Auth redirects
 	hq.Set("sb", "")
 	u.Fragment = hq.Encode()
-	return u.String(), nil
+	return utilities.PreserveEmptyAuthority(rurl, u), nil
 }
 
 func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
@@ -539,7 +539,7 @@ func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
 	q := u.Query()
 	q.Set("code", code)
 	u.RawQuery = q.Encode()
-	return u.String(), nil
+	return utilities.PreserveEmptyAuthority(rurl, u), nil
 }
 
 func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
