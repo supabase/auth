@@ -48,7 +48,6 @@ type API struct {
 	hibpClient   *hibp.PwnedClient
 	oauthServer  *oauthserver.Server
 	scim         *scim.Server
-	scimUsers    scim.UserRepository
 	tokenService *tokens.Service
 	mailer       mailer.Mailer
 	oidcCache    *provider.OIDCProviderCache
@@ -130,9 +129,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		tc := templatemailer.NewCache()
 		api.mailer = templatemailer.FromConfig(globalConfig, tc)
 	}
-	if api.scimUsers == nil {
-		api.scimUsers = scim.NewUserMemoryRepository()
-	}
 
 	// Connect token service to API's time function (supports test overrides)
 	api.tokenService.SetTimeFunc(api.Now)
@@ -142,7 +138,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
 	}
 
-	api.scim = scim.NewServer(globalConfig, db, api.scimUsers)
+	api.scim = scim.NewServer(globalConfig, db, scim.NewUserRepository(db))
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{

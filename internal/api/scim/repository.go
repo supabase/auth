@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/supabase/auth/internal/api/scim/core"
+	"github.com/supabase/auth/internal/storage"
 )
 
 var ErrNotFound = errors.New("scim: resource not found")
@@ -16,6 +17,6 @@ type Repository[T any] interface {
 
 type UserRepository = Repository[*core.User]
 
-func NewUserMemoryRepository() *MemoryRepository[*core.User] {
+func NewUserRepository(db *storage.Connection) *MemoryRepository[*core.User] {
 	return NewMemoryRepository(func(u *core.User) string { return u.ID })
 }

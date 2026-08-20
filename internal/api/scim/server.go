@@ -29,7 +29,6 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection, users U
 
 	return &Server{
 		baseURL: baseURL,
-		db:      db,
 		users:   users,
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
@@ -58,17 +57,6 @@ func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
 
 func (srv *Server) SchemaByID(w http.ResponseWriter, r *http.Request) error {
 	return byID(srv, w, r, srv.schemas)
-}
-
-func newUserSchema(baseURL string) *core.Schema {
-	return core.
-		NewSchema(baseURL, core.SchemaUser, core.KindUser.Name).
-		Describe("User Account").
-		With(
-			core.NewAttribute("userName", core.TypeString, "Unique identifier for the User.").
-				AsRequired().
-				UniqueOn(core.UniquenessServer),
-		)
 }
 
 func urlParam(r *http.Request, key string) string {

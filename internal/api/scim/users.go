@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gofrs/uuid"
+	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/api/shared"
 )
@@ -56,4 +57,15 @@ func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return protocol.Send(w, http.StatusOK, protocol.NewPage(users, page.StartIndex, total))
+}
+
+func newUserSchema(baseURL string) *core.Schema {
+	return core.
+		NewSchema(baseURL, core.SchemaUser, core.KindUser.Name).
+		Describe("User Account").
+		With(
+			core.NewAttribute("userName", core.TypeString, "Unique identifier for the User.").
+				AsRequired().
+				UniqueOn(core.UniquenessServer),
+		)
 }

@@ -15,7 +15,7 @@ func user(id string) *core.User {
 
 func TestMemoryRepositoryGet(t *testing.T) {
 	ctx := context.Background()
-	repo := NewUserMemoryRepository()
+	repo := NewMemoryRepository(func(u *core.User) string { return u.ID })
 	repo.Put("tenant-a", user("1"))
 
 	t.Run("returns a stored resource", func(t *testing.T) {
@@ -39,7 +39,7 @@ func TestMemoryRepositoryGet(t *testing.T) {
 
 func TestMemoryRepositoryList(t *testing.T) {
 	ctx := context.Background()
-	repo := NewUserMemoryRepository()
+	repo := NewMemoryRepository(func(u *core.User) string { return u.ID })
 	for _, id := range []string{"3", "1", "2"} {
 		repo.Put("tenant-a", user(id))
 	}
