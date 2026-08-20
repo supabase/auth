@@ -19,14 +19,12 @@ func NewMeta(baseURL string, kind Kind) Meta {
 }
 
 func NewMetaFor(baseURL string, kind Kind, r Resource) Meta {
-	created, updated := r.Timestamps()
-	return NewMetaForID(baseURL, kind, r.ResourceID(), created, updated)
+	return NewMeta(baseURL, kind).For(r)
 }
 
-func NewMetaForID(baseURL string, kind Kind, id string, created, updated time.Time) Meta {
-	meta := NewMeta(baseURL, kind)
-	meta.Location = Join(meta.Location, id)
-	meta.Created, meta.LastModified = created.UTC(), updated.UTC()
-
-	return meta
+func (m Meta) For(resource Resource) Meta {
+	created, updated := resource.Timestamps()
+	m.Location = Join(m.Location, resource.ResourceID())
+	m.Created, m.LastModified = created.UTC(), updated.UTC()
+	return m
 }
