@@ -25,13 +25,13 @@ type Server struct {
 	schemas               []*core.Schema
 }
 
-func NewServer(config *conf.GlobalConfiguration, db *storage.Connection, users UserRepository) *Server {
+func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) *Server {
 	baseURL := core.Join(config.API.ExternalURL, BasePath)
 	userSchema := newUserSchema(baseURL)
 
 	return &Server{
 		db:    db,
-		users: users,
+		users: NewUserRepository(db),
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),

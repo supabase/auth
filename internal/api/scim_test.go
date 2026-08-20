@@ -25,10 +25,6 @@ var scimPaths = []string{
 	scimServiceProviderConfigPath,
 	scimResourceTypesPath,
 	scimSchemasPath,
-	// /Users is admin-gated, but chi resolves 405 and the disabled-feature 404
-	// before any per-route middleware runs, so both loops below reach it
-	// without credentials. It stays out of the enabled-200 loop, which asserts
-	// the 403 that only the metadata endpoints return for a filter.
 	scimUsersPath,
 }
 
