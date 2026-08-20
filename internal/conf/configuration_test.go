@@ -261,18 +261,16 @@ func TestValidate(t *testing.T) {
 	}
 	cases := []testCase{
 		{
+			val: &APIConfiguration{},
+			err: `parse "": empty url`,
+		},
+		{
 			val: &APIConfiguration{ExternalURL: "http://localhost"},
 		},
 		{
 			val: &APIConfiguration{ExternalURL: "invalid"},
 			err: `parse "invalid": invalid URI for request`,
 		},
-
-		{
-			val: &APIConfiguration{ExternalURL: "invalid"},
-			err: `parse "invalid": invalid URI for request`,
-		},
-
 		{
 			val: &CustomOAuthConfiguration{},
 		},
