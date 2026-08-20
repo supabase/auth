@@ -1,13 +1,13 @@
 package sbff
 
 import (
-	"context"
 	"errors"
 	"net"
 	"net/http"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/ctxkey"
 )
 
 // HeaderName is the Sb-Forwarded-For header name. It is all lowercase here as HTTP header names
@@ -15,7 +15,7 @@ import (
 const HeaderName = "sb-forwarded-for"
 
 var (
-	ctxKeySBFF = &struct{}{}
+	ctxKeySBFF = ctxkey.New[string]("sbff_ip_address")
 
 	ErrHeaderNotFound = errors.New("Sb-Forwarded-For header not found")
 	ErrHeaderInvalid  = errors.New("invalid Sb-Forwarded-For header value")
@@ -35,7 +35,7 @@ func parseSBFFHeader(headerVal string) (string, error) {
 // SBForwardedForMiddleware. If no value is present in the request context, this function will
 // return ("", false).
 func GetIPAddress(r *http.Request) (addr string, found bool) {
-	if ipAddr, ok := r.Context().Value(ctxKeySBFF).(string); ok && ipAddr != "" {
+	if ipAddr := ctxKeySBFF.Value(r.Context()); ipAddr != "" {
 		return ipAddr, true
 	}
 
@@ -57,8 +57,7 @@ func withIPAddress(r *http.Request) (*http.Request, error) {
 		return nil, err
 	}
 
-	ctx := r.Context()
-	newCtx := context.WithValue(ctx, ctxKeySBFF, parsedIPAddr)
+	newCtx := ctxKeySBFF.WithValue(r.Context(), parsedIPAddr)
 	out := r.WithContext(newCtx)
 
 	return out, nil
