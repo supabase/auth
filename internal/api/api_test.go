@@ -63,8 +63,7 @@ func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Con
 	}
 
 	limiterOpts := apilimiter.New(config)
-	opts = append([]Option{WithLimiter(limiterOpts)}, opts...)
-	return NewAPIWithVersion(config, conn, apiTestVersion, opts...), config, nil
+	return NewAPIWithVersion(config, conn, apiTestVersion, WithLimiter(limiterOpts)), config, nil
 }
 
 func TestEmailEnabledByDefault(t *testing.T) {

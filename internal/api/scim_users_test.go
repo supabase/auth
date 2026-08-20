@@ -67,7 +67,6 @@ type SCIMUsersTestSuite struct {
 }
 
 func TestSCIMUsers(t *testing.T) {
-	users := scim.NewUserRepository()
 	api, config, err := setupAPIForTestWithCallback(func(cfg *conf.GlobalConfiguration, _ *storage.Connection) {
 		if cfg != nil {
 			cfg.Experimental.ScimEnabled = true
@@ -76,6 +75,7 @@ func TestSCIMUsers(t *testing.T) {
 	require.NoError(t, err)
 	defer api.db.Close()
 
+	users := scim.NewUserRepository(api.db)
 	suite.Run(t, &SCIMUsersTestSuite{API: api, Config: config, Users: users})
 }
 
