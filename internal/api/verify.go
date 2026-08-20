@@ -705,7 +705,10 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 	switch params.Type {
 	case phoneChangeVerification:
-		user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
+		// Resolved through the one-time token where one exists: phone_change is
+		// not unique, so matching on it alone can return a different user than
+		// the token was issued to. Mirrors the email-change lookup below.
+		user, err = models.FindUserForPhoneChange(conn, params.Phone, tokenHash, aud)
 	case smsVerification:
 		user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
 	case mail.EmailChangeVerification:
