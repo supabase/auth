@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -70,8 +71,16 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
 	query.Del("provider")
-	query.Del("code_challenge")
-	query.Del("code_challenge_method")
+	// Strip OAuth params the auth server controls so a client cannot
+	// override redirect_uri, state, code_challenge, etc. by passing them
+	// lowercase query keys for the comparison, URL.Query keeps casing
+	for key := range query {
+		lowerKey := strings.ToLower(key)
+		if lowerKey != "nonce" && slices.Contains(reservedOAuthParams, lowerKey) {
+			query.Del(key)
+		}
+	}
+
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
