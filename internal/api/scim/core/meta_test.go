@@ -29,13 +29,13 @@ func TestMeta(t *testing.T) {
 		require.Zero(t, meta.LastModified)
 	})
 
-	t.Run("NewMetaFor", func(t *testing.T) {
+	t.Run("For", func(t *testing.T) {
 		resource := exampleUser{
 			id:      uuid.Must(uuid.NewV4()).String(),
 			created: time.Date(2026, 7, 21, 19, 41, 41, 0, time.UTC),
 			updated: time.Date(2026, 7, 22, 8, 12, 3, 0, time.UTC),
 		}
-		meta := NewMetaFor(baseURL, KindUser, resource)
+		meta := NewMeta(baseURL, KindUser).For(resource)
 
 		require.Equal(t, KindUser.Name, meta.ResourceType)
 		require.Equal(t, baseURL+"/Users/"+resource.id, meta.Location)

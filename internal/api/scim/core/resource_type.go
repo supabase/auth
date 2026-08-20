@@ -29,7 +29,7 @@ func NewResourceType(baseURL string, kind Kind, schema *Schema) *ResourceType {
 		Endpoint:    kind.Endpoint,
 		Schema:      schema.ID,
 	}
-	resourceType.Meta = NewMetaFor(baseURL, KindResourceType, resourceType)
+	resourceType.Meta = NewMeta(baseURL, KindResourceType).For(resourceType)
 
 	return resourceType
 }

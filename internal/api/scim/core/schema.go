@@ -18,7 +18,7 @@ func NewSchema(baseURL string, kind Kind) *Schema {
 		ID:      kind.Schema,
 		Name:    kind.Name,
 	}
-	schema.Meta = NewMetaFor(baseURL, KindSchema, schema)
+	schema.Meta = NewMeta(baseURL, KindSchema).For(schema)
 
 	return schema
 }
