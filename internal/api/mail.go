@@ -258,7 +258,8 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if params.Type == "email_change_current" {
 				user.EmailChangeTokenCurrent = hashedToken
 			} else if params.Type == "email_change_new" {
-				user.EmailChangeTokenNew = crypto.GenerateTokenHash(params.NewEmail, otp)
+				hashedToken = crypto.GenerateTokenHash(params.NewEmail, otp)
+				user.EmailChangeTokenNew = hashedToken
 			}
 			terr = tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status")
 			if terr != nil {
@@ -838,7 +839,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			Token:           otp,
 			EmailActionType: params.emailActionType,
 			RedirectTo:      referrerURL,
-			SiteURL:         externalURL.String(),
+			SiteURL:         config.SiteURL,
 			TokenHash:       params.tokenHashWithPrefix,
 		}
 		if params.emailActionType == mail.EmailChangeVerification {
