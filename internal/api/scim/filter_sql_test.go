@@ -130,6 +130,8 @@ func TestCompileUserFilterRejects(t *testing.T) {
 		{"contains on a boolean", `active co "x"`},
 		{"boolean compared to a string", `active eq "x"`},
 		{"string attribute compared to a number", `userName eq 5`},
+		{"substring on id", `id co "abc"`},
+		{"id compared to a non-uuid", `id eq "not-a-uuid"`},
 		{"unparseable timestamp", `meta.created eq "not-a-date"`},
 		{"unknown schema qualified attribute", `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department eq "x"`},
 	}

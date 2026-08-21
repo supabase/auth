@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/uuid"
+
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
 )
@@ -17,6 +19,7 @@ const (
 	filterString filterKind = iota
 	filterBool
 	filterTime
+	filterUUID
 )
 
 // filterAttr is an attribute a User can be filtered on: the column that carries
@@ -44,7 +47,7 @@ var userFilterAttrs = map[string]filterAttr{
 		valueOf: func(u *core.User) (any, bool) { return u.ExternalID, u.ExternalID != "" },
 	},
 	"id": {
-		column: "id", kind: filterString, caseExact: true,
+		column: "id", kind: filterUUID, caseExact: true,
 		valueOf: func(u *core.User) (any, bool) { return u.ID, u.ID != "" },
 	},
 	"active": {
@@ -154,4 +157,20 @@ func timeValue(v protocol.Value) (time.Time, error) {
 		return time.Time{}, protocol.ErrInvalidFilter(strconv.Quote(s) + " is not a valid dateTime")
 	}
 	return at, nil
+}
+
+// uuidValue holds an id filter's value to a UUID, returning it canonicalised so
+// that both stores compare the same text. A value that is not a UUID is
+// ErrInvalidFilter -- the 400 the database would otherwise raise as a 500 when
+// it casts the value to the uuid column.
+func uuidValue(v protocol.Value) (string, error) {
+	s, ok := v.Raw.(string)
+	if !ok {
+		return "", protocol.ErrInvalidFilter("a string value was expected")
+	}
+	id, err := uuid.FromString(s)
+	if err != nil {
+		return "", protocol.ErrInvalidFilter(strconv.Quote(s) + " is not a valid id")
+	}
+	return id.String(), nil
 }

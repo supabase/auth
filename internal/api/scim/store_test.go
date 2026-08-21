@@ -219,6 +219,19 @@ func TestUserStoreCreateRejectsADuplicateUserName(t *testing.T) {
 		"userName is unique without regard to case, and a violation is a 409")
 }
 
+// TestUserStoreListRejectsANonUUIDIdFilter pins the fix for a filter on id: the
+// value is held to a UUID before a query runs, so a non-UUID is a 400 rejected
+// in Go rather than a 500 from casting text to the uuid column.
+func TestUserStoreListRejectsANonUUIDIdFilter(t *testing.T) {
+	repo := seedPostgres(t, nil)
+
+	_, _, err := repo.List(context.Background(), &protocol.SearchRequest{
+		StartIndex: 1, Count: 10, Filter: `id eq "not-a-uuid"`,
+	})
+	require.ErrorIs(t, err, protocol.ErrInvalidFilter(""),
+		"a non-uuid id is a 400 rejected before SQL, not a 500 from the uuid column")
+}
+
 func TestUserStoreRejectsADuplicateUserName(t *testing.T) {
 	db := newTestDB(t)
 	tenant := newTenant(t, db)

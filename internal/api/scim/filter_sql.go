@@ -114,6 +114,8 @@ func scalarArg(attr filterAttr, v protocol.Value) (any, error) {
 		return boolValue(v)
 	case filterTime:
 		return timeValue(v)
+	case filterUUID:
+		return uuidValue(v)
 	default:
 		return stringValue(v)
 	}

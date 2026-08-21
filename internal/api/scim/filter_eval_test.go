@@ -93,6 +93,8 @@ func TestMatchUserFilterRejects(t *testing.T) {
 		{"unsupported ordering operator", `meta.created gt "2026-08-21T12:00:00Z"`},
 		{"contains on a boolean", `active co "x"`},
 		{"boolean compared to a string", `active eq "x"`},
+		{"substring on id", `id co "abc"`},
+		{"id compared to a non-uuid", `id eq "not-a-uuid"`},
 	}
 
 	for _, tc := range cases {

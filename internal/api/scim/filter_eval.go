@@ -114,6 +114,17 @@ func matchAttrExpr(u *core.User, f *protocol.AttrExpr) (bool, error) {
 		got, _ := raw.(time.Time)
 		return matchesEquality(f.Op, got.Equal(want)), nil
 
+	case filterUUID:
+		want, err := uuidValue(f.Value)
+		if err != nil {
+			return false, err
+		}
+		if !present {
+			return false, nil
+		}
+		got, _ := raw.(string)
+		return matchesEquality(f.Op, strings.EqualFold(got, want)), nil
+
 	default:
 		want, err := stringValue(f.Value)
 		if err != nil {

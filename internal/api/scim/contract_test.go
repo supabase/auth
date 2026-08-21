@@ -235,6 +235,8 @@ func storeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Rep
 			`emails[type eq "work"]`,
 			`nickName eq "x"`,
 			`meta.created gt "2026-08-21T12:00:00Z"`,
+			`id co "abc"`,
+			`id eq "not-a-uuid"`,
 		} {
 			t.Run("refuses "+rejected, func(t *testing.T) {
 				_, _, err := repo.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: rejected})
