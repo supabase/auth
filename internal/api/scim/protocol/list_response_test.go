@@ -17,23 +17,29 @@ const emptyListResponse = `{
 
 func TestNewListResponse(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		resources []string
-		expected  string
+		name       string
+		startIndex int
+		total      int
+		resources  []string
+		expected   string
 	}{
 		{
-			name:      "nil resources marshal to an empty array",
-			resources: nil,
-			expected:  emptyListResponse,
+			name:       "nil resources marshal to an empty array",
+			startIndex: 1,
+			resources:  nil,
+			expected:   emptyListResponse,
 		},
 		{
-			name:      "empty resources marshal to an empty array",
-			resources: []string{},
-			expected:  emptyListResponse,
+			name:       "empty resources marshal to an empty array",
+			startIndex: 1,
+			resources:  []string{},
+			expected:   emptyListResponse,
 		},
 		{
-			name:      "populated resources are counted",
-			resources: []string{"a", "b"},
+			name:       "reports the resources on the page as the page size",
+			startIndex: 1,
+			total:      2,
+			resources:  []string{"a", "b"},
 			expected: `{
 				"schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
 				"totalResults": 2,
@@ -42,26 +48,38 @@ func TestNewListResponse(t *testing.T) {
 				"Resources": ["a", "b"]
 			}`,
 		},
+		{
+			name:       "counts every match, not just the resources on the page",
+			startIndex: 3,
+			total:      9,
+			resources:  []string{"c", "d"},
+			expected: `{
+				"schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+				"totalResults": 9,
+				"startIndex": 3,
+				"itemsPerPage": 2,
+				"Resources": ["c", "d"]
+			}`,
+		},
+		{
+			name:       "reports the total of a page the client asked to skip",
+			startIndex: 1,
+			total:      5000,
+			resources:  []string{},
+			expected: `{
+				"schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+				"totalResults": 5000,
+				"startIndex": 1,
+				"itemsPerPage": 0,
+				"Resources": []
+			}`,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			body, err := json.Marshal(NewListResponse(tc.resources))
+			body, err := json.Marshal(NewListResponse(tc.startIndex, tc.total, tc.resources))
+
 			require.NoError(t, err)
 			require.JSONEq(t, tc.expected, string(body))
 		})
 	}
-}
-
-func TestNewPage(t *testing.T) {
-	t.Run("counts every match, not just the resources on the page", func(t *testing.T) {
-		body, err := json.Marshal(NewPage([]string{"c", "d"}, 3, 9))
-
-		require.NoError(t, err)
-		require.JSONEq(t, `{
-			"schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
-			"totalResults": 9,
-			"startIndex": 3,
-			"itemsPerPage": 2,
-			"Resources": ["c", "d"]
-		}`, string(body))
-	})
 }

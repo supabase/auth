@@ -19,6 +19,7 @@ const BasePath = "/scim/v2"
 
 type Server struct {
 	db                    *storage.Connection
+	limits                protocol.Limits
 	users                 UserRepository
 	serviceProviderConfig *core.ServiceProviderConfig
 	resourceTypes         []*core.ResourceType
@@ -30,8 +31,9 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) *Server
 	userSchema := newUserSchema(baseURL)
 
 	return &Server{
-		db:    db,
-		users: NewUserRepository(db),
+		db:     db,
+		limits: protocol.DefaultLimits,
+		users:  NewUserRepository(db),
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
@@ -68,9 +70,9 @@ func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	page, err := protocol.ParsePage(r.URL.Query())
+	query, err := srv.limits.ParseSearchRequest(r.URL.Query())
 	if err != nil {
-		return protocol.WriteError(w, protocol.ErrInvalidValue(err.Error()))
+		return protocol.WriteError(w, err)
 	}
 
 	provider := shared.GetSSOProvider(ctx)
@@ -78,12 +80,12 @@ func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
 		return srv.NotFound(w, r)
 	}
 
-	users, total, err := srv.users.List(ctx, provider.ID.String(), page.Count, page.Offset())
+	users, total, err := srv.users.List(ctx, provider.ID.String(), query)
 	if err != nil {
-		return srv.internalError(w, r, err)
+		return srv.storeError(w, r, err)
 	}
 
-	return protocol.Send(w, http.StatusOK, protocol.NewPage(users, page.StartIndex, total))
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, users))
 }
 
 func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
@@ -119,7 +121,7 @@ func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
 		return err
 	}
 
-	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(resources))
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(resources), resources))
 }
 
 func byID[T core.Resource](srv *Server, w http.ResponseWriter, r *http.Request, resources []T) error {
@@ -151,6 +153,17 @@ func urlParam(r *http.Request, key string) string {
 		return decoded
 	}
 	return value
+}
+
+// storeError answers an error from a repository. A *protocol.Error describes
+// something the client asked for and is reported as it stands; anything else is
+// this server's problem and is not disclosed.
+func (srv *Server) storeError(w http.ResponseWriter, r *http.Request, err error) error {
+	var scimErr *protocol.Error
+	if errors.As(err, &scimErr) {
+		return protocol.WriteError(w, scimErr)
+	}
+	return srv.internalError(w, r, err)
 }
 
 func (srv *Server) internalError(w http.ResponseWriter, r *http.Request, err error) error {
