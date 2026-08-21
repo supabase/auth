@@ -260,6 +260,10 @@ func decodeUser(r *http.Request) (*core.User, error) {
 func readBody(r *http.Request) ([]byte, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return nil, protocol.ErrTooLarge("the request body is too large")
+		}
 		return nil, protocol.ErrInvalidSyntax("could not read the request body")
 	}
 	return body, nil

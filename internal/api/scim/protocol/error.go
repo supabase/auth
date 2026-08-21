@@ -142,6 +142,12 @@ func ErrForbidden(detail string) *Error {
 	return NewError(http.StatusForbidden, "", detail)
 }
 
+// ErrTooLarge reports a request body larger than this provider will accept,
+// the 413 of Table 9, Section 3.12.
+func ErrTooLarge(detail string) *Error {
+	return NewError(http.StatusRequestEntityTooLarge, "", detail)
+}
+
 func ErrNotImplemented(detail string) *Error {
 	return NewError(http.StatusNotImplemented, "", detail)
 }

@@ -35,6 +35,14 @@ func newServerFor(externalURL string) *Server {
 	})
 }
 
+func TestReadBodyRejectsATooLargeBody(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 64)))
+	r.Body = http.MaxBytesReader(httptest.NewRecorder(), r.Body, 8)
+
+	_, err := readBody(r)
+	require.ErrorIs(t, err, protocol.ErrTooLarge(""), "an oversized body is 413, not 400")
+}
+
 func TestServer(t *testing.T) {
 	srv := newServerFor("http://localhost:9999")
 	require.NotNil(t, srv)
