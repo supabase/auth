@@ -11,10 +11,10 @@ import (
 )
 
 // applyUserPatch applies a parsed PatchOp to a User and returns the result,
-// leaving the input untouched. It works on the resource as a document so that an
-// attribute this server does not model can still be patched, then reads the
-// document back through core.User, which canonicalises the attribute names a
-// case-insensitive client may have used.
+// leaving the input untouched. It works on the resource as a document so that a
+// patch may name an attribute in any case, then reads the document back through
+// core.User, which canonicalises those names. Only attributes core.User models
+// survive that round-trip; an attribute this server does not model is dropped.
 //
 // id and meta are the server's to assert (RFC 7643, Section 3.1), so they are
 // restored after the operations run and cannot be moved by a patch.
@@ -33,6 +33,9 @@ func applyUserPatch(current *core.User, patch *protocol.PatchOp) (*core.User, er
 	patched, err := docToUser(doc)
 	if err != nil {
 		return nil, err
+	}
+	if patched.UserName == "" {
+		return nil, protocol.ErrInvalidValue(`"userName" is required`)
 	}
 	patched.ID = current.ID
 	patched.Meta = current.Meta

@@ -232,6 +232,21 @@ func TestUserStoreListRejectsANonUUIDIdFilter(t *testing.T) {
 		"a non-uuid id is a 400 rejected before SQL, not a 500 from the uuid column")
 }
 
+// TestUserStorePatchRejectsRemovingUserName pins the fix for a patch that empties
+// the required userName: it is a 400 caught before the write rather than a 500
+// from the not-null generated column.
+func TestUserStorePatchRejectsRemovingUserName(t *testing.T) {
+	repo := seedPostgres(t, nil)
+	ctx := context.Background()
+
+	created, err := repo.Create(ctx, &core.User{UserName: "bjensen@example.com"})
+	require.NoError(t, err)
+
+	_, err = repo.Patch(ctx, created.ID, patchOf(t, `{"Operations":[{"op":"remove","path":"userName"}]}`))
+	require.ErrorIs(t, err, protocol.ErrInvalidValue(""),
+		"emptying the required userName is a 400, not a 500 from the not-null column")
+}
+
 func TestUserStoreRejectsADuplicateUserName(t *testing.T) {
 	db := newTestDB(t)
 	tenant := newTenant(t, db)

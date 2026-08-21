@@ -1,6 +1,7 @@
 package scim
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -71,6 +72,25 @@ func TestApplyUserPatch(t *testing.T) {
 		]}`))
 		require.NoError(t, err)
 		require.Equal(t, "second", got.UserName)
+	})
+
+	t.Run("rejects a patch that removes userName", func(t *testing.T) {
+		_, err := applyUserPatch(base(), patchOf(t, `{"Operations":[{"op":"remove","path":"userName"}]}`))
+		require.ErrorIs(t, err, protocol.ErrInvalidValue(""), "userName is required and must not be removed")
+	})
+
+	t.Run("rejects a patch that empties userName", func(t *testing.T) {
+		_, err := applyUserPatch(base(), patchOf(t, `{"Operations":[{"op":"replace","path":"userName","value":""}]}`))
+		require.ErrorIs(t, err, protocol.ErrInvalidValue(""), "userName must not be emptied")
+	})
+
+	t.Run("drops an attribute core.User does not model", func(t *testing.T) {
+		got, err := applyUserPatch(base(), patchOf(t, `{"Operations":[{"op":"add","path":"displayName","value":"BJ"}]}`))
+		require.NoError(t, err)
+
+		encoded, err := json.Marshal(got)
+		require.NoError(t, err)
+		require.NotContains(t, string(encoded), "displayName", "an unmodeled attribute is not retained")
 	})
 
 	t.Run("id and meta are the server's and survive a patch", func(t *testing.T) {
