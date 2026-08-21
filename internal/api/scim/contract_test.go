@@ -244,23 +244,126 @@ func storeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Rep
 	})
 }
 
+// seedMemory and seedPostgres are the two implementations every contract runs
+// against, so a guarantee proved once is proved for both.
+func seedMemory(t *testing.T, users []*core.User) Repository[*core.User] {
+	store := NewMemoryUserStore()
+	for _, user := range users {
+		store.Put(tenant, user)
+	}
+	return store.For(tenant)
+}
+
+func seedPostgres(t *testing.T, users []*core.User) Repository[*core.User] {
+	db := newTestDB(t)
+	owner := newTenant(t, db)
+	for _, user := range users {
+		putUser(t, db, owner, user)
+	}
+	return NewUserStore(db, testExternalURL).For(owner)
+}
+
 func TestMemoryStoreContract(t *testing.T) {
-	storeContract(t, func(t *testing.T, users []*core.User) Repository[*core.User] {
-		store := NewMemoryUserStore()
-		for _, user := range users {
-			store.Put(tenant, user)
-		}
-		return store.For(tenant)
-	})
+	storeContract(t, seedMemory)
 }
 
 func TestUserStoreContract(t *testing.T) {
-	storeContract(t, func(t *testing.T, users []*core.User) Repository[*core.User] {
-		db := newTestDB(t)
-		owner := newTenant(t, db)
-		for _, user := range users {
-			putUser(t, db, owner, user)
-		}
-		return NewUserStore(db, testExternalURL).For(owner)
+	storeContract(t, seedPostgres)
+}
+
+func TestMemoryStoreWriteContract(t *testing.T) {
+	writeContract(t, seedMemory)
+}
+
+func TestUserStoreWriteContract(t *testing.T) {
+	writeContract(t, seedPostgres)
+}
+
+// writeContract is the guarantee Repository makes about writes: a resource is
+// readable once created, changes replace or patch what it holds, and a deleted
+// resource is gone. Both stores honour it, so a handler behaves the same over
+// either.
+func writeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Repository[*core.User]) {
+	ctx := context.Background()
+	repo := seed(t, nil)
+
+	user := func(name string) *core.User {
+		return &core.User{Schemas: []core.SchemaURI{core.SchemaUser}, UserName: name}
+	}
+
+	t.Run("Create assigns an id and preserves the attributes", func(t *testing.T) {
+		created, err := repo.Create(ctx, user("alice"))
+		require.NoError(t, err)
+		assert.NotEmpty(t, created.ID)
+		assert.Equal(t, "alice", created.UserName)
+	})
+
+	t.Run("Create then Get reads the resource back", func(t *testing.T) {
+		created, err := repo.Create(ctx, user("bob"))
+		require.NoError(t, err)
+
+		got, err := repo.Get(ctx, created.ID)
+		require.NoError(t, err)
+		assert.Equal(t, created.ID, got.ID)
+		assert.Equal(t, "bob", got.UserName)
+	})
+
+	t.Run("Replace changes attributes and keeps the id", func(t *testing.T) {
+		created, err := repo.Create(ctx, user("carol"))
+		require.NoError(t, err)
+
+		replaced, err := repo.Replace(ctx, created.ID, user("carol-renamed"))
+		require.NoError(t, err)
+		assert.Equal(t, created.ID, replaced.ID)
+		assert.Equal(t, "carol-renamed", replaced.UserName)
+
+		got, err := repo.Get(ctx, created.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "carol-renamed", got.UserName)
+	})
+
+	t.Run("Patch applies its operations", func(t *testing.T) {
+		created, err := repo.Create(ctx, user("dave"))
+		require.NoError(t, err)
+
+		patch, err := protocol.ParsePatchOp([]byte(`{"Operations":[{"op":"replace","value":{"active":false}}]}`))
+		require.NoError(t, err)
+
+		patched, err := repo.Patch(ctx, created.ID, patch)
+		require.NoError(t, err)
+		require.NotNil(t, patched.Active)
+		assert.False(t, *patched.Active)
+
+		got, err := repo.Get(ctx, created.ID)
+		require.NoError(t, err)
+		require.NotNil(t, got.Active)
+		assert.False(t, *got.Active)
+	})
+
+	t.Run("Delete makes a resource unreadable", func(t *testing.T) {
+		created, err := repo.Create(ctx, user("eve"))
+		require.NoError(t, err)
+
+		require.NoError(t, repo.Delete(ctx, created.ID))
+
+		_, err = repo.Get(ctx, created.ID)
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("writing an unknown id is ErrNotFound", func(t *testing.T) {
+		missing := uuid.Must(uuid.NewV4()).String()
+
+		_, err := repo.Get(ctx, missing)
+		require.ErrorIs(t, err, ErrNotFound)
+
+		_, err = repo.Replace(ctx, missing, user("ghost"))
+		require.ErrorIs(t, err, ErrNotFound)
+
+		patch, err := protocol.ParsePatchOp([]byte(`{"Operations":[{"op":"replace","value":{"active":false}}]}`))
+		require.NoError(t, err)
+		_, err = repo.Patch(ctx, missing, patch)
+		require.ErrorIs(t, err, ErrNotFound)
+
+		require.ErrorIs(t, repo.Delete(ctx, missing), ErrNotFound)
 	})
 }

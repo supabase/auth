@@ -207,6 +207,18 @@ func TestUserStore(t *testing.T) {
 
 // TestUserStoreRejectsADuplicateUserName pins the constraint the write path in
 // M4 will rely on to answer 409 uniqueness.
+func TestUserStoreCreateRejectsADuplicateUserName(t *testing.T) {
+	repo := seedPostgres(t, nil)
+	ctx := context.Background()
+
+	_, err := repo.Create(ctx, &core.User{UserName: "BJensen@example.com"})
+	require.NoError(t, err)
+
+	_, err = repo.Create(ctx, &core.User{UserName: "bjensen@example.com"})
+	require.ErrorIs(t, err, protocol.ErrUniqueness(""),
+		"userName is unique without regard to case, and a violation is a 409")
+}
+
 func TestUserStoreRejectsADuplicateUserName(t *testing.T) {
 	db := newTestDB(t)
 	tenant := newTenant(t, db)

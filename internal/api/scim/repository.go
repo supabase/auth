@@ -2,6 +2,7 @@ package scim
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"maps"
 	"slices"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gofrs/uuid"
 
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
@@ -43,6 +46,23 @@ type Repository[T any] interface {
 	// A SortBy the implementation cannot order is a *protocol.Error carrying
 	// "invalidValue".
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
+
+	// Create stores a new resource and returns it as stored, with the identity
+	// and metadata the server assigned. A value that violates a uniqueness
+	// constraint is a *protocol.Error carrying "uniqueness".
+	Create(ctx context.Context, item T) (T, error)
+
+	// Replace overwrites the attributes of the resource with id, keeping its
+	// identity and creation metadata. An unknown id is ErrNotFound.
+	Replace(ctx context.Context, id string, item T) (T, error)
+
+	// Patch applies a PatchOp to the resource with id and returns it. An unknown
+	// id is ErrNotFound.
+	Patch(ctx context.Context, id string, patch *protocol.PatchOp) (T, error)
+
+	// Delete removes the resource with id from every read. An unknown id is
+	// ErrNotFound.
+	Delete(ctx context.Context, id string) error
 }
 
 // Notes for an implementation backed by Postgres, gathered while shaping this
@@ -76,18 +96,64 @@ func NewMemoryUserStore() *MemoryStore[*core.User] {
 			"meta.lastModified": byTime(func(u *core.User) time.Time { return u.Meta.LastModified }),
 		},
 		filterUsers,
+		MemoryWrites[*core.User]{
+			Created: func(u *core.User) *core.User {
+				stored := cloneUser(u)
+				stored.ID = uuid.Must(uuid.NewV4()).String()
+				now := time.Now().UTC()
+				stored.Meta = core.Meta{ResourceType: core.KindUser.Name, Created: now, LastModified: now}
+				return stored
+			},
+			Replaced: func(existing, incoming *core.User) *core.User {
+				stored := cloneUser(incoming)
+				stored.ID = existing.ID
+				stored.Meta = existing.Meta
+				stored.Meta.LastModified = time.Now().UTC()
+				return stored
+			},
+			Patched: func(existing *core.User, patch *protocol.PatchOp) (*core.User, error) {
+				patched, err := applyUserPatch(existing, patch)
+				if err != nil {
+					return nil, err
+				}
+				patched.Meta.LastModified = time.Now().UTC()
+				return patched, nil
+			},
+		},
 	)
+}
+
+// cloneUser is a deep copy through the resource's own JSON, which also
+// canonicalises it, matching how the Postgres store re-marshals a User before
+// storing it.
+func cloneUser(u *core.User) *core.User {
+	clone := new(core.User)
+	if encoded, err := json.Marshal(u); err == nil {
+		_ = json.Unmarshal(encoded, clone)
+	}
+	return clone
 }
 
 // MemoryStore holds every tenant's resources in a map. It serves development
 // and tests, so it orders and windows in memory; a store backed by a database
 // pushes both into the query.
+// MemoryWrites is the resource-specific behaviour a MemoryStore needs to serve
+// writes: how to stamp a new resource with an identity, how to carry that
+// identity forward across a replace, and how to apply a patch. The store owns
+// the map; these own what a resource of type T becomes as it is written.
+type MemoryWrites[T any] struct {
+	Created  func(item T) T
+	Replaced func(existing, incoming T) T
+	Patched  func(existing T, patch *protocol.PatchOp) (T, error)
+}
+
 type MemoryStore[T any] struct {
 	mu       sync.RWMutex
 	byTenant map[string]map[string]T
 	idOf     func(T) string
 	sorts    map[string]func(a, b T) int
 	filter   func(items []T, filter protocol.Filter) ([]T, error)
+	writes   MemoryWrites[T]
 }
 
 // NewMemoryStore builds a store that identifies a resource with idOf, orders one
@@ -99,6 +165,7 @@ func NewMemoryStore[T any](
 	idOf func(T) string,
 	sorts map[string]func(a, b T) int,
 	filter func(items []T, filter protocol.Filter) ([]T, error),
+	writes MemoryWrites[T],
 ) *MemoryStore[T] {
 	folded := make(map[string]func(a, b T) int, len(sorts))
 	for name, sort := range sorts {
@@ -110,6 +177,7 @@ func NewMemoryStore[T any](
 		idOf:     idOf,
 		sorts:    folded,
 		filter:   filter,
+		writes:   writes,
 	}
 }
 
@@ -221,6 +289,57 @@ func (r *memoryRepository[T]) List(ctx context.Context, query *protocol.SearchRe
 	}
 
 	return items[offset:min(offset+query.Count, total)], total, nil
+}
+
+func (r *memoryRepository[T]) Create(ctx context.Context, item T) (T, error) {
+	stored := r.store.writes.Created(item)
+	r.store.Put(r.tenant, stored)
+	return stored, nil
+}
+
+func (r *memoryRepository[T]) Replace(ctx context.Context, id string, item T) (T, error) {
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+
+	existing, ok := r.store.byTenant[r.tenant][id]
+	if !ok {
+		var zero T
+		return zero, ErrNotFound
+	}
+
+	stored := r.store.writes.Replaced(existing, item)
+	r.store.byTenant[r.tenant][id] = stored
+	return stored, nil
+}
+
+func (r *memoryRepository[T]) Patch(ctx context.Context, id string, patch *protocol.PatchOp) (T, error) {
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+
+	existing, ok := r.store.byTenant[r.tenant][id]
+	if !ok {
+		var zero T
+		return zero, ErrNotFound
+	}
+
+	patched, err := r.store.writes.Patched(existing, patch)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	r.store.byTenant[r.tenant][id] = patched
+	return patched, nil
+}
+
+func (r *memoryRepository[T]) Delete(ctx context.Context, id string) error {
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+
+	if _, ok := r.store.byTenant[r.tenant][id]; !ok {
+		return ErrNotFound
+	}
+	delete(r.store.byTenant[r.tenant], id)
+	return nil
 }
 
 func byText[T any](text func(T) string) func(a, b T) int {

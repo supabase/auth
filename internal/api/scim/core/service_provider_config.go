@@ -83,6 +83,13 @@ func (c *ServiceProviderConfig) Filtering(maxResults int) *ServiceProviderConfig
 	return c
 }
 
+// Patching states that this provider honours the PATCH request of RFC 7644,
+// Section 3.5.2.
+func (c *ServiceProviderConfig) Patching() *ServiceProviderConfig {
+	c.Patch.Supported = true
+	return c
+}
+
 func NewServiceProviderConfig(baseURL string, schemes ...*AuthenticationScheme) *ServiceProviderConfig {
 	if schemes == nil {
 		schemes = []*AuthenticationScheme{}

@@ -1,7 +1,9 @@
 package scim
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -35,6 +37,7 @@ type Server struct {
 	limits                protocol.Limits
 	users                 Store[*core.User]
 	tenants               Tenants
+	usersURL              string
 	serviceProviderConfig *core.ServiceProviderConfig
 	resourceTypes         []*core.ResourceType
 	schemas               []*core.Schema
@@ -50,13 +53,14 @@ func NewServer(cfg Config) *Server {
 	}
 
 	return &Server{
-		limits:  limits,
-		users:   cfg.Users,
-		tenants: cfg.Tenants,
+		limits:   limits,
+		users:    cfg.Users,
+		tenants:  cfg.Tenants,
+		usersURL: core.KindUser.Location(baseURL),
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
-		).Sorting().Filtering(limits.MaxCount),
+		).Sorting().Filtering(limits.MaxCount).Patching(),
 		resourceTypes: []*core.ResourceType{core.NewResourceType(baseURL, core.KindUser, userSchema)},
 		schemas:       []*core.Schema{userSchema},
 	}
@@ -125,6 +129,140 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return protocol.Send(w, http.StatusOK, user)
+}
+
+func (srv *Server) CreateUser(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	users, ok := srv.tenantUsers(r)
+	if !ok {
+		return srv.NotFound(w, r)
+	}
+
+	user, err := decodeUser(r)
+	if err != nil {
+		return protocol.WriteError(w, err)
+	}
+	if user.UserName == "" {
+		return protocol.WriteError(w, protocol.ErrInvalidValue(`"userName" is required`))
+	}
+
+	created, err := users.Create(ctx, user)
+	if err != nil {
+		return srv.storeError(w, r, err)
+	}
+
+	w.Header().Set("Location", core.Join(srv.usersURL, created.ID))
+	return protocol.Send(w, http.StatusCreated, created)
+}
+
+func (srv *Server) ReplaceUser(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	id, err := uuid.FromString(urlParam(r, "id"))
+	if err != nil {
+		return srv.NotFound(w, r)
+	}
+
+	users, ok := srv.tenantUsers(r)
+	if !ok {
+		return srv.NotFound(w, r)
+	}
+
+	user, err := decodeUser(r)
+	if err != nil {
+		return protocol.WriteError(w, err)
+	}
+	if user.UserName == "" {
+		return protocol.WriteError(w, protocol.ErrInvalidValue(`"userName" is required`))
+	}
+
+	replaced, err := users.Replace(ctx, id.String(), user)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return srv.NotFound(w, r)
+		}
+		return srv.storeError(w, r, err)
+	}
+	return protocol.Send(w, http.StatusOK, replaced)
+}
+
+func (srv *Server) PatchUser(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	id, err := uuid.FromString(urlParam(r, "id"))
+	if err != nil {
+		return srv.NotFound(w, r)
+	}
+
+	users, ok := srv.tenantUsers(r)
+	if !ok {
+		return srv.NotFound(w, r)
+	}
+
+	body, err := readBody(r)
+	if err != nil {
+		return protocol.WriteError(w, err)
+	}
+	patch, err := protocol.ParsePatchOp(body)
+	if err != nil {
+		return protocol.WriteError(w, err)
+	}
+
+	patched, err := users.Patch(ctx, id.String(), patch)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return srv.NotFound(w, r)
+		}
+		return srv.storeError(w, r, err)
+	}
+	return protocol.Send(w, http.StatusOK, patched)
+}
+
+func (srv *Server) DeleteUser(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	id, err := uuid.FromString(urlParam(r, "id"))
+	if err != nil {
+		return srv.NotFound(w, r)
+	}
+
+	users, ok := srv.tenantUsers(r)
+	if !ok {
+		return srv.NotFound(w, r)
+	}
+
+	if err := users.Delete(ctx, id.String()); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return srv.NotFound(w, r)
+		}
+		return srv.storeError(w, r, err)
+	}
+	return protocol.Send(w, http.StatusNoContent, nil)
+}
+
+// decodeUser reads the request body as a User. A body that is not a User is
+// ErrInvalidSyntax; the store, not this decoder, is where a well-formed but
+// unacceptable User is caught.
+func decodeUser(r *http.Request) (*core.User, error) {
+	body, err := readBody(r)
+	if err != nil {
+		return nil, err
+	}
+
+	user := new(core.User)
+	if err := json.Unmarshal(body, user); err != nil {
+		return nil, protocol.ErrInvalidSyntax("request body is not a valid User")
+	}
+	return user, nil
+}
+
+func readBody(r *http.Request) ([]byte, error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, protocol.ErrInvalidSyntax("could not read the request body")
+	}
+	return body, nil
 }
 
 // tenantUsers is the requesting tenant's collection of Users. Every handler

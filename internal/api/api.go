@@ -467,7 +467,11 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 			users := r.WithBypass(api.scim.Tenant)
 			users.Get("/Users", api.scim.Users)
+			users.Post("/Users", api.scim.CreateUser)
 			users.Get("/Users/{id}", api.scim.UserByID)
+			users.Put("/Users/{id}", api.scim.ReplaceUser)
+			users.Patch("/Users/{id}", api.scim.PatchUser)
+			users.Delete("/Users/{id}", api.scim.DeleteUser)
 		})
 	})
 

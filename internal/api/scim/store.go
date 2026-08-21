@@ -3,11 +3,15 @@ package scim
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
 
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
@@ -130,6 +134,104 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 		users = append(users, user)
 	}
 	return users, total, nil
+}
+
+func (r *userRepository) Create(ctx context.Context, user *core.User) (*core.User, error) {
+	document, err := userDocument(user)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows []scimUserRow
+	if err := r.store.db.WithContext(ctx).RawQuery(
+		"INSERT INTO "+scimUsersTable+" (sso_provider_id, resource) VALUES (?, ?)"+
+			" RETURNING "+scimUserColumns,
+		r.tenant, document,
+	).All(&rows); err != nil {
+		return nil, r.writeError("creating", err)
+	}
+	return r.store.user(rows[0])
+}
+
+func (r *userRepository) Replace(ctx context.Context, id string, user *core.User) (*core.User, error) {
+	document, err := userDocument(user)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows []scimUserRow
+	if err := r.store.db.WithContext(ctx).RawQuery(
+		"UPDATE "+scimUsersTable+" SET resource = ?, updated_at = now()"+scimUserWhere+
+			" AND id = ? RETURNING "+scimUserColumns,
+		document, r.tenant, id,
+	).All(&rows); err != nil {
+		return nil, r.writeError("replacing", err)
+	}
+	if len(rows) == 0 {
+		return nil, ErrNotFound
+	}
+	return r.store.user(rows[0])
+}
+
+// Patch reads the resource, applies the operations, and writes it back. It is
+// two statements rather than one because SCIM patch semantics live in the
+// resource document, not in SQL; a single provisioner serialises its own writes,
+// so the read and the write do not race in practice.
+func (r *userRepository) Patch(ctx context.Context, id string, patch *protocol.PatchOp) (*core.User, error) {
+	current, err := r.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	patched, err := applyUserPatch(current, patch)
+	if err != nil {
+		return nil, err
+	}
+	return r.Replace(ctx, id, patched)
+}
+
+// Delete is a soft delete: the row stays, its deleted_at is set, and every read
+// filters it out through scimUserWhere. That is what a SCIM DELETE and Okta's
+// deactivate both want, and it lets a userName be reused once its holder is
+// gone.
+func (r *userRepository) Delete(ctx context.Context, id string) error {
+	var ids []string
+	if err := r.store.db.WithContext(ctx).RawQuery(
+		"UPDATE "+scimUsersTable+" SET deleted_at = now()"+scimUserWhere+" AND id = ? RETURNING id",
+		r.tenant, id,
+	).All(&ids); err != nil {
+		return fmt.Errorf("scim: deleting user: %w", err)
+	}
+	if len(ids) == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// userDocument is the resource as it is stored: the client-supplied attributes
+// only. id and meta are the server's, kept in real columns and reconstructed on
+// read, so they are cleared from the document rather than trusted from it.
+func userDocument(user *core.User) ([]byte, error) {
+	stored := *user
+	stored.ID = ""
+	stored.Meta = core.Meta{}
+
+	document, err := json.Marshal(&stored)
+	if err != nil {
+		return nil, fmt.Errorf("scim: encoding user: %w", err)
+	}
+	return document, nil
+}
+
+// writeError maps a unique violation on user_name to the 409 of RFC 7644,
+// Section 3.3; anything else is this server's problem to log, not the client's
+// to read.
+func (r *userRepository) writeError(action string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		return protocol.ErrUniqueness("a User with this userName already exists")
+	}
+	return fmt.Errorf("scim: %s user: %w", action, err)
 }
 
 // where is the predicate and parameters a List runs under: the tenant scope
