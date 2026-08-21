@@ -122,6 +122,9 @@ vet: # Vet the code
 check-go-version: ## Verify the pinned Go version matches across go.mod, Dockerfiles, and submodules.
 	./hack/check-go-version.sh
 
+scim-goldens: ## Regenerate the SCIM golden files from the RFC text. Pass --check to compare without writing.
+	./hack/extract-scim-goldens.py $(ARGS)
+
 .NOTPARALLEL: $(TOOL_TARGETS)
 $(TOOL_TARGETS):
 	$(MAKE) -C tools

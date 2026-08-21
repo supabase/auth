@@ -64,13 +64,13 @@ func (srv *Server) SchemaByID(w http.ResponseWriter, r *http.Request) error {
 func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	if rejected, err := rejectFilter(w, r, http.StatusBadRequest, protocol.ScimTypeInvalidFilter); rejected {
+	if rejected, err := rejectFilter(w, r, protocol.ErrInvalidFilter(filterUnsupported)); rejected {
 		return err
 	}
 
 	page, err := protocol.ParsePage(r.URL.Query())
 	if err != nil {
-		return protocol.SendError(w, http.StatusBadRequest, protocol.ScimTypeInvalidValue, err.Error())
+		return protocol.WriteError(w, protocol.ErrInvalidValue(err.Error()))
 	}
 
 	provider := shared.GetSSOProvider(ctx)
@@ -111,12 +111,12 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
-	return protocol.SendError(w, http.StatusNotFound, "", "Endpoint or resource does not exist")
+	return protocol.WriteError(w, protocol.ErrNotFound("Endpoint or resource does not exist"))
 }
 
 func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
-	if r.URL.Query().Has("filter") {
-		return protocol.SendError(w, http.StatusForbidden, "", "Filtering is not supported on this endpoint")
+	if rejected, err := rejectFilter(w, r, protocol.ErrForbidden(filterUnsupported)); rejected {
+		return err
 	}
 
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(resources))
@@ -155,12 +155,16 @@ func urlParam(r *http.Request, key string) string {
 
 func (srv *Server) internalError(w http.ResponseWriter, r *http.Request, err error) error {
 	observability.LogEntrySetField(r, "error", err.Error())
-	return protocol.SendError(w, http.StatusInternalServerError, "", "Internal server error")
+	return protocol.WriteError(w, protocol.ErrInternal("Internal server error"))
 }
 
-func rejectFilter(w http.ResponseWriter, r *http.Request, status int, scimType protocol.ScimType) (bool, error) {
+// filterUnsupported is the detail this server gives for a filter it will not
+// honour. The status differs by endpoint, so the caller supplies the error.
+const filterUnsupported = "Filtering is not supported on this endpoint"
+
+func rejectFilter(w http.ResponseWriter, r *http.Request, unsupported *protocol.Error) (bool, error) {
 	if !r.URL.Query().Has("filter") {
 		return false, nil
 	}
-	return true, protocol.SendError(w, status, scimType, "Filtering is not supported on this endpoint")
+	return true, protocol.WriteError(w, unsupported)
 }
