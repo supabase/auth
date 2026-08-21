@@ -246,7 +246,17 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		if isUsingTokenHash(params) {
 			user, terr = a.verifyTokenHash(tx, params)
 		} else {
-			user, terr = a.verifyUserAndToken(tx, params, aud)
+			var sessionUser *models.User
+			if params.Type == phoneChangeVerification {
+				// phone_change has no unique constraint, so a lookup by phone
+				// can match an abandoned pending change from another user.
+				// Prefer the authenticated session user when their pending
+				// change matches the phone being verified.
+				if authCtx, aerr := a.requireAuthentication(w, r); aerr == nil {
+					sessionUser = getUser(authCtx)
+				}
+			}
+			user, terr = a.verifyUserAndToken(tx, params, aud, sessionUser)
 		}
 		if terr != nil {
 			return terr
@@ -696,7 +706,7 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 }
 
 // verifyUserAndToken verifies the token associated to the user based on the verify type
-func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams, aud string, sessionUser *models.User) (*models.User, error) {
 	config := a.config
 
 	var user *models.User
@@ -705,7 +715,11 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 	switch params.Type {
 	case phoneChangeVerification:
-		user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
+		if sessionUser != nil && sessionUser.PhoneChange == params.Phone {
+			user = sessionUser
+		} else {
+			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
+		}
 	case smsVerification:
 		user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
 	case mail.EmailChangeVerification:
