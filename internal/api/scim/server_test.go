@@ -125,18 +125,6 @@ func TestServer(t *testing.T) {
 		require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
 	})
 
-	t.Run("Users rejects a filter it cannot honour", func(t *testing.T) {
-		filter := url.Values{"filter": {`userName eq "user@example.com"`}}.Encode()
-		r := httptest.NewRequest(http.MethodGet, BasePath+"/Users?"+filter, nil)
-		w := httptest.NewRecorder()
-
-		require.NoError(t, srv.Users(w, r))
-
-		require.Equal(t, http.StatusBadRequest, w.Code)
-		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-		require.JSONEq(t, testFixture(t, "filter_invalid.json"), w.Body.String())
-	})
-
 	t.Run("Users rejects pagination parameters that are not integers", func(t *testing.T) {
 		for _, query := range []string{"startIndex=first", "count=all"} {
 			t.Run(query, func(t *testing.T) {
@@ -270,6 +258,54 @@ func TestServerUsers(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
 	})
+
+	t.Run("returns only the Users a filter matches", func(t *testing.T) {
+		_, get := usersFor(t, "alice", "bob", "carol")
+
+		body := listedUsers(t, get(filterQuery(`userName eq "bob"`)))
+
+		assert.Equal(t, 1, body.TotalResults)
+		assert.Equal(t, []string{"bob"}, userNamesOf(body.Resources))
+	})
+
+	t.Run("counts only the matches a filter selects, not the whole tenant", func(t *testing.T) {
+		_, get := usersFor(t, "ann", "abe", "bob")
+
+		body := listedUsers(t, get(filterQuery(`userName sw "a"`)))
+
+		assert.Equal(t, 2, body.TotalResults)
+	})
+
+	t.Run("matches userName without regard to case", func(t *testing.T) {
+		_, get := usersFor(t, "BJensen")
+
+		body := listedUsers(t, get(filterQuery(`userName eq "bjensen"`)))
+
+		assert.Equal(t, 1, body.TotalResults)
+	})
+
+	t.Run("refuses a filter it cannot serve", func(t *testing.T) {
+		_, get := usersFor(t, "a")
+
+		w := get(filterQuery(`emails[type eq "work"]`))
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidFilter))
+	})
+
+	t.Run("refuses a malformed filter", func(t *testing.T) {
+		_, get := usersFor(t, "a")
+
+		w := get(filterQuery(`userName eq`))
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidFilter))
+	})
+}
+
+func filterQuery(filter string) string {
+	return url.Values{"filter": {filter}}.Encode()
 }
 
 func userNamesOf(users []*core.User) []string {

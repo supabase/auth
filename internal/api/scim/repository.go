@@ -75,6 +75,7 @@ func NewMemoryUserStore() *MemoryStore[*core.User] {
 			"meta.created":      byTime(func(u *core.User) time.Time { return u.Meta.Created }),
 			"meta.lastModified": byTime(func(u *core.User) time.Time { return u.Meta.LastModified }),
 		},
+		filterUsers,
 	)
 }
 
@@ -86,13 +87,19 @@ type MemoryStore[T any] struct {
 	byTenant map[string]map[string]T
 	idOf     func(T) string
 	sorts    map[string]func(a, b T) int
+	filter   func(items []T, filter protocol.Filter) ([]T, error)
 }
 
-// NewMemoryStore builds a store that identifies a resource with idOf and can
-// order one by each attribute named in sorts. An attribute absent from sorts is
-// one this store will refuse to sort by. Attribute names are matched without
-// regard to case, as RFC 7643, Section 2.1 requires.
-func NewMemoryStore[T any](idOf func(T) string, sorts map[string]func(a, b T) int) *MemoryStore[T] {
+// NewMemoryStore builds a store that identifies a resource with idOf, orders one
+// by each attribute named in sorts, and narrows a collection to a parsed filter
+// with filter. An attribute absent from sorts is one this store refuses to sort
+// by; a filter this store cannot serve is filter's to reject. Attribute names
+// are matched without regard to case, as RFC 7643, Section 2.1 requires.
+func NewMemoryStore[T any](
+	idOf func(T) string,
+	sorts map[string]func(a, b T) int,
+	filter func(items []T, filter protocol.Filter) ([]T, error),
+) *MemoryStore[T] {
 	folded := make(map[string]func(a, b T) int, len(sorts))
 	for name, sort := range sorts {
 		folded[strings.ToLower(name)] = sort
@@ -102,6 +109,7 @@ func NewMemoryStore[T any](idOf func(T) string, sorts map[string]func(a, b T) in
 		byTenant: make(map[string]map[string]T),
 		idOf:     idOf,
 		sorts:    folded,
+		filter:   filter,
 	}
 }
 
@@ -176,10 +184,25 @@ func (r *memoryRepository[T]) List(ctx context.Context, query *protocol.SearchRe
 		return nil, 0, err
 	}
 
+	filter, err := parseFilterQuery(query)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	r.store.mu.RLock()
 	defer r.store.mu.RUnlock()
 
 	items := slices.Collect(maps.Values(r.store.byTenant[r.tenant]))
+
+	if filter != nil {
+		items, err = r.store.filter(items, filter)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+
+	// total counts the resources the filter matched, not the tenant's whole
+	// collection, because that is what a page is a window over.
 	total := len(items)
 
 	// A count of none is answered with the total alone. Here that only saves

@@ -56,7 +56,7 @@ func NewServer(cfg Config) *Server {
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
-		).Sorting(),
+		).Sorting().Filtering(limits.MaxCount),
 		resourceTypes: []*core.ResourceType{core.NewResourceType(baseURL, core.KindUser, userSchema)},
 		schemas:       []*core.Schema{userSchema},
 	}
@@ -84,10 +84,6 @@ func (srv *Server) SchemaByID(w http.ResponseWriter, r *http.Request) error {
 
 func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-
-	if rejected, err := rejectFilter(w, r, protocol.ErrInvalidFilter(filterUnsupported)); rejected {
-		return err
-	}
 
 	query, err := srv.limits.ParseSearchRequest(r.URL.Query())
 	if err != nil {

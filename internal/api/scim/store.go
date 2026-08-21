@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -89,12 +90,17 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 		return nil, 0, err
 	}
 
+	where, args, err := r.where(query)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	db := r.store.db.WithContext(ctx)
 
 	var total int
 	if err := db.RawQuery(
-		"SELECT COUNT(*) FROM "+scimUsersTable+scimUserWhere,
-		r.tenant,
+		"SELECT COUNT(*) FROM "+scimUsersTable+where,
+		args...,
 	).First(&total); err != nil {
 		return nil, 0, fmt.Errorf("scim: counting users: %w", err)
 	}
@@ -105,11 +111,12 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 		return nil, total, nil
 	}
 
+	page := append(slices.Clone(args), query.Count, query.Offset())
 	var rows []scimUserRow
 	if err := db.RawQuery(
-		"SELECT "+scimUserColumns+" FROM "+scimUsersTable+scimUserWhere+
+		"SELECT "+scimUserColumns+" FROM "+scimUsersTable+where+
 			" ORDER BY "+orderBy+" LIMIT ? OFFSET ?",
-		r.tenant, query.Count, query.Offset(),
+		page...,
 	).All(&rows); err != nil {
 		return nil, 0, fmt.Errorf("scim: listing users: %w", err)
 	}
@@ -123,6 +130,30 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 		users = append(users, user)
 	}
 	return users, total, nil
+}
+
+// where is the predicate and parameters a List runs under: the tenant scope
+// scimUserWhere always carries, and the compiled filter when the query names
+// one. The COUNT and the windowed SELECT run under the same where, so they
+// count and return the same rows.
+func (r *userRepository) where(query *protocol.SearchRequest) (string, []any, error) {
+	where := scimUserWhere
+	args := []any{r.tenant}
+
+	filter, err := parseFilterQuery(query)
+	if err != nil {
+		return "", nil, err
+	}
+	if filter != nil {
+		fragment, fargs, err := compileUserFilter(filter)
+		if err != nil {
+			return "", nil, err
+		}
+		where += " AND (" + fragment + ")"
+		args = append(args, fargs...)
+	}
+
+	return where, args, nil
 }
 
 // userOrderBy is the total order the query asks for. Every sort breaks its ties

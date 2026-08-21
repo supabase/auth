@@ -72,6 +72,17 @@ func (c *ServiceProviderConfig) Sorting() *ServiceProviderConfig {
 	return c
 }
 
+// Filtering states that this provider honours the "filter" parameter of RFC
+// 7644, Section 3.4.2.2, and the largest number of results a filter may return,
+// which is this provider's page bound. A provider may still refuse a particular
+// filter, answering "invalidFilter"; what it claims here is that filtering is
+// meaningful.
+func (c *ServiceProviderConfig) Filtering(maxResults int) *ServiceProviderConfig {
+	c.Filter.Supported = true
+	c.Filter.MaxResults = maxResults
+	return c
+}
+
 func NewServiceProviderConfig(baseURL string, schemes ...*AuthenticationScheme) *ServiceProviderConfig {
 	if schemes == nil {
 		schemes = []*AuthenticationScheme{}

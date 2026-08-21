@@ -181,6 +181,67 @@ func storeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Rep
 		require.ErrorIs(t, err, protocol.ErrInvalidValue(""))
 		assert.Contains(t, err.Error(), "nickName")
 	})
+
+	// Filtering runs against both stores for the same reason ordering does: a
+	// filter the SQL store compiles and the memory store evaluates must select
+	// the same resources, or a client filtering one gets a different answer than
+	// a client filtering the other.
+	t.Run("filters", func(t *testing.T) {
+		matched := func(t *testing.T, filter string) []string {
+			t.Helper()
+			users, total, err := repo.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: filter})
+			require.NoError(t, err)
+			require.Equal(t, total, len(users), "the whole match set should fit one page")
+			return userNamesOf(users)
+		}
+
+		t.Run("userName eq selects one, folding case", func(t *testing.T) {
+			assert.ElementsMatch(t, []string{"alice@example.com"}, matched(t, `userName eq "ALICE@example.com"`))
+		})
+
+		t.Run("userName co selects every substring match", func(t *testing.T) {
+			assert.ElementsMatch(t,
+				[]string{"carol1@example.com", "carol-1@example.com"},
+				matched(t, `userName co "carol"`))
+		})
+
+		t.Run("userName pr selects every resource", func(t *testing.T) {
+			assert.Len(t, matched(t, `userName pr`), count)
+		})
+
+		t.Run("active eq true selects every resource, an absent active being true", func(t *testing.T) {
+			assert.Len(t, matched(t, `active eq true`), count)
+		})
+
+		t.Run("active eq false selects none", func(t *testing.T) {
+			assert.Empty(t, matched(t, `active eq false`))
+		})
+
+		t.Run("meta.created eq selects every resource sharing the instant", func(t *testing.T) {
+			assert.Len(t, matched(t, `meta.created eq "2026-08-21T12:00:00Z"`), count)
+		})
+
+		t.Run("not negates a match", func(t *testing.T) {
+			assert.Len(t, matched(t, `not (userName eq "alice@example.com")`), count-1)
+		})
+
+		t.Run("and requires both", func(t *testing.T) {
+			assert.ElementsMatch(t,
+				[]string{"alice@example.com"},
+				matched(t, `userName sw "alice" and userName ew "example.com"`))
+		})
+
+		for _, rejected := range []string{
+			`emails[type eq "work"]`,
+			`nickName eq "x"`,
+			`meta.created gt "2026-08-21T12:00:00Z"`,
+		} {
+			t.Run("refuses "+rejected, func(t *testing.T) {
+				_, _, err := repo.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: rejected})
+				require.ErrorIs(t, err, protocol.ErrInvalidFilter(""))
+			})
+		}
+	})
 }
 
 func TestMemoryStoreContract(t *testing.T) {
