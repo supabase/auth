@@ -15,13 +15,13 @@ import (
 
 const tenant = "8a2f1c34-0000-0000-0000-000000000000"
 
-// seedUsers fills a repository with users that deliberately share a userName
+// seedUsers fills a store with users that deliberately share a userName
 // and a created timestamp, so that a sort which forgets its tiebreaker has
 // something to get wrong.
-func seedUsers(t *testing.T, count int) *MemoryRepository[*core.User] {
+func seedUsers(t *testing.T, count int) *MemoryStore[*core.User] {
 	t.Helper()
 
-	repo := NewUserRepository(nil)
+	repo := NewMemoryUserStore()
 	created := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 
 	for i := range count {
@@ -34,15 +34,15 @@ func seedUsers(t *testing.T, count int) *MemoryRepository[*core.User] {
 	return repo
 }
 
-func page(t *testing.T, repo *MemoryRepository[*core.User], query *protocol.SearchRequest) ([]*core.User, int) {
+func page(t *testing.T, repo *MemoryStore[*core.User], query *protocol.SearchRequest) ([]*core.User, int) {
 	t.Helper()
 
-	users, total, err := repo.List(context.Background(), tenant, query)
+	users, total, err := repo.For(tenant).List(context.Background(), query)
 	require.NoError(t, err)
 	return users, total
 }
 
-func TestMemoryRepositoryList(t *testing.T) {
+func TestMemoryStoreList(t *testing.T) {
 	t.Run("reports the total without a page when no resources are wanted", func(t *testing.T) {
 		users, total := page(t, seedUsers(t, 7), &protocol.SearchRequest{StartIndex: 1, Count: 0})
 
@@ -65,7 +65,7 @@ func TestMemoryRepositoryList(t *testing.T) {
 	})
 
 	t.Run("refuses to sort by an attribute it cannot order", func(t *testing.T) {
-		_, _, err := seedUsers(t, 3).List(context.Background(), tenant, &protocol.SearchRequest{
+		_, _, err := seedUsers(t, 3).For(tenant).List(context.Background(), &protocol.SearchRequest{
 			StartIndex: 1, Count: 10, SortBy: "nickName",
 		})
 
@@ -74,7 +74,7 @@ func TestMemoryRepositoryList(t *testing.T) {
 	})
 
 	t.Run("names attributes case insensitively, per RFC 7643 Section 2.1", func(t *testing.T) {
-		_, _, err := seedUsers(t, 3).List(context.Background(), tenant, &protocol.SearchRequest{
+		_, _, err := seedUsers(t, 3).For(tenant).List(context.Background(), &protocol.SearchRequest{
 			StartIndex: 1, Count: 10, SortBy: "USERname",
 		})
 
@@ -92,11 +92,11 @@ func TestMemoryRepositoryList(t *testing.T) {
 	})
 }
 
-// TestMemoryRepositoryPagesTotally is the guarantee the Repository interface
+// TestMemoryStorePagesTotally is the guarantee the Repository interface
 // makes: startIndex and count are a window over a total order. Paging at every
 // window size must reproduce the whole collection exactly once, because a
 // window over a partial order silently skips and repeats rows between pages.
-func TestMemoryRepositoryPagesTotally(t *testing.T) {
+func TestMemoryStorePagesTotally(t *testing.T) {
 	const count = 12
 
 	for _, sortBy := range []string{"", "id", "userName", "meta.created", "meta.lastModified"} {

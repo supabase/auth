@@ -16,9 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
-	"github.com/supabase/auth/internal/api/shared"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
 )
 
 //go:embed testdata/*
@@ -31,9 +28,10 @@ func testFixture(t *testing.T, file string) string {
 }
 
 func newServerFor(externalURL string) *Server {
-	return NewServer(&conf.GlobalConfiguration{
-		API: conf.APIConfiguration{ExternalURL: externalURL},
-	}, nil)
+	return NewServer(Config{
+		ExternalURL: externalURL,
+		Users:       NewMemoryUserStore(),
+	})
 }
 
 func TestServer(t *testing.T) {
@@ -191,17 +189,16 @@ func usersFor(t *testing.T, userNames ...string) (*Server, func(query string) *h
 	t.Helper()
 
 	srv := newServerFor("http://localhost:9999")
-	repo, ok := srv.users.(*MemoryRepository[*core.User])
+	store, ok := srv.users.(*MemoryStore[*core.User])
 	require.True(t, ok)
 
-	provider := &models.SSOProvider{ID: uuid.Must(uuid.NewV4())}
 	for i, userName := range userNames {
-		repo.Put(provider.ID.String(), &core.User{ID: strconv.Itoa(i), UserName: userName})
+		store.Put(tenant, &core.User{ID: strconv.Itoa(i), UserName: userName})
 	}
 
 	return srv, func(query string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodGet, BasePath+"/Users?"+query, nil)
-		r = r.WithContext(shared.WithSSOProvider(r.Context(), provider))
+		r = r.WithContext(withTenant(r.Context(), tenant))
 
 		w := httptest.NewRecorder()
 		require.NoError(t, srv.Users(w, r))

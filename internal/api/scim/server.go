@@ -9,31 +9,50 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
-	"github.com/supabase/auth/internal/api/shared"
-	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
 )
 
 const BasePath = "/scim/v2"
 
+// Config is what a SCIM server needs from the application hosting it. It holds
+// collaborators rather than a database connection so that only the stores
+// themselves can reach one.
+type Config struct {
+	// ExternalURL is the origin this server is reached at. BasePath is this
+	// package's business to append.
+	ExternalURL string
+
+	// Limits bound pagination. A zero value means protocol.DefaultLimits:
+	// Section 3.4.2.4 leaves the maximum to the provider, and a maximum of
+	// none would serve nothing.
+	Limits protocol.Limits
+
+	Users   Store[*core.User]
+	Tenants Tenants
+}
+
 type Server struct {
-	db                    *storage.Connection
 	limits                protocol.Limits
-	users                 UserRepository
+	users                 Store[*core.User]
+	tenants               Tenants
 	serviceProviderConfig *core.ServiceProviderConfig
 	resourceTypes         []*core.ResourceType
 	schemas               []*core.Schema
 }
 
-func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) *Server {
-	baseURL := core.Join(config.API.ExternalURL, BasePath)
+func NewServer(cfg Config) *Server {
+	baseURL := core.Join(cfg.ExternalURL, BasePath)
 	userSchema := newUserSchema(baseURL)
 
+	limits := cfg.Limits
+	if limits == (protocol.Limits{}) {
+		limits = protocol.DefaultLimits
+	}
+
 	return &Server{
-		db:     db,
-		limits: protocol.DefaultLimits,
-		users:  NewUserRepository(db),
+		limits:  limits,
+		users:   cfg.Users,
+		tenants: cfg.Tenants,
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
@@ -75,17 +94,17 @@ func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
 		return protocol.WriteError(w, err)
 	}
 
-	provider := shared.GetSSOProvider(ctx)
-	if provider == nil {
+	users, ok := srv.tenantUsers(r)
+	if !ok {
 		return srv.NotFound(w, r)
 	}
 
-	users, total, err := srv.users.List(ctx, provider.ID.String(), query)
+	items, total, err := users.List(ctx, query)
 	if err != nil {
 		return srv.storeError(w, r, err)
 	}
 
-	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, users))
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, items))
 }
 
 func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
@@ -96,12 +115,12 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 		return srv.NotFound(w, r)
 	}
 
-	provider := shared.GetSSOProvider(ctx)
-	if provider == nil {
+	users, ok := srv.tenantUsers(r)
+	if !ok {
 		return srv.NotFound(w, r)
 	}
 
-	user, err := srv.users.Get(ctx, provider.ID.String(), id.String())
+	user, err := users.Get(ctx, id.String())
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return srv.NotFound(w, r)
@@ -110,6 +129,17 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return protocol.Send(w, http.StatusOK, user)
+}
+
+// tenantUsers is the requesting tenant's collection of Users. Every handler
+// scopes through here, so the tenant is named once for a request rather than
+// once for each query it makes.
+func (srv *Server) tenantUsers(r *http.Request) (Repository[*core.User], bool) {
+	tenant, ok := tenantFrom(r.Context())
+	if !ok {
+		return nil, false
+	}
+	return srv.users.For(tenant), true
 }
 
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
