@@ -140,8 +140,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 	api.scim = scim.NewServer(scim.Config{
 		ExternalURL: globalConfig.API.ExternalURL,
-		Users:       scim.NewMemoryUserStore(),
-		Tenants:     scim.NewProviderTenants(db),
+		Users:       scim.NewUserStore(db, globalConfig.API.ExternalURL),
+		Tenants:     scim.NewTokenTenants(db),
 	})
 
 	if api.config.Password.HIBP.Enabled {
@@ -465,8 +465,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Get("/Schemas", api.scim.Schemas)
 			r.Get("/Schemas/{id}", api.scim.SchemaByID)
 
-			// TEMPORARY: Use admin token and x-scim-provider-id header until SCIM tokens land
-			users := r.With(api.requireAdminCredentials).WithBypass(api.scim.Tenant)
+			users := r.WithBypass(api.scim.Tenant)
 			users.Get("/Users", api.scim.Users)
 			users.Get("/Users/{id}", api.scim.UserByID)
 		})

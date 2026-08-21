@@ -56,7 +56,7 @@ func NewServer(cfg Config) *Server {
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
-		),
+		).Sorting(),
 		resourceTypes: []*core.ResourceType{core.NewResourceType(baseURL, core.KindUser, userSchema)},
 		schemas:       []*core.Schema{userSchema},
 	}
@@ -165,14 +165,56 @@ func byID[T core.Resource](srv *Server, w http.ResponseWriter, r *http.Request, 
 	return srv.NotFound(w, r)
 }
 
+// newUserSchema declares the attributes this server actually serves, which is
+// what /Schemas is for. It is deliberately a subset of RFC 7643, Section 8.7.1:
+// declaring an attribute core.User drops would be as misleading as omitting one
+// it carries.
+//
+// id, externalId and meta are absent because they are common attributes of
+// Section 3.1 rather than attributes of this schema -- the RFC's own User schema
+// does not list them either.
 func newUserSchema(baseURL string) *core.Schema {
 	return core.
 		NewSchema(baseURL, core.KindUser).
 		Describe("User Account").
 		With(
-			core.NewAttribute("userName", core.TypeString, "Unique identifier for the User.").
+			core.NewAttribute("userName", core.TypeString,
+				"Unique identifier for the User, typically used by the user to directly "+
+					"authenticate to the service provider. Each User MUST include a non-empty "+
+					"userName value. This identifier MUST be unique across the service "+
+					"provider's entire set of Users. REQUIRED.").
 				AsRequired().
 				UniqueOn(core.UniquenessServer),
+
+			core.NewAttribute("name", core.TypeComplex,
+				"The components of the user's real name.").
+				With(
+					core.NewAttribute("formatted", core.TypeString,
+						"The full name, including all middle names, titles, and suffixes as "+
+							"appropriate, formatted for display."),
+					core.NewAttribute("familyName", core.TypeString,
+						"The family name of the User, or last name in most Western languages."),
+					core.NewAttribute("givenName", core.TypeString,
+						"The given name of the User, or first name in most Western languages."),
+					core.NewAttribute("middleName", core.TypeString,
+						"The middle name(s) of the User."),
+				),
+
+			core.NewAttribute("emails", core.TypeComplex,
+				"Email addresses for the user. The value SHOULD be canonicalized by the "+
+					"service provider, e.g., 'bjensen@example.com' instead of "+
+					"'bjensen@EXAMPLE.COM'.").
+				AsMultiValued().
+				With(
+					core.NewAttribute("value", core.TypeString, "An email address for the user."),
+					core.NewAttribute("primary", core.TypeBoolean,
+						"A Boolean value indicating the 'primary' or preferred attribute value "+
+							"for this attribute. The primary attribute value 'true' MUST appear "+
+							"no more than once."),
+				),
+
+			core.NewAttribute("active", core.TypeBoolean,
+				"A Boolean value indicating the User's administrative status."),
 		)
 }
 

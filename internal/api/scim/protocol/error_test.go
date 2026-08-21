@@ -113,6 +113,7 @@ func TestErrorConstructors(t *testing.T) {
 		{"ErrMutability", ErrMutability(""), http.StatusBadRequest, ScimTypeMutability, "Section 3.5.2"},
 		{"ErrUniqueness", ErrUniqueness(""), http.StatusConflict, ScimTypeUniqueness, "Section 3.3"},
 		{"ErrSensitive", ErrSensitive(""), http.StatusForbidden, ScimTypeSensitive, "Section 7.5.2"},
+		{"ErrUnauthorized", ErrUnauthorized(""), http.StatusUnauthorized, "", "Section 3.12, Table 8"},
 		{"ErrNotFound", ErrNotFound(""), http.StatusNotFound, "", "Section 3.12, Table 8"},
 		{"ErrForbidden", ErrForbidden(""), http.StatusForbidden, "", "Section 3.12, Table 8"},
 		{"ErrNotImplemented", ErrNotImplemented(""), http.StatusNotImplemented, "", "Section 3.12, Table 8"},

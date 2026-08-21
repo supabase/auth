@@ -33,6 +33,12 @@ create index if not exists scim_users_external_id_idx
 
 -- The sort indexes carry id as the last column because a SCIM window is only
 -- correct over a total order, so every sort breaks its ties on id.
+--
+-- user_name is ordered by lower(...) collate "C" so that the order does not
+-- depend on the collation this database happens to have been created with. A
+-- paginated API has to answer the same way on every deployment, and "C" is also
+-- exactly what Go's strings.Compare of a lowercased string does, which is how
+-- the in-memory store used by tests orders it.
 /* auth_migration: 20260821000000 */
 create index if not exists scim_users_id_idx
     on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, id)
@@ -40,7 +46,7 @@ create index if not exists scim_users_id_idx
 
 /* auth_migration: 20260821000000 */
 create index if not exists scim_users_user_name_idx
-    on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, lower(user_name), id)
+    on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, lower(user_name) collate "C", id)
     where deleted_at is null;
 
 /* auth_migration: 20260821000000 */

@@ -63,6 +63,15 @@ type ServiceProviderConfig struct {
 	Meta                  Meta                    `json:"meta"`
 }
 
+// Sorting states that this provider honours the "sortBy" and "sortOrder"
+// parameters of RFC 7644, Section 3.4.2.3. A provider may still refuse to order
+// by a particular attribute, answering "invalidValue"; what it claims here is
+// that asking is meaningful.
+func (c *ServiceProviderConfig) Sorting() *ServiceProviderConfig {
+	c.Sort.Supported = true
+	return c
+}
+
 func NewServiceProviderConfig(baseURL string, schemes ...*AuthenticationScheme) *ServiceProviderConfig {
 	if schemes == nil {
 		schemes = []*AuthenticationScheme{}

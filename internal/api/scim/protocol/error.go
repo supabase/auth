@@ -131,6 +131,13 @@ func ErrNotFound(detail string) *Error {
 	return NewError(http.StatusNotFound, "", detail)
 }
 
+// ErrUnauthorized is the 401 of Section 3.12: the authorization header is
+// missing or does not name a caller. A responder should also send
+// WWW-Authenticate, per RFC 6750, Section 3.
+func ErrUnauthorized(detail string) *Error {
+	return NewError(http.StatusUnauthorized, "", detail)
+}
+
 func ErrForbidden(detail string) *Error {
 	return NewError(http.StatusForbidden, "", detail)
 }
