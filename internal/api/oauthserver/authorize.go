@@ -487,7 +487,7 @@ func (s *Server) validatePKCEParams(codeChallengeMethod, codeChallenge string) e
 		return errors.New("code_challenge_method must be 'S256' or 'plain'")
 	}
 
-	// Validate code challenge format and length (per OAuth2 spec)
+	// Validate code challenge format and length
 	if len(codeChallenge) < 43 || len(codeChallenge) > 128 {
 		return errors.New("code_challenge must be between 43 and 128 characters")
 	}
@@ -495,7 +495,7 @@ func (s *Server) validatePKCEParams(codeChallengeMethod, codeChallenge string) e
 	return nil
 }
 
-// validateResourceParam validates the resource parameter per RFC 8707
+// validateResourceParam validates the requested resource parameter per RFC 8707
 func (s *Server) validateResourceParam(resource string) error {
 	// Resource parameter is optional
 	if resource == "" {
@@ -550,12 +550,55 @@ func (s *Server) validateScopes(scopeString string) error {
 func (s *Server) isValidRedirectURI(client *models.OAuthServerClient, redirectURI string) bool {
 	registeredURIs := client.GetRedirectURIs()
 	for _, registeredURI := range registeredURIs {
-		// exact string matching per OAuth2 spec
-		if registeredURI == redirectURI {
+		// Exact string matching is required except for loopback redirect URIs,
+		// where RFC 8252 permits the client to choose an ephemeral port.
+		if registeredURI == redirectURI || isValidLoopbackRedirectURI(registeredURI, redirectURI) {
 			return true
 		}
 	}
 	return false
+}
+
+// isValidLoopbackRedirectURI applies the RFC 8252 Section 7.3 exception:
+// for HTTP redirects on a loopback host, only the port may differ from the
+// registered URI. Scheme, host, user info, path, query, and fragment remain
+// exact so that the exception cannot be used to broaden the redirect target.
+func isValidLoopbackRedirectURI(registeredURI, redirectURI string) bool {
+	registered, err := url.Parse(registeredURI)
+	if err != nil {
+		return false
+	}
+	requested, err := url.Parse(redirectURI)
+	if err != nil {
+		return false
+	}
+
+	if registered.Scheme != "http" || requested.Scheme != "http" {
+		return false
+	}
+	if !isLoopbackHost(registered.Hostname()) || !isLoopbackHost(requested.Hostname()) {
+		return false
+	}
+	if !strings.EqualFold(registered.Hostname(), requested.Hostname()) {
+		return false
+	}
+	if (registered.User == nil) != (requested.User == nil) {
+		return false
+	}
+	if registered.User != nil && registered.User.String() != requested.User.String() {
+		return false
+	}
+
+	return registered.Opaque == requested.Opaque &&
+		registered.EscapedPath() == requested.EscapedPath() &&
+		registered.ForceQuery == requested.ForceQuery &&
+		registered.RawQuery == requested.RawQuery &&
+		registered.Fragment == requested.Fragment &&
+		registered.RawFragment == requested.RawFragment
+}
+
+func isLoopbackHost(host string) bool {
+	return strings.EqualFold(host, "localhost") || host == "127.0.0.1" || host == "::1"
 }
 
 func (s *Server) consentCoversScopes(consent *models.OAuthServerConsent, requestedScope string) bool {
