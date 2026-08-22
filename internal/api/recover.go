@@ -74,6 +74,8 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		if httpErr, ok := err.(*apierrors.HTTPError); ok && httpErr.ErrorCode == apierrors.ErrorCodeEmailAddressInvalid {
 			return sendJSON(w, http.StatusOK, map[string]string{})
 		}
+        // Return all other errors (rate limits 429, DB transaction errors 500, etc.)
+    	return err
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]string{})
