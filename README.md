@@ -466,6 +466,12 @@ The URI a OAuth2 provider will redirect to with the `code` and `state` values.
 
 The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` and `keycloak`. For `gitlab` it defaults to `https://gitlab.com`. For `keycloak` you need to set this to your instance, for example: `https://keycloak.example.com/realms/myrealm`
 
+#### Network hardening
+
+Configuring an external authentication provider causes Auth to make outbound HTTP requests to that provider's authorization, token, and userinfo endpoints. Configuring a provider either via `GOTRUE_EXTERNAL_*` settings or an admin API is an administrative action, and doing so implies trust in the hosts and URLs that will be contacted.
+
+The network Auth runs in should be hardened so these outbound connections cannot reach internal-only resources you don't want exposed, such as `localhost`/loopback addresses or cloud metadata endpoints (e.g. `169.254.169.254`). This matters most for providers with admin-configurable or discoverable endpoints (e.g. custom OAuth/OIDC providers), where a misconfigured or malicious URL could otherwise be used to reach internal infrastructure.
+
 #### Apple OAuth
 
 To try out external authentication with Apple locally, you will need to do the following:

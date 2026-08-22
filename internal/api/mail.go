@@ -107,7 +107,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			Email:    params.Email,
 			Password: params.Password,
 			Data:     params.Data,
-			Provider: "email",
+			Provider: EmailProvider,
 			Aud:      aud,
 		}
 
@@ -127,7 +127,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		signupParams := &SignupParams{
 			Email:    params.Email,
 			Data:     params.Data,
-			Provider: "email",
+			Provider: EmailProvider,
 			Aud:      aud,
 		}
 
@@ -171,7 +171,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return terr
 				}
-				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				identity, terr := a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Email:   user.GetEmail(),
 				}))
@@ -217,7 +217,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return terr
 				}
-				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				identity, terr := a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Email:   user.GetEmail(),
 				}))
@@ -654,10 +654,11 @@ func (a *API) sendIdentityLinkedNotification(r *http.Request, tx *storage.Connec
 	return nil
 }
 
-func (a *API) sendIdentityUnlinkedNotification(r *http.Request, tx *storage.Connection, u *models.User, provider string) error {
+func (a *API) sendIdentityUnlinkedNotification(r *http.Request, tx *storage.Connection, u *models.User, provider, recipientEmail string) error {
 	err := a.sendEmail(r, tx, u, sendEmailParams{
 		emailActionType: mail.IdentityUnlinkedNotification,
 		provider:        provider,
+		recipientEmail:  recipientEmail,
 	})
 	if err != nil {
 		if errors.Is(err, EmailRateLimitExceeded) {
@@ -754,6 +755,7 @@ type sendEmailParams struct {
 	oldPhone            string
 	provider            string
 	factorType          string
+	recipientEmail      string
 }
 
 func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, params sendEmailParams) error {
@@ -762,10 +764,14 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	referrerURL := utilities.GetReferrer(r, config)
 	externalURL := getExternalHost(ctx)
 	otp := params.otp
+	recipientEmail := params.recipientEmail
+	if recipientEmail == "" {
+		recipientEmail = u.GetEmail()
+	}
 
 	if params.emailActionType != mail.EmailChangeVerification {
-		if u.GetEmail() != "" && !a.checkEmailAddressAuthorization(u.GetEmail()) {
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.GetEmail())
+		if recipientEmail != "" && !a.checkEmailAddressAuthorization(recipientEmail) {
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", recipientEmail)
 		}
 	} else {
 		// first check that the user can update their address to the
@@ -855,6 +861,9 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		case mail.PhoneChangedNotification:
 			emailData.OldPhone = params.oldPhone
 		case mail.IdentityLinkedNotification, mail.IdentityUnlinkedNotification:
+			// TODO(fm): propagate recipientEmail in the hook payload;
+			// consumers currently deliver identity_unlinked to user.email, which
+			// may be a different (promoted) address after unlinking.
 			emailData.Provider = params.provider
 		case mail.MFAFactorEnrolledNotification, mail.MFAFactorUnenrolledNotification:
 			emailData.FactorType = params.factorType
@@ -897,7 +906,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	case mail.IdentityLinkedNotification:
 		err = mr.IdentityLinkedNotificationMail(r, u, params.provider)
 	case mail.IdentityUnlinkedNotification:
-		err = mr.IdentityUnlinkedNotificationMail(r, u, params.provider)
+		err = mr.IdentityUnlinkedNotificationMail(r, u, params.provider, recipientEmail)
 	case mail.MFAFactorEnrolledNotification:
 		err = mr.MFAFactorEnrolledNotificationMail(r, u, params.factorType)
 	case mail.MFAFactorUnenrolledNotification:
@@ -915,7 +924,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		return apierrors.NewBadRequestError(
 			apierrors.ErrorCodeEmailAddressInvalid,
 			"Email address %q is invalid",
-			u.GetEmail())
+			recipientEmail)
 	case err != nil:
 		emailErrorsCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("type", params.emailActionType)))
 		return err
