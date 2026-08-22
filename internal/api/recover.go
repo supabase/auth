@@ -69,7 +69,11 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		return a.sendPasswordRecovery(r, tx, user, flowType)
 	})
 	if err != nil {
-		return err
+		// Prevent account enumeration: if sending password recovery fails because the email address
+		// is invalid or rejected by the mailer, return HTTP 200 OK to match the non-existent user path.
+		if httpErr, ok := err.(*apierrors.HTTPError); ok && httpErr.ErrorCode == apierrors.ErrorCodeEmailAddressInvalid {
+			return sendJSON(w, http.StatusOK, map[string]string{})
+		}
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]string{})
