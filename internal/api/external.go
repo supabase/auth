@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -70,8 +71,16 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
 	query.Del("provider")
-	query.Del("code_challenge")
-	query.Del("code_challenge_method")
+	// Strip OAuth params the auth server controls so a client cannot
+	// override redirect_uri, state, code_challenge, etc. by passing them
+	// lowercase query keys for the comparison, URL.Query keeps casing
+	for key := range query {
+		lowerKey := strings.ToLower(key)
+		if lowerKey != "nonce" && slices.Contains(reservedOAuthParams, lowerKey) {
+			query.Del(key)
+		}
+	}
+
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
@@ -145,7 +154,7 @@ func (a *API) handleOAuthCallback(r *http.Request) (*OAuthProviderData, error) {
 	var oAuthResponseData *OAuthProviderData
 	var err error
 	switch providerType {
-	case "twitter":
+	case TwitterProvider:
 		// future OAuth1.0 providers will use this method
 		oAuthResponseData, err = a.oAuth1Callback(ctx, providerType)
 	default:
@@ -322,6 +331,14 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return 0, nil, terr
 		}
 
+		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityLinkAction, utilities.GetIPAddress(r), map[string]any{
+			"identity_id": identity.ID,
+			"provider":    identity.Provider,
+			"provider_id": identity.ProviderID,
+		}); terr != nil {
+			return 0, nil, terr
+		}
+
 	case models.CreateAccount:
 		if config.DisableSignup {
 			return 0, nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSignupDisabled, "Signups not allowed for this instance")
@@ -389,7 +406,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return 0, nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
-	hasEmails := providerType != "web3" && !(emailOptional && decision.CandidateEmail.Email == "")
+	hasEmails := providerType != Web3Provider && !(emailOptional && decision.CandidateEmail.Email == "")
 
 	if hasEmails && !user.IsConfirmed() {
 		// The user may have other unconfirmed email + password
@@ -602,79 +619,79 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	}
 
 	switch name {
-	case "apple":
+	case AppleProvider:
 		pConfig = config.External.Apple
 		p, err = provider.NewAppleProvider(ctx, pConfig, a.oidcCache)
-	case "azure":
+	case AzureProvider:
 		pConfig = config.External.Azure
 		p, err = provider.NewAzureProvider(pConfig, scopes, a.oidcCache)
-	case "bitbucket":
+	case BitbucketProvider:
 		pConfig = config.External.Bitbucket
 		p, err = provider.NewBitbucketProvider(pConfig)
-	case "discord":
+	case DiscordProvider:
 		pConfig = config.External.Discord
 		p, err = provider.NewDiscordProvider(pConfig, scopes)
-	case "facebook":
+	case FacebookProvider:
 		pConfig = config.External.Facebook
 		p, err = provider.NewFacebookProvider(pConfig, scopes)
-	case "figma":
+	case FigmaProvider:
 		pConfig = config.External.Figma
 		p, err = provider.NewFigmaProvider(pConfig, scopes)
-	case "fly":
+	case FlyProvider:
 		pConfig = config.External.Fly
 		p, err = provider.NewFlyProvider(pConfig, scopes)
-	case "github":
+	case GitHubProvider:
 		pConfig = config.External.Github
 		p, err = provider.NewGithubProvider(pConfig, scopes)
-	case "gitlab":
+	case GitLabProvider:
 		pConfig = config.External.Gitlab
 		p, err = provider.NewGitlabProvider(pConfig, scopes)
-	case "google":
+	case GoogleProvider:
 		pConfig = config.External.Google
 		p, err = provider.NewGoogleProvider(ctx, pConfig, scopes, a.oidcCache)
-	case "kakao":
+	case KakaoProvider:
 		pConfig = config.External.Kakao
 		p, err = provider.NewKakaoProvider(pConfig, scopes)
-	case "keycloak":
+	case KeycloakProvider:
 		pConfig = config.External.Keycloak
 		p, err = provider.NewKeycloakProvider(pConfig, scopes)
-	case "linkedin":
+	case LinkedInProvider:
 		pConfig = config.External.Linkedin
 		p, err = provider.NewLinkedinProvider(pConfig, scopes)
-	case "linkedin_oidc":
+	case LinkedInOIDCProvider:
 		pConfig = config.External.LinkedinOIDC
 		p, err = provider.NewLinkedinOIDCProvider(ctx, pConfig, scopes, a.oidcCache)
-	case "notion":
+	case NotionProvider:
 		pConfig = config.External.Notion
 		p, err = provider.NewNotionProvider(pConfig)
-	case "snapchat":
+	case SnapchatProvider:
 		pConfig = config.External.Snapchat
 		p, err = provider.NewSnapchatProvider(pConfig, scopes)
-	case "spotify":
+	case SpotifyProvider:
 		pConfig = config.External.Spotify
 		p, err = provider.NewSpotifyProvider(pConfig, scopes)
-	case "slack":
+	case SlackProvider:
 		pConfig = config.External.Slack
 		p, err = provider.NewSlackProvider(pConfig, scopes)
-	case "slack_oidc":
+	case SlackOIDCProvider:
 		pConfig = config.External.SlackOIDC
 		p, err = provider.NewSlackOIDCProvider(pConfig, scopes)
-	case "twitch":
+	case TwitchProvider:
 		pConfig = config.External.Twitch
 		p, err = provider.NewTwitchProvider(pConfig, scopes)
-	case "twitter":
+	case TwitterProvider:
 		pConfig = config.External.Twitter
 		p, err = provider.NewTwitterProvider(pConfig, scopes)
-	case "x":
+	case XProvider:
 		pConfig = config.External.X
 		p, err = provider.NewXProvider(pConfig, scopes)
-	case "vercel_marketplace":
+	case VercelMarketplaceProvider:
 		pConfig = config.External.VercelMarketplace
 		p, err = provider.NewVercelMarketplaceProvider(ctx, pConfig, scopes, a.oidcCache)
-	case "workos":
+	case WorkOSProvider:
 		pConfig = config.External.WorkOS
 		p, err = provider.NewWorkOSProvider(pConfig)
-	case "zoom":
+	case ZoomProvider:
 		pConfig = config.External.Zoom
 		p, err = provider.NewZoomProvider(pConfig)
 	default:

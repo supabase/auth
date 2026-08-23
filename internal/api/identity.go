@@ -12,6 +12,7 @@ import (
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
@@ -52,8 +53,9 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	provider := identityToBeDeleted.Provider
+	recipientEmail := user.GetEmail()
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, utilities.GetIPAddress(r), map[string]any{
 			"identity_id": identityToBeDeleted.ID,
 			"provider":    identityToBeDeleted.Provider,
 			"provider_id": identityToBeDeleted.ProviderID,
@@ -65,7 +67,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		switch identityToBeDeleted.Provider {
-		case "phone":
+		case PhoneProvider:
 			user.PhoneConfirmedAt = nil
 			if terr := user.SetPhone(tx, ""); terr != nil {
 				return apierrors.NewInternalServerError("Database error updating user phone").WithInternalError(terr)
@@ -79,7 +81,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 				return apierrors.NewInternalServerError("Database error updating user phone metadata").WithInternalError(terr)
 			}
 		default:
-			if terr := user.UpdateUserEmailFromIdentities(tx); terr != nil {
+			if terr := user.UpdateUserEmailFromIdentities(tx, config.Mailer.Autoconfirm); terr != nil {
 				if models.IsUniqueConstraintViolatedError(terr) {
 					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailConflictIdentityNotDeletable, "Unable to unlink identity due to email conflict").WithInternalError(terr)
 				}
@@ -95,9 +97,11 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// Send identity unlinked notification email if enabled and user has an email
-	if config.Mailer.Notifications.IdentityUnlinkedEnabled && user.GetEmail() != "" {
-		if err := a.sendIdentityUnlinkedNotification(r, db, user, provider); err != nil {
+	// Send the identity unlinked notification to the email address that was on
+	// the user before unlinking. Removing an identity may promote another
+	// identity's email onto the user record.
+	if config.Mailer.Notifications.IdentityUnlinkedEnabled && recipientEmail != "" {
+		if err := a.sendIdentityUnlinkedNotification(r, db, user, provider, recipientEmail); err != nil {
 			// Log the error but don't fail the unlinking
 			logrus.WithError(err).Warn("Unable to send identity unlinked notification email")
 		}
@@ -131,12 +135,12 @@ func (a *API) ensureEmailIdentityForPassword(tx *storage.Connection, user *model
 		return apierrors.NewInternalServerError("Database error finding identities").WithInternalError(terr)
 	}
 	for _, identity := range identities {
-		if identity.Provider == "email" {
+		if identity.Provider == EmailProvider {
 			return nil
 		}
 	}
 
-	identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+	identity, terr := a.createNewIdentity(tx, user, EmailProvider, structs.Map(provider.Claims{
 		Subject:       user.ID.String(),
 		Email:         email,
 		EmailVerified: true,
@@ -185,12 +189,20 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 		}
 		return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked to another user")
 	}
-	if _, terr := a.createNewIdentity(tx, targetUser, providerType, structs.Map(userData.Metadata)); terr != nil {
+	identity, terr = a.createNewIdentity(tx, targetUser, providerType, structs.Map(userData.Metadata))
+	if terr != nil {
 		return nil, terr
+	}
+	if terr := models.NewAuditLogEntry(a.config.AuditLog, r, tx, targetUser, models.IdentityLinkAction, utilities.GetIPAddress(r), map[string]any{
+		"identity_id": identity.ID,
+		"provider":    identity.Provider,
+		"provider_id": identity.ProviderID,
+	}); terr != nil {
+		return nil, apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
 	}
 
 	if targetUser.GetEmail() == "" {
-		if terr := targetUser.UpdateUserEmailFromIdentities(tx); terr != nil {
+		if terr := targetUser.UpdateUserEmailFromIdentities(tx, a.config.Mailer.Autoconfirm); terr != nil {
 			if models.IsUniqueConstraintViolatedError(terr) {
 				return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
