@@ -404,6 +404,26 @@ func TestValidate(t *testing.T) {
 				Secret:   "abc",
 			},
 		},
+		{
+			val: &CaptchaConfiguration{
+				Enabled:  true,
+				Provider: "fcaptcha",
+				Secret:   "abc",
+			},
+			err: "fcaptcha provider URL must be an HTTP(S) base URL",
+		},
+		{
+			val: &CaptchaConfiguration{
+				Enabled:     true,
+				Provider:    "fcaptcha",
+				Secret:      "abc",
+				ProviderURL: "https://captcha.example.com/",
+			},
+			check: func(t *testing.T, v any) {
+				cfg := v.(*CaptchaConfiguration)
+				require.Equal(t, "https://captcha.example.com", cfg.ProviderURL)
+			},
+		},
 
 		{
 			val: &DatabaseEncryptionConfiguration{Encrypt: false},

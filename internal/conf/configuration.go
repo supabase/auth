@@ -792,10 +792,11 @@ type VonageProviderConfiguration struct {
 }
 
 type CaptchaConfiguration struct {
-	Enabled  bool          `json:"enabled" default:"false"`
-	Provider string        `json:"provider" default:"hcaptcha"`
-	Secret   string        `json:"provider_secret"`
-	Timeout  time.Duration `json:"timeout" split_words:"true" default:"10s"`
+	Enabled     bool          `json:"enabled" default:"false"`
+	Provider    string        `json:"provider" default:"hcaptcha"`
+	Secret      string        `json:"provider_secret"`
+	ProviderURL string        `json:"provider_url" split_words:"true"`
+	Timeout     time.Duration `json:"timeout" split_words:"true" default:"10s"`
 }
 
 func (c *CaptchaConfiguration) Validate() error {
@@ -803,7 +804,7 @@ func (c *CaptchaConfiguration) Validate() error {
 		return nil
 	}
 
-	if c.Provider != "hcaptcha" && c.Provider != "turnstile" {
+	if c.Provider != "hcaptcha" && c.Provider != "turnstile" && c.Provider != "fcaptcha" {
 		return fmt.Errorf("unsupported captcha provider: %s", c.Provider)
 	}
 
@@ -811,6 +812,15 @@ func (c *CaptchaConfiguration) Validate() error {
 
 	if c.Secret == "" {
 		return errors.New("captcha provider secret is empty")
+	}
+
+	if c.Provider == "fcaptcha" {
+		u, err := url.Parse(c.ProviderURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
+			u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return errors.New("fcaptcha provider URL must be an HTTP(S) base URL")
+		}
+		c.ProviderURL = strings.TrimRight(c.ProviderURL, "/")
 	}
 
 	return nil
