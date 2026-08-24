@@ -91,50 +91,34 @@ func matchAttrExpr(u *core.User, f *protocol.AttrExpr) (bool, error) {
 	// The value is coerced before presence is consulted, so a mistyped compValue
 	// is ErrInvalidFilter even against an absent attribute -- as it is in SQL,
 	// where compilation fails before a row is ever read.
+	want, err := coerceValue(attr, f.Value)
+	if err != nil {
+		return false, err
+	}
+	if !present {
+		return false, nil
+	}
+
 	switch attr.kind {
 	case filterBool:
-		want, err := boolValue(f.Value)
-		if err != nil {
-			return false, err
-		}
-		if !present {
-			return false, nil
-		}
 		got, _ := raw.(bool)
-		return matchesEquality(f.Op, got == want), nil
+		w, _ := want.(bool)
+		return matchesEquality(f.Op, got == w), nil
 
 	case filterTime:
-		want, err := timeValue(f.Value)
-		if err != nil {
-			return false, err
-		}
-		if !present {
-			return false, nil
-		}
 		got, _ := raw.(time.Time)
-		return matchesEquality(f.Op, got.Equal(want)), nil
+		w, _ := want.(time.Time)
+		return matchesEquality(f.Op, got.Equal(w)), nil
 
 	case filterUUID:
-		want, err := uuidValue(f.Value)
-		if err != nil {
-			return false, err
-		}
-		if !present {
-			return false, nil
-		}
 		got, _ := raw.(string)
-		return matchesEquality(f.Op, strings.EqualFold(got, want)), nil
+		w, _ := want.(string)
+		return matchesEquality(f.Op, strings.EqualFold(got, w)), nil
 
 	default:
-		want, err := stringValue(f.Value)
-		if err != nil {
-			return false, err
-		}
-		if !present {
-			return false, nil
-		}
 		got, _ := raw.(string)
-		return compareString(f.Op, got, want, attr.caseExact), nil
+		w, _ := want.(string)
+		return compareString(f.Op, got, w, attr.caseExact), nil
 	}
 }
 

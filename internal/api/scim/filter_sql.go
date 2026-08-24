@@ -73,7 +73,7 @@ func compileAttrExpr(f *protocol.AttrExpr, args *[]any) (string, error) {
 
 	switch f.Op {
 	case protocol.OpEqual, protocol.OpNotEqual:
-		arg, err := scalarArg(attr, f.Value)
+		arg, err := coerceValue(attr, f.Value)
 		if err != nil {
 			return "", err
 		}
@@ -106,19 +106,6 @@ func foldedOperands(attr filterAttr) (lhs, rhs string) {
 		return "lower(" + attr.column + ")", "lower(?)"
 	}
 	return attr.column, "?"
-}
-
-func scalarArg(attr filterAttr, v protocol.Value) (any, error) {
-	switch attr.kind {
-	case filterBool:
-		return boolValue(v)
-	case filterTime:
-		return timeValue(v)
-	case filterUUID:
-		return uuidValue(v)
-	default:
-		return stringValue(v)
-	}
 }
 
 // likePattern is the LIKE pattern a substring operator compares against, with

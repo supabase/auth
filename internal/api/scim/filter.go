@@ -89,24 +89,24 @@ func resolveUserFilterAttr(path protocol.AttrPath) (filterAttr, error) {
 		return filterAttr{}, unfilterable(path)
 	}
 
-	key := strings.ToLower(path.Name)
-	if path.Sub != "" {
-		key += "." + strings.ToLower(path.Sub)
-	}
-
-	attr, ok := userFilterAttrs[key]
+	attr, ok := userFilterAttrs[strings.ToLower(nameSub(path))]
 	if !ok {
 		return filterAttr{}, unfilterable(path)
 	}
 	return attr, nil
 }
 
-func unfilterable(path protocol.AttrPath) error {
-	name := path.Name
-	if path.Sub != "" {
-		name += "." + path.Sub
+// nameSub is the attrPath's attribute name with its sub-attribute joined on,
+// without the schema URI -- the text a filter names a column by.
+func nameSub(path protocol.AttrPath) string {
+	if path.Sub == "" {
+		return path.Name
 	}
-	return protocol.ErrInvalidFilter(strconv.Quote(name) + " is not an attribute this server can filter on")
+	return path.Name + "." + path.Sub
+}
+
+func unfilterable(path protocol.AttrPath) error {
+	return protocol.ErrInvalidFilter(strconv.Quote(nameSub(path)) + " is not an attribute this server can filter on")
 }
 
 // checkOp reports whether attr may be compared with op. Presence and equality
@@ -127,30 +127,46 @@ func checkOp(attr filterAttr, op protocol.CompareOp) error {
 	}
 }
 
-// The value extractors below hold a filter's value to the type its attribute
-// compares as, so that a mistyped compValue is ErrInvalidFilter rather than a
-// query the database rejects.
+// coerceValue holds a comparison's value to the type attr compares as. Both
+// stores coerce through this one switch, so the registry alone decides how a
+// filterKind reads its compValue -- a mistyped compValue is ErrInvalidFilter
+// rather than a query the database rejects.
+func coerceValue(attr filterAttr, v protocol.Value) (any, error) {
+	switch attr.kind {
+	case filterBool:
+		return boolValue(v)
+	case filterTime:
+		return timeValue(v)
+	case filterUUID:
+		return uuidValue(v)
+	default:
+		return stringValue(v)
+	}
+}
+
+// rawAs holds a filter's value to the type its attribute compares as, or
+// ErrInvalidFilter when the decoded compValue is the wrong JSON type.
+func rawAs[T any](v protocol.Value, expected string) (T, error) {
+	t, ok := v.Raw.(T)
+	if !ok {
+		var zero T
+		return zero, protocol.ErrInvalidFilter(expected)
+	}
+	return t, nil
+}
 
 func stringValue(v protocol.Value) (string, error) {
-	s, ok := v.Raw.(string)
-	if !ok {
-		return "", protocol.ErrInvalidFilter("a string value was expected")
-	}
-	return s, nil
+	return rawAs[string](v, "a string value was expected")
 }
 
 func boolValue(v protocol.Value) (bool, error) {
-	b, ok := v.Raw.(bool)
-	if !ok {
-		return false, protocol.ErrInvalidFilter("a boolean value was expected")
-	}
-	return b, nil
+	return rawAs[bool](v, "a boolean value was expected")
 }
 
 func timeValue(v protocol.Value) (time.Time, error) {
-	s, ok := v.Raw.(string)
-	if !ok {
-		return time.Time{}, protocol.ErrInvalidFilter("a dateTime string was expected")
+	s, err := rawAs[string](v, "a dateTime string was expected")
+	if err != nil {
+		return time.Time{}, err
 	}
 	at, err := time.Parse(time.RFC3339, s)
 	if err != nil {
@@ -164,9 +180,9 @@ func timeValue(v protocol.Value) (time.Time, error) {
 // ErrInvalidFilter -- the 400 the database would otherwise raise as a 500 when
 // it casts the value to the uuid column.
 func uuidValue(v protocol.Value) (string, error) {
-	s, ok := v.Raw.(string)
-	if !ok {
-		return "", protocol.ErrInvalidFilter("a string value was expected")
+	s, err := rawAs[string](v, "a string value was expected")
+	if err != nil {
+		return "", err
 	}
 	id, err := uuid.FromString(s)
 	if err != nil {
