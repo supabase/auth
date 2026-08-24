@@ -10,13 +10,6 @@ import (
 	"github.com/supabase/auth/internal/api/scim/protocol"
 )
 
-func patchOf(t *testing.T, body string) *protocol.PatchOp {
-	t.Helper()
-	patch, err := protocol.ParsePatchOp([]byte(body))
-	require.NoError(t, err)
-	return patch
-}
-
 func ptr[T any](v T) *T { return &v }
 
 func TestApplyUserPatch(t *testing.T) {

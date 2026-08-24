@@ -2,7 +2,6 @@ package scim
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -11,71 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
-	"github.com/supabase/auth/internal/conf/confload"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/storage/test"
 )
-
-const scimTestConfig = "../../../hack/test.env"
-
-const testExternalURL = "http://localhost:9999"
-
-func newTestDB(t *testing.T) *storage.Connection {
-	t.Helper()
-
-	globalConfig, err := confload.LoadGlobal(scimTestConfig)
-	require.NoError(t, err)
-
-	conn, err := test.SetupDBConnection(globalConfig)
-	require.NoError(t, err)
-
-	return conn
-}
-
-// newTenant creates an SSO provider to own one test's resources, so that tests
-// sharing a database cannot see each other's rows. Deleting it cascades to the
-// scim_users that reference it.
-func newTenant(t *testing.T, db *storage.Connection) string {
-	t.Helper()
-
-	id := uuid.Must(uuid.NewV4()).String()
-	require.NoError(t, db.RawQuery("INSERT INTO sso_providers (id, resource_id, created_at, updated_at) VALUES (?, ?, now(), now())", id, "scim-test-"+id).Exec())
-
-	t.Cleanup(func() {
-		_ = db.RawQuery("DELETE FROM sso_providers WHERE id = ?", id).Exec()
-	})
-
-	return id
-}
-
-// putUser stores a resource the way a write path will once one exists: the
-// document carries what a client supplied, while id and the timestamps are
-// columns because they are the server's to assert.
-func putUser(t *testing.T, db *storage.Connection, tenant string, user *core.User) {
-	t.Helper()
-
-	stored := *user
-	stored.ID, stored.Meta = "", core.Meta{}
-
-	document, err := json.Marshal(&stored)
-	require.NoError(t, err)
-
-	require.NoError(t, db.RawQuery(
-		"INSERT INTO scim_users (id, sso_provider_id, resource, created_at, updated_at)"+
-			" VALUES (?, ?, ?, ?, ?)",
-		user.ID, tenant, string(document), user.Meta.Created, user.Meta.LastModified,
-	).Exec())
-}
-
-func newStoredUser(t *testing.T, db *storage.Connection, tenant string, user *core.User) *core.User {
-	t.Helper()
-
-	if user.ID == "" {
-		user.ID = uuid.Must(uuid.NewV4()).String()
-	}
-	putUser(t, db, tenant, user)
-	return user
-}
 
 func TestUserStore(t *testing.T) {
 	db := newTestDB(t)

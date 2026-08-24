@@ -244,18 +244,6 @@ func storeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Rep
 	})
 }
 
-// seedPostgres is the implementation every contract runs against: it owns a
-// tenant so its rows are invisible to other tests, and serves that tenant's
-// Users out of Postgres.
-func seedPostgres(t *testing.T, users []*core.User) Repository[*core.User] {
-	db := newTestDB(t)
-	owner := newTenant(t, db)
-	for _, user := range users {
-		putUser(t, db, owner, user)
-	}
-	return NewUserStore(db, testExternalURL).For(owner)
-}
-
 func TestUserStoreContract(t *testing.T) {
 	storeContract(t, seedPostgres)
 }

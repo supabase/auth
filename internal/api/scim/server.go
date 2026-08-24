@@ -16,6 +16,8 @@ import (
 
 const BasePath = "/scim/v2"
 
+var ErrNotFound = errors.New("scim: resource not found")
+
 type Config struct {
 	ExternalURL string
 	Limits      protocol.Limits

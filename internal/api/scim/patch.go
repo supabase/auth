@@ -10,14 +10,6 @@ import (
 	"github.com/supabase/auth/internal/api/scim/protocol"
 )
 
-// applyUserPatch applies a parsed PatchOp to a User and returns the result,
-// leaving the input untouched. It works on the resource as a document so that a
-// patch may name an attribute in any case, then reads the document back through
-// core.User, which canonicalises those names. Only attributes core.User models
-// survive that round-trip; an attribute this server does not model is dropped.
-//
-// id and meta are the server's to assert (RFC 7643, Section 3.1), so they are
-// restored after the operations run and cannot be moved by a patch.
 func applyUserPatch(current *core.User, patch *protocol.PatchOp) (*core.User, error) {
 	doc, err := userToDoc(current)
 	if err != nil {
@@ -64,9 +56,6 @@ func applyPatchOperation(doc map[string]json.RawMessage, op protocol.PatchOperat
 	}
 }
 
-// mergeAttributes overlays a set of attributes onto the document, which is what
-// a "replace" or "add" with no path means: the value is the attributes to
-// replace, per RFC 7644, Section 3.5.2.
 func mergeAttributes(doc map[string]json.RawMessage, value json.RawMessage) error {
 	var attrs map[string]json.RawMessage
 	if err := json.Unmarshal(value, &attrs); err != nil {
@@ -81,9 +70,6 @@ func mergeAttributes(doc map[string]json.RawMessage, value json.RawMessage) erro
 	return nil
 }
 
-// setDocKey sets an attribute, or a sub-attribute when sub is given, replacing
-// any key that differs only in case so the document never holds an attribute
-// twice. Attribute names are case insensitive (RFC 7643, Section 2.1).
 func setDocKey(doc map[string]json.RawMessage, name, sub string, value json.RawMessage) error {
 	if sub == "" {
 		deleteFold(doc, name)
@@ -125,9 +111,6 @@ func removeDocKey(doc map[string]json.RawMessage, name, sub string) {
 	}
 }
 
-// childObject reads name as a JSON object so a sub-attribute can be set on it,
-// treating an absent or null attribute as an empty object to add into, per the
-// "add where an attribute did not previously exist" of Section 3.5.2.
 func childObject(doc map[string]json.RawMessage, name string) (map[string]json.RawMessage, error) {
 	raw, ok := lookupFold(doc, name)
 	if !ok || len(raw) == 0 || string(raw) == "null" {
