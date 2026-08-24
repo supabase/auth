@@ -14,7 +14,7 @@ const bearerScheme = "bearer "
 
 type tenantKey struct{}
 
-type scimTokenRow struct {
+type scimToken struct {
 	ID            string `db:"id"`
 	SSOProviderID string `db:"sso_provider_id"`
 }
@@ -78,7 +78,7 @@ func (srv *Server) lookup(ctx context.Context, credential string) (string, error
 		return "", ErrNotFound
 	}
 
-	var rows []scimTokenRow
+	var rows []scimToken
 	err := srv.db.WithContext(ctx).RawQuery(
 		"SELECT t.id, t.sso_provider_id FROM scim_tokens t"+
 			" JOIN sso_providers p ON p.id = t.sso_provider_id"+

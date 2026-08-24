@@ -33,10 +33,70 @@ func TestServer(t *testing.T) {
 	db := newTestDB(t)
 	srv := NewServer(db, testExternalURL)
 
-	t.Run("NewServer trims a trailing slash from the external URL", func(t *testing.T) {
+	t.Run("NewServer", func(t *testing.T) {
 		location := NewServer(nil, "https://auth.example.com/").serviceProviderConfig.Meta.Location
 
 		require.Equal(t, "https://auth.example.com/scim/v2/ServiceProviderConfig", location)
+	})
+
+	t.Run("Tenant", func(t *testing.T) {
+		provider := newTenant(t, db)
+		token := grantToken(t, db, provider)
+
+		served := func(t *testing.T, authorization string) (*httptest.ResponseRecorder, string) {
+			t.Helper()
+
+			var seen string
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				seen, _ = tenantFrom(r.Context())
+				w.WriteHeader(http.StatusTeapot)
+			})
+
+			r := httptest.NewRequest(http.MethodGet, BasePath+"/Users", nil)
+			if authorization != "" {
+				r.Header.Set("Authorization", authorization)
+			}
+
+			w := httptest.NewRecorder()
+			srv.Tenant(next).ServeHTTP(w, r)
+			return w, seen
+		}
+
+		t.Run("hands the tenant to the handler", func(t *testing.T) {
+			w, seen := served(t, "Bearer "+token)
+
+			assert.Equal(t, http.StatusTeapot, w.Code)
+			assert.Equal(t, provider, seen)
+		})
+
+		t.Run("returns 401 with a challenge when the token is unknown", func(t *testing.T) {
+			unknown, _ := NewSCIMToken()
+
+			w, seen := served(t, "Bearer "+unknown)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Equal(t, `Bearer realm="SCIM"`, w.Header().Get("WWW-Authenticate"))
+			assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+			assert.Empty(t, seen)
+		})
+
+		t.Run("returns 401 when there is no Authorization header", func(t *testing.T) {
+			w, seen := served(t, "")
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Empty(t, seen)
+		})
+
+		t.Run("returns 404 when token is revoked", func(t *testing.T) {
+			revoked := grantToken(t, db, provider)
+			require.NoError(t, db.RawQuery("UPDATE scim_tokens SET revoked_at = now() WHERE token_hash = ?", hashToken(revoked)).Exec())
+
+			w, seen := served(t, "Bearer "+revoked)
+			assert.Empty(t, seen)
+			assert.Equal(t, http.StatusNotFound, w.Code)
+			assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+			assert.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
+		})
 	})
 
 	t.Run("GET /ServiceProviderConfig", func(t *testing.T) {

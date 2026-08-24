@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/supabase/auth/internal/api/scim/core"
-	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
@@ -97,13 +96,6 @@ func grantToken(t *testing.T, db *storage.Connection, provider string) string {
 	).Exec())
 
 	return token
-}
-
-func patchOf(t *testing.T, body string) *protocol.PatchOp {
-	t.Helper()
-	patch, err := protocol.ParsePatchOp([]byte(body))
-	require.NoError(t, err)
-	return patch
 }
 
 func userNamesOf(users []*core.User) []string {
