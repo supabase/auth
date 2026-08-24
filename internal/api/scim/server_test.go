@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
+	"github.com/supabase/auth/internal/storage"
 )
 
 //go:embed testdata/*
@@ -28,13 +28,6 @@ func testFixture(t *testing.T, file string) string {
 	return string(data)
 }
 
-func newServerFor(externalURL string) *Server {
-	return NewServer(Config{
-		ExternalURL: externalURL,
-		Users:       NewMemoryUserStore(),
-	})
-}
-
 func TestReadBodyRejectsATooLargeBody(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 64)))
 	r.Body = http.MaxBytesReader(httptest.NewRecorder(), r.Body, 8)
@@ -44,11 +37,14 @@ func TestReadBodyRejectsATooLargeBody(t *testing.T) {
 }
 
 func TestServer(t *testing.T) {
-	srv := newServerFor("http://localhost:9999")
-	require.NotNil(t, srv)
+	db := newTestDB(t)
+	srv := NewServer(Config{
+		ExternalURL: testExternalURL,
+		Users:       NewUserStore(db, testExternalURL),
+	})
 
 	t.Run("NewServer trims a trailing slash from the external URL", func(t *testing.T) {
-		location := newServerFor("https://auth.example.com/").serviceProviderConfig.Meta.Location
+		location := NewServer(Config{ExternalURL: "https://auth.example.com/"}).serviceProviderConfig.Meta.Location
 
 		require.Equal(t, "https://auth.example.com/scim/v2/ServiceProviderConfig", location)
 	})
@@ -204,7 +200,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("?startIndex=2&count=2", func(t *testing.T) {
-			_, get := usersFor(t, "a", "b", "c", "d", "e")
+			get := usersFor(t, srv, db, "a", "b", "c", "d", "e")
 
 			w := get("startIndex=2&count=2")
 			body := listed[*core.User](t, w)
@@ -217,7 +213,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("?count=0", func(t *testing.T) {
-			_, get := usersFor(t, "a", "b", "c")
+			get := usersFor(t, srv, db, "a", "b", "c")
 
 			w := get("count=0")
 			body := listed[*core.User](t, w)
@@ -230,7 +226,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("sortBy=userName", func(t *testing.T) {
-			_, get := usersFor(t, "carol", "alice", "bob")
+			get := usersFor(t, srv, db, "carol", "alice", "bob")
 
 			ascending := listed[*core.User](t, get("sortBy=userName"))
 			descending := listed[*core.User](t, get("sortBy=userName&sortOrder=descending"))
@@ -240,7 +236,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("?sortBy=nickName", func(t *testing.T) {
-			_, get := usersFor(t, "a")
+			get := usersFor(t, srv, db, "a")
 
 			w := get("sortBy=nickName")
 
@@ -251,7 +247,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("?sortBy=userName&sortOrder=sideways", func(t *testing.T) {
-			_, get := usersFor(t, "a")
+			get := usersFor(t, srv, db, "a")
 
 			w := get("sortBy=userName&sortOrder=sideways")
 
@@ -260,7 +256,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run(`?filter=userName eq "bob"`, func(t *testing.T) {
-			_, get := usersFor(t, "alice", "bob", "carol")
+			get := usersFor(t, srv, db, "alice", "bob", "carol")
 
 			body := listed[*core.User](t, get(filterQuery(`userName eq "bob"`)))
 
@@ -269,7 +265,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run(`?filter=userName sw "a"`, func(t *testing.T) {
-			_, get := usersFor(t, "ann", "abe", "bob")
+			get := usersFor(t, srv, db, "ann", "abe", "bob")
 
 			body := listed[*core.User](t, get(filterQuery(`userName sw "a"`)))
 
@@ -277,7 +273,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run(`?filter=userName eq "bjensen"`, func(t *testing.T) {
-			_, get := usersFor(t, "BJensen")
+			get := usersFor(t, srv, db, "BJensen")
 
 			body := listed[*core.User](t, get(filterQuery(`userName eq "bjensen"`)))
 
@@ -285,7 +281,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run(`?filter=emails[type eq "work"`, func(t *testing.T) {
-			_, get := usersFor(t, "a")
+			get := usersFor(t, srv, db, "a")
 
 			w := get(filterQuery(`emails[type eq "work"]`))
 
@@ -295,7 +291,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("?filter=userName eq", func(t *testing.T) {
-			_, get := usersFor(t, "a")
+			get := usersFor(t, srv, db, "a")
 
 			w := get(filterQuery(`userName eq`))
 
@@ -318,9 +314,9 @@ func TestServer(t *testing.T) {
 		})
 	})
 
-	create := func(t *testing.T, srv *Server, userName string) *core.User {
+	create := func(t *testing.T, srv *Server, tenant, userName string) *core.User {
 		t.Helper()
-		r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"`+userName+`"}`, nil)
+		r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"`+userName+`"}`, tenant, nil)
 		w := httptest.NewRecorder()
 		require.NoError(t, srv.CreateUser(w, r))
 		require.Equal(t, http.StatusCreated, w.Code)
@@ -332,9 +328,9 @@ func TestServer(t *testing.T) {
 
 	t.Run("POST /Users", func(t *testing.T) {
 		t.Run("with valid parameters", func(t *testing.T) {
-			srv := newServerFor("http://localhost:9999")
+			tenant := newTenant(t, db)
 
-			r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen"}`, nil)
+			r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen"}`, tenant, nil)
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.CreateUser(w, r))
 
@@ -345,13 +341,13 @@ func TestServer(t *testing.T) {
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
 			assert.NotEmpty(t, user.ID)
 			assert.Equal(t, "bjensen", user.UserName)
-			assert.Equal(t, "http://localhost:9999"+BasePath+"/Users/"+user.ID, w.Header().Get("Location"))
+			assert.Equal(t, testExternalURL+BasePath+"/Users/"+user.ID, w.Header().Get("Location"))
 		})
 
 		t.Run("without a userName", func(t *testing.T) {
-			srv := newServerFor("http://localhost:9999")
+			tenant := newTenant(t, db)
 
-			r := scimRequest(http.MethodPost, "/Users", `{"externalId":"ext-1"}`, nil)
+			r := scimRequest(http.MethodPost, "/Users", `{"externalId":"ext-1"}`, tenant, nil)
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.CreateUser(w, r))
 
@@ -360,9 +356,9 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("with a malformed body", func(t *testing.T) {
-			srv := newServerFor("http://localhost:9999")
+			tenant := newTenant(t, db)
 
-			r := scimRequest(http.MethodPost, "/Users", `{"userName":`, nil)
+			r := scimRequest(http.MethodPost, "/Users", `{"userName":`, tenant, nil)
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.CreateUser(w, r))
 
@@ -374,11 +370,11 @@ func TestServer(t *testing.T) {
 
 	t.Run("PUT /Users/{id}", func(t *testing.T) {
 		t.Run("replaces a User's attributes", func(t *testing.T) {
-			srv := newServerFor("http://localhost:9999")
-			created := create(t, srv, "carol")
+			tenant := newTenant(t, db)
+			created := create(t, srv, tenant, "carol")
 
 			r := scimRequest(http.MethodPut, "/Users/"+created.ID, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"carol-renamed"}`,
-				map[string]string{"id": created.ID})
+				tenant, map[string]string{"id": created.ID})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.ReplaceUser(w, r))
 
@@ -390,10 +386,10 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("with an unknown id", func(t *testing.T) {
-			srv := newServerFor("http://localhost:9999")
+			tenant := newTenant(t, db)
 			id := uuid.Must(uuid.NewV4()).String()
 
-			r := scimRequest(http.MethodPut, "/Users/"+id, `{"userName":"ghost"}`, map[string]string{"id": id})
+			r := scimRequest(http.MethodPut, "/Users/"+id, `{"userName":"ghost"}`, tenant, map[string]string{"id": id})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.ReplaceUser(w, r))
 
@@ -403,10 +399,10 @@ func TestServer(t *testing.T) {
 
 	t.Run("PATCH /Users", func(t *testing.T) {
 		t.Run("deactivates a User", func(t *testing.T) {
-			srv := newServerFor("http://localhost:9999")
-			created := create(t, srv, "dave")
+			tenant := newTenant(t, db)
+			created := create(t, srv, tenant, "dave")
 
-			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":false}}]}`, map[string]string{"id": created.ID})
+			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":false}}]}`, tenant, map[string]string{"id": created.ID})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.PatchUser(w, r))
 
@@ -418,10 +414,10 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("with an unknown id", func(t *testing.T) {
-			srv := newServerFor("http://localhost:9999")
+			tenant := newTenant(t, db)
 			id := uuid.Must(uuid.NewV4()).String()
 
-			r := scimRequest(http.MethodPatch, "/Users/"+id, `{"Operations":[{"op":"replace","value":{"active":false}}]}`, map[string]string{"id": id})
+			r := scimRequest(http.MethodPatch, "/Users/"+id, `{"Operations":[{"op":"replace","value":{"active":false}}]}`, tenant, map[string]string{"id": id})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.PatchUser(w, r))
 
@@ -429,10 +425,10 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("with a malformed body", func(t *testing.T) {
-			srv := newServerFor("http://localhost:9999")
-			created := create(t, srv, "erin")
+			tenant := newTenant(t, db)
+			created := create(t, srv, tenant, "erin")
 
-			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, `{"Operations":[{"op":"move","path":"active"}]}`, map[string]string{"id": created.ID})
+			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, `{"Operations":[{"op":"move","path":"active"}]}`, tenant, map[string]string{"id": created.ID})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.PatchUser(w, r))
 
@@ -442,27 +438,27 @@ func TestServer(t *testing.T) {
 
 	t.Run("DELETE /Users", func(t *testing.T) {
 		t.Run("removes a User", func(t *testing.T) {
-			srv := newServerFor("http://localhost:9999")
-			created := create(t, srv, "eve")
+			tenant := newTenant(t, db)
+			created := create(t, srv, tenant, "eve")
 
-			r := scimRequest(http.MethodDelete, "/Users/"+created.ID, "", map[string]string{"id": created.ID})
+			r := scimRequest(http.MethodDelete, "/Users/"+created.ID, "", tenant, map[string]string{"id": created.ID})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.DeleteUser(w, r))
 
 			require.Equal(t, http.StatusNoContent, w.Code)
 			assert.Empty(t, w.Body.String())
 
-			get := scimRequest(http.MethodGet, "/Users/"+created.ID, "", map[string]string{"id": created.ID})
+			get := scimRequest(http.MethodGet, "/Users/"+created.ID, "", tenant, map[string]string{"id": created.ID})
 			gw := httptest.NewRecorder()
 			require.NoError(t, srv.UserByID(gw, get))
 			assert.Equal(t, http.StatusNotFound, gw.Code)
 		})
 
 		t.Run("with an unknown", func(t *testing.T) {
-			srv := newServerFor("http://localhost:9999")
+			tenant := newTenant(t, db)
 			id := uuid.Must(uuid.NewV4()).String()
 
-			r := scimRequest(http.MethodDelete, "/Users/"+id, "", map[string]string{"id": id})
+			r := scimRequest(http.MethodDelete, "/Users/"+id, "", tenant, map[string]string{"id": id})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.DeleteUser(w, r))
 
@@ -484,7 +480,7 @@ func filterQuery(filter string) string {
 	return url.Values{"filter": {filter}}.Encode()
 }
 
-func scimRequest(method, target, body string, params map[string]string) *http.Request {
+func scimRequest(method, target, body, tenant string, params map[string]string) *http.Request {
 	r := httptest.NewRequest(method, BasePath+target, strings.NewReader(body))
 
 	routeCtx := chi.NewRouteContext()
@@ -496,18 +492,18 @@ func scimRequest(method, target, body string, params map[string]string) *http.Re
 	return r.WithContext(withTenant(ctx, tenant))
 }
 
-func usersFor(t *testing.T, userNames ...string) (*Server, func(query string) *httptest.ResponseRecorder) {
+// usersFor seeds a fresh tenant with userNames and returns a func that lists
+// that tenant's Users under the given query. The tenant is its own so that a
+// listing test cannot see another test's rows.
+func usersFor(t *testing.T, srv *Server, db *storage.Connection, userNames ...string) func(query string) *httptest.ResponseRecorder {
 	t.Helper()
 
-	srv := newServerFor("http://localhost:9999")
-	store, ok := srv.users.(*MemoryStore[*core.User])
-	require.True(t, ok)
-
-	for i, userName := range userNames {
-		store.Put(tenant, &core.User{ID: strconv.Itoa(i), UserName: userName})
+	tenant := newTenant(t, db)
+	for _, userName := range userNames {
+		newStoredUser(t, db, tenant, &core.User{UserName: userName})
 	}
 
-	return srv, func(query string) *httptest.ResponseRecorder {
+	return func(query string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodGet, BasePath+"/Users?"+query, nil)
 		r = r.WithContext(withTenant(r.Context(), tenant))
 

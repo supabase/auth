@@ -67,10 +67,9 @@ func idsOf(users []*core.User) []string {
 // window over a total order, so paging at any window size reproduces the whole
 // collection exactly once and never twice.
 //
-// Every implementation runs it, because a window is only correct if they all
-// order the same way. MemoryStore orders in Go and the Postgres store orders in
-// SQL, and those two have to agree on a collation and on a tiebreaker or a
-// client paging one gets a different answer than a client paging the other.
+// It is written against the interface rather than the Postgres store directly,
+// so that a second implementation added later is held to the same window,
+// collation, and tiebreaker a client already depends on.
 func storeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Repository[*core.User]) {
 	count := len(contractUserNames)
 
@@ -154,7 +153,7 @@ func storeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Rep
 	// regard to case, and this asserts the store agrees with a lowercased code
 	// point comparison rather than with whatever collation it happens to run
 	// under. A store ordering by the raw column passes on en_US.utf8 and fails
-	// on C, so pinning it here is what keeps the two stores interchangeable.
+	// on C, so pinning it here holds any implementation to the same order.
 	t.Run("orders userName as a lowercased code point comparison", func(t *testing.T) {
 		users, _ := page(t, &protocol.SearchRequest{StartIndex: 1, Count: count, SortBy: "userName"})
 		names := userNamesOf(users)
@@ -182,10 +181,9 @@ func storeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Rep
 		assert.Contains(t, err.Error(), "nickName")
 	})
 
-	// Filtering runs against both stores for the same reason ordering does: a
-	// filter the SQL store compiles and the memory store evaluates must select
-	// the same resources, or a client filtering one gets a different answer than
-	// a client filtering the other.
+	// Filtering runs under the contract for the same reason ordering does: the
+	// resources a filter selects are part of what a client depends on, so they
+	// are pinned here rather than left to the store that happens to serve them.
 	t.Run("filters", func(t *testing.T) {
 		matched := func(t *testing.T, filter string) []string {
 			t.Helper()
@@ -246,16 +244,9 @@ func storeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Rep
 	})
 }
 
-// seedMemory and seedPostgres are the two implementations every contract runs
-// against, so a guarantee proved once is proved for both.
-func seedMemory(t *testing.T, users []*core.User) Repository[*core.User] {
-	store := NewMemoryUserStore()
-	for _, user := range users {
-		store.Put(tenant, user)
-	}
-	return store.For(tenant)
-}
-
+// seedPostgres is the implementation every contract runs against: it owns a
+// tenant so its rows are invisible to other tests, and serves that tenant's
+// Users out of Postgres.
 func seedPostgres(t *testing.T, users []*core.User) Repository[*core.User] {
 	db := newTestDB(t)
 	owner := newTenant(t, db)
@@ -265,16 +256,8 @@ func seedPostgres(t *testing.T, users []*core.User) Repository[*core.User] {
 	return NewUserStore(db, testExternalURL).For(owner)
 }
 
-func TestMemoryStoreContract(t *testing.T) {
-	storeContract(t, seedMemory)
-}
-
 func TestUserStoreContract(t *testing.T) {
 	storeContract(t, seedPostgres)
-}
-
-func TestMemoryStoreWriteContract(t *testing.T) {
-	writeContract(t, seedMemory)
 }
 
 func TestUserStoreWriteContract(t *testing.T) {
@@ -283,8 +266,8 @@ func TestUserStoreWriteContract(t *testing.T) {
 
 // writeContract is the guarantee Repository makes about writes: a resource is
 // readable once created, changes replace or patch what it holds, and a deleted
-// resource is gone. Both stores honour it, so a handler behaves the same over
-// either.
+// resource is gone. A handler relies on it holding over whichever store backs
+// the server.
 func writeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Repository[*core.User]) {
 	ctx := context.Background()
 	repo := seed(t, nil)

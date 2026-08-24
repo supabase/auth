@@ -17,6 +17,8 @@ func patchOf(t *testing.T, body string) *protocol.PatchOp {
 	return patch
 }
 
+func ptr[T any](v T) *T { return &v }
+
 func TestApplyUserPatch(t *testing.T) {
 	base := func() *core.User {
 		return &core.User{

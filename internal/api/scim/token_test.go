@@ -216,7 +216,7 @@ func TestServerTenantMiddleware(t *testing.T) {
 
 	srv := NewServer(Config{
 		ExternalURL: testExternalURL,
-		Users:       NewMemoryUserStore(),
+		Users:       NewUserStore(db, testExternalURL),
 		Tenants:     NewTokenTenants(db),
 	})
 

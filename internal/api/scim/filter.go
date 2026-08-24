@@ -11,8 +11,8 @@ import (
 	"github.com/supabase/auth/internal/api/scim/protocol"
 )
 
-// filterKind is how an attribute's values compare, which decides both the SQL a
-// comparison becomes and how it is evaluated in memory.
+// filterKind is how an attribute's values compare, which decides the SQL a
+// comparison becomes.
 type filterKind int
 
 const (
@@ -23,14 +23,12 @@ const (
 )
 
 // filterAttr is an attribute a User can be filtered on: the column that carries
-// it in SQL, how to read it from a User in memory, and how its values compare.
-// Both stores resolve through this one registry so that a filter this server
-// accepts means the same thing whichever store answers it.
+// it in SQL and how its values compare. A filter resolves through this one
+// registry, so a filter this server accepts names a column it can push down.
 type filterAttr struct {
 	column    string
 	kind      filterKind
 	caseExact bool
-	valueOf   func(u *core.User) (any, bool)
 }
 
 // userFilterAttrs is the set of attributes promoted to a column, and so the set
@@ -38,37 +36,12 @@ type filterAttr struct {
 // keeps only inside the resource document, which a pushed-down WHERE cannot
 // reach; naming it in a filter is ErrInvalidFilter.
 var userFilterAttrs = map[string]filterAttr{
-	"username": {
-		column: "user_name", kind: filterString, caseExact: false,
-		valueOf: func(u *core.User) (any, bool) { return u.UserName, u.UserName != "" },
-	},
-	"externalid": {
-		column: "external_id", kind: filterString, caseExact: true,
-		valueOf: func(u *core.User) (any, bool) { return u.ExternalID, u.ExternalID != "" },
-	},
-	"id": {
-		column: "id", kind: filterUUID, caseExact: true,
-		valueOf: func(u *core.User) (any, bool) { return u.ID, u.ID != "" },
-	},
-	"active": {
-		column: "active", kind: filterBool,
-		valueOf: func(u *core.User) (any, bool) { return activeOrDefault(u), true },
-	},
-	"meta.created": {
-		column: "created_at", kind: filterTime,
-		valueOf: func(u *core.User) (any, bool) { return u.Meta.Created, !u.Meta.Created.IsZero() },
-	},
-	"meta.lastmodified": {
-		column: "updated_at", kind: filterTime,
-		valueOf: func(u *core.User) (any, bool) { return u.Meta.LastModified, !u.Meta.LastModified.IsZero() },
-	},
-}
-
-// activeOrDefault mirrors the active column: an absent active is true, which is
-// what coalesce((resource->>'active')::boolean, true) yields in the database.
-// The two stores must agree on this, or "active eq true" pages differently.
-func activeOrDefault(u *core.User) bool {
-	return u.Active == nil || *u.Active
+	"username":          {column: "user_name", kind: filterString, caseExact: false},
+	"externalid":        {column: "external_id", kind: filterString, caseExact: true},
+	"id":                {column: "id", kind: filterUUID, caseExact: true},
+	"active":            {column: "active", kind: filterBool},
+	"meta.created":      {column: "created_at", kind: filterTime},
+	"meta.lastmodified": {column: "updated_at", kind: filterTime},
 }
 
 // parseFilterQuery parses the filter a query carries, or nil when it carries
@@ -127,10 +100,10 @@ func checkOp(attr filterAttr, op protocol.CompareOp) error {
 	}
 }
 
-// coerceValue holds a comparison's value to the type attr compares as. Both
-// stores coerce through this one switch, so the registry alone decides how a
-// filterKind reads its compValue -- a mistyped compValue is ErrInvalidFilter
-// rather than a query the database rejects.
+// coerceValue holds a comparison's value to the type attr compares as. Coercion
+// runs through this one switch, so the registry alone decides how a filterKind
+// reads its compValue -- a mistyped compValue is ErrInvalidFilter rather than a
+// query the database rejects.
 func coerceValue(attr filterAttr, v protocol.Value) (any, error) {
 	switch attr.kind {
 	case filterBool:
@@ -175,10 +148,9 @@ func timeValue(v protocol.Value) (time.Time, error) {
 	return at, nil
 }
 
-// uuidValue holds an id filter's value to a UUID, returning it canonicalised so
-// that both stores compare the same text. A value that is not a UUID is
-// ErrInvalidFilter -- the 400 the database would otherwise raise as a 500 when
-// it casts the value to the uuid column.
+// uuidValue holds an id filter's value to a UUID, returning it canonicalised. A
+// value that is not a UUID is ErrInvalidFilter -- the 400 the database would
+// otherwise raise as a 500 when it casts the value to the uuid column.
 func uuidValue(v protocol.Value) (string, error) {
 	s, err := rawAs[string](v, "a string value was expected")
 	if err != nil {

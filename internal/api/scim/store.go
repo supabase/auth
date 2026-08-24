@@ -36,8 +36,9 @@ const scimUserColumns = "id, resource, created_at, updated_at"
 //
 // The keys are lowercased because attribute names are case insensitive
 // (RFC 7643, Section 2.1). userName folds case because it is not caseExact
-// (RFC 7644, Section 3.4.2.3), which is also what MemoryStore does -- the two
-// have to agree or paging one differs from paging the other.
+// (RFC 7644, Section 3.4.2.3), so paging by it orders on a lowercased code
+// point comparison rather than on whatever collation the column happens to run
+// under.
 var userSortColumns = map[string]string{
 	"id":                "id",
 	"username":          `lower(user_name) collate "C"`,
