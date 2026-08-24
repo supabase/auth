@@ -32,13 +32,9 @@ var discoveryPaths = []string{
 	scimUserSchemaPath,
 }
 
-var scimPaths = []string{
-	scimServiceProviderConfigPath,
-	scimResourceTypesPath,
-	scimUserResourceTypePath,
-	scimSchemasPath,
+var scimPaths = append(discoveryPaths, []string{
 	scimUsersPath,
-}
+}...)
 
 func TestSCIM(t *testing.T) {
 	t.Run("Disabled by default", func(t *testing.T) {
