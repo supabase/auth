@@ -39,10 +39,7 @@ func newTenant(t *testing.T, db *storage.Connection) string {
 	t.Helper()
 
 	id := uuid.Must(uuid.NewV4()).String()
-	require.NoError(t, db.RawQuery(
-		"INSERT INTO sso_providers (id, resource_id, created_at, updated_at) VALUES (?, ?, now(), now())",
-		id, "scim-test-"+id,
-	).Exec())
+	require.NoError(t, db.RawQuery("INSERT INTO sso_providers (id, resource_id, created_at, updated_at) VALUES (?, ?, now(), now())", id, "scim-test-"+id).Exec())
 
 	t.Cleanup(func() {
 		_ = db.RawQuery("DELETE FROM sso_providers WHERE id = ?", id).Exec()
