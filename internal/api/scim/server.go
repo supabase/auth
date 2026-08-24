@@ -19,7 +19,12 @@ const BasePath = "/scim/v2"
 
 var ErrNotFound = errors.New("scim: resource not found")
 
+// filterUnsupported is the detail this server gives for a filter it will not
+// honour. The status differs by endpoint, so the caller supplies the error.
+const filterUnsupported = "Filtering is not supported on this endpoint"
+
 type Server struct {
+	db                    *storage.Connection
 	limits                protocol.Limits
 	users                 Repository[*core.User]
 	serviceProviderConfig *core.ServiceProviderConfig
@@ -32,12 +37,13 @@ func NewServer(db *storage.Connection, externalURL string) *Server {
 	userSchema := newUserSchema(baseURL)
 
 	return &Server{
+		db:     db,
 		limits: protocol.DefaultLimits,
-		users:  &userRepository{db: db},
+		users:  &userRepository{db: db, baseURL: baseURL},
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
-		).Sorting().Filtering(limits.MaxCount).Patching(),
+		).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching(),
 		resourceTypes: []*core.ResourceType{core.NewResourceType(baseURL, core.KindUser, userSchema)},
 		schemas:       []*core.Schema{userSchema},
 	}
@@ -73,7 +79,7 @@ func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
 
 	items, total, err := srv.users.List(ctx, query)
 	if err != nil {
-		return srv.storeError(w, r, err)
+		return srv.sendError(w, r, err)
 	}
 
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, items))
@@ -111,7 +117,7 @@ func (srv *Server) CreateUser(w http.ResponseWriter, r *http.Request) error {
 
 	created, err := srv.users.Create(ctx, user)
 	if err != nil {
-		return srv.storeError(w, r, err)
+		return srv.sendError(w, r, err)
 	}
 
 	w.Header().Set("Location", created.Meta.Location)
@@ -139,7 +145,7 @@ func (srv *Server) ReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, ErrNotFound) {
 			return srv.NotFound(w, r)
 		}
-		return srv.storeError(w, r, err)
+		return srv.sendError(w, r, err)
 	}
 	return protocol.Send(w, http.StatusOK, replaced)
 }
@@ -166,7 +172,7 @@ func (srv *Server) PatchUser(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, ErrNotFound) {
 			return srv.NotFound(w, r)
 		}
-		return srv.storeError(w, r, err)
+		return srv.sendError(w, r, err)
 	}
 	return protocol.Send(w, http.StatusOK, patched)
 }
@@ -183,14 +189,15 @@ func (srv *Server) DeleteUser(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, ErrNotFound) {
 			return srv.NotFound(w, r)
 		}
-		return srv.storeError(w, r, err)
+		return srv.sendError(w, r, err)
 	}
 	return protocol.Send(w, http.StatusNoContent, nil)
 }
 
-// decodeUser reads the request body as a User. A body that is not a User is
-// ErrInvalidSyntax; the store, not this decoder, is where a well-formed but
-// unacceptable User is caught.
+func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
+	return protocol.WriteError(w, protocol.ErrNotFound("Endpoint or resource does not exist"))
+}
+
 func decodeUser(r *http.Request) (*core.User, error) {
 	body, err := readBody(r)
 	if err != nil {
@@ -214,10 +221,6 @@ func readBody(r *http.Request) ([]byte, error) {
 		return nil, protocol.ErrInvalidSyntax("could not read the request body")
 	}
 	return body, nil
-}
-
-func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
-	return protocol.WriteError(w, protocol.ErrNotFound("Endpoint or resource does not exist"))
 }
 
 func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
@@ -277,7 +280,7 @@ func urlParam(r *http.Request, key string) string {
 	return value
 }
 
-func (srv *Server) storeError(w http.ResponseWriter, r *http.Request, err error) error {
+func (srv *Server) sendError(w http.ResponseWriter, r *http.Request, err error) error {
 	var scimErr *protocol.Error
 	if errors.As(err, &scimErr) {
 		return protocol.WriteError(w, scimErr)
@@ -289,10 +292,6 @@ func (srv *Server) internalError(w http.ResponseWriter, r *http.Request, err err
 	observability.LogEntrySetField(r, "error", err.Error())
 	return protocol.WriteError(w, protocol.ErrInternal("Internal server error"))
 }
-
-// filterUnsupported is the detail this server gives for a filter it will not
-// honour. The status differs by endpoint, so the caller supplies the error.
-const filterUnsupported = "Filtering is not supported on this endpoint"
 
 func rejectFilter(w http.ResponseWriter, r *http.Request, unsupported *protocol.Error) (bool, error) {
 	if !r.URL.Query().Has("filter") {

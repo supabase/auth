@@ -38,18 +38,24 @@ var userSortColumns = map[string]string{
 }
 
 type userRepository struct {
-	db *storage.Connection
+	db      *storage.Connection
+	baseURL string
 }
 
-type scimUserRow struct {
-	ID        string    `db:"id"`
-	Resource  []byte    `db:"resource"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+type scimUser struct {
+	ID            string    `db:"id"`
+	SSOProviderID string    `db:"sso_provider_id"`
+	UserName      string    `db:"user_name"`
+	ExternalID    string    `db:"external_id"`
+	Active        bool      `db:"active"`
+	Resource      []byte    `db:"resource"`
+	CreatedAt     time.Time `db:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at"`
+	DeletedAt     time.Time `db:"deleted_at"`
 }
 
 func (r *userRepository) Get(ctx context.Context, id string) (*core.User, error) {
-	var rows []scimUserRow
+	var rows []scimUser
 
 	err := r.db.WithContext(ctx).RawQuery("SELECT "+scimUserColumns+" FROM "+scimUsersTable+scimUserWhere+" AND id = ?", r.tenant(ctx), id).All(&rows)
 	if err != nil {
@@ -68,7 +74,7 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 		return nil, 0, err
 	}
 
-	where, args, err := r.where(query)
+	where, args, err := r.where(ctx, query)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -90,7 +96,7 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 	}
 
 	page := append(slices.Clone(args), query.Count, query.Offset())
-	var rows []scimUserRow
+	var rows []scimUser
 	if err := db.RawQuery(
 		"SELECT "+scimUserColumns+" FROM "+scimUsersTable+where+
 			" ORDER BY "+orderBy+" LIMIT ? OFFSET ?",
@@ -116,11 +122,11 @@ func (r *userRepository) Create(ctx context.Context, user *core.User) (*core.Use
 		return nil, err
 	}
 
-	var rows []scimUserRow
+	var rows []scimUser
 	if err := r.db.WithContext(ctx).RawQuery(
 		"INSERT INTO "+scimUsersTable+" (sso_provider_id, resource) VALUES (?, ?)"+
 			" RETURNING "+scimUserColumns,
-		r.tenant, document,
+		r.tenant(ctx), document,
 	).All(&rows); err != nil {
 		return nil, r.writeError("creating", err)
 	}
@@ -133,7 +139,7 @@ func (r *userRepository) Replace(ctx context.Context, id string, user *core.User
 		return nil, err
 	}
 
-	var rows []scimUserRow
+	var rows []scimUser
 	if err := r.db.WithContext(ctx).RawQuery(
 		"UPDATE "+scimUsersTable+" SET resource = ?, updated_at = now()"+scimUserWhere+
 			" AND id = ? RETURNING "+scimUserColumns,
@@ -218,7 +224,7 @@ func (r *userRepository) where(ctx context.Context, query *protocol.SearchReques
 	return where, args, nil
 }
 
-func (r *userRepository) user(row scimUserRow) (*core.User, error) {
+func (r *userRepository) user(row scimUser) (*core.User, error) {
 	user := new(core.User)
 	if err := json.Unmarshal(row.Resource, user); err != nil {
 		return nil, fmt.Errorf("scim: decoding stored user %s: %w", row.ID, err)
@@ -229,7 +235,7 @@ func (r *userRepository) user(row scimUserRow) (*core.User, error) {
 		ResourceType: core.KindUser.Name,
 		Created:      row.CreatedAt.UTC(),
 		LastModified: row.UpdatedAt.UTC(),
-		// Location:     core.Join(r.usersURL, row.ID),
+		Location:     core.Join(core.KindUser.Location(r.baseURL), row.ID),
 	}
 
 	// A stored User is a User whether or not the document says so, and

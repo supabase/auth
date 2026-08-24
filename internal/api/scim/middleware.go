@@ -41,7 +41,7 @@ func (srv *Server) Tenant(next http.Handler) http.Handler {
 func (srv *Server) tenant(w http.ResponseWriter, r *http.Request) (context.Context, bool) {
 	ctx := r.Context()
 
-	tenant, err := lookup(ctx, credential(r))
+	tenant, err := srv.lookup(ctx, credential(r))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			_ = srv.unauthorized(w)

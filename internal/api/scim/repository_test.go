@@ -70,11 +70,10 @@ func idsOf(users []*core.User) []string {
 // It is written against the interface rather than the Postgres store directly,
 // so that a second implementation added later is held to the same window,
 // collation, and tiebreaker a client already depends on.
-func storeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Repository[*core.User]) {
+func storeContract(t *testing.T, seed func(t *testing.T, users []*core.User) (Repository[*core.User], context.Context)) {
 	count := len(contractUserNames)
 
-	ctx := context.Background()
-	repo := seed(t, contractUsers())
+	repo, ctx := seed(t, contractUsers())
 
 	page := func(t *testing.T, query *protocol.SearchRequest) ([]*core.User, int) {
 		t.Helper()
@@ -256,9 +255,8 @@ func TestUserStoreWriteContract(t *testing.T) {
 // readable once created, changes replace or patch what it holds, and a deleted
 // resource is gone. A handler relies on it holding over whichever store backs
 // the server.
-func writeContract(t *testing.T, seed func(t *testing.T, users []*core.User) Repository[*core.User]) {
-	ctx := context.Background()
-	repo := seed(t, nil)
+func writeContract(t *testing.T, seed func(t *testing.T, users []*core.User) (Repository[*core.User], context.Context)) {
+	repo, ctx := seed(t, nil)
 
 	user := func(name string) *core.User {
 		return &core.User{Schemas: []core.SchemaURI{core.SchemaUser}, UserName: name}

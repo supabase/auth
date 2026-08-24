@@ -31,13 +31,10 @@ func testFixture(t *testing.T, file string) string {
 
 func TestServer(t *testing.T) {
 	db := newTestDB(t)
-	srv := NewServer(Config{
-		ExternalURL: testExternalURL,
-		Users:       NewUserStore(db, testExternalURL),
-	})
+	srv := NewServer(db, testExternalURL)
 
 	t.Run("NewServer trims a trailing slash from the external URL", func(t *testing.T) {
-		location := NewServer(Config{ExternalURL: "https://auth.example.com/"}).serviceProviderConfig.Meta.Location
+		location := NewServer(nil, "https://auth.example.com/").serviceProviderConfig.Meta.Location
 
 		require.Equal(t, "https://auth.example.com/scim/v2/ServiceProviderConfig", location)
 	})
@@ -153,17 +150,6 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("GET /Users", func(t *testing.T) {
-		t.Run("Unauthenticated", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
-			w := httptest.NewRecorder()
-
-			require.NoError(t, srv.Users(w, r))
-
-			require.Equal(t, http.StatusNotFound, w.Code)
-			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
-		})
-
 		t.Run("?startIndex=first", func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?startIndex=first", nil)
 			w := httptest.NewRecorder()
@@ -290,20 +276,6 @@ func TestServer(t *testing.T) {
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidFilter))
-		})
-	})
-
-	t.Run("GET /Users/{id}", func(t *testing.T) {
-		t.Run("Unauthenticated", func(t *testing.T) {
-			id := uuid.Must(uuid.NewV4()).String()
-			r := requestWithURLParam("Users/"+id, "id", id)
-			w := httptest.NewRecorder()
-
-			require.NoError(t, srv.UserByID(w, r))
-
-			require.Equal(t, http.StatusNotFound, w.Code)
-			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
 		})
 	})
 

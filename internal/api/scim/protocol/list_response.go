@@ -11,8 +11,6 @@ type ListResponse[T any] struct {
 	Resources    []T              `json:"Resources"`
 }
 
-// NewListResponse describes one page of a collection: the resources in the
-// window the client asked for, and the number of resources its query matched.
 func NewListResponse[T any](startIndex, total int, resources []T) *ListResponse[T] {
 	if resources == nil {
 		resources = []T{}

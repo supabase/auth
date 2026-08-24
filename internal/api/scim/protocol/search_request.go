@@ -92,10 +92,6 @@ func (l Limits) ParseSearchRequest(values url.Values) (*SearchRequest, error) {
 	}, nil
 }
 
-// sortOrderParam reads "sortOrder", which defaults to ascending once the client
-// names an attribute to sort by, per Section 3.4.2.3. A value that is neither
-// direction is refused rather than read as the default, so that a client
-// misspelling it is told instead of quietly served the wrong order.
 func sortOrderParam(values url.Values) (SortOrder, error) {
 	switch order := SortOrder(values.Get("sortOrder")); order {
 	case SortAscending, SortDescending:
@@ -110,8 +106,6 @@ func sortOrderParam(values url.Values) (SortOrder, error) {
 	}
 }
 
-// listParam reads a multi-valued parameter, which a client may send as one
-// comma separated value or as the parameter repeated.
 func listParam(values url.Values, name string) []string {
 	var list []string
 

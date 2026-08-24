@@ -37,11 +37,7 @@ func TestServerTenantMiddleware(t *testing.T) {
 	provider := newTenant(t, db)
 	token := grantToken(t, db, provider)
 
-	srv := NewServer(Config{
-		ExternalURL: testExternalURL,
-		Users:       NewUserStore(db, testExternalURL),
-		Tenants:     NewTokenTenants(db),
-	})
+	srv := NewServer(db, testExternalURL)
 
 	served := func(t *testing.T, authorization string) (*httptest.ResponseRecorder, string) {
 		t.Helper()

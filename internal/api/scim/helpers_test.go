@@ -1,6 +1,7 @@
 package scim
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -69,13 +70,21 @@ func newStoredUser(t *testing.T, db *storage.Connection, tenant string, user *co
 	return user
 }
 
-func seedPostgres(t *testing.T, users []*core.User) Repository[*core.User] {
+func newTestRepo(db *storage.Connection) *userRepository {
+	return &userRepository{db: db, baseURL: core.Join(testExternalURL, BasePath)}
+}
+
+func ctxFor(tenant string) context.Context {
+	return withTenant(context.Background(), tenant)
+}
+
+func seedPostgres(t *testing.T, users []*core.User) (Repository[*core.User], context.Context) {
 	db := newTestDB(t)
 	owner := newTenant(t, db)
 	for _, user := range users {
 		putUser(t, db, owner, user)
 	}
-	return NewUserStore(db, testExternalURL).For(owner)
+	return newTestRepo(db), ctxFor(owner)
 }
 
 func grantToken(t *testing.T, db *storage.Connection, provider string) string {
