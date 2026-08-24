@@ -230,7 +230,7 @@ func TestSCIM(t *testing.T) {
 				require.Contains(t, w.Body.String(), `"totalResults":1`)
 			})
 
-			t.Run("answers 401 with a challenge when no token is offered", func(t *testing.T) {
+			t.Run("returns 401 when no token is offered", func(t *testing.T) {
 				w := get(t, "")
 
 				require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -238,23 +238,23 @@ func TestSCIM(t *testing.T) {
 				require.Contains(t, w.Body.String(), string(scimProtocol.SchemaError))
 			})
 
-			t.Run("answers 401 to a credential that is not a SCIM token", func(t *testing.T) {
+			t.Run("returns 401 to an invalid token", func(t *testing.T) {
 				w := get(t, "Bearer eyJhbGciOiJIUzI1NiJ9.e30.signature")
 
 				require.Equal(t, http.StatusUnauthorized, w.Code)
 			})
 
-			t.Run("answers 401 once the token is revoked", func(t *testing.T) {
-				doomed, revoked := createProvider(t, conn)
-				require.NoError(t, conn.RawQuery("UPDATE scim_tokens SET revoked_at = now() WHERE sso_provider_id = ?", doomed).Exec())
+			t.Run("returns 401 when the token is revoked", func(t *testing.T) {
+				otherProvider, token := createProvider(t, conn)
+				require.NoError(t, conn.RawQuery("UPDATE scim_tokens SET revoked_at = now() WHERE sso_provider_id = ?", otherProvider).Exec())
 
-				require.Equal(t, http.StatusUnauthorized, get(t, "Bearer "+revoked).Code)
+				require.Equal(t, http.StatusUnauthorized, get(t, "Bearer "+token).Code)
 			})
 
 			t.Run("does not serve one provider's users to another's token", func(t *testing.T) {
-				_, other := createProvider(t, conn)
+				_, otherToken := createProvider(t, conn)
 
-				w := get(t, "Bearer "+other)
+				w := get(t, "Bearer "+otherToken)
 
 				require.Equal(t, http.StatusOK, w.Code)
 				require.Contains(t, w.Body.String(), `"totalResults":0`)
