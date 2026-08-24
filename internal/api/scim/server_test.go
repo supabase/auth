@@ -318,20 +318,20 @@ func TestServer(t *testing.T) {
 		})
 	})
 
+	create := func(t *testing.T, srv *Server, userName string) *core.User {
+		t.Helper()
+		r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"`+userName+`"}`, nil)
+		w := httptest.NewRecorder()
+		require.NoError(t, srv.CreateUser(w, r))
+		require.Equal(t, http.StatusCreated, w.Code)
+
+		var user core.User
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+		return &user
+	}
+
 	t.Run("POST /Users", func(t *testing.T) {
-		create := func(t *testing.T, srv *Server, userName string) *core.User {
-			t.Helper()
-			r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"`+userName+`"}`, nil)
-			w := httptest.NewRecorder()
-			require.NoError(t, srv.CreateUser(w, r))
-			require.Equal(t, http.StatusCreated, w.Code)
-
-			var user core.User
-			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
-			return &user
-		}
-
-		t.Run("POST creates a User and answers 201 with a Location", func(t *testing.T) {
+		t.Run("with valid parameters", func(t *testing.T) {
 			srv := newServerFor("http://localhost:9999")
 
 			r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen"}`, nil)
@@ -348,7 +348,7 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, "http://localhost:9999"+BasePath+"/Users/"+user.ID, w.Header().Get("Location"))
 		})
 
-		t.Run("POST without a userName is a bad request", func(t *testing.T) {
+		t.Run("without a userName", func(t *testing.T) {
 			srv := newServerFor("http://localhost:9999")
 
 			r := scimRequest(http.MethodPost, "/Users", `{"externalId":"ext-1"}`, nil)
@@ -359,7 +359,7 @@ func TestServer(t *testing.T) {
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
 		})
 
-		t.Run("POST of a malformed body is a bad request", func(t *testing.T) {
+		t.Run("with a malformed body", func(t *testing.T) {
 			srv := newServerFor("http://localhost:9999")
 
 			r := scimRequest(http.MethodPost, "/Users", `{"userName":`, nil)
@@ -370,7 +370,10 @@ func TestServer(t *testing.T) {
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidSyntax))
 		})
 
-		t.Run("PUT replaces a User's attributes", func(t *testing.T) {
+	})
+
+	t.Run("PUT /Users/{id}", func(t *testing.T) {
+		t.Run("replaces a User's attributes", func(t *testing.T) {
 			srv := newServerFor("http://localhost:9999")
 			created := create(t, srv, "carol")
 
@@ -386,7 +389,7 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, "carol-renamed", user.UserName)
 		})
 
-		t.Run("PUT of an unknown id is not found", func(t *testing.T) {
+		t.Run("with an unknown id", func(t *testing.T) {
 			srv := newServerFor("http://localhost:9999")
 			id := uuid.Must(uuid.NewV4()).String()
 
@@ -396,8 +399,10 @@ func TestServer(t *testing.T) {
 
 			assert.Equal(t, http.StatusNotFound, w.Code)
 		})
+	})
 
-		t.Run("PATCH deactivates a User", func(t *testing.T) {
+	t.Run("PATCH /Users", func(t *testing.T) {
+		t.Run("deactivates a User", func(t *testing.T) {
 			srv := newServerFor("http://localhost:9999")
 			created := create(t, srv, "dave")
 
@@ -412,7 +417,7 @@ func TestServer(t *testing.T) {
 			assert.False(t, *user.Active)
 		})
 
-		t.Run("PATCH of an unknown id is not found", func(t *testing.T) {
+		t.Run("with an unknown id", func(t *testing.T) {
 			srv := newServerFor("http://localhost:9999")
 			id := uuid.Must(uuid.NewV4()).String()
 
@@ -423,7 +428,7 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, http.StatusNotFound, w.Code)
 		})
 
-		t.Run("PATCH of a malformed body is a bad request", func(t *testing.T) {
+		t.Run("with a malformed body", func(t *testing.T) {
 			srv := newServerFor("http://localhost:9999")
 			created := create(t, srv, "erin")
 
@@ -433,8 +438,10 @@ func TestServer(t *testing.T) {
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 		})
+	})
 
-		t.Run("DELETE removes a User and answers 204", func(t *testing.T) {
+	t.Run("DELETE /Users", func(t *testing.T) {
+		t.Run("removes a User", func(t *testing.T) {
 			srv := newServerFor("http://localhost:9999")
 			created := create(t, srv, "eve")
 
@@ -451,7 +458,7 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, http.StatusNotFound, gw.Code)
 		})
 
-		t.Run("DELETE of an unknown id is not found", func(t *testing.T) {
+		t.Run("with an unknown", func(t *testing.T) {
 			srv := newServerFor("http://localhost:9999")
 			id := uuid.Must(uuid.NewV4()).String()
 
@@ -462,7 +469,6 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, http.StatusNotFound, w.Code)
 		})
 	})
-
 }
 
 func requestWithURLParam(path, key, value string) *http.Request {
