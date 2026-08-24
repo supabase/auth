@@ -16,19 +16,9 @@ import (
 
 const BasePath = "/scim/v2"
 
-// Config is what a SCIM server needs from the application hosting it. It holds
-// collaborators rather than a database connection so that only the stores
-// themselves can reach one.
 type Config struct {
-	// ExternalURL is the origin this server is reached at. BasePath is this
-	// package's business to append.
 	ExternalURL string
-
-	// Limits bound pagination. A zero value means protocol.DefaultLimits:
-	// Section 3.4.2.4 leaves the maximum to the provider, and a maximum of
-	// none would serve nothing.
 	Limits protocol.Limits
-
 	Users   Store[*core.User]
 	Tenants Tenants
 }
@@ -75,7 +65,7 @@ func (srv *Server) ResourceTypes(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (srv *Server) ResourceTypeByID(w http.ResponseWriter, r *http.Request) error {
-	return byID(srv, w, r, srv.resourceTypes)
+	return srv.byID(w, r, srv.resourceTypes)
 }
 
 func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
@@ -83,7 +73,7 @@ func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (srv *Server) SchemaByID(w http.ResponseWriter, r *http.Request) error {
-	return byID(srv, w, r, srv.schemas)
+	return srv.byID(w, r, srv.schemas)
 }
 
 func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
@@ -292,7 +282,7 @@ func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(resources), resources))
 }
 
-func byID[T core.Resource](srv *Server, w http.ResponseWriter, r *http.Request, resources []T) error {
+func (srv *Server) byID[T core.Resource](w http.ResponseWriter, r *http.Request, resources []T) error {
 	id := urlParam(r, "id")
 
 	for _, resource := range resources {
@@ -303,14 +293,6 @@ func byID[T core.Resource](srv *Server, w http.ResponseWriter, r *http.Request, 
 	return srv.NotFound(w, r)
 }
 
-// newUserSchema declares the attributes this server actually serves, which is
-// what /Schemas is for. It is deliberately a subset of RFC 7643, Section 8.7.1:
-// declaring an attribute core.User drops would be as misleading as omitting one
-// it carries.
-//
-// id, externalId and meta are absent because they are common attributes of
-// Section 3.1 rather than attributes of this schema -- the RFC's own User schema
-// does not list them either.
 func newUserSchema(baseURL string) *core.Schema {
 	return core.
 		NewSchema(baseURL, core.KindUser).

@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 
 	"github.com/gofrs/uuid"
@@ -17,15 +16,26 @@ import (
 )
 
 const (
-	scimServiceProviderConfigPath = "/scim/v2/ServiceProviderConfig"
 	scimResourceTypesPath         = "/scim/v2/ResourceTypes"
 	scimSchemasPath               = "/scim/v2/Schemas"
+	scimServiceProviderConfigPath = "/scim/v2/ServiceProviderConfig"
+	scimUserResourceTypePath      = "/scim/v2/ResourceTypes/User"
+	scimUserSchemaPath            = "/scim/v2/Schemas/urn:ietf:params:scim:schemas:core:2.0:User"
 	scimUsersPath                 = "/scim/v2/Users"
 )
+
+var discoveryPaths = []string{
+	scimResourceTypesPath,
+	scimSchemasPath,
+	scimServiceProviderConfigPath,
+	scimUserResourceTypePath,
+	scimUserSchemaPath,
+}
 
 var scimPaths = []string{
 	scimServiceProviderConfigPath,
 	scimResourceTypesPath,
+	scimUserResourceTypePath,
 	scimSchemasPath,
 	scimUsersPath,
 }
@@ -80,52 +90,86 @@ func TestSCIM(t *testing.T) {
 			require.Contains(t, w.Body.String(), string(scimCore.SchemaServiceProviderConfig))
 		})
 
-		for _, path := range []string{scimResourceTypesPath, scimSchemasPath} {
-			t.Run(path, func(t *testing.T) {
-				r := httptest.NewRequest(http.MethodGet, path, nil)
-				w := httptest.NewRecorder()
+		t.Run(scimResourceTypesPath, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, scimResourceTypesPath, nil)
+			w := httptest.NewRecorder()
 
-				api.handler.ServeHTTP(w, r)
+			api.handler.ServeHTTP(w, r)
 
-				require.Equal(t, http.StatusOK, w.Code)
-				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
-				require.Contains(t, w.Body.String(), scimProtocol.SchemaListResponse)
-			})
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), scimProtocol.SchemaListResponse)
+		})
 
-			t.Run(path+" rejects filter query parameter", func(t *testing.T) {
-				filter := url.Values{"filter": {`name eq "User"`}}.Encode()
-				r := httptest.NewRequest(http.MethodGet, path+"?"+filter, nil)
-				w := httptest.NewRecorder()
+		t.Run(scimResourceTypesPath+" with filter", func(t *testing.T) {
+			filter := url.Values{"filter": {`name eq "User"`}}.Encode()
+			r := httptest.NewRequest(http.MethodGet, scimResourceTypesPath+"?"+filter, nil)
+			w := httptest.NewRecorder()
 
-				api.handler.ServeHTTP(w, r)
+			api.handler.ServeHTTP(w, r)
 
-				require.Equal(t, http.StatusForbidden, w.Code)
-				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
-				require.Contains(t, w.Body.String(), scimProtocol.SchemaError)
-			})
-		}
+			require.Equal(t, http.StatusForbidden, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), scimProtocol.SchemaError)
+		})
 
-		for _, tc := range []struct {
-			path   string
-			schema string
-		}{
-			{scimResourceTypesPath + "/User", string(scimCore.SchemaResourceType)},
-			{scimSchemasPath + "/" + string(scimCore.SchemaUser), string(scimCore.SchemaSchema)},
-			// A URN's colons are legal to percent-encode in a path segment, and
-			// some clients do, so both spellings must reach the same schema.
-			{scimSchemasPath + "/" + strings.ReplaceAll(string(scimCore.SchemaUser), ":", "%3A"), string(scimCore.SchemaSchema)},
-		} {
-			t.Run(tc.path, func(t *testing.T) {
-				r := httptest.NewRequest(http.MethodGet, tc.path, nil)
-				w := httptest.NewRecorder()
+		t.Run(scimUserResourceTypePath, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, scimUserResourceTypePath, nil)
+			w := httptest.NewRecorder()
 
-				api.handler.ServeHTTP(w, r)
+			api.handler.ServeHTTP(w, r)
 
-				require.Equal(t, http.StatusOK, w.Code)
-				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
-				require.Contains(t, w.Body.String(), tc.schema)
-			})
-		}
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaResourceType))
+		})
+
+		t.Run(scimSchemasPath, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, scimSchemasPath, nil)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), scimProtocol.SchemaListResponse)
+		})
+
+		t.Run(scimSchemasPath+" with filter", func(t *testing.T) {
+			filter := url.Values{"filter": {`name eq "User"`}}.Encode()
+			r := httptest.NewRequest(http.MethodGet, scimSchemasPath+"?"+filter, nil)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusForbidden, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), scimProtocol.SchemaError)
+		})
+
+		t.Run(scimUserSchemaPath, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, scimUserSchemaPath, nil)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaSchema))
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaUser))
+		})
+
+		t.Run("/scim/v2/Schemas/urn%3Aietf%3Aparams%3Ascim%3Aschemas%3Acore%3A2.0%3AUser", func(t *testing.T) {
+			path := "/scim/v2/Schemas/urn%3Aietf%3Aparams%3Ascim%3Aschemas%3Acore%3A2.0%3AUser"
+			r := httptest.NewRequest(http.MethodGet, path, nil)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaSchema))
+		})
 
 		t.Run("Returns a SCIM 404 for an unknown endpoint", func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Unknown", nil)
@@ -140,7 +184,7 @@ func TestSCIM(t *testing.T) {
 
 		t.Run("Returns a SCIM 405 for an unsupported method", func(t *testing.T) {
 			for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
-				for _, path := range scimPaths {
+				for _, path := range discoveryPaths {
 					t.Run(method+" "+path, func(t *testing.T) {
 						r := httptest.NewRequest(method, path, nil)
 						w := httptest.NewRecorder()
