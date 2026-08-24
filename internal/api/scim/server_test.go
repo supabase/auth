@@ -3,6 +3,7 @@ package scim
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/scim/protocol"
 )
@@ -46,11 +48,11 @@ func TestServer(t *testing.T) {
 	t.Run("NewServer trims a trailing slash from the external URL", func(t *testing.T) {
 		location := newServerFor("https://auth.example.com/").serviceProviderConfig.Meta.Location
 
-		require.Equal(t, "https://auth.example.com"+BasePath+"/ServiceProviderConfig", location)
+		require.Equal(t, "https://auth.example.com/scim/v2/ServiceProviderConfig", location)
 	})
 
 	t.Run("/ServiceProviderConfig", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodGet, BasePath+"/ServiceProviderConfig", nil)
+		r := httptest.NewRequest(http.MethodGet, "/scim/v2/ServiceProviderConfig", nil)
 		w := httptest.NewRecorder()
 
 		require.NoError(t, srv.ServiceProviderConfig(w, r))
@@ -149,7 +151,7 @@ func TestServer(t *testing.T) {
 	})
 
 	t.Run("NotFound", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodGet, BasePath+"/Unknown", nil)
+		r := httptest.NewRequest(http.MethodGet, "/scim/v2/Unknown", nil)
 		w := httptest.NewRecorder()
 
 		require.NoError(t, srv.NotFound(w, r))
@@ -159,45 +161,54 @@ func TestServer(t *testing.T) {
 		require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
 	})
 
-	t.Run("Users rejects pagination parameters that are not integers", func(t *testing.T) {
-		for _, query := range []string{"startIndex=first", "count=all"} {
-			t.Run(query, func(t *testing.T) {
-				r := httptest.NewRequest(http.MethodGet, BasePath+"/Users?"+query, nil)
-				w := httptest.NewRecorder()
+	t.Run("/Users", func(t *testing.T) {
+		t.Run("Unauthenticated", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
+			w := httptest.NewRecorder()
 
-				require.NoError(t, srv.Users(w, r))
+			require.NoError(t, srv.Users(w, r))
 
-				require.Equal(t, http.StatusBadRequest, w.Code)
-				require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-				require.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
-			})
-		}
+			require.Equal(t, http.StatusNotFound, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
+		})
+
+		t.Run("with invalid pagination parameters", func(t *testing.T) {
+			for _, query := range []string{"startIndex=first", "count=all"} {
+				t.Run(query, func(t *testing.T) {
+					r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?"+query, nil)
+					w := httptest.NewRecorder()
+
+					require.NoError(t, srv.Users(w, r))
+
+					require.Equal(t, http.StatusBadRequest, w.Code)
+					require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+
+					var body protocol.Error
+					require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+					assert.Equal(t, protocol.ScimTypeInvalidValue, body.ScimType)
+				})
+			}
+		})
 	})
 
-	t.Run("Users without a tenant on the context is a server error", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodGet, BasePath+"/Users", nil)
-		w := httptest.NewRecorder()
+	t.Run("/Users/{id}", func(t *testing.T) {
+		t.Run("Unauthenticated", func(t *testing.T) {
+			id := uuid.Must(uuid.NewV4()).String()
+			r := requestWithURLParam("Users/"+id, "id", id)
+			w := httptest.NewRecorder()
 
-		require.NoError(t, srv.Users(w, r))
+			require.NoError(t, srv.UserByID(w, r))
 
-		require.Equal(t, http.StatusNotFound, w.Code)
-		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-	})
-
-	t.Run("UserByID without a tenant on the context is a server error", func(t *testing.T) {
-		id := uuid.Must(uuid.NewV4()).String()
-		r := requestWithURLParam("Users/"+id, "id", id)
-		w := httptest.NewRecorder()
-
-		require.NoError(t, srv.UserByID(w, r))
-
-		require.Equal(t, http.StatusNotFound, w.Code)
-		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+			require.Equal(t, http.StatusNotFound, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
+		})
 	})
 }
 
 func requestWithURLParam(path, key, value string) *http.Request {
-	r := httptest.NewRequest(http.MethodGet, BasePath+"/"+path, nil)
+	r := httptest.NewRequest(http.MethodGet, "/scim/v2/"+path, nil)
 
 	routeCtx := chi.NewRouteContext()
 	routeCtx.URLParams.Add(key, value)

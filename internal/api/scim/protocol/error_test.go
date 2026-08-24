@@ -101,7 +101,7 @@ func TestErrorConstructors(t *testing.T) {
 		name     string
 		err      *Error
 		status   int
-		scimType ScimType
+		scimType ErrorType
 		cite     string
 	}{
 		{"ErrInvalidFilter", ErrInvalidFilter(""), http.StatusBadRequest, ScimTypeInvalidFilter, "Section 3.4.2.2, Table 3"},

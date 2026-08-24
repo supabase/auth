@@ -7,31 +7,31 @@ import (
 	"github.com/supabase/auth/internal/api/scim/core"
 )
 
-// ScimType is a detail error keyword from RFC 7644, Table 9.
-type ScimType string
+// ErrorType is a detail error keyword from RFC 7644, Table 9.
+type ErrorType string
 
 const (
-	ScimTypeInvalidFilter ScimType = "invalidFilter"
-	ScimTypeInvalidPath   ScimType = "invalidPath"
-	ScimTypeInvalidSyntax ScimType = "invalidSyntax"
-	ScimTypeInvalidValue  ScimType = "invalidValue"
-	ScimTypeInvalidVers   ScimType = "invalidVers"
-	ScimTypeMutability    ScimType = "mutability"
-	ScimTypeNoTarget      ScimType = "noTarget"
-	ScimTypeSensitive     ScimType = "sensitive"
-	ScimTypeTooMany       ScimType = "tooMany"
-	ScimTypeUniqueness    ScimType = "uniqueness"
+	ScimTypeInvalidFilter ErrorType = "invalidFilter"
+	ScimTypeInvalidPath   ErrorType = "invalidPath"
+	ScimTypeInvalidSyntax ErrorType = "invalidSyntax"
+	ScimTypeInvalidValue  ErrorType = "invalidValue"
+	ScimTypeInvalidVers   ErrorType = "invalidVers"
+	ScimTypeMutability    ErrorType = "mutability"
+	ScimTypeNoTarget      ErrorType = "noTarget"
+	ScimTypeSensitive     ErrorType = "sensitive"
+	ScimTypeTooMany       ErrorType = "tooMany"
+	ScimTypeUniqueness    ErrorType = "uniqueness"
 )
 
 // Error is the error message form defined in RFC 7644, Section 3.12.
 type Error struct {
 	Schemas  []core.SchemaURI `json:"schemas"`
-	ScimType ScimType         `json:"scimType,omitempty"`
+	ScimType ErrorType        `json:"scimType,omitempty"`
 	Detail   string           `json:"detail,omitempty"`
 	Status   string           `json:"status"`
 }
 
-func NewError(status int, scimType ScimType, detail string) *Error {
+func NewError(status int, scimType ErrorType, detail string) *Error {
 	return &Error{
 		Schemas:  []core.SchemaURI{SchemaError},
 		ScimType: scimType,
