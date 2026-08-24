@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -29,7 +30,7 @@ func testFixture(t *testing.T, file string) string {
 }
 
 func TestReadBodyRejectsATooLargeBody(t *testing.T) {
-	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 64)))
+	r := httptest.NewRequest(http.MethodPost, "/scim/v2", strings.NewReader(strings.Repeat("x", 64)))
 	r.Body = http.MaxBytesReader(httptest.NewRecorder(), r.Body, 8)
 
 	_, err := readBody(r)
@@ -366,6 +367,22 @@ func TestServer(t *testing.T) {
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidSyntax))
 		})
 
+		t.Run("with an oversized request body", func(t *testing.T) {
+			tenant := newTenant(t, db)
+
+			body := fmt.Sprintf(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"%s"}`, strings.Repeat("x", 64))
+			r := httptest.
+				NewRequest(http.MethodPost, "/scim/v2/Users", strings.NewReader(body)).
+				WithContext(withTenant(t.Context(), tenant))
+			r.Body = http.MaxBytesReader(httptest.NewRecorder(), r.Body, 8)
+
+			w := httptest.NewRecorder()
+
+			require.NoError(t, srv.CreateUser(w, r))
+
+			require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		})
 	})
 
 	t.Run("PUT /Users/{id}", func(t *testing.T) {
@@ -373,8 +390,8 @@ func TestServer(t *testing.T) {
 			tenant := newTenant(t, db)
 			created := create(t, srv, tenant, "carol")
 
-			r := scimRequest(http.MethodPut, "/Users/"+created.ID, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"carol-renamed"}`,
-				tenant, map[string]string{"id": created.ID})
+			body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"carol-renamed"}`
+			r := scimRequest(http.MethodPut, "/Users/"+created.ID, body, tenant, map[string]string{"id": created.ID})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.ReplaceUser(w, r))
 
@@ -402,7 +419,8 @@ func TestServer(t *testing.T) {
 			tenant := newTenant(t, db)
 			created := create(t, srv, tenant, "dave")
 
-			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":false}}]}`, tenant, map[string]string{"id": created.ID})
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":false}}]}`
+			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, body, tenant, map[string]string{"id": created.ID})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.PatchUser(w, r))
 
@@ -417,7 +435,8 @@ func TestServer(t *testing.T) {
 			tenant := newTenant(t, db)
 			id := uuid.Must(uuid.NewV4()).String()
 
-			r := scimRequest(http.MethodPatch, "/Users/"+id, `{"Operations":[{"op":"replace","value":{"active":false}}]}`, tenant, map[string]string{"id": id})
+			body := `{"Operations":[{"op":"replace","value":{"active":false}}]}`
+			r := scimRequest(http.MethodPatch, "/Users/"+id, body, tenant, map[string]string{"id": id})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.PatchUser(w, r))
 
@@ -428,7 +447,8 @@ func TestServer(t *testing.T) {
 			tenant := newTenant(t, db)
 			created := create(t, srv, tenant, "erin")
 
-			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, `{"Operations":[{"op":"move","path":"active"}]}`, tenant, map[string]string{"id": created.ID})
+			body := `{"Operations":[{"op":"move","path":"active"}]}`
+			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, body, tenant, map[string]string{"id": created.ID})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.PatchUser(w, r))
 
@@ -492,9 +512,6 @@ func scimRequest(method, target, body, tenant string, params map[string]string) 
 	return r.WithContext(withTenant(ctx, tenant))
 }
 
-// usersFor seeds a fresh tenant with userNames and returns a func that lists
-// that tenant's Users under the given query. The tenant is its own so that a
-// listing test cannot see another test's rows.
 func usersFor(t *testing.T, srv *Server, db *storage.Connection, userNames ...string) func(query string) *httptest.ResponseRecorder {
 	t.Helper()
 
