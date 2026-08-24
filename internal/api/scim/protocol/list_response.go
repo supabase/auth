@@ -13,11 +13,6 @@ type ListResponse[T any] struct {
 
 // NewListResponse describes one page of a collection: the resources in the
 // window the client asked for, and the number of resources its query matched.
-//
-// total is asked for separately because it is not len(resources): a client
-// pages through a collection larger than the page it is holding, and a total
-// taken from the page would tell it there is nothing more to fetch. A caller
-// holding a whole collection states that, as in NewListResponse(1, len(all), all).
 func NewListResponse[T any](startIndex, total int, resources []T) *ListResponse[T] {
 	if resources == nil {
 		resources = []T{}

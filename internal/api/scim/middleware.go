@@ -9,15 +9,10 @@ import (
 	"github.com/supabase/auth/internal/api/scim/protocol"
 )
 
-// bearerScheme is the authentication scheme of RFC 6750, Section 2.1. RFC 7235
-// makes a scheme name case insensitive, so it is matched that way.
 const bearerScheme = "bearer "
 
 type tenantKey struct{}
 
-// withTenant carries the tenant across the one hop a context is for: from the
-// middleware that resolved it to the handler that serves the request. The
-// storage interfaces take the tenant explicitly, so no query can omit it.
 func withTenant(ctx context.Context, tenant string) context.Context {
 	return context.WithValue(ctx, tenantKey{}, tenant)
 }
@@ -56,9 +51,6 @@ func (srv *Server) tenant(w http.ResponseWriter, r *http.Request) (context.Conte
 // unauthorized answers a credential that names no tenant. RFC 7644,
 // Section 3.12 gives 401 for a missing or invalid authorization header, and
 // RFC 6750, Section 3 asks for the challenge that says which scheme would work.
-//
-// It does not distinguish a missing token from a revoked or expired one: which
-// of those it was is not something an unauthenticated caller is owed.
 func (srv *Server) unauthorized(w http.ResponseWriter) error {
 	w.Header().Set("WWW-Authenticate", `Bearer realm="SCIM"`)
 	return protocol.WriteError(w, protocol.ErrUnauthorized("Bearer token is missing or invalid"))
