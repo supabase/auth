@@ -12,6 +12,7 @@ import (
 
 const bearerScheme = "bearer "
 
+// TODO:: Replace with https://github.com/supabase/auth/pull/2677
 type tenantKey struct{}
 
 type scimToken struct {
@@ -79,15 +80,17 @@ func (srv *Server) lookup(ctx context.Context, credential string) (string, error
 	}
 
 	var rows []scimToken
-	err := srv.db.WithContext(ctx).RawQuery(
-		"SELECT t.id, t.sso_provider_id FROM scim_tokens t"+
-			" JOIN sso_providers p ON p.id = t.sso_provider_id"+
-			" WHERE t.token_hash = ?"+
-			"   AND t.revoked_at IS NULL"+
-			"   AND (t.expires_at IS NULL OR t.expires_at > now())"+
-			"   AND (p.disabled IS NULL OR p.disabled = false)",
-		hashToken(credential),
-	).All(&rows)
+	tokenQuery := `
+		SELECT t.id, t.sso_provider_id
+		FROM scim_tokens t
+		INNER JOIN sso_providers p ON p.id = t.sso_provider_id
+		WHERE t.token_hash = ?
+			AND t.revoked_at IS NULL
+			AND (t.expires_at IS NULL OR t.expires_at > now())
+			AND (p.disabled IS NULL OR p.disabled = false)
+		`
+
+	err := srv.db.WithContext(ctx).RawQuery(tokenQuery, hashToken(credential)).All(&rows)
 	if err != nil {
 		return "", fmt.Errorf("scim: looking up token: %w", err)
 	}
