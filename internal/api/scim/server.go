@@ -12,43 +12,28 @@ import (
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 )
 
 const BasePath = "/scim/v2"
 
 var ErrNotFound = errors.New("scim: resource not found")
 
-type Config struct {
-	ExternalURL string
-	Limits      protocol.Limits
-	Users       Store[*core.User]
-	Tenants     Tenants
-}
-
 type Server struct {
 	limits                protocol.Limits
-	users                 Store[*core.User]
-	tenants               Tenants
-	usersURL              string
+	users                 Repository[*core.User]
 	serviceProviderConfig *core.ServiceProviderConfig
 	resourceTypes         []*core.ResourceType
 	schemas               []*core.Schema
 }
 
-func NewServer(cfg Config) *Server {
-	baseURL := core.Join(cfg.ExternalURL, BasePath)
+func NewServer(db *storage.Connection, externalURL string) *Server {
+	baseURL := core.Join(externalURL, BasePath)
 	userSchema := newUserSchema(baseURL)
 
-	limits := cfg.Limits
-	if limits == (protocol.Limits{}) {
-		limits = protocol.DefaultLimits
-	}
-
 	return &Server{
-		limits:   limits,
-		users:    cfg.Users,
-		tenants:  cfg.Tenants,
-		usersURL: core.KindUser.Location(baseURL),
+		limits: protocol.DefaultLimits,
+		users:  &userRepository{db: db},
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
@@ -86,12 +71,7 @@ func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
 		return protocol.WriteError(w, err)
 	}
 
-	users, ok := srv.tenantUsers(r)
-	if !ok {
-		return srv.NotFound(w, r)
-	}
-
-	items, total, err := users.List(ctx, query)
+	items, total, err := srv.users.List(ctx, query)
 	if err != nil {
 		return srv.storeError(w, r, err)
 	}
@@ -107,12 +87,7 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 		return srv.NotFound(w, r)
 	}
 
-	users, ok := srv.tenantUsers(r)
-	if !ok {
-		return srv.NotFound(w, r)
-	}
-
-	user, err := users.Get(ctx, id.String())
+	user, err := srv.users.Get(ctx, id.String())
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return srv.NotFound(w, r)
@@ -126,11 +101,6 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 func (srv *Server) CreateUser(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	users, ok := srv.tenantUsers(r)
-	if !ok {
-		return srv.NotFound(w, r)
-	}
-
 	user, err := decodeUser(r)
 	if err != nil {
 		return protocol.WriteError(w, err)
@@ -139,12 +109,12 @@ func (srv *Server) CreateUser(w http.ResponseWriter, r *http.Request) error {
 		return protocol.WriteError(w, protocol.ErrInvalidValue(`"userName" is required`))
 	}
 
-	created, err := users.Create(ctx, user)
+	created, err := srv.users.Create(ctx, user)
 	if err != nil {
 		return srv.storeError(w, r, err)
 	}
 
-	w.Header().Set("Location", core.Join(srv.usersURL, created.ID))
+	w.Header().Set("Location", created.Meta.Location)
 	return protocol.Send(w, http.StatusCreated, created)
 }
 
@@ -156,11 +126,6 @@ func (srv *Server) ReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		return srv.NotFound(w, r)
 	}
 
-	users, ok := srv.tenantUsers(r)
-	if !ok {
-		return srv.NotFound(w, r)
-	}
-
 	user, err := decodeUser(r)
 	if err != nil {
 		return protocol.WriteError(w, err)
@@ -169,7 +134,7 @@ func (srv *Server) ReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		return protocol.WriteError(w, protocol.ErrInvalidValue(`"userName" is required`))
 	}
 
-	replaced, err := users.Replace(ctx, id.String(), user)
+	replaced, err := srv.users.Replace(ctx, id.String(), user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return srv.NotFound(w, r)
@@ -187,11 +152,6 @@ func (srv *Server) PatchUser(w http.ResponseWriter, r *http.Request) error {
 		return srv.NotFound(w, r)
 	}
 
-	users, ok := srv.tenantUsers(r)
-	if !ok {
-		return srv.NotFound(w, r)
-	}
-
 	body, err := readBody(r)
 	if err != nil {
 		return protocol.WriteError(w, err)
@@ -201,7 +161,7 @@ func (srv *Server) PatchUser(w http.ResponseWriter, r *http.Request) error {
 		return protocol.WriteError(w, err)
 	}
 
-	patched, err := users.Patch(ctx, id.String(), patch)
+	patched, err := srv.users.Patch(ctx, id.String(), patch)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return srv.NotFound(w, r)
@@ -219,12 +179,7 @@ func (srv *Server) DeleteUser(w http.ResponseWriter, r *http.Request) error {
 		return srv.NotFound(w, r)
 	}
 
-	users, ok := srv.tenantUsers(r)
-	if !ok {
-		return srv.NotFound(w, r)
-	}
-
-	if err := users.Delete(ctx, id.String()); err != nil {
+	if err := srv.users.Delete(ctx, id.String()); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return srv.NotFound(w, r)
 		}
@@ -261,17 +216,6 @@ func readBody(r *http.Request) ([]byte, error) {
 	return body, nil
 }
 
-// tenantUsers is the requesting tenant's collection of Users. Every handler
-// scopes through here, so the tenant is named once for a request rather than
-// once for each query it makes.
-func (srv *Server) tenantUsers(r *http.Request) (Repository[*core.User], bool) {
-	tenant, ok := tenantFrom(r.Context())
-	if !ok {
-		return nil, false
-	}
-	return srv.users.For(tenant), true
-}
-
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
 	return protocol.WriteError(w, protocol.ErrNotFound("Endpoint or resource does not exist"))
 }
@@ -300,43 +244,27 @@ func newUserSchema(baseURL string) *core.Schema {
 		NewSchema(baseURL, core.KindUser).
 		Describe("User Account").
 		With(
-			core.NewAttribute("userName", core.TypeString,
-				"Unique identifier for the User, typically used by the user to directly "+
-					"authenticate to the service provider. Each User MUST include a non-empty "+
-					"userName value. This identifier MUST be unique across the service "+
-					"provider's entire set of Users. REQUIRED.").
+			core.NewAttribute("userName", core.TypeString, "Unique identifier for the User").
 				AsRequired().
 				UniqueOn(core.UniquenessServer),
 
 			core.NewAttribute("name", core.TypeComplex,
-				"The components of the user's real name.").
+				"The components of the user's name.").
 				With(
-					core.NewAttribute("formatted", core.TypeString,
-						"The full name, including all middle names, titles, and suffixes as "+
-							"appropriate, formatted for display."),
-					core.NewAttribute("familyName", core.TypeString,
-						"The family name of the User, or last name in most Western languages."),
-					core.NewAttribute("givenName", core.TypeString,
-						"The given name of the User, or first name in most Western languages."),
-					core.NewAttribute("middleName", core.TypeString,
-						"The middle name(s) of the User."),
+					core.NewAttribute("formatted", core.TypeString, "The name formatted for display."),
+					core.NewAttribute("familyName", core.TypeString, "The family name of the User."),
+					core.NewAttribute("givenName", core.TypeString, "The given name of the User."),
+					core.NewAttribute("middleName", core.TypeString, "The middle name(s) of the User."),
 				),
 
-			core.NewAttribute("emails", core.TypeComplex,
-				"Email addresses for the user. The value SHOULD be canonicalized by the "+
-					"service provider, e.g., 'bjensen@example.com' instead of "+
-					"'bjensen@EXAMPLE.COM'.").
+			core.NewAttribute("emails", core.TypeComplex, "Email addresses for the user.").
 				AsMultiValued().
 				With(
 					core.NewAttribute("value", core.TypeString, "An email address for the user."),
-					core.NewAttribute("primary", core.TypeBoolean,
-						"A Boolean value indicating the 'primary' or preferred attribute value "+
-							"for this attribute. The primary attribute value 'true' MUST appear "+
-							"no more than once."),
+					core.NewAttribute("primary", core.TypeBoolean, "The 'primary' email address"),
 				),
 
-			core.NewAttribute("active", core.TypeBoolean,
-				"A Boolean value indicating the User's administrative status."),
+			core.NewAttribute("active", core.TypeBoolean, ""),
 		)
 }
 

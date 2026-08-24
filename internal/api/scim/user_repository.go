@@ -38,9 +38,7 @@ var userSortColumns = map[string]string{
 }
 
 type userRepository struct {
-	db       *storage.Connection
-	usersURL string
-	tenant   string
+	db *storage.Connection
 }
 
 type scimUserRow struct {
@@ -53,10 +51,7 @@ type scimUserRow struct {
 func (r *userRepository) Get(ctx context.Context, id string) (*core.User, error) {
 	var rows []scimUserRow
 
-	err := r.db.WithContext(ctx).RawQuery(
-		"SELECT "+scimUserColumns+" FROM "+scimUsersTable+scimUserWhere+" AND id = ?",
-		r.tenant, id,
-	).All(&rows)
+	err := r.db.WithContext(ctx).RawQuery("SELECT "+scimUserColumns+" FROM "+scimUsersTable+scimUserWhere+" AND id = ?", r.tenant(ctx), id).All(&rows)
 	if err != nil {
 		return nil, fmt.Errorf("scim: reading user: %w", err)
 	}
@@ -142,7 +137,7 @@ func (r *userRepository) Replace(ctx context.Context, id string, user *core.User
 	if err := r.db.WithContext(ctx).RawQuery(
 		"UPDATE "+scimUsersTable+" SET resource = ?, updated_at = now()"+scimUserWhere+
 			" AND id = ? RETURNING "+scimUserColumns,
-		document, r.tenant, id,
+		document, r.tenant(ctx), id,
 	).All(&rows); err != nil {
 		return nil, r.writeError("replacing", err)
 	}
@@ -167,10 +162,7 @@ func (r *userRepository) Patch(ctx context.Context, id string, patch *protocol.P
 
 func (r *userRepository) Delete(ctx context.Context, id string) error {
 	var ids []string
-	if err := r.db.WithContext(ctx).RawQuery(
-		"UPDATE "+scimUsersTable+" SET deleted_at = now()"+scimUserWhere+" AND id = ? RETURNING id",
-		r.tenant, id,
-	).All(&ids); err != nil {
+	if err := r.db.WithContext(ctx).RawQuery("UPDATE "+scimUsersTable+" SET deleted_at = now()"+scimUserWhere+" AND id = ? RETURNING id", r.tenant(ctx), id).All(&ids); err != nil {
 		return fmt.Errorf("scim: deleting user: %w", err)
 	}
 	if len(ids) == 0 {
@@ -206,9 +198,9 @@ func (r *userRepository) writeError(action string, err error) error {
 // scimUserWhere always carries, and the compiled filter when the query names
 // one. The COUNT and the windowed SELECT run under the same where, so they
 // count and return the same rows.
-func (r *userRepository) where(query *protocol.SearchRequest) (string, []any, error) {
+func (r *userRepository) where(ctx context.Context, query *protocol.SearchRequest) (string, []any, error) {
 	where := scimUserWhere
-	args := []any{r.tenant}
+	args := []any{r.tenant(ctx)}
 
 	filter, err := parseFilterQuery(query)
 	if err != nil {
@@ -237,7 +229,7 @@ func (r *userRepository) user(row scimUserRow) (*core.User, error) {
 		ResourceType: core.KindUser.Name,
 		Created:      row.CreatedAt.UTC(),
 		LastModified: row.UpdatedAt.UTC(),
-		Location:     core.Join(r.usersURL, row.ID),
+		// Location:     core.Join(r.usersURL, row.ID),
 	}
 
 	// A stored User is a User whether or not the document says so, and
@@ -246,6 +238,11 @@ func (r *userRepository) user(row scimUserRow) (*core.User, error) {
 		user.Schemas = []core.SchemaURI{core.SchemaUser}
 	}
 	return user, nil
+}
+
+func (r *userRepository) tenant(ctx context.Context) string {
+	tenant, _ := tenantFrom(ctx)
+	return tenant
 }
 
 // userOrderBy is the total order the query asks for. Every sort breaks its ties
