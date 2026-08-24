@@ -29,14 +29,6 @@ func testFixture(t *testing.T, file string) string {
 	return string(data)
 }
 
-func TestReadBodyRejectsATooLargeBody(t *testing.T) {
-	r := httptest.NewRequest(http.MethodPost, "/scim/v2", strings.NewReader(strings.Repeat("x", 64)))
-	r.Body = http.MaxBytesReader(httptest.NewRecorder(), r.Body, 8)
-
-	_, err := readBody(r)
-	require.ErrorIs(t, err, protocol.ErrTooLarge(""), "an oversized body is 413, not 400")
-}
-
 func TestServer(t *testing.T) {
 	db := newTestDB(t)
 	srv := NewServer(Config{
@@ -453,6 +445,26 @@ func TestServer(t *testing.T) {
 			require.NoError(t, srv.PatchUser(w, r))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+
+		t.Run("with an oversized request body", func(t *testing.T) {
+			tenant := newTenant(t, db)
+			created := create(t, srv, tenant, "alice")
+
+			routeCtx := chi.NewRouteContext()
+			routeCtx.URLParams.Add("id", created.ID)
+			body := fmt.Sprintf(`{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":"%s"}}]}`, strings.Repeat("x", 64))
+			r := httptest.
+				NewRequest(http.MethodPatch, "/scim/v2/Users/"+created.ID, strings.NewReader(body)).
+				WithContext(withTenant(context.WithValue(t.Context(), chi.RouteCtxKey, routeCtx), tenant))
+			r.Body = http.MaxBytesReader(httptest.NewRecorder(), r.Body, 8)
+
+			w := httptest.NewRecorder()
+
+			require.NoError(t, srv.PatchUser(w, r))
+
+			require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 		})
 	})
 
