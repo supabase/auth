@@ -18,9 +18,9 @@ const BasePath = "/scim/v2"
 
 type Config struct {
 	ExternalURL string
-	Limits protocol.Limits
-	Users   Store[*core.User]
-	Tenants Tenants
+	Limits      protocol.Limits
+	Users       Store[*core.User]
+	Tenants     Tenants
 }
 
 type Server struct {
@@ -347,9 +347,6 @@ func urlParam(r *http.Request, key string) string {
 	return value
 }
 
-// storeError answers an error from a repository. A *protocol.Error describes
-// something the client asked for and is reported as it stands; anything else is
-// this server's problem and is not disclosed.
 func (srv *Server) storeError(w http.ResponseWriter, r *http.Request, err error) error {
 	var scimErr *protocol.Error
 	if errors.As(err, &scimErr) {

@@ -53,7 +53,7 @@ func TestServer(t *testing.T) {
 		require.Equal(t, "https://auth.example.com"+BasePath+"/ServiceProviderConfig", location)
 	})
 
-	t.Run("ServiceProviderConfig", func(t *testing.T) {
+	t.Run("/ServiceProviderConfig", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, BasePath+"/ServiceProviderConfig", nil)
 		w := httptest.NewRecorder()
 
@@ -64,64 +64,93 @@ func TestServer(t *testing.T) {
 		require.JSONEq(t, testFixture(t, "service_provider_config.json"), w.Body.String())
 	})
 
-	for _, tc := range []struct {
-		path, fixture string
-		id            string
-		list, byID    func(http.ResponseWriter, *http.Request) error
-	}{
-		{"ResourceTypes", "resource_type_user.json", string(core.KindUser.Name), srv.ResourceTypes, srv.ResourceTypeByID},
-		{"Schemas", "schema_user.json", string(core.SchemaUser), srv.Schemas, srv.SchemaByID},
-	} {
-		t.Run(tc.path, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, BasePath+"/"+tc.path, nil)
-			w := httptest.NewRecorder()
+	t.Run("/ResourceTypes", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/scim/v2/ResourceTypes", nil)
+		w := httptest.NewRecorder()
 
-			require.NoError(t, tc.list(w, r))
+		require.NoError(t, srv.ResourceTypes(w, r))
 
-			require.Equal(t, http.StatusOK, w.Code)
-			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		require.JSONEq(t, testFixture(t, "resource_types.json"), w.Body.String())
+	})
 
-			var body protocol.ListResponse[json.RawMessage]
-			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	t.Run("/ResourceTypes?filter={name eq User}", func(t *testing.T) {
+		filter := url.Values{"filter": {`name eq "User"`}}.Encode()
+		r := httptest.NewRequest(http.MethodGet, "/scim/v2/ResourceTypes"+"?"+filter, nil)
+		w := httptest.NewRecorder()
 
-			require.Equal(t, 1, body.TotalResults)
-			require.Len(t, body.Resources, 1)
-			require.JSONEq(t, testFixture(t, tc.fixture), string(body.Resources[0]))
-		})
+		require.NoError(t, srv.ResourceTypes(w, r))
 
-		t.Run(tc.path+" rejects filter query parameter", func(t *testing.T) {
-			filter := url.Values{"filter": {`name eq "User"`}}.Encode()
-			r := httptest.NewRequest(http.MethodGet, BasePath+"/"+tc.path+"?"+filter, nil)
-			w := httptest.NewRecorder()
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.JSONEq(t, testFixture(t, "filter_forbidden.json"), w.Body.String())
+	})
 
-			require.NoError(t, tc.list(w, r))
+	t.Run("/ResourceTypes/User", func(t *testing.T) {
+		r := requestWithURLParam("/ResourceTypes/User", "id", "User")
+		w := httptest.NewRecorder()
 
-			require.Equal(t, http.StatusForbidden, w.Code)
-			require.JSONEq(t, testFixture(t, "filter_forbidden.json"), w.Body.String())
-		})
+		require.NoError(t, srv.ResourceTypeByID(w, r))
 
-		t.Run(tc.path+"/"+tc.id, func(t *testing.T) {
-			r := requestWithURLParam(tc.path+"/"+tc.id, "id", tc.id)
-			w := httptest.NewRecorder()
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		require.JSONEq(t, testFixture(t, "resource_type_user.json"), w.Body.String())
+	})
 
-			require.NoError(t, tc.byID(w, r))
+	t.Run("/ResourceTypes/Unknown", func(t *testing.T) {
+		r := requestWithURLParam("/ResourceTypes/Unknown", "id", "Unknown")
+		w := httptest.NewRecorder()
 
-			require.Equal(t, http.StatusOK, w.Code)
-			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-			require.JSONEq(t, testFixture(t, tc.fixture), w.Body.String())
-		})
+		require.NoError(t, srv.ResourceTypeByID(w, r))
 
-		t.Run(tc.path+" returns a SCIM 404 for an unknown id", func(t *testing.T) {
-			r := requestWithURLParam(tc.path+"/Unknown", "id", "Unknown")
-			w := httptest.NewRecorder()
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
+	})
 
-			require.NoError(t, tc.byID(w, r))
+	t.Run("/Schemas", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/scim/v2/Schemas", nil)
+		w := httptest.NewRecorder()
 
-			require.Equal(t, http.StatusNotFound, w.Code)
-			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
-		})
-	}
+		require.NoError(t, srv.Schemas(w, r))
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		require.JSONEq(t, testFixture(t, "schemas.json"), w.Body.String())
+	})
+
+	t.Run("/Schemas?filter={name eq User}", func(t *testing.T) {
+		filter := url.Values{"filter": {`name eq "User"`}}.Encode()
+		r := httptest.NewRequest(http.MethodGet, "/scim/v2/Schemas"+"?"+filter, nil)
+		w := httptest.NewRecorder()
+
+		require.NoError(t, srv.Schemas(w, r))
+
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.JSONEq(t, testFixture(t, "filter_forbidden.json"), w.Body.String())
+	})
+
+	t.Run("/Schemas/User", func(t *testing.T) {
+		r := requestWithURLParam("/Schemas/urn:ietf:params:scim:schemas:core:2.0:User", "id", "urn:ietf:params:scim:schemas:core:2.0:User")
+		w := httptest.NewRecorder()
+
+		require.NoError(t, srv.SchemaByID(w, r))
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		require.JSONEq(t, testFixture(t, "schema_user.json"), w.Body.String())
+	})
+
+	t.Run("/Schemas/Unknown", func(t *testing.T) {
+		r := requestWithURLParam("/Schemas/Unknown", "id", "Unknown")
+		w := httptest.NewRecorder()
+
+		require.NoError(t, srv.SchemaByID(w, r))
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
+	})
 
 	t.Run("NotFound", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, BasePath+"/Unknown", nil)
