@@ -175,22 +175,32 @@ func TestServer(t *testing.T) {
 			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
 		})
 
-		t.Run("with invalid pagination parameters", func(t *testing.T) {
-			for _, query := range []string{"startIndex=first", "count=all"} {
-				t.Run(query, func(t *testing.T) {
-					r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?"+query, nil)
-					w := httptest.NewRecorder()
+		t.Run("?startIndex=first", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?startIndex=first", nil)
+			w := httptest.NewRecorder()
 
-					require.NoError(t, srv.Users(w, r))
+			require.NoError(t, srv.Users(w, r))
 
-					require.Equal(t, http.StatusBadRequest, w.Code)
-					require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 
-					var body protocol.Error
-					require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-					assert.Equal(t, protocol.ScimTypeInvalidValue, body.ScimType)
-				})
-			}
+			var body protocol.Error
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+			assert.Equal(t, protocol.ScimTypeInvalidValue, body.ScimType)
+		})
+
+		t.Run("?count=all", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?count=all", nil)
+			w := httptest.NewRecorder()
+
+			require.NoError(t, srv.Users(w, r))
+
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+
+			var body protocol.Error
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+			assert.Equal(t, protocol.ScimTypeInvalidValue, body.ScimType)
 		})
 
 		t.Run("?startIndex=2&count=2", func(t *testing.T) {
@@ -294,7 +304,7 @@ func TestServer(t *testing.T) {
 		})
 	})
 
-	t.Run("/Users/{id}", func(t *testing.T) {
+	t.Run("GET /Users/{id}", func(t *testing.T) {
 		t.Run("Unauthenticated", func(t *testing.T) {
 			id := uuid.Must(uuid.NewV4()).String()
 			r := requestWithURLParam("Users/"+id, "id", id)
