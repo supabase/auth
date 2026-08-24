@@ -317,6 +317,152 @@ func TestServer(t *testing.T) {
 			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
 		})
 	})
+
+	t.Run("POST /Users", func(t *testing.T) {
+		create := func(t *testing.T, srv *Server, userName string) *core.User {
+			t.Helper()
+			r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"`+userName+`"}`, nil)
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.CreateUser(w, r))
+			require.Equal(t, http.StatusCreated, w.Code)
+
+			var user core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+			return &user
+		}
+
+		t.Run("POST creates a User and answers 201 with a Location", func(t *testing.T) {
+			srv := newServerFor("http://localhost:9999")
+
+			r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen"}`, nil)
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.CreateUser(w, r))
+
+			require.Equal(t, http.StatusCreated, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+
+			var user core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+			assert.NotEmpty(t, user.ID)
+			assert.Equal(t, "bjensen", user.UserName)
+			assert.Equal(t, "http://localhost:9999"+BasePath+"/Users/"+user.ID, w.Header().Get("Location"))
+		})
+
+		t.Run("POST without a userName is a bad request", func(t *testing.T) {
+			srv := newServerFor("http://localhost:9999")
+
+			r := scimRequest(http.MethodPost, "/Users", `{"externalId":"ext-1"}`, nil)
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.CreateUser(w, r))
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
+		})
+
+		t.Run("POST of a malformed body is a bad request", func(t *testing.T) {
+			srv := newServerFor("http://localhost:9999")
+
+			r := scimRequest(http.MethodPost, "/Users", `{"userName":`, nil)
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.CreateUser(w, r))
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidSyntax))
+		})
+
+		t.Run("PUT replaces a User's attributes", func(t *testing.T) {
+			srv := newServerFor("http://localhost:9999")
+			created := create(t, srv, "carol")
+
+			r := scimRequest(http.MethodPut, "/Users/"+created.ID, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"carol-renamed"}`,
+				map[string]string{"id": created.ID})
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.ReplaceUser(w, r))
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var user core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+			assert.Equal(t, created.ID, user.ID)
+			assert.Equal(t, "carol-renamed", user.UserName)
+		})
+
+		t.Run("PUT of an unknown id is not found", func(t *testing.T) {
+			srv := newServerFor("http://localhost:9999")
+			id := uuid.Must(uuid.NewV4()).String()
+
+			r := scimRequest(http.MethodPut, "/Users/"+id, `{"userName":"ghost"}`, map[string]string{"id": id})
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.ReplaceUser(w, r))
+
+			assert.Equal(t, http.StatusNotFound, w.Code)
+		})
+
+		t.Run("PATCH deactivates a User", func(t *testing.T) {
+			srv := newServerFor("http://localhost:9999")
+			created := create(t, srv, "dave")
+
+			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":false}}]}`, map[string]string{"id": created.ID})
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.PatchUser(w, r))
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var user core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+			require.NotNil(t, user.Active)
+			assert.False(t, *user.Active)
+		})
+
+		t.Run("PATCH of an unknown id is not found", func(t *testing.T) {
+			srv := newServerFor("http://localhost:9999")
+			id := uuid.Must(uuid.NewV4()).String()
+
+			r := scimRequest(http.MethodPatch, "/Users/"+id, `{"Operations":[{"op":"replace","value":{"active":false}}]}`, map[string]string{"id": id})
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.PatchUser(w, r))
+
+			assert.Equal(t, http.StatusNotFound, w.Code)
+		})
+
+		t.Run("PATCH of a malformed body is a bad request", func(t *testing.T) {
+			srv := newServerFor("http://localhost:9999")
+			created := create(t, srv, "erin")
+
+			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, `{"Operations":[{"op":"move","path":"active"}]}`, map[string]string{"id": created.ID})
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.PatchUser(w, r))
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+
+		t.Run("DELETE removes a User and answers 204", func(t *testing.T) {
+			srv := newServerFor("http://localhost:9999")
+			created := create(t, srv, "eve")
+
+			r := scimRequest(http.MethodDelete, "/Users/"+created.ID, "", map[string]string{"id": created.ID})
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.DeleteUser(w, r))
+
+			require.Equal(t, http.StatusNoContent, w.Code)
+			assert.Empty(t, w.Body.String())
+
+			get := scimRequest(http.MethodGet, "/Users/"+created.ID, "", map[string]string{"id": created.ID})
+			gw := httptest.NewRecorder()
+			require.NoError(t, srv.UserByID(gw, get))
+			assert.Equal(t, http.StatusNotFound, gw.Code)
+		})
+
+		t.Run("DELETE of an unknown id is not found", func(t *testing.T) {
+			srv := newServerFor("http://localhost:9999")
+			id := uuid.Must(uuid.NewV4()).String()
+
+			r := scimRequest(http.MethodDelete, "/Users/"+id, "", map[string]string{"id": id})
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.DeleteUser(w, r))
+
+			assert.Equal(t, http.StatusNotFound, w.Code)
+		})
+	})
+
 }
 
 func requestWithURLParam(path, key, value string) *http.Request {
@@ -342,151 +488,6 @@ func scimRequest(method, target, body string, params map[string]string) *http.Re
 
 	ctx := context.WithValue(r.Context(), chi.RouteCtxKey, routeCtx)
 	return r.WithContext(withTenant(ctx, tenant))
-}
-
-func TestServerUserWrites(t *testing.T) {
-	create := func(t *testing.T, srv *Server, userName string) *core.User {
-		t.Helper()
-		r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"`+userName+`"}`, nil)
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.CreateUser(w, r))
-		require.Equal(t, http.StatusCreated, w.Code)
-
-		var user core.User
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
-		return &user
-	}
-
-	t.Run("POST creates a User and answers 201 with a Location", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-
-		r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen"}`, nil)
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.CreateUser(w, r))
-
-		require.Equal(t, http.StatusCreated, w.Code)
-		require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-
-		var user core.User
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
-		assert.NotEmpty(t, user.ID)
-		assert.Equal(t, "bjensen", user.UserName)
-		assert.Equal(t, "http://localhost:9999"+BasePath+"/Users/"+user.ID, w.Header().Get("Location"))
-	})
-
-	t.Run("POST without a userName is a bad request", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-
-		r := scimRequest(http.MethodPost, "/Users", `{"externalId":"ext-1"}`, nil)
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.CreateUser(w, r))
-
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
-	})
-
-	t.Run("POST of a malformed body is a bad request", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-
-		r := scimRequest(http.MethodPost, "/Users", `{"userName":`, nil)
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.CreateUser(w, r))
-
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidSyntax))
-	})
-
-	t.Run("PUT replaces a User's attributes", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-		created := create(t, srv, "carol")
-
-		r := scimRequest(http.MethodPut, "/Users/"+created.ID, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"carol-renamed"}`,
-			map[string]string{"id": created.ID})
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.ReplaceUser(w, r))
-
-		require.Equal(t, http.StatusOK, w.Code)
-		var user core.User
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
-		assert.Equal(t, created.ID, user.ID)
-		assert.Equal(t, "carol-renamed", user.UserName)
-	})
-
-	t.Run("PUT of an unknown id is not found", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-		id := uuid.Must(uuid.NewV4()).String()
-
-		r := scimRequest(http.MethodPut, "/Users/"+id, `{"userName":"ghost"}`, map[string]string{"id": id})
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.ReplaceUser(w, r))
-
-		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
-
-	t.Run("PATCH deactivates a User", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-		created := create(t, srv, "dave")
-
-		r := scimRequest(http.MethodPatch, "/Users/"+created.ID, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":false}}]}`, map[string]string{"id": created.ID})
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.PatchUser(w, r))
-
-		require.Equal(t, http.StatusOK, w.Code)
-		var user core.User
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
-		require.NotNil(t, user.Active)
-		assert.False(t, *user.Active)
-	})
-
-	t.Run("PATCH of an unknown id is not found", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-		id := uuid.Must(uuid.NewV4()).String()
-
-		r := scimRequest(http.MethodPatch, "/Users/"+id, `{"Operations":[{"op":"replace","value":{"active":false}}]}`, map[string]string{"id": id})
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.PatchUser(w, r))
-
-		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
-
-	t.Run("PATCH of a malformed body is a bad request", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-		created := create(t, srv, "erin")
-
-		r := scimRequest(http.MethodPatch, "/Users/"+created.ID, `{"Operations":[{"op":"move","path":"active"}]}`, map[string]string{"id": created.ID})
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.PatchUser(w, r))
-
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-	})
-
-	t.Run("DELETE removes a User and answers 204", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-		created := create(t, srv, "eve")
-
-		r := scimRequest(http.MethodDelete, "/Users/"+created.ID, "", map[string]string{"id": created.ID})
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.DeleteUser(w, r))
-
-		require.Equal(t, http.StatusNoContent, w.Code)
-		assert.Empty(t, w.Body.String())
-
-		get := scimRequest(http.MethodGet, "/Users/"+created.ID, "", map[string]string{"id": created.ID})
-		gw := httptest.NewRecorder()
-		require.NoError(t, srv.UserByID(gw, get))
-		assert.Equal(t, http.StatusNotFound, gw.Code)
-	})
-
-	t.Run("DELETE of an unknown id is not found", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-		id := uuid.Must(uuid.NewV4()).String()
-
-		r := scimRequest(http.MethodDelete, "/Users/"+id, "", map[string]string{"id": id})
-		w := httptest.NewRecorder()
-		require.NoError(t, srv.DeleteUser(w, r))
-
-		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
 }
 
 func usersFor(t *testing.T, userNames ...string) (*Server, func(query string) *httptest.ResponseRecorder) {
