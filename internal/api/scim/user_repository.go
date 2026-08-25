@@ -3,10 +3,13 @@ package scim
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/storage"
@@ -14,6 +17,9 @@ import (
 
 const getUser = `SELECT id, resource, active, created_at, updated_at FROM scim_users
 	WHERE sso_provider_id = ? AND deleted_at IS NULL AND id = ?`
+
+const createUser = `INSERT INTO scim_users (sso_provider_id, resource)
+	VALUES (?, ?) RETURNING id, resource, active, created_at, updated_at`
 
 const countUsers = `SELECT COUNT(*) FROM scim_users
 	WHERE sso_provider_id = ? AND deleted_at IS NULL`
@@ -83,6 +89,41 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 		users = append(users, user)
 	}
 	return users, total, nil
+}
+
+func (r *userRepository) Create(ctx context.Context, user *core.User) (*core.User, error) {
+	resource, err := r.toResource(user)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows []scimUser
+	if err := r.db.WithContext(ctx).RawQuery(createUser, r.tenant(ctx), resource).All(&rows); err != nil {
+		return nil, r.buildError("creating", err)
+	}
+	return r.mapFrom(&rows[0])
+}
+
+// toResource is the document that gets stored. id and meta are the store's to
+// assign, so a client cannot dictate them.
+func (r *userRepository) toResource(user *core.User) ([]byte, error) {
+	stored := *user
+	stored.ID = ""
+	stored.Meta = core.Meta{}
+
+	resource, err := json.Marshal(&stored)
+	if err != nil {
+		return nil, fmt.Errorf("scim: encoding user: %w", err)
+	}
+	return resource, nil
+}
+
+func (r *userRepository) buildError(action string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		return protocol.ErrUniqueness("a User with this userName already exists")
+	}
+	return fmt.Errorf("scim: %s user: %w", action, err)
 }
 
 func (r *userRepository) mapFrom(row *scimUser) (*core.User, error) {

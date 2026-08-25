@@ -1,9 +1,12 @@
 package scim
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
@@ -77,6 +80,26 @@ func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, items))
 }
 
+func (srv *Server) CreateUser(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	user, err := srv.decodeUser(r)
+	if err != nil {
+		return protocol.WriteError(w, err)
+	}
+	if err := srv.validateUser(user); err != nil {
+		return protocol.WriteError(w, err)
+	}
+
+	created, err := srv.users.Create(ctx, user)
+	if err != nil {
+		return srv.sendError(w, r, err)
+	}
+
+	w.Header().Set("Location", created.Meta.Location)
+	return protocol.Send(w, http.StatusCreated, created)
+}
+
 func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
@@ -117,6 +140,32 @@ func byID[T core.Resource](w http.ResponseWriter, r *http.Request, resources []T
 		}
 	}
 	return notFound(w)
+}
+
+func (srv *Server) validateUser(user *core.User) *protocol.Error {
+	if user.UserName == "" {
+		return protocol.ErrInvalidValue(`"userName" is required`)
+	}
+	if !slices.Contains(user.Schemas, core.SchemaUser) {
+		return protocol.ErrInvalidValue(`"schemas" must include the User schema URN`)
+	}
+	return nil
+}
+
+func (srv *Server) decodeUser(r *http.Request) (*core.User, error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return nil, protocol.ErrTooLarge("the request body is too large")
+		}
+		return nil, protocol.ErrInvalidSyntax("could not read the request body")
+	}
+
+	user := new(core.User)
+	if err := json.Unmarshal(body, user); err != nil {
+		return nil, protocol.ErrInvalidSyntax("request body is not a valid User")
+	}
+	return user, nil
 }
 
 func (srv *Server) sendError(w http.ResponseWriter, r *http.Request, err error) error {

@@ -121,6 +121,103 @@ func TestServer(t *testing.T) {
 		})
 	})
 
+	t.Run("POST /Users", func(t *testing.T) {
+		const validBody = `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen"}`
+
+		created := func(t *testing.T, body string) (*httptest.ResponseRecorder, string) {
+			t.Helper()
+
+			tenant := newTenant(t, db)
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.CreateUser(w, scimRequest(http.MethodPost, "/Users", body, tenant, nil)))
+			return w, tenant
+		}
+
+		t.Run("stores the resource and names its location", func(t *testing.T) {
+			w, _ := created(t, validBody)
+
+			require.Equal(t, http.StatusCreated, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+
+			var user core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+			assert.NotEmpty(t, user.ID)
+			assert.Equal(t, "bjensen", user.UserName)
+			assert.Equal(t, testExternalURL+BasePath+"/Users/"+user.ID, w.Header().Get("Location"))
+		})
+
+		t.Run("defaults active to true when omitted", func(t *testing.T) {
+			w, _ := created(t, validBody)
+
+			require.Equal(t, http.StatusCreated, w.Code)
+
+			var user core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+			require.NotNil(t, user.Active)
+			assert.True(t, *user.Active)
+		})
+
+		t.Run("ignores an id supplied by the client", func(t *testing.T) {
+			w, _ := created(t, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"id":"11111111-1111-1111-1111-111111111111","userName":"bjensen"}`)
+
+			require.Equal(t, http.StatusCreated, w.Code)
+
+			var user core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+			assert.NotEqual(t, "11111111-1111-1111-1111-111111111111", user.ID)
+		})
+
+		t.Run("a duplicate userName within a provider is a 409", func(t *testing.T) {
+			tenant := newTenant(t, db)
+
+			first := httptest.NewRecorder()
+			require.NoError(t, srv.CreateUser(first, scimRequest(http.MethodPost, "/Users", validBody, tenant, nil)))
+			require.Equal(t, http.StatusCreated, first.Code)
+
+			second := httptest.NewRecorder()
+			require.NoError(t, srv.CreateUser(second, scimRequest(http.MethodPost, "/Users", validBody, tenant, nil)))
+
+			require.Equal(t, http.StatusConflict, second.Code)
+			assert.Contains(t, second.Body.String(), string(protocol.ScimTypeUniqueness))
+		})
+
+		t.Run("the same userName in another provider is allowed", func(t *testing.T) {
+			one, _ := created(t, validBody)
+			require.Equal(t, http.StatusCreated, one.Code)
+
+			two, _ := created(t, validBody)
+			require.Equal(t, http.StatusCreated, two.Code)
+		})
+
+		for _, tc := range []struct {
+			name, body, scimType string
+		}{
+			{"without a userName", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"externalId":"ext-1"}`, string(protocol.ScimTypeInvalidValue)},
+			{"without schemas", `{"userName":"bjensen"}`, string(protocol.ScimTypeInvalidValue)},
+			{"with a malformed body", `{"userName":`, string(protocol.ScimTypeInvalidSyntax)},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				w, _ := created(t, tc.body)
+
+				assert.Equal(t, http.StatusBadRequest, w.Code)
+				assert.Contains(t, w.Body.String(), tc.scimType)
+			})
+		}
+
+		t.Run("an oversized request body is a 413", func(t *testing.T) {
+			tenant := newTenant(t, db)
+
+			r := scimRequest(http.MethodPost, "/Users", validBody, tenant, nil)
+			r.Body = http.MaxBytesReader(httptest.NewRecorder(), r.Body, 8)
+
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.CreateUser(w, r))
+
+			require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+		})
+	})
+
 	t.Run("GET /Users", func(t *testing.T) {
 		users := usersFor(t, srv, db, "a@example.com", "b@example.com", "c@example.com", "d@example.com")
 

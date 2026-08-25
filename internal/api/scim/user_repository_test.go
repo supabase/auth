@@ -19,6 +19,49 @@ func TestUserRepository(t *testing.T) {
 	tenant := newTenant(t, db)
 	ctx := ctxFor(tenant)
 
+	t.Run("Create", func(t *testing.T) {
+		user := func(name string) *core.User {
+			return &core.User{Schemas: []core.SchemaURI{core.SchemaUser}, UserName: name}
+		}
+
+		t.Run("assigns an id and preserves the attributes", func(t *testing.T) {
+			created, err := repo.Create(ctx, user("alice@example.com"))
+			require.NoError(t, err)
+
+			assert.NotEmpty(t, created.ID)
+			assert.Equal(t, "alice@example.com", created.UserName)
+			require.NotNil(t, created.Active)
+			assert.True(t, *created.Active)
+		})
+
+		t.Run("reads back what it wrote", func(t *testing.T) {
+			created, err := repo.Create(ctx, user("roundtrip@example.com"))
+			require.NoError(t, err)
+
+			got, err := repo.Get(ctx, created.ID)
+			require.NoError(t, err)
+			assert.Equal(t, created.ID, got.ID)
+			assert.Equal(t, created.UserName, got.UserName)
+		})
+
+		// The unique index is case-folded, so this must conflict.
+		t.Run("a duplicate userName is ErrUniqueness regardless of case", func(t *testing.T) {
+			_, err := repo.Create(ctx, user("Dup@example.com"))
+			require.NoError(t, err)
+
+			_, err = repo.Create(ctx, user("dup@example.com"))
+			require.ErrorIs(t, err, protocol.ErrUniqueness(""))
+		})
+
+		t.Run("the same userName in another tenant is allowed", func(t *testing.T) {
+			_, err := repo.Create(ctx, user("shared@example.com"))
+			require.NoError(t, err)
+
+			_, err = repo.Create(ctxFor(newTenant(t, db)), user("shared@example.com"))
+			require.NoError(t, err)
+		})
+	})
+
 	t.Run("List", func(t *testing.T) {
 		listRepo, listCtx := seedPostgres(t, seedUsers())
 		count := len(seedUserNames)

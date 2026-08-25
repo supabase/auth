@@ -9,4 +9,5 @@ import (
 type Repository[T any] interface {
 	Get(ctx context.Context, id string) (T, error)
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
+	Create(ctx context.Context, item T) (T, error)
 }
