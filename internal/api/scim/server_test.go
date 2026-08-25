@@ -87,15 +87,15 @@ func TestServer(t *testing.T) {
 			assert.Empty(t, seen)
 		})
 
-		t.Run("returns 404 when token is revoked", func(t *testing.T) {
+		t.Run("returns 401 when token is revoked", func(t *testing.T) {
 			revoked := grantToken(t, db, provider)
 			require.NoError(t, db.RawQuery("UPDATE scim_tokens SET revoked_at = now() WHERE token_hash = ?", hashToken(revoked)).Exec())
 
 			w, seen := served(t, "Bearer "+revoked)
 			assert.Empty(t, seen)
-			assert.Equal(t, http.StatusNotFound, w.Code)
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Equal(t, `Bearer realm="SCIM"`, w.Header().Get("WWW-Authenticate"))
 			assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-			assert.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
 		})
 	})
 
