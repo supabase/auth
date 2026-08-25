@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewSCIMToken(t *testing.T) {
-	token, digest := NewSCIMToken()
+	token, digest := NewToken()
 
 	t.Run("marks the token so that one is recognisable", func(t *testing.T) {
 		assert.Regexp(t, `^scim_`, token)
@@ -35,7 +35,7 @@ func TestNewSCIMToken(t *testing.T) {
 	})
 
 	t.Run("mints a different token every time", func(t *testing.T) {
-		other, otherDigest := NewSCIMToken()
+		other, otherDigest := NewToken()
 
 		assert.NotEqual(t, token, other)
 		assert.NotEqual(t, digest, otherDigest)

@@ -10,7 +10,7 @@ import (
 const TokenPrefix = "scim_"
 const tokenLength = 32
 
-func NewSCIMToken() (token, digest string) {
+func NewToken() (token, digest string) {
 	token = TokenPrefix + crypto.SecureAlphanumeric(tokenLength)
 	return token, hashToken(token)
 }

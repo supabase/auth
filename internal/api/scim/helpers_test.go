@@ -89,7 +89,7 @@ func seedPostgres(t *testing.T, users []*core.User) (Repository[*core.User], con
 func grantToken(t *testing.T, db *storage.Connection, provider string) string {
 	t.Helper()
 
-	token, digest := NewSCIMToken()
+	token, digest := NewToken()
 	require.NoError(t, db.RawQuery(
 		"INSERT INTO scim_tokens (sso_provider_id, token_hash) VALUES (?, ?)",
 		provider, digest,

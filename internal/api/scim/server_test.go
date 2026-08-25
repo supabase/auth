@@ -70,7 +70,7 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("returns 401 with a challenge when the token is unknown", func(t *testing.T) {
-			unknown, _ := NewSCIMToken()
+			unknown, _ := NewToken()
 
 			w, seen := served(t, "Bearer "+unknown)
 

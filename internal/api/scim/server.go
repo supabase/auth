@@ -17,12 +17,6 @@ import (
 
 const BasePath = "/scim/v2"
 
-var ErrNotFound = errors.New("scim: resource not found")
-
-// filterUnsupported is the detail this server gives for a filter it will not
-// honour. The status differs by endpoint, so the caller supplies the error.
-const filterUnsupported = "Filtering is not supported on this endpoint"
-
 type Server struct {
 	db                    *storage.Connection
 	limits                protocol.Limits
@@ -224,7 +218,7 @@ func readBody(r *http.Request) ([]byte, error) {
 }
 
 func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
-	if rejected, err := rejectFilter(w, r, protocol.ErrForbidden(filterUnsupported)); rejected {
+	if rejected, err := rejectFilter(w, r, protocol.ErrForbidden("Filtering is not supported on this endpoint")); rejected {
 		return err
 	}
 
