@@ -23,8 +23,8 @@ func TestNewServiceProviderConfig(t *testing.T) {
 
 		config := NewServiceProviderConfig(baseURL)
 
-		require.Equal(t, ResourceTypeServiceProviderConfig, config.Meta.ResourceType)
-		require.Equal(t, baseURL+EndpointServiceProviderConfig, config.Meta.Location)
+		require.Equal(t, ResourceTypeName("ServiceProviderConfig"), config.Meta.ResourceType)
+		require.Equal(t, baseURL+"/ServiceProviderConfig", config.Meta.Location)
 	})
 
 	t.Run("supports none of the optional protocol features", func(t *testing.T) {
@@ -36,6 +36,20 @@ func TestNewServiceProviderConfig(t *testing.T) {
 		assert.False(t, config.ChangePassword.Supported)
 		assert.False(t, config.Sort.Supported)
 		assert.False(t, config.ETag.Supported)
+	})
+
+	t.Run("Sorting claims support for sortBy and sortOrder", func(t *testing.T) {
+		config := NewServiceProviderConfig("").Sorting()
+
+		assert.True(t, config.Sort.Supported)
+		assert.False(t, config.Filter.Supported, "claiming one feature claims no other")
+	})
+
+	t.Run("Sorting reaches the wire", func(t *testing.T) {
+		body, err := json.Marshal(NewServiceProviderConfig("").Sorting())
+
+		require.NoError(t, err)
+		require.Contains(t, string(body), `"sort":{"supported":true}`)
 	})
 
 	t.Run("serializes authenticationSchemes as an array", func(t *testing.T) {

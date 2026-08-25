@@ -17,12 +17,16 @@ const (
 	scimServiceProviderConfigPath = "/scim/v2/ServiceProviderConfig"
 	scimResourceTypesPath         = "/scim/v2/ResourceTypes"
 	scimSchemasPath               = "/scim/v2/Schemas"
+	scimUserResourceTypePath      = scimResourceTypesPath + "/User"
+	scimUserSchemaPath            = scimSchemasPath + "/urn:ietf:params:scim:schemas:core:2.0:User"
 )
 
 var scimPaths = []string{
 	scimServiceProviderConfigPath,
 	scimResourceTypesPath,
 	scimSchemasPath,
+	scimUserResourceTypePath,
+	scimUserSchemaPath,
 }
 
 func TestSCIM(t *testing.T) {
@@ -97,6 +101,33 @@ func TestSCIM(t *testing.T) {
 				require.Equal(t, http.StatusForbidden, w.Code)
 				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
 				require.Contains(t, w.Body.String(), scimProtocol.SchemaError)
+			})
+		}
+
+		for _, tc := range []struct{ path, schema string }{
+			{scimUserResourceTypePath, string(scimCore.SchemaResourceType)},
+			{scimUserSchemaPath, string(scimCore.SchemaSchema)},
+		} {
+			t.Run(tc.path, func(t *testing.T) {
+				r := httptest.NewRequest(http.MethodGet, tc.path, nil)
+				w := httptest.NewRecorder()
+
+				api.handler.ServeHTTP(w, r)
+
+				require.Equal(t, http.StatusOK, w.Code)
+				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+				require.Contains(t, w.Body.String(), tc.schema)
+			})
+
+			t.Run(tc.path+" with an unknown id", func(t *testing.T) {
+				r := httptest.NewRequest(http.MethodGet, tc.path+"Nope", nil)
+				w := httptest.NewRecorder()
+
+				api.handler.ServeHTTP(w, r)
+
+				require.Equal(t, http.StatusNotFound, w.Code)
+				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+				require.Contains(t, w.Body.String(), string(scimProtocol.SchemaError))
 			})
 		}
 
