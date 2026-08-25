@@ -181,8 +181,7 @@ func decodeUser(r *http.Request) (*core.User, error) {
 func readBody(r *http.Request) ([]byte, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		var maxErr *http.MaxBytesError
-		if errors.As(err, &maxErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return nil, protocol.ErrTooLarge("the request body is too large")
 		}
 		return nil, protocol.ErrInvalidSyntax("could not read the request body")
@@ -248,8 +247,7 @@ func urlParam(r *http.Request, key string) string {
 }
 
 func (srv *Server) sendError(w http.ResponseWriter, r *http.Request, err error) error {
-	var scimErr *protocol.Error
-	if errors.As(err, &scimErr) {
+	if scimErr, ok := errors.AsType[*protocol.Error](err); ok {
 		return protocol.WriteError(w, scimErr)
 	}
 	return srv.internalError(w, r, err)

@@ -97,7 +97,7 @@ func listParam(values url.Values, name string) []string {
 	var list []string
 
 	for _, value := range values[name] {
-		for _, item := range strings.Split(value, ",") {
+		for item := range strings.SplitSeq(value, ",") {
 			if item = strings.TrimSpace(item); item != "" {
 				list = append(list, item)
 			}
