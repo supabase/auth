@@ -271,7 +271,7 @@ func createProvider(t *testing.T, conn *storage.Connection) (provider, token str
 	})
 
 	token, digest := scim.NewToken()
-	require.NoError(t, conn.RawQuery("INSERT INTO scim_tokens (sso_provider_id, token_hash) VALUES (?, ?)", provider, digest).Exec())
+	require.NoError(t, conn.RawQuery("INSERT INTO scim_tokens (sso_provider_id, token_hash, prefix) VALUES (?, ?, ?)", provider, digest, token[:12]).Exec())
 
 	return provider, token
 }

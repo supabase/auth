@@ -91,8 +91,8 @@ func grantToken(t *testing.T, db *storage.Connection, provider string) string {
 
 	token, digest := NewToken()
 	require.NoError(t, db.RawQuery(
-		"INSERT INTO scim_tokens (sso_provider_id, token_hash) VALUES (?, ?)",
-		provider, digest,
+		"INSERT INTO scim_tokens (sso_provider_id, token_hash, prefix) VALUES (?, ?, ?)",
+		provider, digest, token[:12],
 	).Exec())
 
 	return token
