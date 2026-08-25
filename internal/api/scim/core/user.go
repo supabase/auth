@@ -1,7 +1,5 @@
 package core
 
-import "time"
-
 type Email struct {
 	Value   string `json:"value"`
 	Primary bool   `json:"primary"`
@@ -25,10 +23,4 @@ type User struct {
 	Emails     []Email     `json:"emails,omitempty"`
 	Active     *bool       `json:"active,omitempty"`
 	Meta       Meta        `json:"meta"`
-}
-
-func (u *User) ResourceID() string { return u.ID }
-
-func (u *User) Timestamps() (created, updated time.Time) {
-	return u.Meta.Created, u.Meta.LastModified
 }

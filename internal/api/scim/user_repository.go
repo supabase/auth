@@ -38,6 +38,12 @@ type scimUser struct {
 	UpdatedAt time.Time `db:"updated_at"`
 }
 
+func (u *scimUser) ResourceID() string { return u.ID }
+
+func (u *scimUser) Timestamps() (created, updated time.Time) {
+	return u.CreatedAt, u.UpdatedAt
+}
+
 func (r *userRepository) Get(ctx context.Context, id string) (*core.User, error) {
 	var rows []scimUser
 
@@ -49,7 +55,7 @@ func (r *userRepository) Get(ctx context.Context, id string) (*core.User, error)
 	if len(rows) == 0 {
 		return nil, ErrNotFound
 	}
-	return r.user(rows[0])
+	return r.mapFrom(rows[0])
 }
 
 func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
@@ -82,7 +88,7 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 
 	users := make([]*core.User, 0, len(rows))
 	for _, row := range rows {
-		user, err := r.user(row)
+		user, err := r.mapFrom(row)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -101,7 +107,7 @@ func (r *userRepository) Create(ctx context.Context, user *core.User) (*core.Use
 	if err := r.db.WithContext(ctx).RawQuery("INSERT INTO scim_users (sso_provider_id, resource) VALUES (?, ?) RETURNING id, resource, created_at, updated_at", r.tenant(ctx), document).All(&rows); err != nil {
 		return nil, r.writeError("creating", err)
 	}
-	return r.user(rows[0])
+	return r.mapFrom(rows[0])
 }
 
 func (r *userRepository) Replace(ctx context.Context, id string, user *core.User) (*core.User, error) {
@@ -117,7 +123,7 @@ func (r *userRepository) Replace(ctx context.Context, id string, user *core.User
 	if len(rows) == 0 {
 		return nil, ErrNotFound
 	}
-	return r.user(rows[0])
+	return r.mapFrom(rows[0])
 }
 
 func (r *userRepository) Delete(ctx context.Context, id string) error {
@@ -163,16 +169,14 @@ func (r *userRepository) where(ctx context.Context, query *protocol.SearchReques
 	return where, []any{r.tenant(ctx)}, nil
 }
 
-func (r *userRepository) user(row scimUser) (*core.User, error) {
+func (r *userRepository) mapFrom(row scimUser) (*core.User, error) {
 	user := new(core.User)
 	if err := json.Unmarshal(row.Resource, user); err != nil {
 		return nil, fmt.Errorf("scim: decoding stored user %s: %w", row.ID, err)
 	}
 
 	user.ID = row.ID
-	user.Meta.Created = row.CreatedAt
-	user.Meta.LastModified = row.UpdatedAt
-	user.Meta = core.NewMeta(r.baseURL, core.KindUser).For(user)
+	user.Meta = core.NewMeta(r.baseURL, core.KindUser).For(row)
 
 	if len(user.Schemas) == 0 {
 		user.Schemas = []core.SchemaURI{core.SchemaUser}
@@ -190,8 +194,7 @@ func userOrderBy(query *protocol.SearchRequest) (string, error) {
 	if query.SortBy != "" {
 		sortable, ok := userSortColumns[strings.ToLower(query.SortBy)]
 		if !ok {
-			return "", protocol.ErrInvalidValue(strconv.Quote(query.SortBy) +
-				" is not an attribute this resource can be sorted by")
+			return "", protocol.ErrInvalidValue(strconv.Quote(query.SortBy) + " is not an attribute this resource can be sorted by")
 		}
 		column = sortable
 	}

@@ -14,6 +14,10 @@ import (
 )
 
 func TestUserRepository(t *testing.T) {
+	user := func(name string) *core.User {
+		return &core.User{Schemas: []core.SchemaURI{core.SchemaUser}, UserName: name}
+	}
+
 	repo, ctx := seedPostgres(t, seedUsers())
 
 	t.Run("List", func(t *testing.T) {
@@ -129,28 +133,33 @@ func TestUserRepository(t *testing.T) {
 		})
 	})
 
-	t.Run("Create", func(t *testing.T) {
-		user := func(name string) *core.User {
-			return &core.User{Schemas: []core.SchemaURI{core.SchemaUser}, UserName: name}
-		}
+	t.Run("Get", func(t *testing.T) {
+		t.Run("reads the resource back", func(t *testing.T) {
+			created, err := repo.Create(ctx, user("bob"))
+			require.NoError(t, err)
 
+			got, err := repo.Get(ctx, created.ID)
+			require.NoError(t, err)
+
+			assert.Equal(t, created.ID, got.ID)
+			assert.Equal(t, "bob", got.UserName)
+			require.NotNil(t, got.Active)
+			assert.True(t, *got.Active)
+			assert.Equal(t, created.Meta.Created, got.Meta.Created)
+			assert.Equal(t, created.Meta.LastModified, got.Meta.LastModified)
+		})
+	})
+
+	t.Run("Create", func(t *testing.T) {
 		t.Run("Create assigns an id and preserves the attributes", func(t *testing.T) {
 			created, err := repo.Create(ctx, user("alice"))
 			require.NoError(t, err)
 			assert.NotEmpty(t, created.ID)
 			assert.Equal(t, "alice", created.UserName)
 		})
+	})
 
-		t.Run("Create then Get reads the resource back", func(t *testing.T) {
-			created, err := repo.Create(ctx, user("bob"))
-			require.NoError(t, err)
-
-			got, err := repo.Get(ctx, created.ID)
-			require.NoError(t, err)
-			assert.Equal(t, created.ID, got.ID)
-			assert.Equal(t, "bob", got.UserName)
-		})
-
+	t.Run("Replace", func(t *testing.T) {
 		t.Run("Replace changes attributes and keeps the id", func(t *testing.T) {
 			created, err := repo.Create(ctx, user("carol"))
 			require.NoError(t, err)
@@ -165,16 +174,6 @@ func TestUserRepository(t *testing.T) {
 			assert.Equal(t, "carol-renamed", got.UserName)
 		})
 
-		t.Run("Delete makes a resource unreadable", func(t *testing.T) {
-			created, err := repo.Create(ctx, user("eve"))
-			require.NoError(t, err)
-
-			require.NoError(t, repo.Delete(ctx, created.ID))
-
-			_, err = repo.Get(ctx, created.ID)
-			require.ErrorIs(t, err, ErrNotFound)
-		})
-
 		t.Run("writing an unknown id is ErrNotFound", func(t *testing.T) {
 			missing := uuid.Must(uuid.NewV4()).String()
 
@@ -185,6 +184,18 @@ func TestUserRepository(t *testing.T) {
 			require.ErrorIs(t, err, ErrNotFound)
 
 			require.ErrorIs(t, repo.Delete(ctx, missing), ErrNotFound)
+		})
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		t.Run("Delete makes a resource unreadable", func(t *testing.T) {
+			created, err := repo.Create(ctx, user("eve"))
+			require.NoError(t, err)
+
+			require.NoError(t, repo.Delete(ctx, created.ID))
+
+			_, err = repo.Get(ctx, created.ID)
+			require.ErrorIs(t, err, ErrNotFound)
 		})
 	})
 }
