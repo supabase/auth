@@ -3,6 +3,7 @@
 create table if not exists {{ index .Options "Namespace" }}.scim_users (
     id uuid not null default gen_random_uuid(),
     sso_provider_id uuid not null references {{ index .Options "Namespace" }}.sso_providers (id) on delete cascade,
+    user_id uuid references {{ index .Options "Namespace" }}.users (id) on delete set null,
     resource jsonb not null,
     user_name text not null generated always as (resource->>'userName') stored,
     external_id text generated always as (resource->>'externalId') stored,
@@ -20,6 +21,11 @@ create unique index if not exists scim_users_user_name_key
 
 create index if not exists scim_users_external_id_idx
     on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, external_id)
+    where deleted_at is null;
+
+-- Links a SCIM user to its auth.users row; user_id is null until first sign-in.
+create index if not exists scim_users_user_id_idx
+    on {{ index .Options "Namespace" }}.scim_users (user_id)
     where deleted_at is null;
 
 -- Sort indexes break ties on id for a total order; user_name uses collate "C"

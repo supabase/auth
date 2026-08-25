@@ -4,6 +4,7 @@ create table if not exists {{ index .Options "Namespace" }}.scim_tokens (
     id uuid not null default gen_random_uuid(),
     sso_provider_id uuid not null references {{ index .Options "Namespace" }}.sso_providers (id) on delete cascade,
     token_hash text not null,
+    prefix text not null,
     created_at timestamptz not null default now(),
     expires_at timestamptz,
     revoked_at timestamptz,
