@@ -1,14 +1,12 @@
--- SCIM Groups provisioned into one SSO provider. Like scim_users, the RFC 7643
--- Group is stored as a document; display_name is generated so it cannot drift.
--- Created empty here; endpoints and models land later (AUTH-1509).
+-- SCIM Groups; RFC 7643 Group
 create table if not exists {{ index .Options "Namespace" }}.scim_groups (
     id uuid not null default gen_random_uuid(),
     sso_provider_id uuid not null references {{ index .Options "Namespace" }}.sso_providers (id) on delete cascade,
     resource jsonb not null,
     display_name text not null generated always as (resource->>'displayName') stored,
+    external_id text generated always as (resource->>'externalId') stored,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    deleted_at timestamptz,
     constraint scim_groups_pkey primary key (id)
 );
 
