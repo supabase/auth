@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +24,13 @@ var userSortColumns = map[string]string{
 	"meta.created":      "created_at",
 	"meta.lastmodified": "updated_at",
 }
+
+const countUsers = `SELECT COUNT(*) FROM scim_users
+	WHERE sso_provider_id = ? AND deleted_at IS NULL`
+
+const listUsers = `SELECT id, resource, created_at, updated_at FROM scim_users
+	WHERE sso_provider_id = ? AND deleted_at IS NULL
+	ORDER BY %s LIMIT ? OFFSET ?`
 
 type userRepository struct {
 	db      *storage.Connection
@@ -59,20 +65,20 @@ func (r *userRepository) Get(ctx context.Context, id string) (*core.User, error)
 }
 
 func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
+	if query.Filter != "" {
+		return nil, 0, protocol.ErrInvalidFilter("filtering is not supported")
+	}
+
 	orderBy, err := r.orderBy(query)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	where, args, err := r.where(ctx, query)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	db := r.db.WithContext(ctx)
+	tenant := r.tenant(ctx)
 
 	var total int
-	if err := db.RawQuery("SELECT COUNT(*) FROM scim_users"+where, args...).First(&total); err != nil {
+	if err := db.RawQuery(countUsers, tenant).First(&total); err != nil {
 		return nil, 0, fmt.Errorf("scim: counting users: %w", err)
 	}
 
@@ -80,9 +86,8 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 		return nil, total, nil
 	}
 
-	page := append(slices.Clone(args), query.Count, query.Offset())
 	var rows []scimUser
-	if err := db.RawQuery("SELECT id, resource, created_at, updated_at FROM scim_users"+where+" ORDER BY "+orderBy+" LIMIT ? OFFSET ?", page...).All(&rows); err != nil {
+	if err := db.RawQuery(fmt.Sprintf(listUsers, orderBy), tenant, query.Count, query.Offset()).All(&rows); err != nil {
 		return nil, 0, fmt.Errorf("scim: listing users: %w", err)
 	}
 
@@ -159,14 +164,6 @@ func (r *userRepository) writeError(action string, err error) error {
 		return protocol.ErrUniqueness("a User with this userName already exists")
 	}
 	return fmt.Errorf("scim: %s user: %w", action, err)
-}
-
-func (r *userRepository) where(ctx context.Context, query *protocol.SearchRequest) (string, []any, error) {
-	if query.Filter != "" {
-		return "", nil, protocol.ErrInvalidFilter("filtering is not supported")
-	}
-	where := " WHERE sso_provider_id = ? AND deleted_at IS NULL"
-	return where, []any{r.tenant(ctx)}, nil
 }
 
 func (r *userRepository) mapFrom(row *scimUser) (*core.User, error) {
