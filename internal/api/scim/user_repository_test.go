@@ -193,6 +193,25 @@ func TestUserRepository(t *testing.T) {
 			assert.False(t, *replaced.Active)
 		})
 
+		t.Run("replaces active supplied in the body, per RFC 7644 3.5.1", func(t *testing.T) {
+			db := newTestDB(t)
+			repo := newTestRepo(db)
+			ctx := ctxFor(newTenant(t, db))
+
+			created, err := repo.Create(ctx, user("dinesh"))
+			require.NoError(t, err)
+
+			require.NoError(t, db.RawQuery("UPDATE scim_users SET resource = jsonb_set(resource, '{active}', 'false') WHERE id = ?", created.ID).Exec())
+
+			active := true
+			reactivating := &core.User{Schemas: []core.SchemaURI{core.SchemaUser}, UserName: "dinesh", Active: &active}
+
+			replaced, err := repo.Replace(ctx, created.ID, reactivating)
+			require.NoError(t, err)
+			require.NotNil(t, replaced.Active)
+			assert.True(t, *replaced.Active)
+		})
+
 		t.Run("writing an unknown id is ErrNotFound", func(t *testing.T) {
 			missing := uuid.Must(uuid.NewV4()).String()
 
