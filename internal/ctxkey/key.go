@@ -3,7 +3,10 @@
 // out are checked by the compiler rather than by hand at every call site.
 package ctxkey
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 type Key[T any] struct {
 	name string
@@ -14,7 +17,7 @@ func New[T any](name string) *Key[T] {
 }
 
 func (k *Key[T]) String() string {
-	return k.name
+	return fmt.Sprintf("%s(%p)", k.name, k)
 }
 
 func (k *Key[T]) WithValue(ctx context.Context, value T) context.Context {

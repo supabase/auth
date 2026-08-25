@@ -67,4 +67,9 @@ func TestKey(t *testing.T) {
 		ctx := New[string]("first").WithValue(context.Background(), "one")
 		require.Contains(t, fmt.Sprint(ctx), "first")
 	})
+
+	t.Run("distinguishes independently constructed keys sharing a name", func(t *testing.T) {
+		first, second := New[string]("dup"), New[string]("dup")
+		require.NotEqual(t, first.String(), second.String())
+	})
 }
