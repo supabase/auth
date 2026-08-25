@@ -335,6 +335,21 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, testExternalURL+BasePath+"/Users/"+user.ID, w.Header().Get("Location"))
 		})
 
+		t.Run("defaults active to true when omitted", func(t *testing.T) {
+			tenant := newTenant(t, db)
+
+			r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"active-default"}`, tenant, nil)
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.CreateUser(w, r))
+
+			require.Equal(t, http.StatusCreated, w.Code)
+
+			var user core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+			require.NotNil(t, user.Active)
+			assert.True(t, *user.Active)
+		})
+
 		t.Run("without a userName", func(t *testing.T) {
 			tenant := newTenant(t, db)
 

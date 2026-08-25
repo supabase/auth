@@ -142,6 +142,10 @@ func userDocument(user *core.User) ([]byte, error) {
 	stored := *user
 	stored.ID = ""
 	stored.Meta = core.Meta{}
+	if stored.Active == nil {
+		active := true
+		stored.Active = &active
+	}
 
 	document, err := json.Marshal(&stored)
 	if err != nil {
