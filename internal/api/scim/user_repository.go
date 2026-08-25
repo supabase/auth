@@ -89,26 +89,26 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 }
 
 func (r *userRepository) Create(ctx context.Context, user *core.User) (*core.User, error) {
-	document, err := userDocument(user)
+	resource, err := r.toResource(user)
 	if err != nil {
 		return nil, err
 	}
 
 	var rows []scimUser
-	if err := r.db.WithContext(ctx).RawQuery("INSERT INTO scim_users (sso_provider_id, resource) VALUES (?, ?) RETURNING id, resource, created_at, updated_at", r.tenant(ctx), document).All(&rows); err != nil {
+	if err := r.db.WithContext(ctx).RawQuery("INSERT INTO scim_users (sso_provider_id, resource) VALUES (?, ?) RETURNING id, resource, created_at, updated_at", r.tenant(ctx), resource).All(&rows); err != nil {
 		return nil, r.buildError("creating", err)
 	}
 	return r.mapFrom(&rows[0])
 }
 
 func (r *userRepository) Replace(ctx context.Context, id string, user *core.User) (*core.User, error) {
-	document, err := userDocument(user)
+	resource, err := r.toResource(user)
 	if err != nil {
 		return nil, err
 	}
 
 	var rows []scimUser
-	if err := r.db.WithContext(ctx).RawQuery("UPDATE scim_users SET resource = ?, updated_at = now() WHERE sso_provider_id = ? AND deleted_at IS NULL AND id = ? RETURNING id, resource, created_at, updated_at", document, r.tenant(ctx), id).All(&rows); err != nil {
+	if err := r.db.WithContext(ctx).RawQuery("UPDATE scim_users SET resource = ?, updated_at = now() WHERE sso_provider_id = ? AND deleted_at IS NULL AND id = ? RETURNING id, resource, created_at, updated_at", resource, r.tenant(ctx), id).All(&rows); err != nil {
 		return nil, r.buildError("replacing", err)
 	}
 	if len(rows) == 0 {
@@ -128,7 +128,7 @@ func (r *userRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func userDocument(user *core.User) ([]byte, error) {
+func (r *userRepository) toResource(user *core.User) ([]byte, error) {
 	stored := *user
 	stored.ID = ""
 	stored.Meta = core.Meta{}
@@ -137,11 +137,11 @@ func userDocument(user *core.User) ([]byte, error) {
 		stored.Active = &active
 	}
 
-	document, err := json.Marshal(&stored)
+	resource, err := json.Marshal(&stored)
 	if err != nil {
 		return nil, fmt.Errorf("scim: encoding user: %w", err)
 	}
-	return document, nil
+	return resource, nil
 }
 
 func (r *userRepository) buildError(action string, err error) error {
