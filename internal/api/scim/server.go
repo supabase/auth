@@ -92,7 +92,7 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, ErrNotFound) {
 			return srv.NotFound(w, r)
 		}
-		return srv.internalError(w, r, err)
+		return srv.sendError(w, r, err)
 	}
 
 	return protocol.Send(w, http.StatusOK, user)
