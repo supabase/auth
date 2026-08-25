@@ -3,12 +3,15 @@ package scim
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/scim/core"
@@ -117,6 +120,55 @@ func TestServer(t *testing.T) {
 		})
 	})
 
+	t.Run("GET /Users/{id}", func(t *testing.T) {
+		tenant := newTenant(t, db)
+
+		t.Run("returns the resource", func(t *testing.T) {
+			stored := newStoredUser(t, db, tenant, &core.User{UserName: "bjensen@example.com"})
+
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.UserByID(w, scimRequest(http.MethodGet, "/Users/"+stored.ID, "", tenant, map[string]string{"id": stored.ID})))
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+
+			var got core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+			assert.Equal(t, stored.ID, got.ID)
+			assert.Equal(t, "bjensen@example.com", got.UserName)
+		})
+
+		t.Run("an unknown id is a SCIM 404", func(t *testing.T) {
+			missing := uuid.Must(uuid.NewV4()).String()
+
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.UserByID(w, scimRequest(http.MethodGet, "/Users/"+missing, "", tenant, map[string]string{"id": missing})))
+
+			require.Equal(t, http.StatusNotFound, w.Code)
+			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
+		})
+
+		// An id that is not a uuid can never name a row, so it is answered as a
+		// missing resource rather than surfacing a parse error.
+		t.Run("an id that is not a uuid is a SCIM 404", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.UserByID(w, scimRequest(http.MethodGet, "/Users/not-a-uuid", "", tenant, map[string]string{"id": "not-a-uuid"})))
+
+			require.Equal(t, http.StatusNotFound, w.Code)
+			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
+		})
+
+		t.Run("another tenant's resource is a SCIM 404", func(t *testing.T) {
+			other := newTenant(t, db)
+			stored := newStoredUser(t, db, other, &core.User{UserName: "theirs@example.com"})
+
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.UserByID(w, scimRequest(http.MethodGet, "/Users/"+stored.ID, "", tenant, map[string]string{"id": stored.ID})))
+
+			require.Equal(t, http.StatusNotFound, w.Code)
+		})
+	})
+
 	t.Run("GET /ServiceProviderConfig", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, BasePath+"/ServiceProviderConfig", nil)
 		w := httptest.NewRecorder()
@@ -209,4 +261,16 @@ func requestWithURLParam(path, key, value string) *http.Request {
 
 func filterQuery(filter string) string {
 	return url.Values{"filter": {filter}}.Encode()
+}
+
+func scimRequest(method, target, body, tenant string, params map[string]string) *http.Request {
+	r := httptest.NewRequest(method, BasePath+target, strings.NewReader(body))
+
+	routeCtx := chi.NewRouteContext()
+	for key, value := range params {
+		routeCtx.URLParams.Add(key, value)
+	}
+
+	ctx := context.WithValue(r.Context(), chi.RouteCtxKey, routeCtx)
+	return r.WithContext(withTenant(ctx, tenant))
 }

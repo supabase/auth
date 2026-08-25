@@ -1,10 +1,12 @@
 package scim
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/observability"
@@ -15,6 +17,7 @@ const BasePath = "/scim/v2"
 
 type Server struct {
 	db                    *storage.Connection
+	users                 Repository[*core.User]
 	serviceProviderConfig *core.ServiceProviderConfig
 	resourceTypes         []*core.ResourceType
 	schemas               []*core.Schema
@@ -25,7 +28,8 @@ func NewServer(db *storage.Connection, externalURL string) *Server {
 	userSchema := newUserSchema(baseURL)
 
 	return &Server{
-		db: db,
+		db:    db,
+		users: &userRepository{db: db, baseURL: baseURL},
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
@@ -55,6 +59,25 @@ func (srv *Server) SchemaByID(w http.ResponseWriter, r *http.Request) error {
 	return byID(w, r, srv.schemas)
 }
 
+func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	id, err := uuid.FromString(urlParam(r, "id"))
+	if err != nil {
+		return srv.NotFound(w, r)
+	}
+
+	user, err := srv.users.Get(ctx, id.String())
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return srv.NotFound(w, r)
+		}
+		return srv.sendError(w, r, err)
+	}
+
+	return protocol.Send(w, http.StatusOK, user)
+}
+
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
 	return notFound(w)
 }
@@ -76,6 +99,13 @@ func byID[T core.Resource](w http.ResponseWriter, r *http.Request, resources []T
 		}
 	}
 	return notFound(w)
+}
+
+func (srv *Server) sendError(w http.ResponseWriter, r *http.Request, err error) error {
+	if scimErr, ok := errors.AsType[*protocol.Error](err); ok {
+		return protocol.WriteError(w, scimErr)
+	}
+	return srv.internalError(w, r, err)
 }
 
 func (srv *Server) internalError(w http.ResponseWriter, r *http.Request, err error) error {

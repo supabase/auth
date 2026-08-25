@@ -3,9 +3,24 @@ package scim
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 var ErrNotFound = errors.New("scim: resource not found")
+
+type scimUser struct {
+	ID        string    `db:"id"`
+	Resource  []byte    `db:"resource"`
+	Active    bool      `db:"active"`
+	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
+}
+
+func (u *scimUser) ResourceID() string { return u.ID }
+
+func (u *scimUser) Timestamps() (created, updated time.Time) {
+	return u.CreatedAt, u.UpdatedAt
+}
 
 type scimToken struct {
 	ID            string `db:"id"`

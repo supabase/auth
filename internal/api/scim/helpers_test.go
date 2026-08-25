@@ -1,11 +1,14 @@
 package scim
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
@@ -50,4 +53,38 @@ func grantToken(t *testing.T, db *storage.Connection, provider string) string {
 	).Exec())
 
 	return token
+}
+
+func putUser(t *testing.T, db *storage.Connection, tenant string, user *core.User) {
+	t.Helper()
+
+	stored := *user
+	stored.ID, stored.Meta = "", core.Meta{}
+
+	document, err := json.Marshal(&stored)
+	require.NoError(t, err)
+
+	require.NoError(t, db.RawQuery(
+		"INSERT INTO scim_users (id, sso_provider_id, resource, created_at, updated_at)"+
+			" VALUES (?, ?, ?, ?, ?)",
+		user.ID, tenant, string(document), user.Meta.Created, user.Meta.LastModified,
+	).Exec())
+}
+
+func newStoredUser(t *testing.T, db *storage.Connection, tenant string, user *core.User) *core.User {
+	t.Helper()
+
+	if user.ID == "" {
+		user.ID = uuid.Must(uuid.NewV4()).String()
+	}
+	putUser(t, db, tenant, user)
+	return user
+}
+
+func newTestRepo(db *storage.Connection) *userRepository {
+	return &userRepository{db: db, baseURL: core.Join(testExternalURL, BasePath)}
+}
+
+func ctxFor(tenant string) context.Context {
+	return withTenant(context.Background(), tenant)
 }
