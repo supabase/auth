@@ -96,7 +96,7 @@ func (r *userRepository) Create(ctx context.Context, user *core.User) (*core.Use
 
 	var rows []scimUser
 	if err := r.db.WithContext(ctx).RawQuery("INSERT INTO scim_users (sso_provider_id, resource) VALUES (?, ?) RETURNING id, resource, created_at, updated_at", r.tenant(ctx), document).All(&rows); err != nil {
-		return nil, r.writeError("creating", err)
+		return nil, r.buildError("creating", err)
 	}
 	return r.mapFrom(&rows[0])
 }
@@ -109,7 +109,7 @@ func (r *userRepository) Replace(ctx context.Context, id string, user *core.User
 
 	var rows []scimUser
 	if err := r.db.WithContext(ctx).RawQuery("UPDATE scim_users SET resource = ?, updated_at = now() WHERE sso_provider_id = ? AND deleted_at IS NULL AND id = ? RETURNING id, resource, created_at, updated_at", document, r.tenant(ctx), id).All(&rows); err != nil {
-		return nil, r.writeError("replacing", err)
+		return nil, r.buildError("replacing", err)
 	}
 	if len(rows) == 0 {
 		return nil, ErrNotFound
@@ -144,7 +144,7 @@ func userDocument(user *core.User) ([]byte, error) {
 	return document, nil
 }
 
-func (r *userRepository) writeError(action string, err error) error {
+func (r *userRepository) buildError(action string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 		return protocol.ErrUniqueness("a User with this userName already exists")
