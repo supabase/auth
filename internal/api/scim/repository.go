@@ -1,7 +1,12 @@
 package scim
 
-import "context"
+import (
+	"context"
+
+	"github.com/supabase/auth/internal/api/scim/protocol"
+)
 
 type Repository[T any] interface {
 	Get(ctx context.Context, id string) (T, error)
+	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 }

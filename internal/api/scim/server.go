@@ -17,6 +17,7 @@ const BasePath = "/scim/v2"
 
 type Server struct {
 	db                    *storage.Connection
+	limits                protocol.Limits
 	users                 Repository[*core.User]
 	serviceProviderConfig *core.ServiceProviderConfig
 	resourceTypes         []*core.ResourceType
@@ -28,8 +29,9 @@ func NewServer(db *storage.Connection, externalURL string) *Server {
 	userSchema := newUserSchema(baseURL)
 
 	return &Server{
-		db:    db,
-		users: &userRepository{db: db, baseURL: baseURL},
+		db:     db,
+		limits: protocol.DefaultLimits,
+		users:  &userRepository{db: db, baseURL: baseURL},
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
@@ -57,6 +59,22 @@ func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
 
 func (srv *Server) SchemaByID(w http.ResponseWriter, r *http.Request) error {
 	return byID(w, r, srv.schemas)
+}
+
+func (srv *Server) Users(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	query, err := srv.limits.ParseSearchRequest(r.URL.Query())
+	if err != nil {
+		return protocol.WriteError(w, err)
+	}
+
+	items, total, err := srv.users.List(ctx, query)
+	if err != nil {
+		return srv.sendError(w, r, err)
+	}
+
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, items))
 }
 
 func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {

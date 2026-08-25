@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
+	"github.com/supabase/auth/internal/storage"
 )
 
 //go:embed testdata/*
@@ -117,6 +118,57 @@ func TestServer(t *testing.T) {
 
 			assert.Equal(t, http.StatusUnauthorized, w.Code)
 			assert.Empty(t, seen)
+		})
+	})
+
+	t.Run("GET /Users", func(t *testing.T) {
+		users := usersFor(t, srv, db, "a@example.com", "b@example.com", "c@example.com", "d@example.com")
+
+		t.Run("lists the whole collection", func(t *testing.T) {
+			w := users("")
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+
+			body := listed[core.User](t, w)
+			assert.Equal(t, []core.SchemaURI{protocol.SchemaListResponse}, body.Schemas)
+			assert.Equal(t, 4, body.TotalResults)
+			assert.Equal(t, 1, body.StartIndex)
+			assert.Equal(t, 4, body.ItemsPerPage)
+			assert.Len(t, body.Resources, 4)
+		})
+
+		t.Run("honours startIndex and count", func(t *testing.T) {
+			w := users("startIndex=2&count=2")
+
+			body := listed[core.User](t, w)
+			assert.Equal(t, 4, body.TotalResults)
+			assert.Equal(t, 2, body.StartIndex)
+			assert.Equal(t, 2, body.ItemsPerPage)
+			assert.Len(t, body.Resources, 2)
+		})
+
+		t.Run("reports the total but no resources when count is zero", func(t *testing.T) {
+			w := users("count=0")
+
+			body := listed[core.User](t, w)
+			assert.Equal(t, 4, body.TotalResults)
+			assert.Equal(t, 0, body.ItemsPerPage)
+			assert.Empty(t, body.Resources)
+		})
+
+		t.Run("rejects a startIndex that is not an integer", func(t *testing.T) {
+			w := users("startIndex=first")
+
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
+		})
+
+		t.Run("rejects a filter, which this provider does not support", func(t *testing.T) {
+			w := users(filterQuery(`userName eq "a@example.com"`))
+
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidFilter))
 		})
 	})
 
@@ -273,4 +325,30 @@ func scimRequest(method, target, body, tenant string, params map[string]string) 
 
 	ctx := context.WithValue(r.Context(), chi.RouteCtxKey, routeCtx)
 	return r.WithContext(withTenant(ctx, tenant))
+}
+
+func usersFor(t *testing.T, srv *Server, db *storage.Connection, userNames ...string) func(query string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	tenant := newTenant(t, db)
+	for _, userName := range userNames {
+		newStoredUser(t, db, tenant, &core.User{UserName: userName})
+	}
+
+	return func(query string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodGet, BasePath+"/Users?"+query, nil)
+		r = r.WithContext(withTenant(r.Context(), tenant))
+
+		w := httptest.NewRecorder()
+		require.NoError(t, srv.Users(w, r))
+		return w
+	}
+}
+
+func listed[T any](t *testing.T, w *httptest.ResponseRecorder) protocol.ListResponse[T] {
+	t.Helper()
+
+	var body protocol.ListResponse[T]
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	return body
 }

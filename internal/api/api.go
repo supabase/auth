@@ -462,6 +462,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Get("/Schemas/{id}", api.scim.SchemaByID)
 
 			tenant := r.WithBypass(api.scim.Tenant)
+			tenant.Get("/Users", api.scim.Users)
 			tenant.Get("/Users/{id}", api.scim.UserByID)
 		})
 	})

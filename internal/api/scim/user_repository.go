@@ -6,11 +6,19 @@ import (
 	"fmt"
 
 	"github.com/supabase/auth/internal/api/scim/core"
+	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/storage"
 )
 
 const getUser = `SELECT id, resource, active, created_at, updated_at FROM scim_users
 	WHERE sso_provider_id = ? AND deleted_at IS NULL AND id = ?`
+
+const countUsers = `SELECT COUNT(*) FROM scim_users
+	WHERE sso_provider_id = ? AND deleted_at IS NULL`
+
+const listUsers = `SELECT id, resource, active, created_at, updated_at FROM scim_users
+	WHERE sso_provider_id = ? AND deleted_at IS NULL
+	ORDER BY id ASC LIMIT ? OFFSET ?`
 
 type userRepository struct {
 	db      *storage.Connection
@@ -28,6 +36,39 @@ func (r *userRepository) Get(ctx context.Context, id string) (*core.User, error)
 		return nil, ErrNotFound
 	}
 	return r.mapFrom(&rows[0])
+}
+
+func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
+	if query.Filter != "" {
+		return nil, 0, protocol.ErrInvalidFilter("filtering is not supported")
+	}
+
+	db := r.db.WithContext(ctx)
+	tenant := r.tenant(ctx)
+
+	var total int
+	if err := db.RawQuery(countUsers, tenant).First(&total); err != nil {
+		return nil, 0, fmt.Errorf("scim: counting users: %w", err)
+	}
+
+	if query.Count <= 0 {
+		return nil, total, nil
+	}
+
+	var rows []scimUser
+	if err := db.RawQuery(listUsers, tenant, query.Count, query.Offset()).All(&rows); err != nil {
+		return nil, 0, fmt.Errorf("scim: listing users: %w", err)
+	}
+
+	users := make([]*core.User, 0, len(rows))
+	for _, row := range rows {
+		user, err := r.mapFrom(&row)
+		if err != nil {
+			return nil, 0, err
+		}
+		users = append(users, user)
+	}
+	return users, total, nil
 }
 
 func (r *userRepository) mapFrom(row *scimUser) (*core.User, error) {

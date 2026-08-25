@@ -88,3 +88,20 @@ func newTestRepo(db *storage.Connection) *userRepository {
 func ctxFor(tenant string) context.Context {
 	return withTenant(context.Background(), tenant)
 }
+
+func seedPostgres(t *testing.T, users []*core.User) (*userRepository, context.Context) {
+	db := newTestDB(t)
+	owner := newTenant(t, db)
+	for _, user := range users {
+		putUser(t, db, owner, user)
+	}
+	return newTestRepo(db), ctxFor(owner)
+}
+
+func idsOf(users []*core.User) []string {
+	ids := make([]string, 0, len(users))
+	for _, user := range users {
+		ids = append(ids, user.ID)
+	}
+	return ids
+}
