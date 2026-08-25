@@ -1,10 +1,13 @@
 package crypto
 
 import (
+	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,6 +82,17 @@ func TestGenerateRecoveryCodeHash(t *testing.T) {
 	assert.NotEqual(t, hash, otherHash)
 }
 
+func TestGenerateRecoveryCodeHashRandFailure(t *testing.T) {
+	originalReader := rand.Reader
+	rand.Reader = iotest.ErrReader(errors.New("out of entropy"))
+	defer func() {
+		rand.Reader = originalReader
+	}()
+
+	_, err := GenerateRecoveryCodeHash("abcdefghjklmnp27")
+	require.Error(t, err)
+}
+
 func TestCompareHashAndRecoveryCode(t *testing.T) {
 	code := GenerateRecoveryCode(16)
 
@@ -124,18 +138,26 @@ func TestCompareHashAndRecoveryCodeNegativeExamples(t *testing.T) {
 		"$argon2id$v=19$m=4294967297,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// m exceeds the 1 GiB limit
 		"$argon2id$v=19$m=1048577,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		// t larger than 32 bits
+		"$argon2id$v=19$m=16,t=4294967297,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// t is 0
 		"$argon2id$v=19$m=16,t=0,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// t exceeds the limit of 20
 		"$argon2id$v=19$m=16,t=21,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		// p larger than 8 bits
+		"$argon2id$v=19$m=16,t=2,p=256$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// p is 0
 		"$argon2id$v=19$m=16,t=2,p=0$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// p exceeds the limit of 16
 		"$argon2id$v=19$m=16,t=2,p=17$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// salt not base64
 		"$argon2id$v=19$m=16,t=2,p=1$!!!$NfEnUOuUpb7F2fQkgFUG4g",
+		// salt in the base64 alphabet but not decodable (length % 4 == 1)
+		"$argon2id$v=19$m=16,t=2,p=1$AAAAA$NfEnUOuUpb7F2fQkgFUG4g",
 		// hash not base64
 		"$argon2id$v=19$m=16,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$!!!",
+		// hash in the base64 alphabet but not decodable (length % 4 == 1)
+		"$argon2id$v=19$m=16,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$AAAAA",
 		// salt empty
 		"$argon2id$v=19$m=16,t=2,p=1$$NfEnUOuUpb7F2fQkgFUG4g",
 		// hash empty
