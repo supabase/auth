@@ -99,10 +99,5 @@ func (srv *Server) lookup(ctx context.Context, credential string) (string, error
 		return "", ErrNotFound
 	}
 
-	srv.touch(ctx, rows[0].ID)
 	return rows[0].SSOProviderID, nil
-}
-
-func (srv *Server) touch(ctx context.Context, id string) {
-	_ = srv.db.WithContext(ctx).RawQuery("UPDATE scim_tokens SET last_used_at = now() WHERE id = ?", id).Exec()
 }
