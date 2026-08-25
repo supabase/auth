@@ -19,11 +19,12 @@ create unique index if not exists scim_users_user_name_key
     on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, lower(user_name))
     where deleted_at is null;
 
-create index if not exists scim_users_external_id_idx
+-- externalId is unique within a provider when set; nulls are unconstrained.
+create unique index if not exists scim_users_external_id_key
     on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, external_id)
-    where deleted_at is null;
+    where external_id is not null and deleted_at is null;
 
--- Links a SCIM user to its auth.users row; user_id is null until first sign-in.
+-- Links a SCIM user to its auth.users row; null until first sign-in.
 create index if not exists scim_users_user_id_idx
     on {{ index .Options "Namespace" }}.scim_users (user_id)
     where deleted_at is null;
