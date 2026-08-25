@@ -66,10 +66,7 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 	db := r.db.WithContext(ctx)
 
 	var total int
-	if err := db.RawQuery(
-		"SELECT COUNT(*) FROM scim_users"+where,
-		args...,
-	).First(&total); err != nil {
+	if err := db.RawQuery("SELECT COUNT(*) FROM scim_users"+where, args...).First(&total); err != nil {
 		return nil, 0, fmt.Errorf("scim: counting users: %w", err)
 	}
 
@@ -79,11 +76,7 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 
 	page := append(slices.Clone(args), query.Count, query.Offset())
 	var rows []scimUser
-	if err := db.RawQuery(
-		"SELECT id, resource, created_at, updated_at FROM scim_users"+where+
-			" ORDER BY "+orderBy+" LIMIT ? OFFSET ?",
-		page...,
-	).All(&rows); err != nil {
+	if err := db.RawQuery("SELECT id, resource, created_at, updated_at FROM scim_users"+where+" ORDER BY "+orderBy+" LIMIT ? OFFSET ?", page...).All(&rows); err != nil {
 		return nil, 0, fmt.Errorf("scim: listing users: %w", err)
 	}
 
@@ -177,12 +170,9 @@ func (r *userRepository) user(row scimUser) (*core.User, error) {
 	}
 
 	user.ID = row.ID
-	user.Meta = core.Meta{
-		ResourceType: core.KindUser.Name,
-		Created:      row.CreatedAt.UTC(),
-		LastModified: row.UpdatedAt.UTC(),
-		Location:     core.Join(core.KindUser.Location(r.baseURL), row.ID),
-	}
+	user.Meta.Created = row.CreatedAt
+	user.Meta.LastModified = row.UpdatedAt
+	user.Meta = core.NewMeta(r.baseURL, core.KindUser).For(user)
 
 	if len(user.Schemas) == 0 {
 		user.Schemas = []core.SchemaURI{core.SchemaUser}
