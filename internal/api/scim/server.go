@@ -37,12 +37,12 @@ func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
-	return protocol.SendError(w, http.StatusNotFound, "", "Endpoint or resource does not exist")
+	return protocol.WriteError(w, protocol.ErrNotFound("Endpoint or resource does not exist"))
 }
 
 func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
 	if r.URL.Query().Has("filter") {
-		return protocol.SendError(w, http.StatusForbidden, "", "Filtering is not supported on this endpoint")
+		return protocol.WriteError(w, protocol.ErrForbidden("Filtering is not supported on this endpoint"))
 	}
-	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(resources))
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(resources), resources))
 }

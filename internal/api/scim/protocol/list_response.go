@@ -1,25 +1,26 @@
 package protocol
 
-const SchemaListResponse = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
+import "github.com/supabase/auth/internal/api/scim/core"
 
+// ListResponse is the query response of RFC 7644, Section 3.4.2.
 type ListResponse[T any] struct {
-	Schemas      []string `json:"schemas"`
-	TotalResults int      `json:"totalResults"`
-	StartIndex   int      `json:"startIndex"`
-	ItemsPerPage int      `json:"itemsPerPage"`
-	Resources    []T      `json:"Resources"`
+	Schemas      []core.SchemaURI `json:"schemas"`
+	TotalResults int              `json:"totalResults"`
+	StartIndex   int              `json:"startIndex"`
+	ItemsPerPage int              `json:"itemsPerPage"`
+	Resources    []T              `json:"Resources"`
 }
 
-func NewListResponse[T any](resources []T) *ListResponse[T] {
+func NewListResponse[T any](startIndex, total int, resources []T) *ListResponse[T] {
 	if resources == nil {
 		resources = []T{}
 	}
-	n := len(resources)
+
 	return &ListResponse[T]{
-		Schemas:      []string{SchemaListResponse},
-		TotalResults: n,
-		StartIndex:   1,
-		ItemsPerPage: n,
+		Schemas:      []core.SchemaURI{SchemaListResponse},
+		TotalResults: total,
+		StartIndex:   startIndex,
+		ItemsPerPage: len(resources),
 		Resources:    resources,
 	}
 }
