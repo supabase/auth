@@ -361,6 +361,17 @@ func TestServer(t *testing.T) {
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
 		})
 
+		t.Run("without schemas", func(t *testing.T) {
+			tenant := newTenant(t, db)
+
+			r := scimRequest(http.MethodPost, "/Users", `{"userName":"bjensen"}`, tenant, nil)
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.CreateUser(w, r))
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
+		})
+
 		t.Run("with a malformed body", func(t *testing.T) {
 			tenant := newTenant(t, db)
 
@@ -411,7 +422,8 @@ func TestServer(t *testing.T) {
 			tenant := newTenant(t, db)
 			id := uuid.Must(uuid.NewV4()).String()
 
-			r := scimRequest(http.MethodPut, "/Users/"+id, `{"userName":"ghost"}`, tenant, map[string]string{"id": id})
+			body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"ghost"}`
+			r := scimRequest(http.MethodPut, "/Users/"+id, body, tenant, map[string]string{"id": id})
 			w := httptest.NewRecorder()
 			require.NoError(t, srv.ReplaceUser(w, r))
 

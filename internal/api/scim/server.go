@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
@@ -105,8 +106,8 @@ func (srv *Server) CreateUser(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.WriteError(w, err)
 	}
-	if user.UserName == "" {
-		return protocol.WriteError(w, protocol.ErrInvalidValue(`"userName" is required`))
+	if err := srv.validateUser(user); err != nil {
+		return protocol.WriteError(w, err)
 	}
 
 	created, err := srv.users.Create(ctx, user)
@@ -130,8 +131,8 @@ func (srv *Server) ReplaceUser(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.WriteError(w, err)
 	}
-	if user.UserName == "" {
-		return protocol.WriteError(w, protocol.ErrInvalidValue(`"userName" is required`))
+	if err := srv.validateUser(user); err != nil {
+		return protocol.WriteError(w, err)
 	}
 
 	replaced, err := srv.users.Replace(ctx, id.String(), user)
@@ -163,6 +164,16 @@ func (srv *Server) DeleteUser(w http.ResponseWriter, r *http.Request) error {
 
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
 	return protocol.WriteError(w, protocol.ErrNotFound("Endpoint or resource does not exist"))
+}
+
+func (srv *Server) validateUser(user *core.User) *protocol.Error {
+	if user.UserName == "" {
+		return protocol.ErrInvalidValue(`"userName" is required`)
+	}
+	if !slices.Contains(user.Schemas, core.SchemaUser) {
+		return protocol.ErrInvalidValue(`"schemas" must include the User schema URN`)
+	}
+	return nil
 }
 
 func (srv *Server) decodeUser(r *http.Request) (*core.User, error) {

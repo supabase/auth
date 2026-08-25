@@ -95,7 +95,7 @@ func (r *userRepository) Create(ctx context.Context, user *core.User) (*core.Use
 	}
 
 	var rows []scimUser
-	if err := r.db.WithContext(ctx).RawQuery("INSERT INTO scim_users (sso_provider_id, resource) VALUES (?, ?) RETURNING id, resource, created_at, updated_at", r.tenant(ctx), resource).All(&rows); err != nil {
+	if err := r.db.WithContext(ctx).RawQuery("INSERT INTO scim_users (sso_provider_id, resource) VALUES (?, jsonb_set(?::jsonb, '{active}', coalesce(?::jsonb -> 'active', 'true'::jsonb))) RETURNING id, resource, created_at, updated_at", r.tenant(ctx), string(resource), string(resource)).All(&rows); err != nil {
 		return nil, r.buildError("creating", err)
 	}
 	return r.mapFrom(&rows[0])
@@ -108,7 +108,7 @@ func (r *userRepository) Replace(ctx context.Context, id string, user *core.User
 	}
 
 	var rows []scimUser
-	if err := r.db.WithContext(ctx).RawQuery("UPDATE scim_users SET resource = ?, updated_at = now() WHERE sso_provider_id = ? AND deleted_at IS NULL AND id = ? RETURNING id, resource, created_at, updated_at", resource, r.tenant(ctx), id).All(&rows); err != nil {
+	if err := r.db.WithContext(ctx).RawQuery("UPDATE scim_users SET resource = jsonb_set(?::jsonb, '{active}', coalesce(resource -> 'active', 'true'::jsonb)), updated_at = now() WHERE sso_provider_id = ? AND deleted_at IS NULL AND id = ? RETURNING id, resource, created_at, updated_at", string(resource), r.tenant(ctx), id).All(&rows); err != nil {
 		return nil, r.buildError("replacing", err)
 	}
 	if len(rows) == 0 {
@@ -132,10 +132,6 @@ func (r *userRepository) toResource(user *core.User) ([]byte, error) {
 	stored := *user
 	stored.ID = ""
 	stored.Meta = core.Meta{}
-	if stored.Active == nil {
-		active := true
-		stored.Active = &active
-	}
 
 	resource, err := json.Marshal(&stored)
 	if err != nil {

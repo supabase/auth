@@ -151,7 +151,7 @@ func TestUserRepository(t *testing.T) {
 	})
 
 	t.Run("Create", func(t *testing.T) {
-		t.Run("Create assigns an id and preserves the attributes", func(t *testing.T) {
+		t.Run("assigns an id and preserves the attributes", func(t *testing.T) {
 			created, err := repo.Create(ctx, user("alice"))
 			require.NoError(t, err)
 			assert.NotEmpty(t, created.ID)
@@ -160,7 +160,7 @@ func TestUserRepository(t *testing.T) {
 	})
 
 	t.Run("Replace", func(t *testing.T) {
-		t.Run("Replace changes attributes and keeps the id", func(t *testing.T) {
+		t.Run("changes attributes and keeps the id", func(t *testing.T) {
 			created, err := repo.Create(ctx, user("carol"))
 			require.NoError(t, err)
 
@@ -172,6 +172,25 @@ func TestUserRepository(t *testing.T) {
 			got, err := repo.Get(ctx, created.ID)
 			require.NoError(t, err)
 			assert.Equal(t, "carol-renamed", got.UserName)
+		})
+
+		t.Run("keeps active when the body omits it", func(t *testing.T) {
+			db := newTestDB(t)
+			repo := newTestRepo(db)
+			ctx := ctxFor(newTenant(t, db))
+
+			created, err := repo.Create(ctx, user("gilfoyle"))
+			require.NoError(t, err)
+			require.NotNil(t, created.Active)
+			require.True(t, *created.Active)
+
+			require.NoError(t, db.RawQuery("UPDATE scim_users SET resource = jsonb_set(resource, '{active}', 'false') WHERE id = ?", created.ID).Exec())
+
+			replaced, err := repo.Replace(ctx, created.ID, user("gilfoyle-renamed"))
+			require.NoError(t, err)
+			assert.Equal(t, "gilfoyle-renamed", replaced.UserName)
+			require.NotNil(t, replaced.Active)
+			assert.False(t, *replaced.Active)
 		})
 
 		t.Run("writing an unknown id is ErrNotFound", func(t *testing.T) {
@@ -188,7 +207,7 @@ func TestUserRepository(t *testing.T) {
 	})
 
 	t.Run("Delete", func(t *testing.T) {
-		t.Run("Delete makes a resource unreadable", func(t *testing.T) {
+		t.Run("unlists resource", func(t *testing.T) {
 			created, err := repo.Create(ctx, user("eve"))
 			require.NoError(t, err)
 
