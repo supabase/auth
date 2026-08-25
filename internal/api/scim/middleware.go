@@ -12,23 +12,6 @@ import (
 
 const bearerScheme = "bearer "
 
-// TODO:: Replace with https://github.com/supabase/auth/pull/2677
-type tenantKey struct{}
-
-type scimToken struct {
-	ID            string `db:"id"`
-	SSOProviderID string `db:"sso_provider_id"`
-}
-
-func withTenant(ctx context.Context, tenant string) context.Context {
-	return context.WithValue(ctx, tenantKey{}, tenant)
-}
-
-func tenantFrom(ctx context.Context) (string, bool) {
-	tenant, ok := ctx.Value(tenantKey{}).(string)
-	return tenant, ok && tenant != ""
-}
-
 func (srv *Server) Tenant(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, ok := srv.tenant(w, r)

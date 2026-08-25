@@ -48,7 +48,7 @@ func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request)
 }
 
 func (srv *Server) ResourceTypes(w http.ResponseWriter, r *http.Request) error {
-	return list(w, r, srv.resourceTypes)
+	return srv.list(w, r, srv.resourceTypes)
 }
 
 func (srv *Server) ResourceTypeByID(w http.ResponseWriter, r *http.Request) error {
@@ -56,7 +56,7 @@ func (srv *Server) ResourceTypeByID(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
-	return list(w, r, srv.schemas)
+	return srv.list(w, r, srv.schemas)
 }
 
 func (srv *Server) SchemaByID(w http.ResponseWriter, r *http.Request) error {
@@ -101,7 +101,7 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 func (srv *Server) CreateUser(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	user, err := decodeUser(r)
+	user, err := srv.decodeUser(r)
 	if err != nil {
 		return protocol.WriteError(w, err)
 	}
@@ -126,7 +126,7 @@ func (srv *Server) ReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		return srv.NotFound(w, r)
 	}
 
-	user, err := decodeUser(r)
+	user, err := srv.decodeUser(r)
 	if err != nil {
 		return protocol.WriteError(w, err)
 	}
@@ -165,10 +165,13 @@ func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
 	return protocol.WriteError(w, protocol.ErrNotFound("Endpoint or resource does not exist"))
 }
 
-func decodeUser(r *http.Request) (*core.User, error) {
-	body, err := readBody(r)
+func (srv *Server) decodeUser(r *http.Request) (*core.User, error) {
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return nil, err
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return nil, protocol.ErrTooLarge("the request body is too large")
+		}
+		return nil, protocol.ErrInvalidSyntax("could not read the request body")
 	}
 
 	user := new(core.User)
@@ -178,19 +181,8 @@ func decodeUser(r *http.Request) (*core.User, error) {
 	return user, nil
 }
 
-func readBody(r *http.Request) ([]byte, error) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return nil, protocol.ErrTooLarge("the request body is too large")
-		}
-		return nil, protocol.ErrInvalidSyntax("could not read the request body")
-	}
-	return body, nil
-}
-
-func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
-	if rejected, err := rejectFilter(w, r, protocol.ErrForbidden("Filtering is not supported on this endpoint")); rejected {
+func (srv *Server) list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
+	if rejected, err := srv.rejectFilter(w, r, protocol.ErrForbidden("Filtering is not supported on this endpoint")); rejected {
 		return err
 	}
 
@@ -206,6 +198,25 @@ func (srv *Server) byID[T core.Resource](w http.ResponseWriter, r *http.Request,
 		}
 	}
 	return srv.NotFound(w, r)
+}
+
+func (srv *Server) sendError(w http.ResponseWriter, r *http.Request, err error) error {
+	if scimErr, ok := errors.AsType[*protocol.Error](err); ok {
+		return protocol.WriteError(w, scimErr)
+	}
+	return srv.internalError(w, r, err)
+}
+
+func (srv *Server) internalError(w http.ResponseWriter, r *http.Request, err error) error {
+	observability.LogEntrySetField(r, "error", err.Error())
+	return protocol.WriteError(w, protocol.ErrInternal("Internal server error"))
+}
+
+func (srv *Server) rejectFilter(w http.ResponseWriter, r *http.Request, unsupported *protocol.Error) (bool, error) {
+	if !r.URL.Query().Has("filter") {
+		return false, nil
+	}
+	return true, protocol.WriteError(w, unsupported)
 }
 
 func newUserSchema(baseURL string) *core.Schema {
@@ -244,23 +255,4 @@ func urlParam(r *http.Request, key string) string {
 		return decoded
 	}
 	return value
-}
-
-func (srv *Server) sendError(w http.ResponseWriter, r *http.Request, err error) error {
-	if scimErr, ok := errors.AsType[*protocol.Error](err); ok {
-		return protocol.WriteError(w, scimErr)
-	}
-	return srv.internalError(w, r, err)
-}
-
-func (srv *Server) internalError(w http.ResponseWriter, r *http.Request, err error) error {
-	observability.LogEntrySetField(r, "error", err.Error())
-	return protocol.WriteError(w, protocol.ErrInternal("Internal server error"))
-}
-
-func rejectFilter(w http.ResponseWriter, r *http.Request, unsupported *protocol.Error) (bool, error) {
-	if !r.URL.Query().Has("filter") {
-		return false, nil
-	}
-	return true, protocol.WriteError(w, unsupported)
 }

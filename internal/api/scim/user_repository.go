@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
@@ -35,19 +34,6 @@ const listUsers = `SELECT id, resource, created_at, updated_at FROM scim_users
 type userRepository struct {
 	db      *storage.Connection
 	baseURL string
-}
-
-type scimUser struct {
-	ID        string    `db:"id"`
-	Resource  []byte    `db:"resource"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
-}
-
-func (u *scimUser) ResourceID() string { return u.ID }
-
-func (u *scimUser) Timestamps() (created, updated time.Time) {
-	return u.CreatedAt, u.UpdatedAt
 }
 
 func (r *userRepository) Get(ctx context.Context, id string) (*core.User, error) {
