@@ -10,10 +10,9 @@ create table if not exists {{ index .Options "Namespace" }}.scim_groups (
     constraint scim_groups_pkey primary key (id)
 );
 
--- displayName is unique within a provider, case-folded, excluding soft-deleted rows.
+-- displayName is unique within a provider, case-folded.
 create unique index if not exists scim_groups_display_name_key
-    on {{ index .Options "Namespace" }}.scim_groups (sso_provider_id, lower(display_name))
-    where deleted_at is null;
+    on {{ index .Options "Namespace" }}.scim_groups (sso_provider_id, lower(display_name));
 
 -- Group membership. The composite key prevents duplicate (group, user) rows.
 create table if not exists {{ index .Options "Namespace" }}.scim_group_members (
