@@ -35,7 +35,7 @@ func NewServer(db *storage.Connection, externalURL string) *Server {
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
-		),
+		).Sorting(),
 		resourceTypes: []*core.ResourceType{core.NewResourceType(baseURL, core.KindUser, userSchema)},
 		schemas:       []*core.Schema{userSchema},
 	}

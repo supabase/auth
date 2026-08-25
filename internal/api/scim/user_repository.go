@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
@@ -18,7 +20,14 @@ const countUsers = `SELECT COUNT(*) FROM scim_users
 
 const listUsers = `SELECT id, resource, active, created_at, updated_at FROM scim_users
 	WHERE sso_provider_id = ? AND deleted_at IS NULL
-	ORDER BY id ASC LIMIT ? OFFSET ?`
+	ORDER BY %s LIMIT ? OFFSET ?`
+
+var userSortColumns = map[string]string{
+	"id":                "id",
+	"username":          `lower(user_name) collate "C"`,
+	"meta.created":      "created_at",
+	"meta.lastmodified": "updated_at",
+}
 
 type userRepository struct {
 	db      *storage.Connection
@@ -43,6 +52,11 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 		return nil, 0, protocol.ErrInvalidFilter("filtering is not supported")
 	}
 
+	orderBy, err := r.orderBy(query)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	db := r.db.WithContext(ctx)
 	tenant := r.tenant(ctx)
 
@@ -56,7 +70,7 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 	}
 
 	var rows []scimUser
-	if err := db.RawQuery(listUsers, tenant, query.Count, query.Offset()).All(&rows); err != nil {
+	if err := db.RawQuery(fmt.Sprintf(listUsers, orderBy), tenant, query.Count, query.Offset()).All(&rows); err != nil {
 		return nil, 0, fmt.Errorf("scim: listing users: %w", err)
 	}
 
@@ -85,6 +99,29 @@ func (r *userRepository) mapFrom(row *scimUser) (*core.User, error) {
 		user.Schemas = []core.SchemaURI{core.SchemaUser}
 	}
 	return user, nil
+}
+
+// orderBy maps a SCIM sort attribute onto a column, per RFC 7644, Section 3.4.2.3.
+// Every ordering breaks ties on id so a page walk sees a total order.
+func (r *userRepository) orderBy(query *protocol.SearchRequest) (string, error) {
+	column := "id"
+	if query.SortBy != "" {
+		sortable, ok := userSortColumns[strings.ToLower(query.SortBy)]
+		if !ok {
+			return "", protocol.ErrInvalidValue(strconv.Quote(query.SortBy) + " is not an attribute this resource can be sorted by")
+		}
+		column = sortable
+	}
+
+	direction := " ASC"
+	if query.Descending() {
+		direction = " DESC"
+	}
+
+	if column == "id" {
+		return column + direction, nil
+	}
+	return column + direction + ", id" + direction, nil
 }
 
 func (r *userRepository) tenant(ctx context.Context) string {

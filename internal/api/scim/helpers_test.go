@@ -105,3 +105,11 @@ func idsOf(users []*core.User) []string {
 	}
 	return ids
 }
+
+func userNamesOf(users []*core.User) []string {
+	names := make([]string, 0, len(users))
+	for _, user := range users {
+		names = append(names, user.UserName)
+	}
+	return names
+}

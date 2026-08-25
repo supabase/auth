@@ -2,6 +2,7 @@ package scim
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,6 +71,83 @@ func TestUserRepository(t *testing.T) {
 
 			assert.Empty(t, users)
 			assert.Equal(t, count, total)
+		})
+
+		t.Run("sorting", func(t *testing.T) {
+			for _, sortBy := range []string{"", "id", "userName", "meta.created", "meta.lastModified"} {
+				for _, order := range []protocol.SortOrder{protocol.SortAscending, protocol.SortDescending} {
+					t.Run("sortBy="+sortBy+" sortOrder="+string(order), func(t *testing.T) {
+						whole, total := page(t, &protocol.SearchRequest{
+							StartIndex: 1, Count: count, SortBy: sortBy, SortOrder: order,
+						})
+						require.Equal(t, count, total)
+						require.Len(t, whole, count)
+
+						expected := idsOf(whole)
+
+						for size := 1; size <= count+1; size++ {
+							var walked []string
+							for start := 1; start <= count; start += size {
+								users, _ := page(t, &protocol.SearchRequest{
+									StartIndex: start, Count: size, SortBy: sortBy, SortOrder: order,
+								})
+								walked = append(walked, idsOf(users)...)
+							}
+
+							assert.Equal(t, expected, walked, "page size %d", size)
+							assert.Len(t, slices.Compact(slices.Sorted(slices.Values(walked))), count)
+						}
+					})
+				}
+			}
+
+			t.Run("reverses the whole order when asked to descend", func(t *testing.T) {
+				// meta.created ties every resource, so only a tiebreaker that reverses
+				// with the sort makes these two the reverse of one another.
+				for _, sortBy := range []string{"id", "meta.created"} {
+					t.Run(sortBy, func(t *testing.T) {
+						ascending, _ := page(t, &protocol.SearchRequest{StartIndex: 1, Count: count, SortBy: sortBy})
+						descending, _ := page(t, &protocol.SearchRequest{
+							StartIndex: 1, Count: count, SortBy: sortBy, SortOrder: protocol.SortDescending,
+						})
+
+						slices.Reverse(descending)
+						assert.Equal(t, idsOf(ascending), idsOf(descending))
+					})
+				}
+			})
+
+			// Go is the reference: RFC 7644 Section 3.4.2.3 orders a userName without
+			// regard to case, and this asserts the store agrees with a lowercased code
+			// point comparison rather than with whatever collation it happens to run
+			// under. A store ordering by the raw column passes on en_US.utf8 and fails
+			// on C, so pinning it here holds any implementation to the same order.
+			t.Run("orders userName as a lowercased code point comparison", func(t *testing.T) {
+				users, _ := page(t, &protocol.SearchRequest{StartIndex: 1, Count: count, SortBy: "userName"})
+				names := userNamesOf(users)
+
+				expected := slices.Clone(names)
+				slices.SortFunc(expected, func(a, b string) int {
+					return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+				})
+
+				require.Len(t, names, count)
+				assert.Equal(t, expected, names)
+			})
+
+			t.Run("names the sort attribute case insensitively, per RFC 7643 Section 2.1", func(t *testing.T) {
+				lower, _ := page(t, &protocol.SearchRequest{StartIndex: 1, Count: count, SortBy: "userName"})
+				upper, _ := page(t, &protocol.SearchRequest{StartIndex: 1, Count: count, SortBy: "USERNAME"})
+
+				assert.Equal(t, idsOf(lower), idsOf(upper))
+			})
+
+			t.Run("refuses to sort by an attribute it cannot order", func(t *testing.T) {
+				_, _, err := listRepo.List(listCtx, &protocol.SearchRequest{StartIndex: 1, Count: 10, SortBy: "nickName"})
+
+				require.ErrorIs(t, err, protocol.ErrInvalidValue(""))
+				assert.Contains(t, err.Error(), "nickName")
+			})
 		})
 
 		t.Run("refuses any filter", func(t *testing.T) {
