@@ -465,6 +465,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			tenant.Get("/Users", api.scim.Users)
 			tenant.Post("/Users", api.scim.CreateUser)
 			tenant.Get("/Users/{id}", api.scim.UserByID)
+			tenant.Put("/Users/{id}", api.scim.ReplaceUser)
+			tenant.Delete("/Users/{id}", api.scim.DeleteUser)
 		})
 	})
 

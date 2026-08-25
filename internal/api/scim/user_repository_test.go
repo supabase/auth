@@ -62,6 +62,128 @@ func TestUserRepository(t *testing.T) {
 		})
 	})
 
+	t.Run("Replace", func(t *testing.T) {
+		user := func(name string) *core.User {
+			return &core.User{Schemas: []core.SchemaURI{core.SchemaUser}, UserName: name}
+		}
+
+		t.Run("changes attributes and keeps the id", func(t *testing.T) {
+			created, err := repo.Create(ctx, user("carol@example.com"))
+			require.NoError(t, err)
+
+			replaced, err := repo.Replace(ctx, created.ID, user("carol-renamed@example.com"))
+			require.NoError(t, err)
+			assert.Equal(t, created.ID, replaced.ID)
+			assert.Equal(t, "carol-renamed@example.com", replaced.UserName)
+
+			got, err := repo.Get(ctx, created.ID)
+			require.NoError(t, err)
+			assert.Equal(t, "carol-renamed@example.com", got.UserName)
+		})
+
+		// active belongs to the deactivate/reactivate path (AUTH-1360), so a PUT
+		// that says nothing about it must not silently reactivate a leaver.
+		t.Run("keeps active when the body omits it", func(t *testing.T) {
+			created, err := repo.Create(ctx, user("gilfoyle@example.com"))
+			require.NoError(t, err)
+			require.NotNil(t, created.Active)
+			require.True(t, *created.Active)
+
+			require.NoError(t, db.RawQuery("UPDATE scim_users SET resource = jsonb_set(resource, '{active}', 'false') WHERE id = ?", created.ID).Exec())
+
+			replaced, err := repo.Replace(ctx, created.ID, user("gilfoyle-renamed@example.com"))
+			require.NoError(t, err)
+			assert.Equal(t, "gilfoyle-renamed@example.com", replaced.UserName)
+			require.NotNil(t, replaced.Active)
+			assert.False(t, *replaced.Active)
+		})
+
+		t.Run("replaces active supplied in the body, per RFC 7644 3.5.1", func(t *testing.T) {
+			created, err := repo.Create(ctx, user("dinesh@example.com"))
+			require.NoError(t, err)
+
+			require.NoError(t, db.RawQuery("UPDATE scim_users SET resource = jsonb_set(resource, '{active}', 'false') WHERE id = ?", created.ID).Exec())
+
+			active := true
+			reactivating := &core.User{Schemas: []core.SchemaURI{core.SchemaUser}, UserName: "dinesh@example.com", Active: &active}
+
+			replaced, err := repo.Replace(ctx, created.ID, reactivating)
+			require.NoError(t, err)
+			require.NotNil(t, replaced.Active)
+			assert.True(t, *replaced.Active)
+		})
+
+		t.Run("an unknown id is ErrNotFound", func(t *testing.T) {
+			_, err := repo.Replace(ctx, uuid.Must(uuid.NewV4()).String(), user("ghost@example.com"))
+
+			require.ErrorIs(t, err, ErrNotFound)
+		})
+
+		t.Run("never writes across tenants", func(t *testing.T) {
+			other := newTenant(t, db)
+			theirs, err := repo.Create(ctxFor(other), user("theirs-put@example.com"))
+			require.NoError(t, err)
+
+			_, err = repo.Replace(ctx, theirs.ID, user("hijacked@example.com"))
+			require.ErrorIs(t, err, ErrNotFound)
+
+			got, err := repo.Get(ctxFor(other), theirs.ID)
+			require.NoError(t, err)
+			assert.Equal(t, "theirs-put@example.com", got.UserName)
+		})
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		user := func(name string) *core.User {
+			return &core.User{Schemas: []core.SchemaURI{core.SchemaUser}, UserName: name}
+		}
+
+		t.Run("unlists the resource", func(t *testing.T) {
+			created, err := repo.Create(ctx, user("eve@example.com"))
+			require.NoError(t, err)
+
+			require.NoError(t, repo.Delete(ctx, created.ID))
+
+			_, err = repo.Get(ctx, created.ID)
+			require.ErrorIs(t, err, ErrNotFound)
+		})
+
+		t.Run("keeps a tombstone rather than removing the row", func(t *testing.T) {
+			created, err := repo.Create(ctx, user("tombstone@example.com"))
+			require.NoError(t, err)
+			require.NoError(t, repo.Delete(ctx, created.ID))
+
+			var rows []struct {
+				Count int `db:"count"`
+			}
+			require.NoError(t, db.RawQuery("SELECT COUNT(*) AS count FROM scim_users WHERE id = ? AND deleted_at IS NOT NULL", created.ID).All(&rows))
+			assert.Equal(t, 1, rows[0].Count)
+		})
+
+		t.Run("deleting twice is ErrNotFound", func(t *testing.T) {
+			created, err := repo.Create(ctx, user("twice@example.com"))
+			require.NoError(t, err)
+
+			require.NoError(t, repo.Delete(ctx, created.ID))
+			require.ErrorIs(t, repo.Delete(ctx, created.ID), ErrNotFound)
+		})
+
+		t.Run("an unknown id is ErrNotFound", func(t *testing.T) {
+			require.ErrorIs(t, repo.Delete(ctx, uuid.Must(uuid.NewV4()).String()), ErrNotFound)
+		})
+
+		t.Run("never deletes across tenants", func(t *testing.T) {
+			other := newTenant(t, db)
+			theirs, err := repo.Create(ctxFor(other), user("theirs-delete@example.com"))
+			require.NoError(t, err)
+
+			require.ErrorIs(t, repo.Delete(ctx, theirs.ID), ErrNotFound)
+
+			_, err = repo.Get(ctxFor(other), theirs.ID)
+			require.NoError(t, err)
+		})
+	})
+
 	t.Run("List", func(t *testing.T) {
 		listRepo, listCtx := seedPostgres(t, seedUsers())
 		count := len(seedUserNames)

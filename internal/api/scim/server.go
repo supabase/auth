@@ -119,6 +119,49 @@ func (srv *Server) UserByID(w http.ResponseWriter, r *http.Request) error {
 	return protocol.Send(w, http.StatusOK, user)
 }
 
+func (srv *Server) ReplaceUser(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	id, err := uuid.FromString(urlParam(r, "id"))
+	if err != nil {
+		return srv.NotFound(w, r)
+	}
+
+	user, err := srv.decodeUser(r)
+	if err != nil {
+		return protocol.WriteError(w, err)
+	}
+	if err := srv.validateUser(user); err != nil {
+		return protocol.WriteError(w, err)
+	}
+
+	replaced, err := srv.users.Replace(ctx, id.String(), user)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return srv.NotFound(w, r)
+		}
+		return srv.sendError(w, r, err)
+	}
+	return protocol.Send(w, http.StatusOK, replaced)
+}
+
+func (srv *Server) DeleteUser(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	id, err := uuid.FromString(urlParam(r, "id"))
+	if err != nil {
+		return srv.NotFound(w, r)
+	}
+
+	if err := srv.users.Delete(ctx, id.String()); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return srv.NotFound(w, r)
+		}
+		return srv.sendError(w, r, err)
+	}
+	return protocol.Send(w, http.StatusNoContent, nil)
+}
+
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
 	return notFound(w)
 }

@@ -21,6 +21,17 @@ const getUser = `SELECT id, resource, active, created_at, updated_at FROM scim_u
 const createUser = `INSERT INTO scim_users (sso_provider_id, resource)
 	VALUES (?, ?) RETURNING id, resource, active, created_at, updated_at`
 
+// Replace overwrites the stored document, but active is the leaver path's to
+// change (AUTH-1360): when the body omits it, the stored value is carried over.
+const replaceUser = `UPDATE scim_users
+	SET resource = jsonb_set(?::jsonb, '{active}', coalesce(?::jsonb -> 'active', to_jsonb(active))),
+		updated_at = now()
+	WHERE sso_provider_id = ? AND deleted_at IS NULL AND id = ?
+	RETURNING id, resource, active, created_at, updated_at`
+
+const deleteUser = `UPDATE scim_users SET deleted_at = now()
+	WHERE sso_provider_id = ? AND deleted_at IS NULL AND id = ? RETURNING id`
+
 const countUsers = `SELECT COUNT(*) FROM scim_users
 	WHERE sso_provider_id = ? AND deleted_at IS NULL`
 
@@ -124,6 +135,35 @@ func (r *userRepository) buildError(action string, err error) error {
 		return protocol.ErrUniqueness("a User with this userName already exists")
 	}
 	return fmt.Errorf("scim: %s user: %w", action, err)
+}
+
+func (r *userRepository) Replace(ctx context.Context, id string, user *core.User) (*core.User, error) {
+	resource, err := r.toResource(user)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows []scimUser
+	if err := r.db.WithContext(ctx).RawQuery(replaceUser, string(resource), string(resource), r.tenant(ctx), id).All(&rows); err != nil {
+		return nil, r.buildError("replacing", err)
+	}
+	if len(rows) == 0 {
+		return nil, ErrNotFound
+	}
+	return r.mapFrom(&rows[0])
+}
+
+// Delete is a soft delete: the tombstone keeps the row so a userName is not
+// silently reusable and the record survives the auth user being removed.
+func (r *userRepository) Delete(ctx context.Context, id string) error {
+	var ids []string
+	if err := r.db.WithContext(ctx).RawQuery(deleteUser, r.tenant(ctx), id).All(&ids); err != nil {
+		return fmt.Errorf("scim: deleting user: %w", err)
+	}
+	if len(ids) == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *userRepository) mapFrom(row *scimUser) (*core.User, error) {

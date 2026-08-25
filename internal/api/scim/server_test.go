@@ -218,6 +218,75 @@ func TestServer(t *testing.T) {
 		})
 	})
 
+	t.Run("PUT /Users/{id}", func(t *testing.T) {
+		tenant := newTenant(t, db)
+
+		t.Run("replaces the resource's attributes", func(t *testing.T) {
+			stored := newStoredUser(t, db, tenant, &core.User{UserName: "before@example.com"})
+
+			body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"after@example.com"}`
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.ReplaceUser(w, scimRequest(http.MethodPut, "/Users/"+stored.ID, body, tenant, map[string]string{"id": stored.ID})))
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+
+			var user core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+			assert.Equal(t, stored.ID, user.ID)
+			assert.Equal(t, "after@example.com", user.UserName)
+		})
+
+		t.Run("an unknown id is a SCIM 404", func(t *testing.T) {
+			missing := uuid.Must(uuid.NewV4()).String()
+
+			body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"ghost@example.com"}`
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.ReplaceUser(w, scimRequest(http.MethodPut, "/Users/"+missing, body, tenant, map[string]string{"id": missing})))
+
+			require.Equal(t, http.StatusNotFound, w.Code)
+			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
+		})
+
+		t.Run("a body that fails validation is a 400", func(t *testing.T) {
+			stored := newStoredUser(t, db, tenant, &core.User{UserName: "invalid@example.com"})
+
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.ReplaceUser(w, scimRequest(http.MethodPut, "/Users/"+stored.ID, `{"userName":"no-schemas@example.com"}`, tenant, map[string]string{"id": stored.ID})))
+
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
+		})
+	})
+
+	t.Run("DELETE /Users/{id}", func(t *testing.T) {
+		tenant := newTenant(t, db)
+
+		t.Run("removes the resource and answers 204", func(t *testing.T) {
+			stored := newStoredUser(t, db, tenant, &core.User{UserName: "leaver@example.com"})
+
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.DeleteUser(w, scimRequest(http.MethodDelete, "/Users/"+stored.ID, "", tenant, map[string]string{"id": stored.ID})))
+
+			require.Equal(t, http.StatusNoContent, w.Code)
+			assert.Empty(t, w.Body.String())
+
+			after := httptest.NewRecorder()
+			require.NoError(t, srv.UserByID(after, scimRequest(http.MethodGet, "/Users/"+stored.ID, "", tenant, map[string]string{"id": stored.ID})))
+			require.Equal(t, http.StatusNotFound, after.Code)
+		})
+
+		t.Run("an unknown id is a SCIM 404", func(t *testing.T) {
+			missing := uuid.Must(uuid.NewV4()).String()
+
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.DeleteUser(w, scimRequest(http.MethodDelete, "/Users/"+missing, "", tenant, map[string]string{"id": missing})))
+
+			require.Equal(t, http.StatusNotFound, w.Code)
+			require.JSONEq(t, testFixture(t, "not_found.json"), w.Body.String())
+		})
+	})
+
 	t.Run("GET /Users", func(t *testing.T) {
 		users := usersFor(t, srv, db, "a@example.com", "b@example.com", "c@example.com", "d@example.com")
 
