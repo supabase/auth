@@ -9,12 +9,11 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
 )
-
-const testExternalURL = "http://localhost:9999"
 
 //go:embed testdata/*
 var fixtures embed.FS
@@ -26,13 +25,96 @@ func testFixture(t *testing.T, file string) string {
 }
 
 func TestServer(t *testing.T) {
-	srv := NewServer(testExternalURL)
+	db := newTestDB(t)
+	srv := NewServer(db, testExternalURL)
 	require.NotNil(t, srv)
 
 	t.Run("NewServer trims a trailing slash from the external URL", func(t *testing.T) {
-		location := NewServer("https://auth.example.com/").serviceProviderConfig.Meta.Location
+		location := NewServer(nil, "https://auth.example.com/").serviceProviderConfig.Meta.Location
 
 		require.Equal(t, "https://auth.example.com"+BasePath+"/ServiceProviderConfig", location)
+	})
+
+	t.Run("Tenant", func(t *testing.T) {
+		provider := newTenant(t, db)
+		token := grantToken(t, db, provider)
+
+		served := func(t *testing.T, authorization string) (*httptest.ResponseRecorder, string) {
+			t.Helper()
+
+			var seen string
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				seen, _ = tenantFrom(r.Context())
+				w.WriteHeader(http.StatusTeapot)
+			})
+
+			r := httptest.NewRequest(http.MethodGet, BasePath+"/Users", nil)
+			if authorization != "" {
+				r.Header.Set("Authorization", authorization)
+			}
+
+			w := httptest.NewRecorder()
+			srv.Tenant(next).ServeHTTP(w, r)
+			return w, seen
+		}
+
+		t.Run("hands the tenant to the handler", func(t *testing.T) {
+			w, seen := served(t, "Bearer "+token)
+
+			assert.Equal(t, http.StatusTeapot, w.Code)
+			assert.Equal(t, provider, seen)
+		})
+
+		t.Run("returns 401 with a challenge when the token is unknown", func(t *testing.T) {
+			unknown, _ := NewToken()
+
+			w, seen := served(t, "Bearer "+unknown)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Equal(t, `Bearer realm="SCIM"`, w.Header().Get("WWW-Authenticate"))
+			assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+			assert.Empty(t, seen)
+		})
+
+		t.Run("returns 401 when there is no Authorization header", func(t *testing.T) {
+			w, seen := served(t, "")
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Empty(t, seen)
+		})
+
+		t.Run("returns 401 when the token is revoked", func(t *testing.T) {
+			revoked := grantToken(t, db, provider)
+			require.NoError(t, db.RawQuery("UPDATE scim_tokens SET revoked_at = now() WHERE token_hash = ?", hashToken(revoked)).Exec())
+
+			w, seen := served(t, "Bearer "+revoked)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Equal(t, `Bearer realm="SCIM"`, w.Header().Get("WWW-Authenticate"))
+			assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+			assert.Empty(t, seen)
+		})
+
+		t.Run("returns 401 when the token is expired", func(t *testing.T) {
+			expired := grantToken(t, db, provider)
+			require.NoError(t, db.RawQuery("UPDATE scim_tokens SET expires_at = now() - interval '1 second' WHERE token_hash = ?", hashToken(expired)).Exec())
+
+			w, seen := served(t, "Bearer "+expired)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Empty(t, seen)
+		})
+
+		t.Run("returns 401 when the provider is disabled", func(t *testing.T) {
+			other := newTenant(t, db)
+			disabled := grantToken(t, db, other)
+			require.NoError(t, db.RawQuery("UPDATE sso_providers SET disabled = true WHERE id = ?", other).Exec())
+
+			w, seen := served(t, "Bearer "+disabled)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Empty(t, seen)
+		})
 	})
 
 	t.Run("GET /ServiceProviderConfig", func(t *testing.T) {

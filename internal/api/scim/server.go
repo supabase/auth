@@ -7,21 +7,25 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/supabase/auth/internal/api/scim/core"
 	"github.com/supabase/auth/internal/api/scim/protocol"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 )
 
 const BasePath = "/scim/v2"
 
 type Server struct {
+	db                    *storage.Connection
 	serviceProviderConfig *core.ServiceProviderConfig
 	resourceTypes         []*core.ResourceType
 	schemas               []*core.Schema
 }
 
-func NewServer(externalURL string) *Server {
+func NewServer(db *storage.Connection, externalURL string) *Server {
 	baseURL := core.Join(externalURL, BasePath)
 	userSchema := newUserSchema(baseURL)
 
 	return &Server{
+		db: db,
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
@@ -72,6 +76,11 @@ func byID[T core.Resource](w http.ResponseWriter, r *http.Request, resources []T
 		}
 	}
 	return notFound(w)
+}
+
+func (srv *Server) internalError(w http.ResponseWriter, r *http.Request, err error) error {
+	observability.LogEntrySetField(r, "error", err.Error())
+	return protocol.WriteError(w, protocol.ErrInternal("Internal server error"))
 }
 
 func notFound(w http.ResponseWriter) error {
