@@ -3,7 +3,7 @@
     "urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"
   ],
   "patch": {
-    "supported": true
+    "supported": false
   },
   "bulk": {
     "supported": false,
@@ -11,8 +11,8 @@
     "maxPayloadSize": 0
   },
   "filter": {
-    "supported": true,
-    "maxResults": 100
+    "supported": false,
+    "maxResults": 0
   },
   "changePassword": {
     "supported": false

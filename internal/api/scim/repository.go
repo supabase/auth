@@ -11,6 +11,5 @@ type Repository[T any] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 	Create(ctx context.Context, item T) (T, error)
 	Replace(ctx context.Context, id string, item T) (T, error)
-	Patch(ctx context.Context, id string, patch *protocol.PatchOp) (T, error)
 	Delete(ctx context.Context, id string) error
 }

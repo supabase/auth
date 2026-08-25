@@ -240,11 +240,11 @@ func TestSCIM(t *testing.T) {
 				require.Equal(t, http.StatusUnauthorized, w.Code)
 			})
 
-			t.Run("returns 401 when the token is revoked", func(t *testing.T) {
+			t.Run("returns 404 when the token is revoked", func(t *testing.T) {
 				otherProvider, token := createProvider(t, conn)
 				require.NoError(t, conn.RawQuery("UPDATE scim_tokens SET revoked_at = now() WHERE sso_provider_id = ?", otherProvider).Exec())
 
-				require.Equal(t, http.StatusUnauthorized, get(t, "Bearer "+token).Code)
+				require.Equal(t, http.StatusNotFound, get(t, "Bearer "+token).Code)
 			})
 
 			t.Run("does not serve one provider's users to another's token", func(t *testing.T) {

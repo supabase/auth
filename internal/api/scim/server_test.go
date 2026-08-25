@@ -294,47 +294,13 @@ func TestServer(t *testing.T) {
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
 		})
 
-		t.Run(`?filter=userName eq "bob"`, func(t *testing.T) {
+		t.Run("?filter is rejected", func(t *testing.T) {
 			get := usersFor(t, srv, db, "alice", "bob", "carol")
 
-			body := listed[*core.User](t, get(filterQuery(`userName eq "bob"`)))
-
-			assert.Equal(t, 1, body.TotalResults)
-			assert.Equal(t, []string{"bob"}, userNamesOf(body.Resources))
-		})
-
-		t.Run(`?filter=userName sw "a"`, func(t *testing.T) {
-			get := usersFor(t, srv, db, "ann", "abe", "bob")
-
-			body := listed[*core.User](t, get(filterQuery(`userName sw "a"`)))
-
-			assert.Equal(t, 2, body.TotalResults)
-		})
-
-		t.Run(`?filter=userName eq "bjensen"`, func(t *testing.T) {
-			get := usersFor(t, srv, db, "BJensen")
-
-			body := listed[*core.User](t, get(filterQuery(`userName eq "bjensen"`)))
-
-			assert.Equal(t, 1, body.TotalResults)
-		})
-
-		t.Run(`?filter=emails[type eq "work"`, func(t *testing.T) {
-			get := usersFor(t, srv, db, "a")
-
-			w := get(filterQuery(`emails[type eq "work"]`))
+			w := get(filterQuery(`userName eq "bob"`))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidFilter))
-		})
-
-		t.Run("?filter=userName eq", func(t *testing.T) {
-			get := usersFor(t, srv, db, "a")
-
-			w := get(filterQuery(`userName eq`))
-
-			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidFilter))
 		})
 	})
@@ -435,68 +401,6 @@ func TestServer(t *testing.T) {
 			require.NoError(t, srv.ReplaceUser(w, r))
 
 			assert.Equal(t, http.StatusNotFound, w.Code)
-		})
-	})
-
-	t.Run("PATCH /Users", func(t *testing.T) {
-		t.Run("deactivates a User", func(t *testing.T) {
-			tenant := newTenant(t, db)
-			created := create(t, srv, tenant, "dave")
-
-			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":false}}]}`
-			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, body, tenant, map[string]string{"id": created.ID})
-			w := httptest.NewRecorder()
-			require.NoError(t, srv.PatchUser(w, r))
-
-			require.Equal(t, http.StatusOK, w.Code)
-			var user core.User
-			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
-			require.NotNil(t, user.Active)
-			assert.False(t, *user.Active)
-		})
-
-		t.Run("with an unknown id", func(t *testing.T) {
-			tenant := newTenant(t, db)
-			id := uuid.Must(uuid.NewV4()).String()
-
-			body := `{"Operations":[{"op":"replace","value":{"active":false}}]}`
-			r := scimRequest(http.MethodPatch, "/Users/"+id, body, tenant, map[string]string{"id": id})
-			w := httptest.NewRecorder()
-			require.NoError(t, srv.PatchUser(w, r))
-
-			assert.Equal(t, http.StatusNotFound, w.Code)
-		})
-
-		t.Run("with a malformed body", func(t *testing.T) {
-			tenant := newTenant(t, db)
-			created := create(t, srv, tenant, "erin")
-
-			body := `{"Operations":[{"op":"move","path":"active"}]}`
-			r := scimRequest(http.MethodPatch, "/Users/"+created.ID, body, tenant, map[string]string{"id": created.ID})
-			w := httptest.NewRecorder()
-			require.NoError(t, srv.PatchUser(w, r))
-
-			assert.Equal(t, http.StatusBadRequest, w.Code)
-		})
-
-		t.Run("with an oversized request body", func(t *testing.T) {
-			tenant := newTenant(t, db)
-			created := create(t, srv, tenant, "alice")
-
-			routeCtx := chi.NewRouteContext()
-			routeCtx.URLParams.Add("id", created.ID)
-			body := fmt.Sprintf(`{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":"%s"}}]}`, strings.Repeat("x", 64))
-			r := httptest.
-				NewRequest(http.MethodPatch, "/scim/v2/Users/"+created.ID, strings.NewReader(body)).
-				WithContext(withTenant(context.WithValue(t.Context(), chi.RouteCtxKey, routeCtx), tenant))
-			r.Body = http.MaxBytesReader(httptest.NewRecorder(), r.Body, 8)
-
-			w := httptest.NewRecorder()
-
-			require.NoError(t, srv.PatchUser(w, r))
-
-			require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
-			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 		})
 	})
 

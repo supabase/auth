@@ -15,9 +15,12 @@ const bearerScheme = "bearer "
 // TODO:: Replace with https://github.com/supabase/auth/pull/2677
 type tenantKey struct{}
 
+var errInvalidCredential = errors.New("scim: invalid credential")
+
 type scimToken struct {
 	ID            string `db:"id"`
 	SSOProviderID string `db:"sso_provider_id"`
+	Usable        bool   `db:"usable"`
 }
 
 func withTenant(ctx context.Context, tenant string) context.Context {
@@ -44,9 +47,12 @@ func (srv *Server) tenant(w http.ResponseWriter, r *http.Request) (context.Conte
 
 	tenant, err := srv.lookup(ctx, credential(r))
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		switch {
+		case errors.Is(err, errInvalidCredential):
 			_ = srv.unauthorized(w)
-		} else {
+		case errors.Is(err, ErrNotFound):
+			_ = srv.NotFound(w, r)
+		default:
 			_ = srv.internalError(w, r, err)
 		}
 		return nil, false
@@ -76,18 +82,18 @@ func credential(r *http.Request) string {
 
 func (srv *Server) lookup(ctx context.Context, credential string) (string, error) {
 	if !strings.HasPrefix(credential, TokenPrefix) {
-		return "", ErrNotFound
+		return "", errInvalidCredential
 	}
 
 	var rows []scimToken
 	tokenQuery := `
-		SELECT t.id, t.sso_provider_id
+		SELECT t.id, t.sso_provider_id,
+			(t.revoked_at IS NULL
+				AND (t.expires_at IS NULL OR t.expires_at > now())
+				AND (p.disabled IS NULL OR p.disabled = false)) AS usable
 		FROM scim_tokens t
 		INNER JOIN sso_providers p ON p.id = t.sso_provider_id
 		WHERE t.token_hash = ?
-			AND t.revoked_at IS NULL
-			AND (t.expires_at IS NULL OR t.expires_at > now())
-			AND (p.disabled IS NULL OR p.disabled = false)
 		`
 
 	err := srv.db.WithContext(ctx).RawQuery(tokenQuery, hashToken(credential)).All(&rows)
@@ -96,6 +102,9 @@ func (srv *Server) lookup(ctx context.Context, credential string) (string, error
 	}
 
 	if len(rows) == 0 {
+		return "", errInvalidCredential
+	}
+	if !rows[0].Usable {
 		return "", ErrNotFound
 	}
 

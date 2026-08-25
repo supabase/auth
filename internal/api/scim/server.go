@@ -37,7 +37,7 @@ func NewServer(db *storage.Connection, externalURL string) *Server {
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
-		).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching(),
+		).Sorting(),
 		resourceTypes: []*core.ResourceType{core.NewResourceType(baseURL, core.KindUser, userSchema)},
 		schemas:       []*core.Schema{userSchema},
 	}
@@ -142,33 +142,6 @@ func (srv *Server) ReplaceUser(w http.ResponseWriter, r *http.Request) error {
 		return srv.sendError(w, r, err)
 	}
 	return protocol.Send(w, http.StatusOK, replaced)
-}
-
-func (srv *Server) PatchUser(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-
-	id, err := uuid.FromString(urlParam(r, "id"))
-	if err != nil {
-		return srv.NotFound(w, r)
-	}
-
-	body, err := readBody(r)
-	if err != nil {
-		return protocol.WriteError(w, err)
-	}
-	patch, err := protocol.ParsePatchOp(body)
-	if err != nil {
-		return protocol.WriteError(w, err)
-	}
-
-	patched, err := srv.users.Patch(ctx, id.String(), patch)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return srv.NotFound(w, r)
-		}
-		return srv.sendError(w, r, err)
-	}
-	return protocol.Send(w, http.StatusOK, patched)
 }
 
 func (srv *Server) DeleteUser(w http.ResponseWriter, r *http.Request) error {
