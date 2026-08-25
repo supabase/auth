@@ -51,9 +51,7 @@ func (e *Error) Error() string {
 	return message
 }
 
-// StatusCode is the status as the HTTP status code it was built from. An
-// unparsable status is reported as 500, so that a malformed error still
-// answers the request as an error.
+// StatusCode is the HTTP status the Error was built from, or 500 if unparsable.
 func (e *Error) StatusCode() int {
 	status, err := strconv.Atoi(e.Status)
 	if err != nil {
@@ -62,16 +60,13 @@ func (e *Error) StatusCode() int {
 	return status
 }
 
-// Is reports whether target is an Error of the same status and scimType. The
-// detail is a human-readable explanation, so it plays no part in the match.
+// Is reports whether target is an Error of the same status and scimType.
 func (e *Error) Is(target error) bool {
 	other, ok := target.(*Error)
 	return ok && other.Status == e.Status && other.ScimType == e.ScimType
 }
 
-// The errors of RFC 7644, each pairing a scimType with the status the RFC
-// states for it. The RFC pairs them in prose rather than in a table, so each
-// constructor cites where its status comes from.
+// The errors of RFC 7644, each pairing a scimType with the status the RFC states for it.
 
 // ErrInvalidFilter reports a filter this provider cannot honour, per Table 3
 // of Section 3.4.2.2.

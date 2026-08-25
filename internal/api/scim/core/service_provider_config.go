@@ -63,20 +63,13 @@ type ServiceProviderConfig struct {
 	Meta                  Meta                    `json:"meta"`
 }
 
-// Sorting states that this provider honours the "sortBy" and "sortOrder"
-// parameters of RFC 7644, Section 3.4.2.3. A provider may still refuse to order
-// by a particular attribute, answering "invalidValue"; what it claims here is
-// that asking is meaningful.
+// Sorting states that this provider honours "sortBy" and "sortOrder", per RFC 7644, Section 3.4.2.3.
 func (c *ServiceProviderConfig) Sorting() *ServiceProviderConfig {
 	c.Sort.Supported = true
 	return c
 }
 
-// Filtering states that this provider honours the "filter" parameter of RFC
-// 7644, Section 3.4.2.2, and the largest number of results a filter may return,
-// which is this provider's page bound. A provider may still refuse a particular
-// filter, answering "invalidFilter"; what it claims here is that filtering is
-// meaningful.
+// Filtering states that this provider honours "filter" up to maxResults, per RFC 7644, Section 3.4.2.2.
 func (c *ServiceProviderConfig) Filtering(maxResults int) *ServiceProviderConfig {
 	c.Filter.Supported = true
 	c.Filter.MaxResults = maxResults

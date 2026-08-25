@@ -130,8 +130,6 @@ func TestUserRepository(t *testing.T) {
 	})
 
 	t.Run("Create", func(t *testing.T) {
-		// repo, ctx := seedPostgres(t, nil)
-
 		user := func(name string) *core.User {
 			return &core.User{Schemas: []core.SchemaURI{core.SchemaUser}, UserName: name}
 		}

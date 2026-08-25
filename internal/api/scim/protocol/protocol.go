@@ -11,9 +11,7 @@ import (
 // MediaType is the SCIM media type registered in RFC 7644, Section 8.1.
 const MediaType = "application/scim+json"
 
-// Send writes obj as a SCIM response. The body is encoded before anything is
-// written, so a value that cannot be encoded leaves the response untouched for
-// the caller to answer some other way.
+// Send writes obj as a SCIM response.
 func Send(w http.ResponseWriter, status int, obj any) error {
 	var body []byte
 	if obj != nil {
@@ -34,9 +32,7 @@ func Send(w http.ResponseWriter, status int, obj any) error {
 	return err
 }
 
-// WriteError answers the request with err in the error form of Section 3.12.
-// An error that is not a SCIM Error is reported as 500 without disclosing its
-// message, which is for the provider's logs rather than for the client.
+// WriteError answers the request with err in the error form of RFC 7644, Section 3.12.
 func WriteError(w http.ResponseWriter, err error) error {
 	var scimErr *Error
 	if !errors.As(err, &scimErr) {

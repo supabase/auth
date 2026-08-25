@@ -55,9 +55,7 @@ func (srv *Server) tenant(w http.ResponseWriter, r *http.Request) (context.Conte
 	return withTenant(ctx, tenant), true
 }
 
-// unauthorized answers a credential that names no tenant. RFC 7644,
-// Section 3.12 gives 401 for a missing or invalid authorization header, and
-// RFC 6750, Section 3 asks for the challenge that says which scheme would work.
+// unauthorized answers a request with no valid tenant, per RFC 7644, Section 3.12 and RFC 6750, Section 3.
 func (srv *Server) unauthorized(w http.ResponseWriter) error {
 	w.Header().Set("WWW-Authenticate", `Bearer realm="SCIM"`)
 	return protocol.WriteError(w, protocol.ErrUnauthorized("Bearer token is missing or invalid"))
