@@ -1,46 +1,48 @@
 package scim
 
 import (
-	"context"
 	"net/http"
+	"strings"
 
-	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/scim/core"
+	"github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/conf"
 )
 
-const mediaType = "application/scim+json"
+const BasePath = "/scim/v2"
 
 type Server struct {
-	config *conf.GlobalConfiguration
+	serviceProviderConfig *core.ServiceProviderConfig
 }
 
 func NewServer(config *conf.GlobalConfiguration) *Server {
 	return &Server{
-		config: config,
+		serviceProviderConfig: core.NewServiceProviderConfig(
+			strings.TrimRight(config.API.ExternalURL, "/")+BasePath,
+			core.NewOAuthBearerToken().AsPrimary(),
+		),
 	}
-}
-
-func (srv *Server) Middleware(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	if !srv.config.Experimental.ScimEnabled {
-		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeFeatureDisabled, "SCIM server is disabled")
-	}
-	return r.Context(), nil
 }
 
 func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request) error {
-	return srv.notImplemented(w, r)
+	return protocol.Send(w, http.StatusOK, srv.serviceProviderConfig)
 }
 
 func (srv *Server) ResourceTypes(w http.ResponseWriter, r *http.Request) error {
-	return srv.notImplemented(w, r)
+	return list(w, r, []any{})
 }
 
 func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
-	return srv.notImplemented(w, r)
+	return list(w, r, []any{})
 }
 
-func (srv *Server) notImplemented(w http.ResponseWriter, r *http.Request) error {
-	w.Header().Set("Content-Type", mediaType)
-	w.WriteHeader(http.StatusNotImplemented)
-	return nil
+func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
+	return protocol.SendError(w, http.StatusNotFound, "", "Endpoint or resource does not exist")
+}
+
+func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
+	if r.URL.Query().Has("filter") {
+		return protocol.SendError(w, http.StatusForbidden, "", "Filtering is not supported on this endpoint")
+	}
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(resources))
 }

@@ -1495,6 +1495,7 @@ paths:
                             - verification_attempted
                             - factor_deleted
                             - factor_updated
+                            - identity_linked
                             - identity_unlinked
                             - passkey_created
                             - passkey_updated

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -273,8 +274,9 @@ func (u *User) UpdateAppMetaDataProviders(tx *storage.Connection) error {
 }
 
 // UpdateUserEmail updates the user's email to one of the identity's email
-// if the current email used doesn't match any of the identities email
-func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
+// if the current email used doesn't match any of the identities email.
+// Unverified identity emails remain confirmed when mailer autoconfirm is enabled.
+func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection, mailerAutoconfirm bool) error {
 	identities, terr := FindIdentitiesByUserID(tx, u.ID)
 	if terr != nil {
 		return terr
@@ -286,6 +288,31 @@ func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 			return nil
 		}
 	}
+
+	// We select identities in the following order of priority:
+	// 	1. identities whose email was verified by the identity provider
+	// 	2. identities with an unverified email
+	// 	3. identities without an email (e.g. phone)
+	identityRank := func(i *Identity) int {
+		switch {
+		case i.GetEmail() == "":
+			return 2
+		case !i.IsEmailVerified():
+			return 1
+		default:
+			return 0
+		}
+	}
+	sort.SliceStable(identities, func(a, b int) bool {
+		ia, ib := identities[a], identities[b]
+		if ra, rb := identityRank(ia), identityRank(ib); ra != rb {
+			return ra < rb
+		}
+		if !ia.CreatedAt.Equal(ib.CreatedAt) {
+			return ia.CreatedAt.Before(ib.CreatedAt)
+		}
+		return ia.ID.String() < ib.ID.String()
+	})
 
 	var primaryIdentity *Identity
 	for _, i := range identities {
@@ -306,13 +333,65 @@ func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 	if terr := u.SetEmail(tx, primaryIdentity.GetEmail()); terr != nil {
 		return terr
 	}
-	if primaryIdentity.GetEmail() == "" {
+	// outstanding tokens and pending account changes were issued before the
+	// primary email transition so they can't be trusted anymore
+	if terr := u.ClearAllPendingTokens(tx); terr != nil {
+		return terr
+	}
+	if primaryIdentity.GetEmail() == "" || (!primaryIdentity.IsEmailVerified() && !mailerAutoconfirm) {
+		// the promoted email was neither verified by the IdP nor covered by
+		// the project's autoconfirm policy, so it can't remain confirmed
 		u.EmailConfirmedAt = nil
 		if terr := tx.UpdateOnly(u, "email_confirmed_at"); terr != nil {
 			return terr
 		}
+		if terr := u.UpdateUserMetaData(tx, map[string]any{
+			"email_verified": false,
+		}); terr != nil {
+			return terr
+		}
 	}
 	return nil
+}
+
+// ClearAllPendingTokens revokes all outstanding confirmation, recovery,
+// email change, phone change and reauthentication tokens issued for the
+// user, together with their one-time token rows.
+func (u *User) ClearAllPendingTokens(tx *storage.Connection) error {
+	u.ConfirmationToken = ""
+	u.ConfirmationSentAt = nil
+	u.RecoveryToken = ""
+	u.RecoverySentAt = nil
+	u.EmailChange = ""
+	u.EmailChangeTokenCurrent = ""
+	u.EmailChangeTokenNew = ""
+	u.EmailChangeSentAt = nil
+	u.EmailChangeConfirmStatus = 0
+	u.PhoneChange = ""
+	u.PhoneChangeToken = ""
+	u.PhoneChangeSentAt = nil
+	u.ReauthenticationToken = ""
+	u.ReauthenticationSentAt = nil
+	if terr := tx.UpdateOnly(
+		u,
+		"confirmation_token",
+		"confirmation_sent_at",
+		"recovery_token",
+		"recovery_sent_at",
+		"email_change",
+		"email_change_token_current",
+		"email_change_token_new",
+		"email_change_sent_at",
+		"email_change_confirm_status",
+		"phone_change",
+		"phone_change_token",
+		"phone_change_sent_at",
+		"reauthentication_token",
+		"reauthentication_sent_at",
+	); terr != nil {
+		return terr
+	}
+	return ClearAllOneTimeTokensForUser(tx, u.ID)
 }
 
 // SetEmail sets the user's email
