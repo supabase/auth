@@ -27,6 +27,7 @@ const (
 	// authorization_code grant (this app acting as the OAuth server, not a third-party provider).
 	LoginTypeOAuthServerAuthorizationCode LoginType = "oauth_server_authorization_code"
 	// LoginTypeOAuthServerTokenRefresh is additive alongside LoginTypeToken for OAuth server token refreshes.
+	// #nosec G101 - No hardcoded credentials, this is a login analytics label.
 	LoginTypeOAuthServerTokenRefresh LoginType = "oauth_server_token_refresh"
 )
 
