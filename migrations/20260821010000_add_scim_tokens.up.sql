@@ -21,3 +21,6 @@ create unique index if not exists scim_tokens_token_hash_key
 create index if not exists scim_tokens_sso_provider_id_idx
     on {{ index .Options "Namespace" }}.scim_tokens (sso_provider_id)
     where revoked_at is null;
+
+alter table {{ index .Options "Namespace" }}.scim_tokens enable row level security;
+grant select on {{ index .Options "Namespace" }}.scim_tokens to postgres with grant option;
