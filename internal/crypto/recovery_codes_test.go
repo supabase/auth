@@ -61,7 +61,7 @@ func TestGenerateRecoveryCodeHash(t *testing.T) {
 	hash, err := GenerateRecoveryCodeHash(code)
 	require.NoError(t, err)
 
-	prefix := "$argon2id$v=19$m=19456,t=1,p=1$"
+	prefix := "$argon2id$v=19$m=19456,t=2,p=1$"
 	require.True(t, strings.HasPrefix(hash, prefix), "hash %q does not have prefix %q", hash, prefix)
 
 	parts := strings.Split(strings.TrimPrefix(hash, prefix), "$")
@@ -120,6 +120,19 @@ func TestCompareHashAndRecoveryCodeParameterAgility(t *testing.T) {
 
 	assert.NoError(t, CompareHashAndRecoveryCode(hash, code))
 	assert.ErrorIs(t, CompareHashAndRecoveryCode(hash, "wrongcodejklmnp27"), ErrRecoveryCodeMismatchedHashAndCode)
+
+	// a hash sitting exactly on every minimum bound (m=8*p, 8-byte salt,
+	// 16-byte digest) must still verify
+	minSalt := []byte("01234567")
+	minDigest := argon2.IDKey([]byte(code), minSalt, 1, 8, 1, 16)
+	minHash := fmt.Sprintf(
+		"$argon2id$v=19$m=8,t=1,p=1$%s$%s",
+		base64.RawStdEncoding.EncodeToString(minSalt),
+		base64.RawStdEncoding.EncodeToString(minDigest),
+	)
+
+	assert.NoError(t, CompareHashAndRecoveryCode(minHash, code))
+	assert.ErrorIs(t, CompareHashAndRecoveryCode(minHash, "wrongcodejklmnp27"), ErrRecoveryCodeMismatchedHashAndCode)
 }
 
 func TestCompareHashAndRecoveryCodeNegativeExamples(t *testing.T) {
@@ -138,6 +151,12 @@ func TestCompareHashAndRecoveryCodeNegativeExamples(t *testing.T) {
 		"$argon2id$v=19$m=4294967297,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// m exceeds the 1 GiB limit
 		"$argon2id$v=19$m=1048577,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		// m is 0
+		"$argon2id$v=19$m=0,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		// m below the minimum of 8 KiB per thread
+		"$argon2id$v=19$m=7,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		// m below the minimum of 8 KiB per thread at the thread limit
+		"$argon2id$v=19$m=127,t=2,p=16$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// t larger than 32 bits
 		"$argon2id$v=19$m=16,t=4294967297,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// t is 0
@@ -160,8 +179,12 @@ func TestCompareHashAndRecoveryCodeNegativeExamples(t *testing.T) {
 		"$argon2id$v=19$m=16,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$AAAAA",
 		// salt empty
 		"$argon2id$v=19$m=16,t=2,p=1$$NfEnUOuUpb7F2fQkgFUG4g",
+		// salt of 4 bytes, below the minimum of 8
+		"$argon2id$v=19$m=16,t=2,p=1$AAAAAA$NfEnUOuUpb7F2fQkgFUG4g",
 		// hash empty
 		"$argon2id$v=19$m=16,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$",
+		// hash of 8 bytes, below the minimum of 16
+		"$argon2id$v=19$m=16,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$AAAAAAAAAAA",
 		// bcrypt hash
 		"$2y$04$mIJxfrCaEI3GukZe11CiXublhEFanu5.ododkll1WphfSp6pn4zIu",
 		// not a hash at all
