@@ -17,17 +17,22 @@ type FilterFeature struct {
 
 type AuthenticationSchemeType string
 
+// The authentication scheme types of RFC 7643, Section 5.
 const (
+	AuthenticationSchemeOAuth            AuthenticationSchemeType = "oauth"
+	AuthenticationSchemeOAuth2           AuthenticationSchemeType = "oauth2"
 	AuthenticationSchemeOAuthBearerToken AuthenticationSchemeType = "oauthbearertoken"
+	AuthenticationSchemeHTTPBasic        AuthenticationSchemeType = "httpbasic"
+	AuthenticationSchemeHTTPDigest       AuthenticationSchemeType = "httpdigest"
 )
 
-// AuthenticationScheme is the authentication scheme of RFC 7643, Section 5.
 type AuthenticationScheme struct {
-	Type        AuthenticationSchemeType `json:"type"`
-	Name        string                   `json:"name"`
-	Description string                   `json:"description"`
-	SpecURI     string                   `json:"specUri,omitempty"`
-	Primary     bool                     `json:"primary"`
+	Type             AuthenticationSchemeType `json:"type"`
+	Name             string                   `json:"name"`
+	Description      string                   `json:"description"`
+	SpecURI          string                   `json:"specUri,omitempty"`
+	DocumentationURI string                   `json:"documentationUri,omitempty"`
+	Primary          bool                     `json:"primary"`
 }
 
 func NewOAuthBearerToken() *AuthenticationScheme {
@@ -47,6 +52,7 @@ func (scheme *AuthenticationScheme) AsPrimary() *AuthenticationScheme {
 // ServiceProviderConfig is the schema defined in RFC 7643, Section 5.
 type ServiceProviderConfig struct {
 	Schemas               []SchemaURI             `json:"schemas"`
+	DocumentationURI      string                  `json:"documentationUri,omitempty"`
 	Patch                 SupportedFeature        `json:"patch"`
 	Bulk                  BulkFeature             `json:"bulk"`
 	Filter                FilterFeature           `json:"filter"`
@@ -57,14 +63,33 @@ type ServiceProviderConfig struct {
 	Meta                  Meta                    `json:"meta"`
 }
 
+// Sorting states that this provider honours "sortBy" and "sortOrder", per RFC 7644, Section 3.4.2.3.
+func (c *ServiceProviderConfig) Sorting() *ServiceProviderConfig {
+	c.Sort.Supported = true
+	return c
+}
+
+// Filtering states that this provider honours "filter" up to maxResults, per RFC 7644, Section 3.4.2.2.
+func (c *ServiceProviderConfig) Filtering(maxResults int) *ServiceProviderConfig {
+	c.Filter.Supported = true
+	c.Filter.MaxResults = maxResults
+	return c
+}
+
+// Patching states that this provider honours the PATCH request of RFC 7644,
+// Section 3.5.2.
+func (c *ServiceProviderConfig) Patching() *ServiceProviderConfig {
+	c.Patch.Supported = true
+	return c
+}
+
 func NewServiceProviderConfig(baseURL string, schemes ...*AuthenticationScheme) *ServiceProviderConfig {
 	if schemes == nil {
 		schemes = []*AuthenticationScheme{}
 	}
-
 	return &ServiceProviderConfig{
 		Schemas:               []SchemaURI{SchemaServiceProviderConfig},
 		AuthenticationSchemes: schemes,
-		Meta:                  NewMeta(baseURL, ResourceTypeServiceProviderConfig, EndpointServiceProviderConfig),
+		Meta:                  NewMeta(baseURL, KindServiceProviderConfig),
 	}
 }
