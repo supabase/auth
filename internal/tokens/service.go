@@ -28,6 +28,14 @@ import (
 
 const retryLoopDuration = 5.0
 
+// OAuth2 grant type values. Defined here (rather than in
+// internal/api/oauthserver, which imports this package) so both the OAuth server's grant type
+// dispatch and this package's own metering calls share a single source of truth.
+const (
+	GrantTypeAuthorizationCode = "authorization_code"
+	GrantTypeRefreshToken      = "refresh_token"
+)
+
 // AMRClaim supports unmarshalling AMR as either strings or AMREntry objects.
 type AMRClaim []models.AMREntry
 
@@ -648,8 +656,11 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 		}
 		metering.RecordLogin(metering.LoginTypeToken, user.ID, nil)
 		if sessionClientID != nil {
-			metering.RecordLogin(metering.LoginTypeOAuthServerTokenRefresh, user.ID, &metering.LoginData{
-				ClientID: sessionClientID.String(),
+			metering.RecordLogin(metering.LoginTypeOAuthServer, user.ID, &metering.LoginData{
+				OAuthServer: &metering.OAuthServerData{
+					ClientID:  sessionClientID.String(),
+					GrantType: GrantTypeRefreshToken,
+				},
 			})
 		}
 		return newTokenResponse, nil

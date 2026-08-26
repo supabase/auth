@@ -28,11 +28,12 @@ func (ts *OAuthClientTestSuite) TestAuthorizationCodeGrantRecordsOAuthServerLogi
 
 	found := false
 	for _, entry := range hook.AllEntries() {
-		if entry.Data["action"] == "login" && entry.Data["login_method"] == "oauth_server_authorization_code" {
+		if entry.Data["action"] == "login" && entry.Data["login_method"] == "oauth_server" {
 			require.Equal(ts.T(), client.ID.String(), entry.Data["client_id"])
+			require.Equal(ts.T(), "authorization_code", entry.Data["grant_type"])
 			require.Equal(ts.T(), user.ID.String(), entry.Data["user_id"])
 			found = true
 		}
 	}
-	require.True(ts.T(), found, "expected an oauth_server_authorization_code login metering event")
+	require.True(ts.T(), found, "expected an oauth_server login metering event for the authorization_code grant")
 }

@@ -23,12 +23,9 @@ const (
 	LoginTypeMFA       LoginType = "mfa"   // for MFA verifications
 	LoginTypePasskey   LoginType = "passkey"
 
-	// LoginTypeOAuthServerAuthorizationCode is for the OAuth 2.1 authorization server's
-	// authorization_code grant (this app acting as the OAuth server, not a third-party provider).
-	LoginTypeOAuthServerAuthorizationCode LoginType = "oauth_server_authorization_code"
-	// LoginTypeOAuthServerTokenRefresh is additive alongside LoginTypeToken for OAuth server token refreshes.
-	// #nosec G101 - No hardcoded credentials, this is a login analytics label.
-	LoginTypeOAuthServerTokenRefresh LoginType = "oauth_server_token_refresh"
+	// LoginTypeOAuthServer is for the OAuth 2.1 authorization server (this app acting as the
+	// OAuth server, not a third-party provider)
+	LoginTypeOAuthServer LoginType = "oauth_server"
 )
 
 // Provider constants for consistent login analytics
@@ -54,8 +51,8 @@ type LoginData struct {
 	// Web3 specific data (for blockchain authentication)
 	Web3 *Web3Data `json:"web3,omitempty"`
 
-	// ClientID is the OAuth server client ID, for OAuth server login events
-	ClientID string `json:"client_id,omitempty"`
+	// OAuthServer specific data (for LoginTypeOAuthServer events)
+	OAuthServer *OAuthServerData `json:"oauth_server,omitempty"`
 
 	// Additional context for future extensibility
 	Extra map[string]interface{} `json:"extra,omitempty"`
@@ -75,6 +72,15 @@ type Web3Data struct {
 	URI string `json:"uri,omitempty"`
 }
 
+// OAuthServerData contains OAuth 2.1 authorization server specific data
+type OAuthServerData struct {
+	// ClientID is the OAuth server client ID, for per-client usage reporting
+	ClientID string `json:"client_id,omitempty"`
+	// GrantType is the OAuth 2.1 grant type behind this login event
+	// (e.g. "authorization_code", "refresh_token")
+	GrantType string `json:"grant_type,omitempty"`
+}
+
 var logger = logrus.StandardLogger().WithField("metering", true)
 
 func RecordLogin(loginType LoginType, userID uuid.UUID, data *LoginData) {
@@ -90,8 +96,14 @@ func RecordLogin(loginType LoginType, userID uuid.UUID, data *LoginData) {
 			fields["provider"] = data.Provider
 		}
 
-		if data.ClientID != "" {
-			fields["client_id"] = data.ClientID
+		// Add OAuth server context fields
+		if data.OAuthServer != nil {
+			if data.OAuthServer.ClientID != "" {
+				fields["client_id"] = data.OAuthServer.ClientID
+			}
+			if data.OAuthServer.GrantType != "" {
+				fields["grant_type"] = data.OAuthServer.GrantType
+			}
 		}
 
 		// Add Web3 context fields

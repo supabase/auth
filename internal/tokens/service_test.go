@@ -241,13 +241,14 @@ func (ts *RefreshTokenV2Suite) TestOAuthServerRefreshRecordsAdditiveLoginMetric(
 		case "token":
 			sawGenericToken = true
 			require.NotContains(ts.T(), entry.Data, "client_id")
-		case "oauth_server_token_refresh":
+		case "oauth_server":
 			sawOAuthServerRefresh = true
 			require.Equal(ts.T(), clientID.String(), entry.Data["client_id"])
+			require.Equal(ts.T(), "refresh_token", entry.Data["grant_type"])
 		}
 	}
 	require.True(ts.T(), sawGenericToken, "existing generic token refresh login event must still fire")
-	require.True(ts.T(), sawOAuthServerRefresh, "additive oauth_server_token_refresh login event must fire with client_id")
+	require.True(ts.T(), sawOAuthServerRefresh, "additive oauth_server login event must fire with client_id and grant_type=refresh_token")
 }
 
 func (ts *RefreshTokenV2Suite) TestMaliciousReuse() {
