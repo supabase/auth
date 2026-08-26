@@ -23,7 +23,7 @@ const recoveryCodeAlphabet = "abcdefghijklmnopqrstuvwxyz234567"
 // the parameters from the stored hash, so these can change without breaking existing codes.
 const (
 	recoveryCodeArgon2idMemoryKiB   uint32 = 19456
-	recoveryCodeArgon2idIterations  uint32 = 1
+	recoveryCodeArgon2idIterations  uint32 = 2
 	recoveryCodeArgon2idParallelism uint8  = 1
 	recoveryCodeArgon2idSaltLength         = 16
 	recoveryCodeArgon2idKeyLength   uint32 = 32
@@ -62,7 +62,7 @@ func NormalizeRecoveryCode(input string) string {
 }
 
 // GenerateRecoveryCodeHash hashes a recovery code with argon2id and a random salt,
-// returning a PHC string of the form $argon2id$v=19$m=19456,t=1,p=1$<salt>$<digest>
+// returning a PHC string of the form $argon2id$v=19$m=19456,t=2,p=1$<salt>$<digest>
 func GenerateRecoveryCodeHash(code string) (string, error) {
 	salt := make([]byte, recoveryCodeArgon2idSaltLength)
 	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
@@ -127,14 +127,24 @@ func CompareHashAndRecoveryCode(hash, code string) error {
 		return fmt.Errorf("crypto: recovery code hash has p parameter %d outside thread limits", threads)
 	}
 
+	if memory < 8*threads { // RFC 9106 requires at least 8 KiB of memory per thread
+		return fmt.Errorf("crypto: recovery code hash has m parameter %d below memory minimum", memory)
+	}
+
 	salt, err := base64.RawStdEncoding.DecodeString(saltB64)
 	if err != nil {
 		return fmt.Errorf("crypto: recovery code hash has invalid base64 in the salt section %w", err)
+	}
+	if len(salt) < 8 { // RFC 9106 minimum salt length for password hashing
+		return fmt.Errorf("crypto: recovery code hash has salt of %d bytes below length minimum", len(salt))
 	}
 
 	rawHash, err := base64.RawStdEncoding.DecodeString(hashB64)
 	if err != nil {
 		return fmt.Errorf("crypto: recovery code hash has invalid base64 in the hash section %w", err)
+	}
+	if len(rawHash) < 16 { // short digests weaken the constant-time comparison below
+		return fmt.Errorf("crypto: recovery code hash has digest of %d bytes below length minimum", len(rawHash))
 	}
 
 	derivedKey := argon2.IDKey([]byte(code), salt, uint32(time), uint32(memory), uint8(threads), uint32(len(rawHash))) // #nosec G115
