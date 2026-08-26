@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
@@ -468,4 +469,79 @@ func (ts *SSOTestSuite) TestFindSSOProviderByResourceID() {
 		require.Error(ts.T(), err)
 		require.Nil(ts.T(), got)
 	}
+}
+
+func (ts *SSOTestSuite) TestFindSSOProviderBySCIMToken() {
+	newProvider := func() *SSOProvider {
+		id := uuid.Must(uuid.NewV4()).String()
+		provider := &SSOProvider{
+			SAMLProvider: SAMLProvider{
+				EntityID:    "https://example.com/saml/metadata/" + id,
+				MetadataXML: "<example />",
+			},
+			SSODomains: []SSODomain{{Domain: id + ".local"}},
+		}
+		require.NoError(ts.T(), ts.db.Eager().Create(provider))
+		return provider
+	}
+
+	ts.Run("resolves the provider for a live token", func() {
+		provider := newProvider()
+		token, plaintext := NewSCIMToken(provider)
+
+		require.NoError(ts.T(), ts.db.Create(token))
+
+		got, err := FindSSOProviderBySCIMToken(ts.db, plaintext)
+		require.NoError(ts.T(), err)
+		require.NotNil(ts.T(), got)
+		require.Equal(ts.T(), provider.ID, got.ID)
+	})
+
+	ts.Run("returns not found for an unknown token", func() {
+		got, err := FindSSOProviderBySCIMToken(ts.db, "never-inserted")
+		require.ErrorIs(ts.T(), err, SSOProviderNotFoundError{})
+		require.Nil(ts.T(), got)
+	})
+
+	ts.Run("ignores revoked tokens", func() {
+		provider := newProvider()
+		revokedAt := time.Now().Add(-1 * time.Second)
+
+		token, plaintext := NewSCIMToken(provider)
+		token.CreatedAt = time.Now().Add(-1 * time.Hour)
+		token.RevokedAt = &revokedAt
+		require.NoError(ts.T(), ts.db.Create(token))
+
+		got, err := FindSSOProviderBySCIMToken(ts.db, plaintext)
+		require.ErrorIs(ts.T(), err, SSOProviderNotFoundError{})
+		require.Nil(ts.T(), got)
+	})
+
+	ts.Run("ignores expired tokens", func() {
+		provider := newProvider()
+
+		token, plaintext := NewSCIMToken(provider)
+		expiredAt := time.Now().Add(-1 * time.Hour)
+		token.CreatedAt = time.Now().Add(-2 * time.Hour)
+		token.ExpiresAt = &expiredAt
+		require.NoError(ts.T(), ts.db.Create(token))
+
+		got, err := FindSSOProviderBySCIMToken(ts.db, plaintext)
+		require.ErrorIs(ts.T(), err, SSOProviderNotFoundError{})
+		require.Nil(ts.T(), got)
+	})
+
+	ts.Run("ignores tokens for disabled providers", func() {
+		disabled := true
+		provider := newProvider()
+		provider.Disabled = &disabled
+		require.NoError(ts.T(), ts.db.Update(provider))
+
+		token, plaintext := NewSCIMToken(provider)
+		require.NoError(ts.T(), ts.db.Create(token))
+
+		got, err := FindSSOProviderBySCIMToken(ts.db, plaintext)
+		require.ErrorIs(ts.T(), err, SSOProviderNotFoundError{})
+		require.Nil(ts.T(), got)
+	})
 }

@@ -222,6 +222,27 @@ func FindSSOProviderByResourceID(tx *storage.Connection, id string) (*SSOProvide
 	return &ssoProvider, nil
 }
 
+func FindSSOProviderBySCIMToken(tx *storage.Connection, raw string) (*SSOProvider, error) {
+	var token SCIMToken
+	err := tx.Eager().Q().
+		Where("token_hash = ?", ToSCIMHash(raw)).
+		Where("revoked_at IS NULL").
+		Where("expires_at IS NULL OR expires_at > now()").
+		First(&token)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SSOProviderNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding SCIM token")
+	}
+
+	if !token.SSOProvider.IsEnabled() {
+		return nil, SSOProviderNotFoundError{}
+	}
+
+	return token.SSOProvider, nil
+}
+
 func FindSSOProviderForEmailAddress(tx *storage.Connection, emailAddress string) (*SSOProvider, error) {
 	parts := strings.Split(emailAddress, "@")
 	emailDomain := strings.ToLower(parts[1])

@@ -6,24 +6,35 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
-	scimCore "github.com/supabase/auth/internal/api/scim/core"
-	scimProtocol "github.com/supabase/auth/internal/api/scim/protocol"
+	scimCore "github.com/supabase-community/scim-go/pkg/core"
+	scimProtocol "github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
 
 const (
-	scimServiceProviderConfigPath = "/scim/v2/ServiceProviderConfig"
 	scimResourceTypesPath         = "/scim/v2/ResourceTypes"
 	scimSchemasPath               = "/scim/v2/Schemas"
+	scimServiceProviderConfigPath = "/scim/v2/ServiceProviderConfig"
+	scimUserResourceTypePath      = "/scim/v2/ResourceTypes/User"
+	scimUserSchemaPath            = "/scim/v2/Schemas/urn:ietf:params:scim:schemas:core:2.0:User"
+	scimUsersPath                 = "/scim/v2/Users"
 )
 
-var scimPaths = []string{
-	scimServiceProviderConfigPath,
+var discoveryPaths = []string{
 	scimResourceTypesPath,
 	scimSchemasPath,
+	scimServiceProviderConfigPath,
+	scimUserResourceTypePath,
+	scimUserSchemaPath,
 }
+
+var scimPaths = append(discoveryPaths, []string{
+	scimUsersPath,
+}...)
 
 func TestSCIM(t *testing.T) {
 	t.Run("Disabled by default", func(t *testing.T) {
@@ -55,12 +66,18 @@ func TestSCIM(t *testing.T) {
 	})
 
 	t.Run("Can be enabled", func(t *testing.T) {
-		api, _, err := setupAPIForTestWithCallback(func(config *conf.GlobalConfiguration, conn *storage.Connection) {
+		var conn *storage.Connection
+
+		api, _, err := setupAPIForTestWithCallback(func(config *conf.GlobalConfiguration, db *storage.Connection) {
 			if config != nil {
 				config.Experimental.ScimEnabled = true
 			}
+			if db != nil {
+				conn = db
+			}
 		})
 		require.NoError(t, err)
+		require.NotNil(t, conn)
 
 		require.True(t, api.config.Experimental.ScimEnabled)
 
@@ -72,33 +89,89 @@ func TestSCIM(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, w.Code)
 			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
-			require.Contains(t, w.Body.String(), scimCore.SchemaServiceProviderConfig)
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaServiceProviderConfig))
 		})
 
-		for _, path := range []string{scimResourceTypesPath, scimSchemasPath} {
-			t.Run(path, func(t *testing.T) {
-				r := httptest.NewRequest(http.MethodGet, path, nil)
-				w := httptest.NewRecorder()
+		t.Run(scimResourceTypesPath, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, scimResourceTypesPath, nil)
+			w := httptest.NewRecorder()
 
-				api.handler.ServeHTTP(w, r)
+			api.handler.ServeHTTP(w, r)
 
-				require.Equal(t, http.StatusOK, w.Code)
-				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
-				require.Contains(t, w.Body.String(), scimProtocol.SchemaListResponse)
-			})
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), scimProtocol.SchemaListResponse)
+		})
 
-			t.Run(path+" rejects filter query parameter", func(t *testing.T) {
-				filter := url.Values{"filter": {`name eq "User"`}}.Encode()
-				r := httptest.NewRequest(http.MethodGet, path+"?"+filter, nil)
-				w := httptest.NewRecorder()
+		t.Run(scimResourceTypesPath+" with filter", func(t *testing.T) {
+			filter := url.Values{"filter": {`name eq "User"`}}.Encode()
+			r := httptest.NewRequest(http.MethodGet, scimResourceTypesPath+"?"+filter, nil)
+			w := httptest.NewRecorder()
 
-				api.handler.ServeHTTP(w, r)
+			api.handler.ServeHTTP(w, r)
 
-				require.Equal(t, http.StatusForbidden, w.Code)
-				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
-				require.Contains(t, w.Body.String(), scimProtocol.SchemaError)
-			})
-		}
+			require.Equal(t, http.StatusForbidden, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), scimProtocol.SchemaError)
+		})
+
+		t.Run(scimUserResourceTypePath, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, scimUserResourceTypePath, nil)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaResourceType))
+		})
+
+		t.Run(scimSchemasPath, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, scimSchemasPath, nil)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), scimProtocol.SchemaListResponse)
+		})
+
+		t.Run(scimSchemasPath+" with filter", func(t *testing.T) {
+			filter := url.Values{"filter": {`name eq "User"`}}.Encode()
+			r := httptest.NewRequest(http.MethodGet, scimSchemasPath+"?"+filter, nil)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusForbidden, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), scimProtocol.SchemaError)
+		})
+
+		t.Run(scimUserSchemaPath, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, scimUserSchemaPath, nil)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaSchema))
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaUser))
+		})
+
+		t.Run("/scim/v2/Schemas/urn%3Aietf%3Aparams%3Ascim%3Aschemas%3Acore%3A2.0%3AUser", func(t *testing.T) {
+			path := "/scim/v2/Schemas/urn%3Aietf%3Aparams%3Ascim%3Aschemas%3Acore%3A2.0%3AUser"
+			r := httptest.NewRequest(http.MethodGet, path, nil)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), string(scimCore.SchemaSchema))
+		})
 
 		t.Run("Returns a SCIM 404 for an unknown endpoint", func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Unknown", nil)
@@ -113,7 +186,7 @@ func TestSCIM(t *testing.T) {
 
 		t.Run("Returns a SCIM 405 for an unsupported method", func(t *testing.T) {
 			for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
-				for _, path := range scimPaths {
+				for _, path := range discoveryPaths {
 					t.Run(method+" "+path, func(t *testing.T) {
 						r := httptest.NewRequest(method, path, nil)
 						w := httptest.NewRecorder()
@@ -126,5 +199,79 @@ func TestSCIM(t *testing.T) {
 				}
 			}
 		})
+
+		t.Run("Authentication", func(t *testing.T) {
+			provider, token := createProvider(t, conn)
+			require.NoError(t, conn.RawQuery("INSERT INTO scim_users (id, sso_provider_id, resource) VALUES (?, ?, ?)", uuid.Must(uuid.NewV4()), provider, `{"userName":"bjensen@example.com"}`).Exec())
+
+			get := func(t *testing.T, authorization string) *httptest.ResponseRecorder {
+				t.Helper()
+
+				r := httptest.NewRequest(http.MethodGet, scimUsersPath, nil)
+				if authorization != "" {
+					r.Header.Set("Authorization", authorization)
+				}
+
+				w := httptest.NewRecorder()
+				api.handler.ServeHTTP(w, r)
+				return w
+			}
+
+			t.Run("serves a provider's users to its own token", func(t *testing.T) {
+				w := get(t, "Bearer "+token)
+
+				require.Equal(t, http.StatusOK, w.Code)
+				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+				require.Contains(t, w.Body.String(), "bjensen@example.com")
+				require.Contains(t, w.Body.String(), `"totalResults":1`)
+			})
+
+			t.Run("returns 401 when no token is offered", func(t *testing.T) {
+				w := get(t, "")
+
+				require.Equal(t, http.StatusUnauthorized, w.Code)
+				require.Equal(t, `Bearer realm="SCIM"`, w.Header().Get("WWW-Authenticate"))
+				require.Contains(t, w.Body.String(), string(scimProtocol.SchemaError))
+			})
+
+			t.Run("returns 401 to an invalid token", func(t *testing.T) {
+				w := get(t, "Bearer eyJhbGciOiJIUzI1NiJ9.e30.signature")
+
+				require.Equal(t, http.StatusUnauthorized, w.Code)
+			})
+
+			t.Run("returns 401 when the token is revoked", func(t *testing.T) {
+				otherProvider, token := createProvider(t, conn)
+				require.NoError(t, conn.RawQuery("UPDATE scim_tokens SET revoked_at = now() WHERE sso_provider_id = ?", otherProvider).Exec())
+
+				require.Equal(t, http.StatusUnauthorized, get(t, "Bearer "+token).Code)
+			})
+
+			t.Run("does not serve one provider's users to another's token", func(t *testing.T) {
+				_, otherToken := createProvider(t, conn)
+
+				w := get(t, "Bearer "+otherToken)
+
+				require.Equal(t, http.StatusOK, w.Code)
+				require.Contains(t, w.Body.String(), `"totalResults":0`)
+				require.NotContains(t, w.Body.String(), "bjensen@example.com")
+			})
+		})
 	})
+}
+
+func createProvider(t *testing.T, conn *storage.Connection) (provider, token string) {
+	t.Helper()
+
+	provider = uuid.Must(uuid.NewV4()).String()
+	require.NoError(t, conn.RawQuery("INSERT INTO sso_providers (id, resource_id, created_at, updated_at) VALUES (?, ?, now(), now())", provider, "scim-e2e-"+provider).Exec())
+
+	t.Cleanup(func() {
+		_ = conn.RawQuery("DELETE FROM sso_providers WHERE id = ?", provider).Exec()
+	})
+
+	token, digest := models.NewSCIMBearerToken()
+	require.NoError(t, conn.RawQuery("INSERT INTO scim_tokens (id, sso_provider_id, token_hash, prefix) VALUES (?, ?, ?, ?)", uuid.Must(uuid.NewV4()), provider, digest, token[:12]).Exec())
+
+	return provider, token
 }
