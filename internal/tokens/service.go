@@ -647,6 +647,11 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 			}
 		}
 		metering.RecordLogin(metering.LoginTypeToken, user.ID, nil)
+		if sessionClientID != nil {
+			metering.RecordLogin(metering.LoginTypeOAuthServerTokenRefresh, user.ID, &metering.LoginData{
+				ClientID: sessionClientID.String(),
+			})
+		}
 		return newTokenResponse, nil
 	}
 

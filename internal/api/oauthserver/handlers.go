@@ -11,6 +11,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/shared"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -458,6 +459,10 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 
 		tokenResponse.IDToken = idToken
 	}
+
+	metering.RecordLogin(metering.LoginTypeOAuthServerAuthorizationCode, user.ID, &metering.LoginData{
+		ClientID: client.ID.String(),
+	})
 
 	// Convert to OAuth-compliant response format (exclude user info for OAuth clients)
 	oauthResponse := map[string]interface{}{

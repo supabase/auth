@@ -22,6 +22,12 @@ const (
 	LoginTypeToken     LoginType = "token" // for refresh token flows, to be backward-compatible with existing data
 	LoginTypeMFA       LoginType = "mfa"   // for MFA verifications
 	LoginTypePasskey   LoginType = "passkey"
+
+	// LoginTypeOAuthServerAuthorizationCode is for the OAuth 2.1 authorization server's
+	// authorization_code grant (this app acting as the OAuth server, not a third-party provider).
+	LoginTypeOAuthServerAuthorizationCode LoginType = "oauth_server_authorization_code"
+	// LoginTypeOAuthServerTokenRefresh is additive alongside LoginTypeToken for OAuth server token refreshes.
+	LoginTypeOAuthServerTokenRefresh LoginType = "oauth_server_token_refresh"
 )
 
 // Provider constants for consistent login analytics
@@ -46,6 +52,9 @@ type LoginData struct {
 
 	// Web3 specific data (for blockchain authentication)
 	Web3 *Web3Data `json:"web3,omitempty"`
+
+	// ClientID is the OAuth server client ID, for OAuth server login events
+	ClientID string `json:"client_id,omitempty"`
 
 	// Additional context for future extensibility
 	Extra map[string]interface{} `json:"extra,omitempty"`
@@ -78,6 +87,10 @@ func RecordLogin(loginType LoginType, userID uuid.UUID, data *LoginData) {
 	if data != nil {
 		if data.Provider != "" {
 			fields["provider"] = data.Provider
+		}
+
+		if data.ClientID != "" {
+			fields["client_id"] = data.ClientID
 		}
 
 		// Add Web3 context fields
