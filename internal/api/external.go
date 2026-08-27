@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -89,10 +90,24 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
 	query.Del("provider")
-	query.Del("code_challenge")
-	query.Del("code_challenge_method")
+	// Strip OAuth params the auth server controls so a client cannot
+	// override redirect_uri, state, code_challenge, etc. by passing them
+	// lowercase query keys for the comparison, URL.Query keeps casing
+	for key := range query {
+		lowerKey := strings.ToLower(key)
+		if lowerKey != "nonce" && slices.Contains(reservedOAuthParams, lowerKey) {
+			query.Del(key)
+		}
+	}
+
 	// Whatever remains in the query is appended to the provider's authorize
 	// URL below. This is for us, not for them.
+	//
+	// Deliberately not added to reservedOAuthParams: that list is also what
+	// validateAuthorizationParams refuses a request for, and hook_data is a
+	// parameter the caller is meant to send. Matched exactly, like the Get
+	// above -- a differently cased key was never read as hook data, so it is
+	// passed through as any other unrecognised param is.
 	query.Del("hook_data")
 	for key := range query {
 		if key == "workos_provider" {
@@ -349,6 +364,14 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		}
 
 		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
+			return 0, nil, terr
+		}
+
+		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityLinkAction, utilities.GetIPAddress(r), map[string]any{
+			"identity_id": identity.ID,
+			"provider":    identity.Provider,
+			"provider_id": identity.ProviderID,
+		}); terr != nil {
 			return 0, nil, terr
 		}
 
