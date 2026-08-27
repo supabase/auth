@@ -294,6 +294,72 @@ func TestExperimentalScimEndpoints(t *testing.T) {
 	}
 }
 
+func TestMFARecoveryCodesConfig(t *testing.T) {
+	baseEnv := func() {
+		os.Clearenv()
+		os.Setenv("GOTRUE_SITE_URL", "http://localhost:8080")
+		os.Setenv("GOTRUE_DB_DRIVER", "postgres")
+		os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
+		os.Setenv("GOTRUE_JWT_SECRET", "secret")
+		os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
+	}
+
+	// defaults land when no recovery-code vars are set
+	{
+		baseEnv()
+		cfg, err := LoadGlobalFromEnv()
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, false, cfg.MFA.RecoveryCodes.EnrollEnabled)
+		assert.Equal(t, false, cfg.MFA.RecoveryCodes.VerifyEnabled)
+		assert.Equal(t, 10, cfg.MFA.RecoveryCodes.Count)
+		assert.Equal(t, 16, cfg.MFA.RecoveryCodes.CodeLength)
+		assert.Equal(t, 5, cfg.MFA.RecoveryCodes.MaxVerifyAttempts)
+		assert.Equal(t, 15*time.Minute, cfg.MFA.RecoveryCodes.LockoutDuration)
+	}
+
+	// maps GOTRUE_MFA_RECOVERY_CODES_* into the struct
+	{
+		baseEnv()
+		os.Setenv("GOTRUE_MFA_RECOVERY_CODES_ENROLL_ENABLED", "true")
+		os.Setenv("GOTRUE_MFA_RECOVERY_CODES_VERIFY_ENABLED", "true")
+		os.Setenv("GOTRUE_MFA_RECOVERY_CODES_COUNT", "12")
+		os.Setenv("GOTRUE_MFA_RECOVERY_CODES_CODE_LENGTH", "20")
+		os.Setenv("GOTRUE_MFA_RECOVERY_CODES_MAX_VERIFY_ATTEMPTS", "4")
+		os.Setenv("GOTRUE_MFA_RECOVERY_CODES_LOCKOUT_DURATION", "30m")
+		cfg, err := LoadGlobalFromEnv()
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, true, cfg.MFA.RecoveryCodes.EnrollEnabled)
+		assert.Equal(t, true, cfg.MFA.RecoveryCodes.VerifyEnabled)
+		assert.Equal(t, 12, cfg.MFA.RecoveryCodes.Count)
+		assert.Equal(t, 20, cfg.MFA.RecoveryCodes.CodeLength)
+		assert.Equal(t, 4, cfg.MFA.RecoveryCodes.MaxVerifyAttempts)
+		assert.Equal(t, 30*time.Minute, cfg.MFA.RecoveryCodes.LockoutDuration)
+	}
+
+	// an explicit out-of-range value fails loading when the feature is enabled
+	{
+		baseEnv()
+		os.Setenv("GOTRUE_MFA_RECOVERY_CODES_ENROLL_ENABLED", "true")
+		os.Setenv("GOTRUE_MFA_RECOVERY_CODES_COUNT", "0")
+		cfg, err := LoadGlobalFromEnv()
+		require.Error(t, err)
+		require.Nil(t, cfg)
+		require.Contains(t, err.Error(), "GOTRUE_MFA_RECOVERY_CODES_COUNT must be between 4 and 16, got 0")
+	}
+
+	// out-of-range values are ignored while the feature is disabled
+	{
+		baseEnv()
+		os.Setenv("GOTRUE_MFA_RECOVERY_CODES_COUNT", "0")
+		cfg, err := LoadGlobalFromEnv()
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, 0, cfg.MFA.RecoveryCodes.Count)
+	}
+}
+
 func TestLoading(t *testing.T) {
 	os.Clearenv()
 
