@@ -6,7 +6,7 @@ create table if not exists {{ index .Options "Namespace" }}.scim_users (
     sso_provider_id uuid not null references {{ index .Options "Namespace" }}.sso_providers (id) on delete cascade,
     user_id uuid references {{ index .Options "Namespace" }}.users (id) on delete set null,
     resource jsonb not null,
-    user_name text not null generated always as (resource->>'userName') stored,
+    user_name text not null generated always as (lower(resource->>'userName')) stored,
     external_id text generated always as (resource->>'externalId') stored,
     active boolean not null generated always as (coalesce((resource->>'active')::boolean, true)) stored,
     created_at timestamptz not null default now(),
@@ -18,7 +18,7 @@ create table if not exists {{ index .Options "Namespace" }}.scim_users (
 /* auth_migration: 20260821000000 */
 -- userName is unique within a provider, case-folded, excluding soft-deleted rows.
 create unique index if not exists scim_users_user_name_key
-    on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, lower(user_name collate "C"))
+    on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, user_name)
     where deleted_at is null;
 
 /* auth_migration: 20260821000000 */
@@ -34,15 +34,13 @@ create index if not exists scim_users_user_id_idx
     on {{ index .Options "Namespace" }}.scim_users (user_id);
 
 /* auth_migration: 20260821000000 */
--- Sort indexes break ties on id for a total order; user_name uses collate "C"
--- so ordering does not depend on the database's collation.
 create index if not exists scim_users_id_idx
     on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, id)
     where deleted_at is null;
 
 /* auth_migration: 20260821000000 */
 create index if not exists scim_users_user_name_idx
-    on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, lower(user_name collate "C"), id)
+    on {{ index .Options "Namespace" }}.scim_users (sso_provider_id, user_name collate "C", id)
     where deleted_at is null;
 
 /* auth_migration: 20260821000000 */
