@@ -61,8 +61,3 @@ create index if not exists scim_users_sso_provider_id_idx
 -- Supports purging soft-deleted rows.
 create index if not exists scim_users_deleted_at_idx
     on {{ index .Options "Namespace" }}.scim_users (deleted_at);
-
-/* auth_migration: 20260821000000 */
-alter table {{ index .Options "Namespace" }}.scim_users enable row level security;
-/* auth_migration: 20260821000000 */
-grant select on {{ index .Options "Namespace" }}.scim_users to postgres with grant option;

@@ -36,8 +36,3 @@ create index if not exists scim_tokens_expires_at_idx
 -- Supports purging revoked tokens.
 create index if not exists scim_tokens_revoked_at_idx
     on {{ index .Options "Namespace" }}.scim_tokens (revoked_at);
-
-/* auth_migration: 20260821010000 */
-alter table {{ index .Options "Namespace" }}.scim_tokens enable row level security;
-/* auth_migration: 20260821010000 */
-grant select on {{ index .Options "Namespace" }}.scim_tokens to postgres with grant option;
