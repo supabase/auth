@@ -2,7 +2,7 @@
 -- SCIM Users provisioned into one SSO provider. The resource is stored as a
 -- document; queryable columns are generated from it so the two cannot drift.
 create table if not exists {{ index .Options "Namespace" }}.scim_users (
-    id uuid not null default gen_random_uuid(),
+    id uuid not null,
     sso_provider_id uuid not null references {{ index .Options "Namespace" }}.sso_providers (id) on delete cascade,
     user_id uuid references {{ index .Options "Namespace" }}.users (id) on delete set null,
     resource jsonb not null,

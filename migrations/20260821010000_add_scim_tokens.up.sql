@@ -2,7 +2,7 @@
 -- Bearer tokens authorising SCIM requests for one SSO provider. Only the
 -- SHA-256 digest is stored; a token carries 160 bits, so the digest needs no salt.
 create table if not exists {{ index .Options "Namespace" }}.scim_tokens (
-    id uuid not null default gen_random_uuid(),
+    id uuid not null,
     sso_provider_id uuid not null references {{ index .Options "Namespace" }}.sso_providers (id) on delete cascade,
     token_hash text not null,
     prefix text not null,
