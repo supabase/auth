@@ -65,6 +65,7 @@ func TestResourceType(t *testing.T) {
 			kind := resourceType.Kind()
 
 			require.Equal(t, KindUser.Name, kind.Name)
+			require.Equal(t, KindUser.Schema, kind.Schema)
 			require.Equal(t, KindUser.Endpoint, kind.Endpoint)
 			require.Equal(t, baseURL+"/Users", kind.Location(baseURL))
 		})

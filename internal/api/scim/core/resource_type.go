@@ -40,7 +40,7 @@ func (r *ResourceType) Extend(extensions ...SchemaExtension) *ResourceType {
 }
 
 func (r ResourceType) Kind() Kind {
-	return Kind{Name: r.Name, Endpoint: r.Endpoint}
+	return Kind{Name: r.Name, Schema: r.Schema, Endpoint: r.Endpoint}
 }
 
 func (r *ResourceType) ResourceID() string { return string(r.ID) }
