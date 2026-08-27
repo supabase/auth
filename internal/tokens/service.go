@@ -28,9 +28,7 @@ import (
 
 const retryLoopDuration = 5.0
 
-// OAuth2 grant type values. Defined here (rather than in
-// internal/api/oauthserver, which imports this package) so both the OAuth server's grant type
-// dispatch and this package's own metering calls share a single source of truth.
+// OAuth2 server grant type values
 const (
 	GrantTypeAuthorizationCode = "authorization_code"
 	GrantTypeRefreshToken      = "refresh_token"
