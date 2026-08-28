@@ -377,7 +377,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			desc: "Only phone",
 			params: map[string]interface{}{
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "test123",
 			},
 			expected: map[string]interface{}{
 				"email":           "",
@@ -385,7 +385,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "phone",
 				"providers":       []string{"phone"},
-				"password":        "test1",
+				"password":        "test123",
 			},
 		},
 		{
@@ -393,7 +393,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"email":    "test1@example.com",
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "test123",
 			},
 			expected: map[string]interface{}{
 				"email":           "test1@example.com",
@@ -401,7 +401,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email", "phone"},
-				"password":        "test1",
+				"password":        "test123",
 			},
 		},
 		{
@@ -439,7 +439,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"email":        "test4@example.com",
 				"phone":        "",
-				"password":     "test1",
+				"password":     "test123",
 				"ban_duration": "24h",
 			},
 			expected: map[string]interface{}{
@@ -448,7 +448,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email"},
-				"password":        "test1",
+				"password":        "test123",
 			},
 		},
 		{
@@ -471,7 +471,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"id":       "fc56ab41-2010-4870-a9b9-767c1dc573fb",
 				"email":    "test6@example.com",
-				"password": "test",
+				"password": "test123",
 			},
 			expected: map[string]interface{}{
 				"id":              "fc56ab41-2010-4870-a9b9-767c1dc573fb",
@@ -480,7 +480,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email"},
-				"password":        "test",
+				"password":        "test123",
 			},
 		},
 	}
@@ -921,7 +921,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"email":    "test1@example.com",
-				"password": "test1",
+				"password": "test123",
 			},
 			expected: http.StatusOK,
 		},
@@ -937,7 +937,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "test123",
 			},
 			expected: http.StatusOK,
 		},
@@ -949,7 +949,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"email":    "test2@example.com",
-				"password": "test2",
+				"password": "test123",
 			},
 			expected: http.StatusOK,
 		},
