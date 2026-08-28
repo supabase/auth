@@ -11,6 +11,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/shared"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -18,10 +19,11 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 )
 
-// OAuth 2.1 Grant Types
+// OAuth 2.1 Grant Types, aliased from internal/tokens so the OAuth server's grant type
+// dispatch and its metering events share one source of truth.
 const (
-	GrantTypeAuthorizationCode = "authorization_code"
-	GrantTypeRefreshToken      = "refresh_token"
+	GrantTypeAuthorizationCode = tokens.GrantTypeAuthorizationCode
+	GrantTypeRefreshToken      = tokens.GrantTypeRefreshToken
 )
 
 // OAuthServerClientResponse represents the response format for OAuth client operations
@@ -458,6 +460,13 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 
 		tokenResponse.IDToken = idToken
 	}
+
+	metering.RecordLogin(metering.LoginTypeOAuthServer, user.ID, &metering.LoginData{
+		OAuthServer: &metering.OAuthServerData{
+			ClientID:  client.ID.String(),
+			GrantType: GrantTypeAuthorizationCode,
+		},
+	})
 
 	// Convert to OAuth-compliant response format (exclude user info for OAuth clients)
 	oauthResponse := map[string]interface{}{
