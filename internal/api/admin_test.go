@@ -633,6 +633,62 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	}
 }
 
+// TestAdminUserCreatePasswordStrength verifies POST /admin/users enforces the
+// configured password strength policy on a client-supplied plaintext
+// password, matching the update endpoint, while leaving the password_hash
+// path exempt.
+func (ts *AdminTestSuite) TestAdminUserCreatePasswordStrength() {
+	ts.Config.Password.MinLength = 6
+
+	ts.Run("weak plaintext password is rejected", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":    "weakpw@example.com",
+			"password": "12345", // below MinLength of 6
+		}))
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+
+		// the user must not have been created
+		_, err := models.FindUserByEmailAndAudience(ts.API.db, "weakpw@example.com", ts.Config.JWT.Aud)
+		require.True(ts.T(), models.IsNotFoundError(err), "weak-password create should not have persisted a user")
+	})
+
+	ts.Run("strong plaintext password is accepted", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":    "strongpw@example.com",
+			"password": "a-sufficiently-long-password",
+		}))
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
+
+	ts.Run("password_hash path is exempt from the strength policy", func() {
+		var buffer bytes.Buffer
+		// bcrypt hash of a short password: the plaintext strength policy
+		// does not (and cannot) apply to a pre-hashed credential.
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":         "hashedpw@example.com",
+			"password_hash": "$2y$10$Tk6yEdmTbb/eQ/haDMaCsuCsmtPVprjHMcij1RqiJdLGPDXnL3L1a",
+		}))
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
+}
+
 func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
 	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
