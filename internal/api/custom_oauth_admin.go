@@ -58,6 +58,7 @@ type AdminCustomOAuthProviderParams struct {
 	AuthorizationParams   map[string]interface{} `json:"authorization_params,omitempty"`
 	Enabled               *bool                  `json:"enabled,omitempty"`
 	EmailOptional         *bool                  `json:"email_optional,omitempty"`
+	SyncEmail             *bool                  `json:"sync_email,omitempty"`
 
 	// OIDC-specific fields
 	Issuer         string  `json:"issuer,omitempty"`
@@ -504,6 +505,7 @@ func buildProviderFromParams(params *AdminCustomOAuthProviderParams, providerTyp
 		AuthorizationParams:   popslices.Map(params.AuthorizationParams),
 		Enabled:               getBoolOrDefault(params.Enabled, true),
 		EmailOptional:         getBoolOrDefault(params.EmailOptional, false),
+		SyncEmail:             getBoolOrDefault(params.SyncEmail, false),
 	}
 
 	// Set type-specific fields
@@ -586,6 +588,9 @@ func updateProviderFromParams(provider *models.CustomOAuthProvider, params *Admi
 	}
 	if params.EmailOptional != nil {
 		provider.EmailOptional = *params.EmailOptional
+	}
+	if params.SyncEmail != nil {
+		provider.SyncEmail = *params.SyncEmail
 	}
 
 	// Update type-specific fields

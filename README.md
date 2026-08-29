@@ -466,6 +466,14 @@ The URI a OAuth2 provider will redirect to with the `code` and `state` values.
 
 The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` and `keycloak`. For `gitlab` it defaults to `https://gitlab.com`. For `keycloak` you need to set this to your instance, for example: `https://keycloak.example.com/realms/myrealm`
 
+`EXTERNAL_X_SYNC_EMAIL` - `bool`
+
+When `true`, an already-linked OAuth identity may update `auth.users.email` if the provider reports a different **verified** email for the same `provider` + `provider_id` (`sub`). Defaults to `false`.
+
+Unverified provider emails are ignored. If the user has an independent `email` identity (password, magic link, or OTP), the canonical email is left unchanged. If the new address already belongs to another user, Auth does not merge accounts or move identities; the OAuth identity metadata is still refreshed and login succeeds. Custom OAuth and OIDC providers expose the same option as `sync_email` on the admin API. SAML and Web3 providers are not covered by this setting.
+
+This path does not send the interactive "email changed" notification. A `user_modified` audit event is recorded when the canonical email actually changes.
+
 #### Network hardening
 
 Configuring an external authentication provider causes Auth to make outbound HTTP requests to that provider's authorization, token, and userinfo endpoints. Configuring a provider either via `GOTRUE_EXTERNAL_*` settings or an admin API is an administrative action, and doing so implies trust in the hosts and URLs that will be contacted.

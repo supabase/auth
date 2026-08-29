@@ -2361,6 +2361,10 @@ paths:
                   type: boolean
                   description: Whether email is optional for users from this provider
                   default: false
+                sync_email:
+                  type: boolean
+                  description: When true, an already-linked identity may update auth.users.email if the provider reports a different verified email for the same provider + provider_id. Default false.
+                  default: false
                 issuer:
                   type: string
                   format: uri
@@ -2588,6 +2592,9 @@ paths:
                 email_optional:
                   type: boolean
                   description: Whether email is optional
+                sync_email:
+                  type: boolean
+                  description: When true, an already-linked identity may update auth.users.email if the provider reports a different verified email
                 issuer:
                   type: string
                   format: uri
@@ -3809,6 +3816,10 @@ components:
         email_optional:
           type: boolean
           description: Whether email is optional for users from this provider
+          default: false
+        sync_email:
+          type: boolean
+          description: When true, an already-linked identity may update auth.users.email if the provider reports a different verified email for the same provider + provider_id. Default false.
           default: false
         issuer:
           type: string

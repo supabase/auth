@@ -62,11 +62,12 @@ func (ts *TokenOIDCTestSuite) TestGetProvider() {
 	ts.Config.External.AllowedIdTokenIssuers = []string{server.URL}
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost", nil)
-	oidcProvider, skipNonceCheck, providerType, acceptableClientIds, emailOptional, err := params.getProvider(context.Background(), ts.API.db, ts.Config, req, ts.API.oidcCache)
+	oidcProvider, skipNonceCheck, providerType, acceptableClientIds, emailOptional, syncEmail, err := params.getProvider(context.Background(), ts.API.db, ts.Config, req, ts.API.oidcCache)
 	require.NoError(ts.T(), err)
 	require.NotNil(ts.T(), oidcProvider)
 	require.False(ts.T(), skipNonceCheck)
 	require.False(ts.T(), emailOptional)
+	require.False(ts.T(), syncEmail)
 	require.Equal(ts.T(), params.Provider, providerType)
 	require.NotEmpty(ts.T(), acceptableClientIds)
 }
@@ -115,7 +116,7 @@ func (ts *TokenOIDCTestSuite) TestGetProviderAppleWithIncorrectIssuer() {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost", nil)
-	_, _, _, _, _, err := params.getProvider(context.Background(), ts.API.db, ts.Config, req, ts.API.oidcCache)
+	_, _, _, _, _, _, err := params.getProvider(context.Background(), ts.API.db, ts.Config, req, ts.API.oidcCache)
 
 	require.Error(ts.T(), err)
 	require.Contains(ts.T(), err.Error(), "not an Apple ID token issuer")
@@ -138,7 +139,7 @@ func (ts *TokenOIDCTestSuite) TestGetProviderAzureWithNonAzureTokenIssuer() {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost", nil)
-	_, _, _, _, _, err := params.getProvider(context.Background(), ts.API.db, ts.Config, req, ts.API.oidcCache)
+	_, _, _, _, _, _, err := params.getProvider(context.Background(), ts.API.db, ts.Config, req, ts.API.oidcCache)
 
 	// This should fail - the token's issuer is not an accepted issuer
 	require.Error(ts.T(), err)
@@ -162,7 +163,7 @@ func (ts *TokenOIDCTestSuite) TestGetProviderAppleWithNonAppleIssuerInToken() {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost", nil)
-	_, _, _, _, _, err := params.getProvider(context.Background(), ts.API.db, ts.Config, req, ts.API.oidcCache)
+	_, _, _, _, _, _, err := params.getProvider(context.Background(), ts.API.db, ts.Config, req, ts.API.oidcCache)
 
 	// This should fail - the token's actual issuer is not appleid.apple.com
 	require.Error(ts.T(), err)

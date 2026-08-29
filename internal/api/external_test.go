@@ -39,6 +39,9 @@ func TestExternal(t *testing.T) {
 func (ts *ExternalTestSuite) SetupTest() {
 	ts.Config.DisableSignup = false
 	ts.Config.Mailer.Autoconfirm = false
+	ts.Config.External.Google.SyncEmail = false
+	ts.Config.External.Github.SyncEmail = false
+	ts.Config.External.Google.EmailOptional = false
 
 	models.TruncateAll(ts.API.db)
 }
@@ -63,7 +66,7 @@ func (ts *ExternalTestSuite) TestAutomaticLinkIdentityWritesAuditLog() {
 	r := httptest.NewRequest(http.MethodGet, "/callback", nil)
 	r.RemoteAddr = "192.0.2.1:1234"
 
-	decision, user, err := ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false)
+	decision, user, err := ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false, false)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), models.LinkAccount, decision)
 	require.Equal(ts.T(), existingUser.ID, user.ID)
@@ -82,7 +85,7 @@ func (ts *ExternalTestSuite) TestAutomaticLinkIdentityWritesAuditLog() {
 	require.Equal(ts.T(), userData.Metadata.Subject, traits["provider_id"])
 	require.Equal(ts.T(), "192.0.2.1", logs[0].IPAddress)
 
-	decision, _, err = ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false)
+	decision, _, err = ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false, false)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), models.AccountExists, decision)
 

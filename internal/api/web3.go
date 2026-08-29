@@ -148,7 +148,7 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		var decision models.AccountLinkingDecision
-		decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
+		decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true, false)
 		if terr != nil {
 			return terr
 		}
@@ -294,7 +294,7 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		var decision models.AccountLinkingDecision
-		decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
+		decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true, false)
 		if terr != nil {
 			return terr
 		}
