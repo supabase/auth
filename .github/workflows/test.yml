@@ -39,7 +39,7 @@ jobs:
         run: |
           set -x
 
-          if [ ! -z $(gofmt -l .) ]
+          if [ -n "$(gofmt -s -l .)" ]
           then
             echo 'Make sure to run "gofmt -s -w ." before commit!' && exit 1
           fi
