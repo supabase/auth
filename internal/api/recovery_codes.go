@@ -144,7 +144,7 @@ func (a *API) RecoveryCodesGenerate(w http.ResponseWriter, r *http.Request) erro
 		// The unique user_id on mfa_recovery_code_sets ensures that only one
 		// recovery-code factor can be created per user.
 		if terr := tx.Create(factor); terr != nil {
-			return terr
+			return apierrors.NewInternalServerError("Database error creating factor").WithInternalError(terr)
 		}
 
 		if _, terr := models.CreateRecoveryCodeSet(tx, factor, hashes); terr != nil {
