@@ -665,7 +665,7 @@ type MailerConfiguration struct {
 }
 
 func (c *MailerConfiguration) OtpExpAsDuration() time.Duration {
-	return time.Duration(c.OtpExp) * time.Second
+	return time.Duration(c.OtpExp) * time.Second // #nosec G115 -- OtpExp comes from trusted config, not user input
 }
 
 func (c *MailerConfiguration) Validate() error {
@@ -758,7 +758,7 @@ type SmsProviderConfiguration struct {
 }
 
 func (c *SmsProviderConfiguration) OtpExpAsDuration() time.Duration {
-	return time.Duration(c.OtpExp) * time.Second
+	return time.Duration(c.OtpExp) * time.Second // #nosec G115 -- OtpExp comes from trusted config, not user input
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {

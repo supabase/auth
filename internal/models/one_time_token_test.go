@@ -51,7 +51,7 @@ func (ts *OneTimeTokenTestSuite) createUser() *User {
 func (ts *OneTimeTokenTestSuite) TestCreateOneTimeToken() {
 	cases := map[string]time.Duration{
 		"future window": 15 * time.Minute,
-		// CreateOneTimeToken neither validates nor clamps the window. 
+		// CreateOneTimeToken neither validates nor clamps the window.
 		// The caller owns it. The api verify tests rely on this to build
 		// expired tokens.
 		"past window": -24 * time.Hour,
