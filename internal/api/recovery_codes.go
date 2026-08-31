@@ -64,7 +64,7 @@ func (a *API) RecoveryCodesStatus(w http.ResponseWriter, r *http.Request) error 
 	set, err := models.FindRecoveryCodeSetByUser(db, user.ID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return apierrors.NewNotFoundError(apierrors.ErrorCodeMFAFactorNotFound, "Recovery codes are not enrolled for this user")
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeMFAFactorNotFound, "The user has not enrolled recovery codes")
 		}
 		return apierrors.NewInternalServerError("Database error finding recovery code set").WithInternalError(err)
 	}
