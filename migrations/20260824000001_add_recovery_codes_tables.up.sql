@@ -19,5 +19,5 @@ create table if not exists {{ index .Options "Namespace" }}.mfa_recovery_codes (
 );
 
 /* auth_migration: 20260824000001 */
-create unique index if not exists mfa_recovery_codes_set_id_code_hash_idx
-    on {{ index .Options "Namespace" }}.mfa_recovery_codes (mfa_recovery_code_set_id, code_hash);
+create index if not exists mfa_recovery_codes_set_id_idx
+    on {{ index .Options "Namespace" }}.mfa_recovery_codes (mfa_recovery_code_set_id);
