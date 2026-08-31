@@ -1,13 +1,17 @@
 package api
 
 import (
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
@@ -16,6 +20,11 @@ import (
 // RecoveryCodesGenerateParams are the parameters for generating recovery codes.
 type RecoveryCodesGenerateParams struct {
 	FriendlyName string `json:"friendly_name"`
+}
+
+// RecoveryCodesVerifyParams are the parameters for verifying a recovery code.
+type RecoveryCodesVerifyParams struct {
+	Code string `json:"code"`
 }
 
 // RecoveryCodesResponse is the response shared by the recovery-code endpoints.
@@ -173,4 +182,193 @@ func (a *API) RecoveryCodesGenerate(w http.ResponseWriter, r *http.Request) erro
 		Total:        len(codes),
 		Codes:        codes,
 	})
+}
+
+func recoveryCodeVerificationFailedError() *apierrors.HTTPError {
+	return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFAVerificationFailed, "Invalid recovery code entered")
+}
+
+func recoveryCodeLockedError() *apierrors.HTTPError {
+	return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeMFARecoveryCodesLocked, "Too many failed verification attempts, try again later")
+}
+
+// RecoveryCodesVerify redeems a single recovery code and upgrades the user's session to AAL2.
+func (a *API) RecoveryCodesVerify(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	session := getSession(ctx)
+	config := a.config
+	db := a.db.WithContext(ctx)
+
+	if session == nil || user == nil {
+		return apierrors.NewInternalServerError("A valid session and a registered user are required to verify recovery codes")
+	}
+
+	if !config.MFA.RecoveryCodes.VerifyEnabled {
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFARecoveryCodesVerifyDisabled, "MFA verification is disabled for recovery codes")
+	}
+
+	params := &RecoveryCodesVerifyParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
+	}
+
+	code := crypto.NormalizeRecoveryCode(params.Code)
+	if code == "" {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Code needs to be non-empty")
+	}
+
+	set, err := models.FindRecoveryCodeSetByUser(db, user.ID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return recoveryCodeVerificationFailedError()
+		}
+
+		return apierrors.NewInternalServerError("Database error finding recovery code set").WithInternalError(err)
+	}
+
+	if set.IsLocked(time.Now()) {
+		return recoveryCodeLockedError()
+	}
+
+	factor, err := models.FindFactorByFactorID(db, set.MFAFactorID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return recoveryCodeVerificationFailedError()
+		}
+
+		return apierrors.NewInternalServerError("Database error finding recovery code factor").WithInternalError(err)
+	}
+
+	entries, err := models.FindUnusedRecoveryCodes(db, set.ID)
+	if err != nil {
+		return apierrors.NewInternalServerError("Database error finding recovery codes").WithInternalError(err)
+	}
+
+	// Compare against every unused code without early exit.
+	var matched *models.RecoveryCodeEntry
+	for i := range entries {
+		switch cerr := crypto.CompareHashAndRecoveryCode(entries[i].CodeHash, code); {
+		case cerr == nil:
+			if matched == nil {
+				matched = &entries[i]
+			}
+		case !errors.Is(cerr, crypto.ErrRecoveryCodeMismatchedHashAndCode):
+			// A malformed stored hash is treated as a non-match.
+			logrus.WithError(cerr).WithField("recovery_code_id", entries[i].ID).Warn("Invalid recovery code hash in database")
+		}
+	}
+	valid := matched != nil
+
+	if config.Hook.MFAVerificationAttempt.Enabled {
+		input := v0hooks.NewMFAVerificationAttemptInput(
+			r,
+			user.ID,
+			factor.ID,
+			factor.FactorType,
+			valid,
+		)
+
+		output := v0hooks.MFAVerificationAttemptOutput{}
+		err := a.hooksMgr.InvokeHook(nil, r, input, &output)
+		if err != nil {
+			return err
+		}
+
+		if output.Decision == v0hooks.HookRejection {
+			if err := models.Logout(db, user.ID); err != nil {
+				return err
+			}
+
+			if output.Message == "" {
+				output.Message = v0hooks.DefaultMFAHookRejectionMessage
+			}
+
+			return apierrors.NewForbiddenError(apierrors.ErrorCodeMFAVerificationRejected, "%s", output.Message)
+		}
+	}
+
+	var token *AccessTokenResponse
+	err = db.Transaction(func(tx *storage.Connection) error {
+		lockedSet, terr := models.FindRecoveryCodeSetForUpdate(tx, user.ID)
+		if terr != nil {
+			if models.IsNotFoundError(terr) {
+				return recoveryCodeVerificationFailedError()
+			}
+
+			return apierrors.NewInternalServerError("Database error locking recovery code set").WithInternalError(terr)
+		}
+
+		now := time.Now()
+		if lockedSet.IsLocked(now) {
+			return recoveryCodeLockedError()
+		}
+
+		if terr := lockedSet.ClearExpiredLockout(tx, now); terr != nil {
+			return apierrors.NewInternalServerError("Database error clearing recovery code lockout").WithInternalError(terr)
+		}
+
+		consumed := false
+		if valid {
+			switch terr := matched.MarkConsumed(tx); {
+			case terr == nil:
+				consumed = true
+			case !errors.Is(terr, models.RecoveryCodeAlreadyConsumedError{}):
+				return apierrors.NewInternalServerError("Database error consuming recovery code").WithInternalError(terr)
+			}
+		}
+
+		if !consumed {
+			// A code consumed by a concurrent request counts as a failure, exactly like a wrong code.
+			// The increment must commit even though the request fails.
+			if terr := lockedSet.RegisterFailure(tx, now, config.MFA.RecoveryCodes.MaxVerifyAttempts, config.MFA.RecoveryCodes.LockoutDuration); terr != nil {
+				return apierrors.NewInternalServerError("Database error recording failed verification").WithInternalError(terr)
+			}
+
+			return storage.NewCommitWithError(recoveryCodeVerificationFailedError())
+		}
+
+		if terr := lockedSet.ResetLockout(tx); terr != nil {
+			return apierrors.NewInternalServerError("Database error resetting recovery code lockout").WithInternalError(terr)
+		}
+
+		_, remaining, terr := models.CountRecoveryCodes(tx, lockedSet.ID)
+		if terr != nil {
+			return apierrors.NewInternalServerError("Database error counting recovery codes").WithInternalError(terr)
+		}
+
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesVerifiedAction, utilities.GetIPAddress(r), map[string]any{
+			"factor_id": factor.ID,
+			"remaining": remaining,
+		}); terr != nil {
+			return terr
+		}
+
+		user, terr = models.FindUserByID(tx, user.ID)
+		if terr != nil {
+			return terr
+		}
+
+		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.MFARecoveryCode, models.GrantParams{
+			FactorID: &factor.ID,
+		})
+		if terr != nil {
+			return terr
+		}
+
+		if terr := models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
+			return apierrors.NewInternalServerError("Failed to update sessions. %s", terr)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	metering.RecordLogin(metering.LoginTypeMFA, user.ID, &metering.LoginData{
+		Provider: metering.ProviderMFARecoveryCode,
+	})
+
+	return sendJSON(w, http.StatusOK, token)
 }
