@@ -48,36 +48,34 @@ func (ts *OneTimeTokenTestSuite) createUser() *User {
 	return u
 }
 
-func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenPersistsExpiresAt() {
-	u := ts.createUser()
-	const validity = 15 * time.Minute
+func (ts *OneTimeTokenTestSuite) TestCreateOneTimeToken() {
+	cases := map[string]time.Duration{
+		"future window": 15 * time.Minute,
+		// CreateOneTimeToken neither validates nor clamps the window. 
+		// The caller owns it. The api verify tests rely on this to build
+		// expired tokens.
+		"past window": -24 * time.Hour,
+	}
 
-	before := time.Now()
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "token-hash", ConfirmationToken, validity))
-	after := time.Now()
+	for name, validity := range cases {
+		ts.Run(name, func() {
+			TruncateAll(ts.db)
+			u := ts.createUser()
 
-	ott, err := FindOneTimeToken(ts.db, "token-hash", ConfirmationToken)
-	require.NoError(ts.T(), err)
-	require.NotNil(ts.T(), ott.ExpiresAt)
+			before := time.Now()
+			require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), name, ConfirmationToken, validity))
+			after := time.Now()
 
-	require.False(ts.T(), ott.ExpiresAt.Before(before.Add(validity)),
-		"expires_at %s precedes the window opened at %s", ott.ExpiresAt, before.Add(validity))
-	require.False(ts.T(), ott.ExpiresAt.After(after.Add(validity)),
-		"expires_at %s follows the window closed at %s", ott.ExpiresAt, after.Add(validity))
-}
+			ott, err := FindOneTimeToken(ts.db, name, ConfirmationToken)
+			require.NoError(ts.T(), err)
+			require.NotNil(ts.T(), ott.ExpiresAt)
 
-// CreateOneTimeToken neither validates nor clamps the window; the caller owns
-// it. The api verify tests rely on this to build expired tokens.
-func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenAcceptsPastWindow() {
-	u := ts.createUser()
-
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "stale-hash", ConfirmationToken, -24*time.Hour))
-
-	ott, err := FindOneTimeToken(ts.db, "stale-hash", ConfirmationToken)
-	require.NoError(ts.T(), err)
-	require.NotNil(ts.T(), ott.ExpiresAt)
-	require.True(ts.T(), ott.ExpiresAt.Before(time.Now()),
-		"expected an already-expired token, got expires_at %s", ott.ExpiresAt)
+			require.False(ts.T(), ott.ExpiresAt.Before(before.Add(validity)),
+				"expires_at %s precedes the window opened at %s", ott.ExpiresAt, before.Add(validity))
+			require.False(ts.T(), ott.ExpiresAt.After(after.Add(validity)),
+				"expires_at %s follows the window closed at %s", ott.ExpiresAt, after.Add(validity))
+		})
+	}
 }
 
 func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenResendReplacesWindow() {
