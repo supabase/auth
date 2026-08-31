@@ -58,6 +58,7 @@ type RequestParams interface {
 		PasswordGrantParams |
 		RecoverParams |
 		RecoveryCodesGenerateParams |
+		RecoveryCodesVerifyParams |
 		RefreshTokenGrantParams |
 		ResendConfirmationParams |
 		SignupParams |
