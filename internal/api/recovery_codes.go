@@ -111,6 +111,12 @@ func (a *API) RecoveryCodesGenerate(w http.ResponseWriter, r *http.Request) erro
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeInsufficientAAL, "AAL2 required to generate recovery codes")
 	}
 
+	if _, err := models.FindRecoveryCodeSetByUser(db, user.ID); err == nil {
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFAVerifiedFactorExists, "Recovery codes are already enrolled for this user, use regenerate to rotate them")
+	} else if !models.IsNotFoundError(err) {
+		return apierrors.NewInternalServerError("Database error finding recovery code set").WithInternalError(err)
+	}
+
 	factor := models.NewRecoveryCodeFactor(user, params.FriendlyName)
 
 	if err := validateFactors(db, user, factor.FriendlyName, config, session); err != nil {
@@ -127,12 +133,6 @@ func (a *API) RecoveryCodesGenerate(w http.ResponseWriter, r *http.Request) erro
 	}
 	if !hasOtherVerifiedFactor {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFARecoveryCodesSoleFactor, "At least one other verified factor is required to generate recovery codes")
-	}
-
-	if _, err := models.FindRecoveryCodeSetByUser(db, user.ID); err == nil {
-		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFAVerifiedFactorExists, "Recovery codes are already enrolled for this user, use regenerate to rotate them")
-	} else if !models.IsNotFoundError(err) {
-		return apierrors.NewInternalServerError("Database error finding recovery code set").WithInternalError(err)
 	}
 
 	codes, hashes, err := generateRecoveryCodes(config)
