@@ -191,8 +191,8 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	u.EmailChangeSentAt = &now
 	u.EmailChangeTokenNew = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken, ts.Config.Mailer.OtpExpAsDuration()))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew, ts.Config.Mailer.OtpExpAsDuration()))
 
 	phoneUser, err := models.NewUser("1234567890", "", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
@@ -200,7 +200,7 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	phoneUser.EmailChangeSentAt = &now
 	phoneUser.EmailChangeTokenNew = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(phoneUser), "Error saving new test user")
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.EmailChange, phoneUser.EmailChangeTokenNew, models.EmailChangeTokenNew))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.EmailChange, phoneUser.EmailChangeTokenNew, models.EmailChangeTokenNew, ts.Config.Mailer.OtpExpAsDuration()))
 
 	emailUser, err := models.NewUser("", "bar@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
@@ -208,7 +208,7 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	phoneUser.PhoneChangeSentAt = &now
 	phoneUser.PhoneChangeToken = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(emailUser), "Error saving new test user")
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.PhoneChange, phoneUser.PhoneChangeToken, models.PhoneChangeToken))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.PhoneChange, phoneUser.PhoneChangeToken, models.PhoneChangeToken, ts.Config.Sms.OtpExpAsDuration()))
 
 	cases := []struct {
 		desc   string
@@ -292,7 +292,7 @@ func (ts *ResendTestSuite) TestResendPKCESuccess() {
 	signupUser.ConfirmationToken = "oldtoken"
 	signupUser.ConfirmationSentAt = &now
 	require.NoError(ts.T(), ts.API.db.Create(signupUser))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, signupUser.ID, signupUser.GetEmail(), signupUser.ConfirmationToken, models.ConfirmationToken))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, signupUser.ID, signupUser.GetEmail(), signupUser.ConfirmationToken, models.ConfirmationToken, ts.Config.Mailer.OtpExpAsDuration()))
 
 	// Fresh user for email_change PKCE resend
 	emailChangeUser, err := models.NewUser("", "pkce-change@example.com", "password", ts.Config.JWT.Aud, nil)
@@ -301,7 +301,7 @@ func (ts *ResendTestSuite) TestResendPKCESuccess() {
 	emailChangeUser.EmailChangeSentAt = &now
 	emailChangeUser.EmailChangeTokenNew = "oldchangetoken"
 	require.NoError(ts.T(), ts.API.db.Create(emailChangeUser))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, emailChangeUser.ID, emailChangeUser.EmailChange, emailChangeUser.EmailChangeTokenNew, models.EmailChangeTokenNew))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, emailChangeUser.ID, emailChangeUser.EmailChange, emailChangeUser.EmailChangeTokenNew, models.EmailChangeTokenNew, ts.Config.Mailer.OtpExpAsDuration()))
 
 	ts.Run("Resend signup confirmation with PKCE", func() {
 		var buffer bytes.Buffer

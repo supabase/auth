@@ -695,6 +695,10 @@ type MailerConfiguration struct {
 	blockedMXRecordsVal cachedValue[map[string]bool]     `json:"-"`
 }
 
+func (c *MailerConfiguration) OtpExpAsDuration() time.Duration {
+	return time.Duration(c.OtpExp) * time.Second
+}
+
 func (c *MailerConfiguration) Validate() error {
 	c.serviceHeadersVal = c.buildServiceHeaders()
 	c.blockedMXRecordsVal = c.buildBlockedMXRecords()
@@ -782,6 +786,10 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
+}
+
+func (c *SmsProviderConfiguration) OtpExpAsDuration() time.Duration {
+	return time.Duration(c.OtpExp) * time.Second
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {

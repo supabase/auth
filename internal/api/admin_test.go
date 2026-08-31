@@ -649,7 +649,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateClearsPendingTokensOnEmailChange() 
 	u.RecoveryToken = recoveryHash
 	u.RecoverySentAt = &now
 	require.NoError(ts.T(), ts.API.db.UpdateOnly(u, "recovery_token", "recovery_sent_at"))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), recoveryHash, models.RecoveryToken))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), recoveryHash, models.RecoveryToken, ts.Config.Mailer.OtpExpAsDuration()))
 
 	// sanity check: the token is redeemable before the email change
 	_, err = models.FindUserByRecoveryToken(ts.API.db, recoveryHash)
@@ -877,11 +877,11 @@ func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
 		"provider": "email",
 	}
 	require.NoError(ts.T(), ts.API.db.Create(u))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.EmailChangeTokenNew, models.EmailChangeTokenNew))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetPhone(), u.PhoneChangeToken, models.PhoneChangeToken))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken, ts.Config.Mailer.OtpExpAsDuration()))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken, ts.Config.Mailer.OtpExpAsDuration()))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent, ts.Config.Mailer.OtpExpAsDuration()))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.EmailChangeTokenNew, models.EmailChangeTokenNew, ts.Config.Mailer.OtpExpAsDuration()))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetPhone(), u.PhoneChangeToken, models.PhoneChangeToken, ts.Config.Sms.OtpExpAsDuration()))
 
 	// create user identities
 	_, err = ts.API.createNewIdentity(ts.API.db, u, "email", map[string]interface{}{
