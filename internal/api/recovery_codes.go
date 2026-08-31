@@ -50,21 +50,6 @@ func generateRecoveryCodes(config *conf.GlobalConfiguration) ([]string, []string
 	return codes, hashes, nil
 }
 
-// generateAndStoreRecoveryCodeSet generates the configured number of codes,
-// persists the set and hashed code rows for factor inside tx, and returns the plaintexts.
-func generateAndStoreRecoveryCodeSet(tx *storage.Connection, config *conf.GlobalConfiguration, factor *models.Factor) ([]string, error) {
-	codes, hashes, err := generateRecoveryCodes(config)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := models.CreateRecoveryCodeSet(tx, factor, hashes); err != nil {
-		return nil, apierrors.NewInternalServerError("Database error creating recovery codes").WithInternalError(err)
-	}
-
-	return codes, nil
-}
-
 // RecoveryCodesStatus returns the recovery-code enrollment status and counts,
 // never code values or lockout state.
 func (a *API) RecoveryCodesStatus(w http.ResponseWriter, r *http.Request) error {
@@ -150,17 +135,20 @@ func (a *API) RecoveryCodesGenerate(w http.ResponseWriter, r *http.Request) erro
 		return apierrors.NewInternalServerError("Database error finding recovery code set").WithInternalError(err)
 	}
 
-	var codes []string
-	err := db.Transaction(func(tx *storage.Connection) error {
+	codes, hashes, err := generateRecoveryCodes(config)
+	if err != nil {
+		return err
+	}
+
+	err = db.Transaction(func(tx *storage.Connection) error {
 		// The unique user_id on mfa_recovery_code_sets ensures that only one
 		// recovery-code factor can be created per user.
 		if terr := tx.Create(factor); terr != nil {
 			return terr
 		}
 
-		var terr error
-		if codes, terr = generateAndStoreRecoveryCodeSet(tx, config, factor); terr != nil {
-			return terr
+		if _, terr := models.CreateRecoveryCodeSet(tx, factor, hashes); terr != nil {
+			return apierrors.NewInternalServerError("Database error creating recovery codes").WithInternalError(terr)
 		}
 
 		return models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesGeneratedAction, utilities.GetIPAddress(r), map[string]any{
