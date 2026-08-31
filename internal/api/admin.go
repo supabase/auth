@@ -341,6 +341,18 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		}
+
+		// Reassigning a user's email or phone changes the account's contact
+		// method, so any outstanding recovery/confirmation/email-change/
+		// phone-change tokens issued before the change can no longer be
+		// trusted (e.g. a recovery link still deliverable to the old
+		// mailbox). Clear them, matching the treatment the password branch
+		// above and UpdateUserEmailFromIdentities already apply.
+		if params.Email != "" || params.Phone != "" {
+			if terr := user.ClearAllPendingTokens(tx); terr != nil {
+				return terr
+			}
+		}
 		user.Identities = append(user.Identities, identities...)
 
 		if addingFirstPassword {
