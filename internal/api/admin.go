@@ -448,6 +448,14 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only a password or a password hash should be provided")
 	}
 
+	// Enforce the configured password strength policy on a client-supplied
+	// plaintext password, matching adminUserUpdate.
+	if params.Password != nil && *params.Password != "" {
+		if err := a.checkPasswordStrength(ctx, *params.Password); err != nil {
+			return err
+		}
+	}
+
 	if (params.Password == nil || *params.Password == "") && params.PasswordHash == "" {
 		password, err := password.Generate(64, 10, 0, false, true)
 		if err != nil {
