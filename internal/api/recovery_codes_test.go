@@ -736,3 +736,112 @@ func (ts *RecoveryCodesTestSuite) TestRecoveryCodesVerifyBadInput() {
 	// Malformed input never reaches the failure counter.
 	require.Equal(ts.T(), 0, ts.recoveryCodeSetState().FailedVerificationCount)
 }
+
+func (ts *RecoveryCodesTestSuite) performRegenerate(token string) *httptest.ResponseRecorder {
+	return ts.serveRequest(http.MethodPost, "http://localhost/factors/recovery-codes/regenerate", token, nil)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesRegenerate() {
+	token := ts.aal2Token()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]any{"friendly_name": "My recovery codes"}))
+	generateResp := ts.performGenerate(token, &buffer)
+
+	// Consume one code from an AAL1 session so regeneration provably restores a full set.
+	verifySession := ts.grantSession()
+	verifyToken := ts.token(ts.TestUser, &verifySession.ID)
+	w := ts.performVerify(verifyToken, generateResp.Codes[0])
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.Equal(ts.T(), 9, ts.unusedCodeCount())
+
+	w = ts.performRegenerate(token)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	resp := RecoveryCodesResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&resp))
+
+	// Same factor, same name; only the codes rotate.
+	require.Equal(ts.T(), generateResp.ID, resp.ID)
+	require.Equal(ts.T(), models.RecoveryCode, resp.Type)
+	require.Equal(ts.T(), "My recovery codes", resp.FriendlyName)
+	require.Equal(ts.T(), 10, resp.Total)
+	require.Nil(ts.T(), resp.Remaining)
+	require.Len(ts.T(), resp.Codes, 10)
+	require.Equal(ts.T(), 10, ts.unusedCodeCount())
+
+	codeFormat := regexp.MustCompile("^[a-z2-7]{16}$")
+	oldCodes := make(map[string]bool)
+	for _, code := range generateResp.Codes {
+		oldCodes[code] = true
+	}
+	seen := make(map[string]bool)
+	for _, code := range resp.Codes {
+		require.Regexp(ts.T(), codeFormat, code)
+		require.False(ts.T(), oldCodes[code], "regenerated code %q should not repeat an old code", code)
+		seen[code] = true
+	}
+	require.Len(ts.T(), seen, 10, "codes should be unique")
+
+	// An old (previously unused) code no longer verifies; a fresh one does.
+	w = ts.performVerify(verifyToken, generateResp.Codes[1])
+	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFAVerificationFailed)
+	w = ts.performVerify(verifyToken, resp.Codes[0])
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	logs, err := models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.RecoveryCodesRegeneratedAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1)
+	require.Equal(ts.T(), "factor", logs[0].Payload["log_type"])
+	traits, ok := logs[0].Payload["traits"].(map[string]any)
+	require.True(ts.T(), ok)
+	require.Equal(ts.T(), generateResp.ID.String(), traits["factor_id"])
+	require.EqualValues(ts.T(), 10, traits["count"])
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesRegenerateClearsLockout() {
+	ts.Config.MFA.RecoveryCodes.MaxVerifyAttempts = 3
+
+	_, _, verifyToken := ts.enrollForVerify()
+
+	for range 3 {
+		w := ts.performVerify(verifyToken, wrongCode)
+		ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFAVerificationFailed)
+	}
+	require.NotNil(ts.T(), ts.recoveryCodeSetState().VerificationLockedUntil)
+
+	// An AAL2 holder can always unlock themselves by rotating the set.
+	w := ts.performRegenerate(ts.token(ts.TestUser, &ts.TestSession.ID))
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	resp := RecoveryCodesResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&resp))
+
+	set := ts.recoveryCodeSetState()
+	require.Equal(ts.T(), 0, set.FailedVerificationCount)
+	require.Nil(ts.T(), set.VerificationLockedUntil)
+
+	// The lockout is gone: a fresh code verifies immediately, no 429.
+	w = ts.performVerify(verifyToken, resp.Codes[0])
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesRegenerateEnrollDisabled() {
+	token := ts.aal2Token()
+	ts.performGenerate(token, nil)
+
+	ts.Config.MFA.RecoveryCodes.EnrollEnabled = false
+
+	w := ts.performRegenerate(token)
+	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFARecoveryCodesEnrollDisabled)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesRegenerateRequiresAAL2() {
+	_, _, aal1Token := ts.enrollForVerify()
+
+	w := ts.performRegenerate(aal1Token)
+	ts.requireErrorCode(w, http.StatusForbidden, apierrors.ErrorCodeInsufficientAAL)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesRegenerateNotEnrolled() {
+	w := ts.performRegenerate(ts.aal2Token())
+	ts.requireErrorCode(w, http.StatusNotFound, apierrors.ErrorCodeMFAFactorNotFound)
+}
