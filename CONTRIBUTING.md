@@ -406,6 +406,11 @@ If you need to run any new migrations:
 make migrate_test
 ```
 
+This passes `--verbose` to the `migrate` command, which logs the name of each
+migration as it is applied. `make migrate_dev` applies the same migrations
+without verbose logging, and `make test` stays at the quiet log level set in
+`hack/test.env`.
+
 ## Testing
 
 Currently, we don't use a separate test database, so the same database created when installing Auth to run locally is used.

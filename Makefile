@@ -110,7 +110,7 @@ migrate_dev: ## Run database migrations for development.
 	hack/migrate.sh postgres
 
 migrate_test: ## Run database migrations for test.
-	hack/migrate.sh postgres
+	hack/migrate.sh postgres --verbose
 
 test: auth ## Run tests.
 	go test -failfast $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"embed"
+	"fmt"
 	"net/url"
 	"os"
 
@@ -13,6 +14,8 @@ import (
 )
 
 var EmbeddedMigrations embed.FS
+
+var migrateVerbose bool
 
 var migrateCmd = cobra.Command{
 	Use:  "migrate",
@@ -40,16 +43,23 @@ func migrate(cmd *cobra.Command, args []string) {
 			log.Fatalf("Failed to parse log level: %+v", err)
 		}
 		log.SetLevel(level)
-		if level == logrus.DebugLevel {
-			// Set to true to display query info
-			pop.Debug = true
-		}
-		if level != logrus.DebugLevel {
-			var noopLogger = func(lvl logging.Level, s string, args ...interface{}) {
+	}
+
+	switch {
+	case log.Level == logrus.DebugLevel:
+		pop.Debug = true
+	case migrateVerbose:
+		pop.SetLogger(func(lvl logging.Level, s string, args ...interface{}) {
+			if lvl == logging.SQL || lvl == logging.Debug {
+				return
 			}
-			// Hide pop migration logging
-			pop.SetLogger(noopLogger)
-		}
+			if len(args) > 0 {
+				s = fmt.Sprintf(s, args...)
+			}
+			fmt.Println(s)
+		})
+	case globalConfig.Logging.Level != "":
+		pop.SetLogger(func(logging.Level, string, ...interface{}) {})
 	}
 
 	q := u.Query()
