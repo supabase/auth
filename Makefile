@@ -1,6 +1,6 @@
-.PHONY: all build deps image migrate test vet sec vulncheck format hooks lint unused release
-.PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck check-go-version check-format
-CHECK_FILES ?= ./...
+.PHONY: all build build-strip deps release release-test check-go-version
+.PHONY: db-create db-migrate db-reset db-schema-dump format lint test
+.PHONY: generate check-oapi-codegen dev down docker-test docker-build docker-clean hooks clean
 
 ifdef RELEASE_VERSION
 	VERSION=v$(RELEASE_VERSION)
@@ -31,17 +31,30 @@ RELEASE_ARCHIVES = \
 	auth-$(VERSION)-amd64.tar.xz \
 	auth-$(VERSION)-arm64.tar.xz
 
-TOOL_BIN_DIR = tools/bin
-TOOL_TARGETS = \
-	$(TOOL_BIN_DIR)/gosec \
-	$(TOOL_BIN_DIR)/staticcheck \
-	$(TOOL_BIN_DIR)/govulncheck
+# Database configuration. Override on the command line, e.g. `APP_ENV=test make db-create`.
+APP_ENV ?= development
+POSTGRES_HOST ?= localhost
+POSTGRES_PORT ?= 5432
+POSTGRES_USER ?= postgres
+POSTGRES_PASSWORD ?= root
 
+DB_USER ?= supabase_auth_admin
+DB_PASSWORD ?= root
+DEV_DB_NAME ?= postgres
+TEST_DB_NAME ?= postgres_test
+
+ifeq ($(APP_ENV),test)
+DB_NAME := $(TEST_DB_NAME)
+MIGRATE_ENV_FILE := hack/test.env
+else
+DB_NAME := $(DEV_DB_NAME)
+MIGRATE_ENV_FILE := hack/dev.env
+endif
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-all: check-go-version vet sec static build ## Run the tests and build the binary.
+all: check-go-version lint test build ## Run the linters, tests, and build the binary.
 
 build: auth auth-amd64 auth-arm64 auth-darwin-arm64 ## Build the binaries.
 
@@ -72,13 +85,6 @@ deps: ## Install dependencies.
 	@go mod download
 	@go mod verify
 
-lint: \
-	check-go-version \
-	vet \
-	static \
-	sec \
-	vulncheck
-
 release-test: lint test
 
 release: $(RELEASE_ARCHIVES)
@@ -107,51 +113,39 @@ release-%/auth: auth-%
 release-%/gotrue: release-%/auth
 	ln -sf $(<F) $(@)
 
-migrate_dev: ## Run database migrations for development.
-	hack/migrate.sh postgres
-
-migrate_test: ## Run database migrations for test.
-	hack/migrate.sh postgres
-
-test: auth ## Run tests.
-	go test -failfast $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1
-	./hack/coverage.sh
-
-vet: # Vet the code
-	go vet $(CHECK_FILES)
-
 check-go-version: ## Verify the pinned Go version matches across go.mod, Dockerfiles, and submodules.
 	./hack/check-go-version.sh
 
-.NOTPARALLEL: $(TOOL_TARGETS)
-$(TOOL_TARGETS):
-	$(MAKE) -C tools
+db-create: ## Create the Postgres database (APP_ENV=test for the test database).
+	@PGPASSWORD=$(POSTGRES_PASSWORD) psql -v ON_ERROR_STOP=1 -h $(POSTGRES_HOST) -p $(POSTGRES_PORT) -U $(POSTGRES_USER) -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$(DB_NAME)'" | grep -qx 1 \
+		|| PGPASSWORD=$(POSTGRES_PASSWORD) createdb -h $(POSTGRES_HOST) -p $(POSTGRES_PORT) -U $(POSTGRES_USER) $(DB_NAME)
+	PGPASSWORD=$(POSTGRES_PASSWORD) psql -v ON_ERROR_STOP=1 -v dbname=$(DB_NAME) -h $(POSTGRES_HOST) -p $(POSTGRES_PORT) -U $(POSTGRES_USER) -d $(DB_NAME) -f hack/init_postgres.sql
 
-sec: | $(TOOL_BIN_DIR)/gosec # Check for security vulnerabilities
-	$(TOOL_BIN_DIR)/gosec \
-		-quiet \
-		-exclude-generated \
-		-exclude=G117,G120,G704 \
-		$(CHECK_FILES)
-	$(TOOL_BIN_DIR)/gosec \
-		-quiet \
-		-tests \
-		-exclude-generated \
-		-exclude=G101,G104,G117,G120,G704 \
-		$(CHECK_FILES)
+db-migrate: ## Run new migrations (APP_ENV=test for the test database).
+	go run . migrate -c $(MIGRATE_ENV_FILE)
 
-vulncheck: $(TOOL_BIN_DIR)/govulncheck # Check for known vulnerabilities
-	$(TOOL_BIN_DIR)/govulncheck $(CHECK_FILES) | go run ./hack/vulncheck-filter
+db-reset: ## Drop, recreate, and migrate the database (APP_ENV=test for the test database).
+	PGPASSWORD=$(POSTGRES_PASSWORD) psql -v ON_ERROR_STOP=1 -h $(POSTGRES_HOST) -p $(POSTGRES_PORT) -U $(POSTGRES_USER) -d postgres -c "DROP DATABASE IF EXISTS $(DB_NAME);"
+	$(MAKE) db-create
+	$(MAKE) db-migrate
 
-unused: | $(TOOL_BIN_DIR)/staticcheck # Look for unused code
-	@echo "Unused code:"
-	$(TOOL_BIN_DIR)/staticcheck -checks U1000 $(CHECK_FILES)
-	@echo
-	@echo "Code used only in _test.go (do move it in those files):"
-	$(TOOL_BIN_DIR)/staticcheck -checks U1000 -tests=false $(CHECK_FILES)
+db-schema-dump: ## Dump the development database schema to structure.sql.
+	PGPASSWORD=$(DB_PASSWORD) pg_dump --schema-only --no-owner --no-privileges \
+		-h $(POSTGRES_HOST) -p $(POSTGRES_PORT) -U $(DB_USER) -d $(DEV_DB_NAME) \
+		-f structure.sql
 
-static: | $(TOOL_BIN_DIR)/staticcheck
-	$(TOOL_BIN_DIR)/staticcheck ./...
+format: ## Format the codebase.
+	go run golang.org/x/tools/cmd/goimports@latest -w .
+	go fmt ./...
+
+lint: ## Run golangci-lint, govulncheck, and validate the OpenAPI spec.
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	golangci-lint run
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./... | go run ./hack/vulncheck-filter
+	npx --yes @stoplight/spectral-cli@latest lint openapi.yaml --ruleset spectral:oas
+
+test: ## Run the unit test suite with the race detector against the test database.
+	go test -race ./...
 
 generate: | check-oapi-codegen
 	go generate ./...
@@ -164,42 +158,26 @@ dev: ## Run the development containers
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up
 
 down: ## Shutdown the development containers
-	# Start postgres first and apply migrations
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) down
 
 docker-test: ## Run the tests using the development containers
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up -d postgres
-	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_test"
-	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make test"
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) run auth sh -c "APP_ENV=test make db-create && APP_ENV=test make db-migrate && make test"
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) down -v
 
 docker-build: ## Force a full rebuild of the development containers
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) build --no-cache
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up -d postgres
-	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_dev"
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make db-migrate"
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) down
 
 docker-clean: ## Remove the development containers and volumes
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) rm -fsv
 
-format:
-	gofmt -s -w .
-
-check-format: ## Verify gofmt formatting. Pass FILES="..." to scope the check.
-	@files=$$(gofmt -s -l $(or $(FILES),.)); \
-	if [ -n "$$files" ]; then \
-		echo "The following files are not gofmt-formatted:"; \
-		echo "$$files"; \
-		echo 'Run "make format" and re-stage the changes.'; \
-		exit 1; \
-	fi
-
 hooks: ## Install the git hooks defined in lefthook.yml (requires: brew install lefthook).
 	lefthook install
-	$(MAKE) -C tools
 
 clean:
-	$(MAKE) -C tools clean
 	rm -rf \
 		$(addprefix release-,$(RELEASE_TARGETS)) \
 		$(addprefix auth-,$(RELEASE_TARGETS)) \
