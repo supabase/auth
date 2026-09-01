@@ -104,10 +104,7 @@ func (a *API) triggerBeforeUserCreatedExternal(
 		Data:     identityData,
 	}
 
-	isSSOUser := false
-	if strings.HasPrefix(decision.LinkingDomain, "sso:") {
-		isSSOUser = true
-	}
+	isSSOUser := strings.HasPrefix(decision.LinkingDomain, "sso:")
 
 	user, err := params.ToUserModel(isSSOUser)
 	if err != nil {

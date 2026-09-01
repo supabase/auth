@@ -406,7 +406,8 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 	phoneIdentityWasCreated := false
 	err := conn.Transaction(func(tx *storage.Connection) error {
 
-		if params.Type == smsVerification {
+		switch params.Type {
+		case smsVerification:
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 				"provider": PhoneProvider,
 			}); terr != nil {
@@ -415,7 +416,7 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 			if terr := user.ConfirmPhone(tx); terr != nil {
 				return apierrors.NewInternalServerError("Error confirming user").WithInternalError(terr)
 			}
-		} else if params.Type == phoneChangeVerification {
+		case phoneChangeVerification:
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 				return terr
 			}

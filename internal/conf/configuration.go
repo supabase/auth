@@ -785,7 +785,7 @@ type SmsProviderConfiguration struct {
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
-	if c.TestOTP != nil && (c.TestOTPValidUntil.Time.IsZero() || now.Before(c.TestOTPValidUntil.Time)) {
+	if c.TestOTP != nil && (c.TestOTPValidUntil.IsZero() || now.Before(c.TestOTPValidUntil.Time)) {
 		testOTP, ok := c.TestOTP[phone]
 		return testOTP, ok
 	}
