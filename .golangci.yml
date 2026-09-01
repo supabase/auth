@@ -1,0 +1,30 @@
+version: "2"
+
+run:
+  timeout: 10m
+
+formatters:
+  enable:
+    - goimports
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - unused
+    - ineffassign
+    - gosec
+    - bodyclose
+    - sqlclosecheck
+    - noctx
+    - contextcheck
+    - rowserrcheck
+    - durationcheck
+    - copyloopvar
+    - unconvert
+    - misspell
+    - prealloc
+    - revive
+    - gocritic
