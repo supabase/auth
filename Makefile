@@ -145,7 +145,8 @@ lint: ## Run golangci-lint, govulncheck, and validate the OpenAPI spec.
 	npx --yes @stoplight/spectral-cli@latest lint openapi.yaml --ruleset spectral:oas
 
 test: ## Run the unit test suite with the race detector against the test database.
-	go test -race ./...
+	# -p 1: packages share one test database, so they can't run concurrently.
+	go test -race -p 1 ./...
 
 generate: | check-oapi-codegen
 	go generate ./...
