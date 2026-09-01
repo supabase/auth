@@ -23,8 +23,6 @@ var migrateCmd = cobra.Command{
 	Run:  migrate,
 }
 
-// popProgressLogger prints pop's migration progress, one line per applied
-// migration, and hides SQL statement logging.
 func popProgressLogger(lvl logging.Level, s string, args ...interface{}) {
 	if lvl == logging.SQL || lvl == logging.Debug {
 		return
@@ -35,7 +33,6 @@ func popProgressLogger(lvl logging.Level, s string, args ...interface{}) {
 	fmt.Println(s)
 }
 
-// popNoopLogger hides pop migration logging.
 func popNoopLogger(logging.Level, string, ...interface{}) {}
 
 func migrate(cmd *cobra.Command, args []string) {
@@ -60,9 +57,6 @@ func migrate(cmd *cobra.Command, args []string) {
 		log.SetLevel(level)
 	}
 
-	// Decide what pop prints while migrations run, from most to least
-	// output: debug shows everything, --verbose shows progress only, any
-	// other configured level hides migration logging entirely.
 	switch {
 	case log.Level == logrus.DebugLevel:
 		pop.Debug = true
