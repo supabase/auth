@@ -61,6 +61,25 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	/*
+	 * Carried in the URL, and therefore not a place for a secret.
+	 *
+	 * This is a GET the browser navigates to, so whatever is put here reaches
+	 * browser history, bookmarks, referrer headers and every proxy log on the
+	 * way. It is removed before the redirect so the provider never sees it, and
+	 * cleared from the flow state once consumed -- but neither undoes the trip
+	 * it already made through the address bar.
+	 *
+	 * So a hook must validate what arrives rather than trust that it arrived.
+	 * The intended shape is a REFERENCE the integrator checks against their own
+	 * records and can mark used there, not a bearer grant that authorises by
+	 * existing.
+	 */
+	hookData := query.Get("hook_data")
+	if err := validateHookData(hookData); err != nil {
+		return "", err
+	}
+
 	redirectURL := utilities.GetReferrer(r, config)
 	log := observability.GetLogEntry(r).Entry
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
@@ -81,6 +100,15 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	// Whatever remains in the query is appended to the provider's authorize
+	// URL below. This is for us, not for them.
+	//
+	// Deliberately not added to reservedOAuthParams: that list is also what
+	// validateAuthorizationParams refuses a request for, and hook_data is a
+	// parameter the caller is meant to send. Matched exactly, like the Get
+	// above -- a differently cased key was never read as hook data, so it is
+	// passed through as any other unrecognised param is.
+	query.Del("hook_data")
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
@@ -110,6 +138,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		CodeChallenge:        codeChallenge,
 		CodeChallengeMethod:  codeChallengeMethod,
 		InviteToken:          inviteToken,
+		HookData:             hookData,
 		Referrer:             redirectURL,
 		OAuthClientStateID:   oauthClientStateID,
 		EmailOptional:        pConfig.EmailOptional,
@@ -243,6 +272,13 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			flowState.UserID = &(user.ID)
 			issueTime := time.Now()
 			flowState.AuthCodeIssuedAt = &issueTime
+
+			// Spent: the hooks for this request have run and nothing reads it
+			// again, so there is no reason for it to sit in the row afterwards
+			// or in any backup taken later. Cleared HERE rather than where it is
+			// restored, because that happens before the user exists -- a callback
+			// that failed after it would have destroyed a value it still needed.
+			flowState.HookData = nil
 
 			terr = tx.Update(flowState)
 		} else {
@@ -576,6 +612,9 @@ func (a *API) loadExternalStateFromUUID(ctx context.Context, db *storage.Connect
 
 	if flowState.InviteToken != nil && *flowState.InviteToken != "" {
 		ctx = withInviteToken(ctx, *flowState.InviteToken)
+	}
+	if flowState.HookData != nil && *flowState.HookData != "" {
+		ctx = utilities.WithHookData(ctx, *flowState.HookData)
 	}
 	if flowState.Referrer != nil && *flowState.Referrer != "" {
 		ctx = withExternalReferrer(ctx, *flowState.Referrer)
