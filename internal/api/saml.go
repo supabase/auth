@@ -12,6 +12,7 @@ import (
 
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
+	dsig "github.com/russellhaering/goxmldsig"
 )
 
 // newSAMLServiceProvider constructs a ServiceProvider for the given IdP
@@ -41,6 +42,7 @@ func (a *API) newSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 	})
 
 	provider.AuthnNameIDFormat = saml.PersistentNameIDFormat
+	provider.SignatureMethod = dsig.RSASHA256SignatureMethod
 
 	return &provider
 }
