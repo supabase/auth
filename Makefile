@@ -142,7 +142,7 @@ lint: ## Run golangci-lint, govulncheck, and validate the OpenAPI spec.
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	golangci-lint run
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./... | go run ./hack/vulncheck-filter
-	npx --yes @stoplight/spectral-cli@latest lint openapi.yaml --ruleset spectral:oas
+	npx --yes @stoplight/spectral-cli@latest lint openapi.yaml --ruleset .spectral.yaml
 
 test: ## Run the unit test suite with the race detector against the test database.
 	# -p 1: packages share one test database, so they can't run concurrently.
