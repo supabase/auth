@@ -159,10 +159,11 @@ Then build the binary by running:
 make build
 ```
 
-4. To setup the database schema via Soda, run:
+4. To create and migrate the database, run:
 
 ```zsh
-make migrate_test
+make db-create
+make db-migrate
 ```
 
 You should see log messages that indicate that the Auth migrations were applied successfully:
@@ -413,12 +414,12 @@ The response from `/admin/users` should return all users:
 If you need to run any new migrations:
 
 ```zsh
-make migrate_test
+make db-migrate
 ```
 
 ## Testing
 
-Currently, we don't use a separate test database, so the same database created when installing Auth to run locally is used.
+Auth uses a separate `postgres_test` database so that running the test suite never touches your development database.
 
 The following commands should help in setting up a database and running the tests:
 
@@ -426,8 +427,9 @@ The following commands should help in setting up a database and running the test
 # Runs the database in a docker container
 $ docker-compose -f docker-compose-dev.yml up postgres
 
-# Applies the migrations to the database (requires soda cli)
-$ make migrate_test
+# Creates and migrates the test database
+$ APP_ENV=test make db-create
+$ APP_ENV=test make db-migrate
 
 # Executes the tests
 $ make test
