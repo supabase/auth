@@ -184,6 +184,77 @@ func (a *API) RecoveryCodesGenerate(w http.ResponseWriter, r *http.Request) erro
 	})
 }
 
+// RecoveryCodesRegenerate atomically replaces the user's recovery codes with a
+// fresh set, clearing any active lockout, and returns the new plaintexts exactly once.
+func (a *API) RecoveryCodesRegenerate(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	session := getSession(ctx)
+	config := a.config
+	db := a.db.WithContext(ctx)
+
+	if session == nil || user == nil {
+		return apierrors.NewInternalServerError("A valid session and a registered user are required to regenerate recovery codes")
+	}
+
+	if !config.MFA.RecoveryCodes.EnrollEnabled {
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFARecoveryCodesEnrollDisabled, "MFA enroll is disabled for recovery codes")
+	}
+
+	if !session.IsAAL2() {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeInsufficientAAL, "AAL2 required to regenerate recovery codes")
+	}
+
+	set, err := models.FindRecoveryCodeSetByUser(db, user.ID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeMFAFactorNotFound, "The user has not enrolled recovery codes")
+		}
+
+		return apierrors.NewInternalServerError("Database error finding recovery code set").WithInternalError(err)
+	}
+
+	factor, err := models.FindFactorByFactorID(db, set.MFAFactorID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeMFAFactorNotFound, "The user has not enrolled recovery codes")
+		}
+
+		return apierrors.NewInternalServerError("Database error finding recovery code factor").WithInternalError(err)
+	}
+
+	codes, hashes, err := generateRecoveryCodes(config)
+	if err != nil {
+		return err
+	}
+
+	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.ReplaceRecoveryCodes(tx, set.ID, hashes); terr != nil {
+			if models.IsNotFoundError(terr) {
+				return apierrors.NewNotFoundError(apierrors.ErrorCodeMFAFactorNotFound, "The user has not enrolled recovery codes")
+			}
+
+			return apierrors.NewInternalServerError("Database error replacing recovery codes").WithInternalError(terr)
+		}
+
+		return models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesRegeneratedAction, utilities.GetIPAddress(r), map[string]any{
+			"factor_id": factor.ID,
+			"count":     len(codes),
+		})
+	})
+	if err != nil {
+		return err
+	}
+
+	return sendJSON(w, http.StatusOK, &RecoveryCodesResponse{
+		ID:           factor.ID,
+		Type:         models.RecoveryCode,
+		FriendlyName: factor.FriendlyName,
+		Total:        len(codes),
+		Codes:        codes,
+	})
+}
+
 func recoveryCodeVerificationFailedError() *apierrors.HTTPError {
 	return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFAVerificationFailed, "Invalid recovery code entered")
 }
