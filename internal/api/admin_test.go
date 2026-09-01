@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -377,7 +378,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			desc: "Only phone",
 			params: map[string]interface{}{
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "test123",
 			},
 			expected: map[string]interface{}{
 				"email":           "",
@@ -385,7 +386,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "phone",
 				"providers":       []string{"phone"},
-				"password":        "test1",
+				"password":        "test123",
 			},
 		},
 		{
@@ -393,7 +394,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"email":    "test1@example.com",
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "test123",
 			},
 			expected: map[string]interface{}{
 				"email":           "test1@example.com",
@@ -401,7 +402,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email", "phone"},
-				"password":        "test1",
+				"password":        "test123",
 			},
 		},
 		{
@@ -439,7 +440,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"email":        "test4@example.com",
 				"phone":        "",
-				"password":     "test1",
+				"password":     "test123",
 				"ban_duration": "24h",
 			},
 			expected: map[string]interface{}{
@@ -448,7 +449,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email"},
-				"password":        "test1",
+				"password":        "test123",
 			},
 		},
 		{
@@ -471,7 +472,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"id":       "fc56ab41-2010-4870-a9b9-767c1dc573fb",
 				"email":    "test6@example.com",
-				"password": "test",
+				"password": "test123",
 			},
 			expected: map[string]interface{}{
 				"id":              "fc56ab41-2010-4870-a9b9-767c1dc573fb",
@@ -480,7 +481,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email"},
-				"password":        "test",
+				"password":        "test123",
 			},
 		},
 	}
@@ -631,6 +632,105 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 
 		}
 	}
+}
+
+// TestAdminUserUpdateClearsPendingTokensOnEmailChange verifies that
+// reassigning a user's email via the admin update endpoint invalidates any
+// outstanding recovery token, so a recovery link issued before the change
+// (and still deliverable to the old mailbox) can no longer be redeemed.
+func (ts *AdminTestSuite) TestAdminUserUpdateClearsPendingTokensOnEmailChange() {
+	u, err := models.NewUser("", "pending-tokens@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	// simulate an outstanding password-recovery token
+	recoveryHash := crypto.GenerateTokenHash(u.GetEmail(), "123456")
+	now := time.Now()
+	u.RecoveryToken = recoveryHash
+	u.RecoverySentAt = &now
+	require.NoError(ts.T(), ts.API.db.UpdateOnly(u, "recovery_token", "recovery_sent_at"))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), recoveryHash, models.RecoveryToken))
+
+	// sanity check: the token is redeemable before the email change
+	_, err = models.FindUserByRecoveryToken(ts.API.db, recoveryHash)
+	require.NoError(ts.T(), err, "recovery token should be redeemable before the email change")
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": "pending-tokens-new@example.com",
+	}))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// the stored recovery token column must be cleared
+	updated, err := models.FindUserByID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), updated.RecoveryToken, "recovery token should be cleared after an admin email change")
+
+	// and the one-time token row must no longer resolve to a user
+	_, err = models.FindUserByRecoveryToken(ts.API.db, recoveryHash)
+	require.Error(ts.T(), err, "recovery token should no longer be redeemable after an admin email change")
+	require.True(ts.T(), models.IsNotFoundError(err), "expected NotFoundError")
+}
+
+// TestAdminUserCreatePasswordStrength verifies POST /admin/users enforces the
+// configured password strength policy on a client-supplied plaintext
+// password, matching the update endpoint, while leaving the password_hash
+// path exempt.
+func (ts *AdminTestSuite) TestAdminUserCreatePasswordStrength() {
+	ts.Config.Password.MinLength = 6
+
+	ts.Run("weak plaintext password is rejected", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":    "weakpw@example.com",
+			"password": "12345", // below MinLength of 6
+		}))
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+
+		// the user must not have been created
+		_, err := models.FindUserByEmailAndAudience(ts.API.db, "weakpw@example.com", ts.Config.JWT.Aud)
+		require.True(ts.T(), models.IsNotFoundError(err), "weak-password create should not have persisted a user")
+	})
+
+	ts.Run("strong plaintext password is accepted", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":    "strongpw@example.com",
+			"password": "a-sufficiently-long-password",
+		}))
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
+
+	ts.Run("password_hash path is exempt from the strength policy", func() {
+		var buffer bytes.Buffer
+		// bcrypt hash of a short password: the plaintext strength policy
+		// does not (and cannot) apply to a pre-hashed credential.
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":         "hashedpw@example.com",
+			"password_hash": "$2y$10$Tk6yEdmTbb/eQ/haDMaCsuCsmtPVprjHMcij1RqiJdLGPDXnL3L1a",
+		}))
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
 }
 
 func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
@@ -865,7 +965,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"email":    "test1@example.com",
-				"password": "test1",
+				"password": "test123",
 			},
 			expected: http.StatusOK,
 		},
@@ -881,7 +981,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "test123",
 			},
 			expected: http.StatusOK,
 		},
@@ -893,7 +993,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"email":    "test2@example.com",
-				"password": "test2",
+				"password": "test123",
 			},
 			expected: http.StatusOK,
 		},

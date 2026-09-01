@@ -46,6 +46,10 @@ const (
 	PasskeyCreatedAction            AuditAction = "passkey_created"
 	PasskeyUpdatedAction            AuditAction = "passkey_updated"
 	PasskeyDeletedAction            AuditAction = "passkey_deleted"
+	RecoveryCodesGeneratedAction    AuditAction = "recovery_codes_generated"
+	RecoveryCodesVerifiedAction     AuditAction = "recovery_codes_verified"
+	RecoveryCodesRegeneratedAction  AuditAction = "recovery_codes_regenerated"
+	RecoveryCodesDeletedAction      AuditAction = "recovery_codes_deleted"
 
 	account auditLogType = "account"
 	team    auditLogType = "team"
@@ -77,6 +81,10 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	VerifyFactorAction:              factor,
 	DeleteFactorAction:              factor,
 	UpdateFactorAction:              factor,
+	RecoveryCodesGeneratedAction:    factor,
+	RecoveryCodesVerifiedAction:     factor,
+	RecoveryCodesRegeneratedAction:  factor,
+	RecoveryCodesDeletedAction:      factor,
 	PasskeyCreatedAction:            user,
 	PasskeyUpdatedAction:            user,
 	PasskeyDeletedAction:            user,
