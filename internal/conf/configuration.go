@@ -176,16 +176,47 @@ type PhoneFactorTypeConfiguration struct {
 	Template     string             `json:"template"`
 }
 
+type RecoveryCodesFactorTypeConfiguration struct {
+	EnrollEnabled     bool          `json:"enroll_enabled" split_words:"true" default:"false"`
+	VerifyEnabled     bool          `json:"verify_enabled" split_words:"true" default:"false"`
+	Count             int           `json:"count" default:"10"`
+	CodeLength        int           `json:"code_length" split_words:"true" default:"16"`
+	MaxVerifyAttempts int           `json:"max_verify_attempts" split_words:"true" default:"5"`
+	LockoutDuration   time.Duration `json:"lockout_duration" split_words:"true" default:"15m"`
+}
+
+func (c *RecoveryCodesFactorTypeConfiguration) Validate() error {
+	if !c.EnrollEnabled && !c.VerifyEnabled {
+		return nil
+	}
+
+	var errs []error
+	if c.Count < 4 || c.Count > 16 {
+		errs = append(errs, fmt.Errorf("conf: GOTRUE_MFA_RECOVERY_CODES_COUNT must be between 4 and 16, got %d", c.Count))
+	}
+	if c.CodeLength < 13 || c.CodeLength > 32 {
+		errs = append(errs, fmt.Errorf("conf: GOTRUE_MFA_RECOVERY_CODES_CODE_LENGTH must be between 13 and 32, got %d", c.CodeLength))
+	}
+	if c.MaxVerifyAttempts < 3 || c.MaxVerifyAttempts > 15 {
+		errs = append(errs, fmt.Errorf("conf: GOTRUE_MFA_RECOVERY_CODES_MAX_VERIFY_ATTEMPTS must be between 3 and 15, got %d", c.MaxVerifyAttempts))
+	}
+	if c.LockoutDuration < time.Minute || c.LockoutDuration > 24*time.Hour {
+		errs = append(errs, fmt.Errorf("conf: GOTRUE_MFA_RECOVERY_CODES_LOCKOUT_DURATION must be between 1m and 24h, got %v", c.LockoutDuration))
+	}
+	return errors.Join(errs...)
+}
+
 // MFAConfiguration holds all the MFA related Configuration
 type MFAConfiguration struct {
-	ChallengeExpiryDuration     float64                      `json:"challenge_expiry_duration" default:"300" split_words:"true"`
-	FactorExpiryDuration        time.Duration                `json:"factor_expiry_duration" default:"300s" split_words:"true"`
-	RateLimitChallengeAndVerify float64                      `split_words:"true" default:"15"`
-	MaxEnrolledFactors          float64                      `split_words:"true" default:"10"`
-	MaxVerifiedFactors          int                          `split_words:"true" default:"10"`
-	Phone                       PhoneFactorTypeConfiguration `split_words:"true"`
-	TOTP                        TOTPFactorTypeConfiguration  `split_words:"true"`
-	WebAuthn                    MFAFactorTypeConfiguration   `split_words:"true"`
+	ChallengeExpiryDuration     float64                              `json:"challenge_expiry_duration" default:"300" split_words:"true"`
+	FactorExpiryDuration        time.Duration                        `json:"factor_expiry_duration" default:"300s" split_words:"true"`
+	RateLimitChallengeAndVerify float64                              `split_words:"true" default:"15"`
+	MaxEnrolledFactors          float64                              `split_words:"true" default:"10"`
+	MaxVerifiedFactors          int                                  `split_words:"true" default:"10"`
+	Phone                       PhoneFactorTypeConfiguration         `split_words:"true"`
+	TOTP                        TOTPFactorTypeConfiguration          `split_words:"true"`
+	WebAuthn                    MFAFactorTypeConfiguration           `split_words:"true"`
+	RecoveryCodes               RecoveryCodesFactorTypeConfiguration `split_words:"true"`
 }
 
 type WebAuthnConfiguration struct {
@@ -1317,6 +1348,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Hook,
 		&c.JWT.Keys,
 		&c.CustomOAuth,
+		&c.MFA.RecoveryCodes,
 	}
 
 	for _, validatable := range validatables {
