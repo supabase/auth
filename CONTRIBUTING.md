@@ -407,9 +407,7 @@ make migrate_test
 ```
 
 This passes `--verbose` to the `migrate` command, which logs the name of each
-migration as it is applied. `make migrate_dev` applies the same migrations
-without verbose logging, and `make test` stays at the quiet log level set in
-`hack/test.env`.
+migration as it is applied.
 
 ## Testing
 
