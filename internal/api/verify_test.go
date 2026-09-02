@@ -65,6 +65,15 @@ func (ts *VerifyTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(i), "Error saving new test identity")
 }
 
+// Restores the previous value; SetupTest does not reset config.
+func (ts *VerifyTestSuite) setOneTimeTokensAsSourceOfTruth(enabled bool) {
+	previous := ts.Config.Experimental.EnableOneTimeTokensAsSourceOfTruth
+	ts.Config.Experimental.EnableOneTimeTokensAsSourceOfTruth = enabled
+	ts.T().Cleanup(func() {
+		ts.Config.Experimental.EnableOneTimeTokensAsSourceOfTruth = previous
+	})
+}
+
 func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 	// modify config so we don't hit rate limit from requesting recovery twice in 60s
 	ts.Config.SMTP.MaxFrequency = 60
@@ -1582,4 +1591,38 @@ func (ts *VerifyTestSuite) TestVerifyPhoneChangeSendsNotificationEmailDisabled()
 
 	// Assert that phone change notification email was not sent
 	require.Len(ts.T(), mockMailer.PhoneChangedMailCalls, 0, "Expected 0 phone change notification email(s) to be sent")
+}
+
+func (ts *VerifyTestSuite) TestVerifyTokenHashEmailOtpResolvesTypeFromRow() {
+	ts.setOneTimeTokensAsSourceOfTruth(true)
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	sentAt := time.Now()
+	tokenHash := crypto.GenerateTokenHash(u.GetEmail(), "123456")
+
+	u.RecoveryToken = ""
+	u.RecoverySentAt = &sentAt
+	u.ConfirmationToken = ""
+	u.ConfirmationSentAt = nil
+	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), models.CreateOneTimeToken(
+		ts.API.db, u.ID, u.GetEmail(), tokenHash, models.RecoveryToken,
+		ts.Config.Mailer.OtpExpAsDuration(),
+	))
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"type":       mail.EmailOTPVerification,
+		"token_hash": tokenHash,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code, "the row's token type must select the recovery expiry window")
 }

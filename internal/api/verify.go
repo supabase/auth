@@ -644,17 +644,18 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 	config := a.config
 
 	var user *models.User
+	var ott *models.OneTimeToken
 	var err error
 	switch params.Type {
 	case mail.EmailOTPVerification:
 		// need to find user by confirmation token or recovery token with the token hash
-		user, err = models.FindUserByConfirmationOrRecoveryToken(conn, params.TokenHash)
+		user, ott, err = models.FindUserAndOneTimeToken(conn, params.TokenHash, models.ConfirmationToken, models.RecoveryToken)
 	case mail.SignupVerification, mail.InviteVerification:
-		user, err = models.FindUserByConfirmationToken(conn, params.TokenHash)
+		user, ott, err = models.FindUserAndOneTimeToken(conn, params.TokenHash, models.ConfirmationToken)
 	case mail.RecoveryVerification, mail.MagicLinkVerification:
-		user, err = models.FindUserByRecoveryToken(conn, params.TokenHash)
+		user, ott, err = models.FindUserAndOneTimeToken(conn, params.TokenHash, models.RecoveryToken)
 	case mail.EmailChangeVerification:
-		user, err = models.FindUserByEmailChangeToken(conn, params.TokenHash)
+		user, ott, err = models.FindUserAndOneTimeToken(conn, params.TokenHash, models.EmailChangeTokenCurrent, models.EmailChangeTokenNew)
 	default:
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid email verification type")
 	}
@@ -670,25 +671,18 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
-	var isExpired bool
-	switch params.Type {
-	case mail.EmailOTPVerification:
-		sentAt := user.ConfirmationSentAt
+	tokenType := a.linkChallengeTokenType(user, ott, params)
+
+	if params.Type == mail.EmailOTPVerification {
 		params.Type = "signup"
-		if user.RecoveryToken == params.TokenHash {
-			sentAt = user.RecoverySentAt
+		if tokenType == models.RecoveryToken {
 			params.Type = "magiclink"
 		}
-		isExpired = isOtpExpired(sentAt, config.Mailer.OtpExp)
-	case mail.SignupVerification, mail.InviteVerification:
-		isExpired = isOtpExpired(user.ConfirmationSentAt, config.Mailer.OtpExp)
-	case mail.RecoveryVerification, mail.MagicLinkVerification:
-		isExpired = isOtpExpired(user.RecoverySentAt, config.Mailer.OtpExp)
-	case mail.EmailChangeVerification:
-		isExpired = isOtpExpired(user.EmailChangeSentAt, config.Mailer.OtpExp)
 	}
 
-	if isExpired {
+	_, sentAt := legacyUserOtpState(user, tokenType)
+
+	if isOtpExpired(sentAt, config.Mailer.OtpExp) {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Email link is invalid or has expired").WithInternalMessage("email link has expired")
 	}
 
@@ -844,6 +838,37 @@ func resolveOtpMatch(
 	}
 
 	return false, false
+}
+
+// Must be called before params.Type is rewritten to signup or magiclink.
+//
+// TODO(AUTH-1559): collapse to ott.TokenType.
+func (a *API) linkChallengeTokenType(user *models.User, ott *models.OneTimeToken, params *VerifyParams) models.OneTimeTokenType {
+	if a.oneTimeTokensAreSourceOfTruth() {
+		return ott.TokenType
+	}
+
+	switch params.Type {
+	case mail.EmailOTPVerification:
+		if user.RecoveryToken == params.TokenHash {
+			return models.RecoveryToken
+		}
+		return models.ConfirmationToken
+
+	case mail.RecoveryVerification, mail.MagicLinkVerification:
+		return models.RecoveryToken
+
+	case mail.EmailChangeVerification:
+		return models.EmailChangeTokenCurrent
+
+	default:
+		return models.ConfirmationToken
+	}
+}
+
+// TODO(AUTH-1559): remove along with the legacy columns.
+func (a *API) oneTimeTokensAreSourceOfTruth() bool {
+	return a.config.Experimental.EnableOneTimeTokensAsSourceOfTruth
 }
 
 func isOtpExpired(sentAt *time.Time, otpExp uint) bool {
