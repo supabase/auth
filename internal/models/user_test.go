@@ -282,6 +282,20 @@ func (ts *UserTestSuite) TestFindUserByRecoveryToken() {
 	require.Equal(ts.T(), u.ID, n.ID)
 }
 
+func (ts *UserTestSuite) TestFindUserByOneTimeTokenMultipleTypes() {
+	u := ts.createUser()
+	tokenHash := "test_confirmation_or_recovery_token"
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, RecoveryToken))
+
+	n, err := FindUserByOneTimeToken(ts.db, tokenHash, ConfirmationToken, RecoveryToken)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), u.ID, n.ID)
+
+	_, err = FindUserByOneTimeToken(ts.db, tokenHash, EmailChangeTokenCurrent, EmailChangeTokenNew)
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err))
+}
+
 func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 	u := ts.createUser()
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
