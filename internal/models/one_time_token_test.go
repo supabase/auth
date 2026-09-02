@@ -97,3 +97,61 @@ func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenResendReplacesWindow() {
 	require.True(ts.T(), second.ExpiresAt.After(*first.ExpiresAt),
 		"resend must move expires_at forward, first=%s second=%s", first.ExpiresAt, second.ExpiresAt)
 }
+
+func (ts *OneTimeTokenTestSuite) TestFindOneTimeTokenByUserID() {
+	u := ts.createUser()
+
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "confirmation-hash", ConfirmationToken, time.Hour))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "recovery-hash", RecoveryToken, time.Hour))
+
+	ts.Run("returns the row for the requested token type", func() {
+		ott, err := FindOneTimeTokenByUserID(ts.db, u.ID, ConfirmationToken)
+		require.NoError(ts.T(), err)
+		require.NotNil(ts.T(), ott)
+		require.Equal(ts.T(), "confirmation-hash", ott.TokenHash)
+		require.Equal(ts.T(), ConfirmationToken, ott.TokenType)
+	})
+
+	ts.Run("does not leak across token types", func() {
+		ott, err := FindOneTimeTokenByUserID(ts.db, u.ID, RecoveryToken)
+		require.NoError(ts.T(), err)
+		require.NotNil(ts.T(), ott)
+		require.Equal(ts.T(), "recovery-hash", ott.TokenHash)
+	})
+
+	ts.Run("an absent row is nil with no error", func() {
+		ott, err := FindOneTimeTokenByUserID(ts.db, u.ID, PhoneChangeToken)
+		require.NoError(ts.T(), err)
+		require.Nil(ts.T(), ott)
+	})
+
+	ts.Run("does not leak across users", func() {
+		other, err := NewUser("", "other@example.com", "password", ts.config.JWT.Aud, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.db.Create(other))
+
+		ott, err := FindOneTimeTokenByUserID(ts.db, other.ID, ConfirmationToken)
+		require.NoError(ts.T(), err)
+		require.Nil(ts.T(), ott)
+	})
+}
+
+func (ts *OneTimeTokenTestSuite) TestFindUserAndOneTimeToken() {
+	u := ts.createUser()
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "recovery-hash", RecoveryToken, time.Hour))
+
+	ts.Run("returns the user and the matched row", func() {
+		user, ott, err := FindUserAndOneTimeToken(ts.db, "recovery-hash", ConfirmationToken, RecoveryToken)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), u.ID, user.ID)
+		require.Equal(ts.T(), RecoveryToken, ott.TokenType)
+	})
+
+	ts.Run("an unmatched hash is a not-found error", func() {
+		user, ott, err := FindUserAndOneTimeToken(ts.db, "no-such-hash", RecoveryToken)
+		require.Error(ts.T(), err)
+		require.True(ts.T(), IsNotFoundError(err))
+		require.Nil(ts.T(), user)
+		require.Nil(ts.T(), ott)
+	})
+}
