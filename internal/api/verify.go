@@ -22,6 +22,8 @@ import (
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -37,6 +39,12 @@ const (
 
 // Only applicable when SECURE_EMAIL_CHANGE_ENABLED
 const singleConfirmationAccepted = "Confirmation link accepted. Please proceed to confirm link sent to the other email"
+
+// TODO(AUTH-1559): remove with the legacy read fallback.
+var otpLegacyFallbackCounter = observability.ObtainMetricCounter(
+	"gotrue_otp_token_read_legacy_fallback_total",
+	"Number of OTP verifications served from the legacy users token column because no one_time_tokens row matched",
+)
 
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
@@ -726,23 +734,41 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 	smsProvider, _ := sms_provider.GetSmsProvider(*config)
 	switch params.Type {
 	case mail.EmailOTPVerification:
-		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
-		if isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
-			isValid = true
+		matched, ok, terr := a.matchOtpChallenge(conn, user, tokenHash, config.Mailer.OtpExp,
+			models.ConfirmationToken, models.RecoveryToken)
+		if terr != nil {
+			return nil, terr
+		}
+
+		isValid = ok
+		if ok {
 			params.Type = mail.SignupVerification
-		} else if isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
-			isValid = true
-			params.Type = mail.MagicLinkVerification
-		} else {
-			isValid = false
+			if matched == models.RecoveryToken {
+				params.Type = mail.MagicLinkVerification
+			}
 		}
 	case mail.SignupVerification, mail.InviteVerification:
-		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
+		_, ok, terr := a.matchOtpChallenge(conn, user, tokenHash, config.Mailer.OtpExp, models.ConfirmationToken)
+		if terr != nil {
+			return nil, terr
+		}
+
+		isValid = ok
 	case mail.RecoveryVerification, mail.MagicLinkVerification:
-		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
+		_, ok, terr := a.matchOtpChallenge(conn, user, tokenHash, config.Mailer.OtpExp, models.RecoveryToken)
+		if terr != nil {
+			return nil, terr
+		}
+
+		isValid = ok
 	case mail.EmailChangeVerification:
-		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
-			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
+		_, ok, terr := a.matchOtpChallenge(conn, user, tokenHash, config.Mailer.OtpExp,
+			models.EmailChangeTokenCurrent, models.EmailChangeTokenNew)
+		if terr != nil {
+			return nil, terr
+		}
+
+		isValid = ok
 	case phoneChangeVerification, smsVerification:
 		if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
 			if params.Token == testOTP {
@@ -751,12 +777,10 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 		}
 
 		phone := params.Phone
-		sentAt := user.ConfirmationSentAt
-		expectedToken := user.ConfirmationToken
+		tokenType := models.ConfirmationToken
 		if params.Type == phoneChangeVerification {
 			phone = user.PhoneChange
-			sentAt = user.PhoneChangeSentAt
-			expectedToken = user.PhoneChangeToken
+			tokenType = models.PhoneChangeToken
 		}
 
 		if !config.Hook.SendSMS.Enabled && config.Sms.IsTwilioVerifyProvider() {
@@ -765,21 +789,19 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 			}
 			return user, nil
 		}
-		isValid = isOtpValid(tokenHash, expectedToken, sentAt, config.Sms.OtpExp)
+
+		_, ok, terr := a.matchOtpChallenge(conn, user, tokenHash, config.Sms.OtpExp, tokenType)
+		if terr != nil {
+			return nil, terr
+		}
+
+		isValid = ok
 	}
 
 	if !isValid {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("token has expired or is invalid")
 	}
 	return user, nil
-}
-
-// isOtpValid checks the actual otp sent against the expected otp and ensures that it's within the valid window
-func isOtpValid(actual, expected string, sentAt *time.Time, otpExp uint) bool {
-	if expected == "" || sentAt == nil {
-		return false
-	}
-	return !isOtpExpired(sentAt, otpExp) && ((actual == expected) || ("pkce_"+actual == expected))
 }
 
 // TODO(AUTH-1555): expiry moves to one_time_tokens.expires_at, retiring sentAt.
@@ -840,6 +862,18 @@ func resolveOtpMatch(
 	return false, false
 }
 
+// TODO(AUTH-1559): remove with the legacy read fallback.
+func recordOtpLegacyFallback(user *models.User, tokenType models.OneTimeTokenType) {
+	otpLegacyFallbackCounter.Add(context.Background(), 1,
+		metric.WithAttributes(attribute.String("token_type", tokenType.String())))
+
+	logrus.WithFields(logrus.Fields{
+		"component":  "otp_verification",
+		"token_type": tokenType.String(),
+		"user_id":    user.ID.String(),
+	}).Warn("OTP verified from legacy users column, no matching one_time_tokens row")
+}
+
 // Must be called before params.Type is rewritten to signup or magiclink.
 //
 // TODO(AUTH-1559): collapse to ott.TokenType.
@@ -869,6 +903,51 @@ func (a *API) linkChallengeTokenType(user *models.User, ott *models.OneTimeToken
 // TODO(AUTH-1559): remove along with the legacy columns.
 func (a *API) oneTimeTokensAreSourceOfTruth() bool {
 	return a.config.Experimental.EnableOneTimeTokensAsSourceOfTruth
+}
+
+// matched is meaningful only when ok is true.
+func (a *API) matchOtpChallenge(
+	conn *storage.Connection,
+	user *models.User,
+	actual string,
+	otpExp uint,
+	candidates ...models.OneTimeTokenType,
+) (matched models.OneTimeTokenType, ok bool, err error) {
+	for _, tokenType := range candidates {
+		var ott *models.OneTimeToken
+
+		if a.oneTimeTokensAreSourceOfTruth() {
+			var terr error
+			if ott, terr = models.FindOneTimeTokenByUserID(conn, user.ID, tokenType); terr != nil {
+				return 0, false, apierrors.NewInternalServerError("Database error finding one-time token").WithInternalError(terr)
+			}
+		}
+
+		if a.isOtpValid(user, ott, tokenType, actual, otpExp) {
+			return tokenType, true, nil
+		}
+	}
+
+	return 0, false, nil
+}
+
+// A nil ott reads the legacy users column only.
+func (a *API) isOtpValid(
+	user *models.User,
+	ott *models.OneTimeToken,
+	tokenType models.OneTimeTokenType,
+	actual string,
+	otpExp uint,
+) bool {
+	legacyHash, sentAt := legacyUserOtpState(user, tokenType)
+
+	valid, usedFallback := resolveOtpMatch(ott, legacyHash, actual, sentAt, otpExp)
+
+	if usedFallback && a.oneTimeTokensAreSourceOfTruth() {
+		recordOtpLegacyFallback(user, tokenType)
+	}
+
+	return valid
 }
 
 func isOtpExpired(sentAt *time.Time, otpExp uint) bool {

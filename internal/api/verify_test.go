@@ -1593,6 +1593,84 @@ func (ts *VerifyTestSuite) TestVerifyPhoneChangeSendsNotificationEmailDisabled()
 	require.Len(ts.T(), mockMailer.PhoneChangedMailCalls, 0, "Expected 0 phone change notification email(s) to be sent")
 }
 
+func (ts *VerifyTestSuite) TestVerifyTypedOtpReadsOneTimeTokenRow() {
+	ts.setOneTimeTokensAsSourceOfTruth(true)
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	sentAt := time.Now()
+
+	u.RecoveryToken = crypto.GenerateTokenHash(u.GetEmail(), "999999")
+	u.RecoverySentAt = &sentAt
+	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), models.CreateOneTimeToken(
+		ts.API.db, u.ID, u.GetEmail(),
+		crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+		models.RecoveryToken,
+		ts.Config.Mailer.OtpExpAsDuration(),
+	))
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"type":  mail.RecoveryVerification,
+		"token": "123456",
+		"email": u.GetEmail(),
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code, "the OTP behind the one_time_tokens row must be accepted")
+}
+
+// TODO(AUTH-1559): once the read fallback is removed this expects http.StatusForbidden.
+func (ts *VerifyTestSuite) TestVerifyTypedOtpFallsBackToUsersColumn() {
+	ts.setOneTimeTokensAsSourceOfTruth(true)
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	sentAt := time.Now()
+	recoveryToken := crypto.GenerateTokenHash(u.GetEmail(), "123456")
+
+	u.RecoveryToken = recoveryToken
+	u.RecoverySentAt = &sentAt
+	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), models.CreateOneTimeToken(
+		ts.API.db, u.ID, u.GetEmail(), recoveryToken, models.RecoveryToken,
+		ts.Config.Mailer.OtpExpAsDuration(),
+	))
+
+	require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
+
+	ott, err := models.FindOneTimeTokenByUserID(ts.API.db, u.ID, models.RecoveryToken)
+	require.NoError(ts.T(), err)
+	require.Nil(ts.T(), ott, "the row should be gone")
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), recoveryToken, u.RecoveryToken, "the legacy column should survive")
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"type":  mail.RecoveryVerification,
+		"token": "123456",
+		"email": u.GetEmail(),
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code, "the legacy column still satisfies this request")
+}
+
 func (ts *VerifyTestSuite) TestVerifyTokenHashEmailOtpResolvesTypeFromRow() {
 	ts.setOneTimeTokensAsSourceOfTruth(true)
 
@@ -1625,4 +1703,88 @@ func (ts *VerifyTestSuite) TestVerifyTokenHashEmailOtpResolvesTypeFromRow() {
 	ts.API.handler.ServeHTTP(w, req)
 
 	assert.Equal(ts.T(), http.StatusOK, w.Code, "the row's token type must select the recovery expiry window")
+}
+
+func (ts *VerifyTestSuite) TestVerifyTypedOtpIgnoresOneTimeTokenRowWhenDisabled() {
+	ts.setOneTimeTokensAsSourceOfTruth(false)
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	sentAt := time.Now()
+
+	u.RecoveryToken = crypto.GenerateTokenHash(u.GetEmail(), "999999")
+	u.RecoverySentAt = &sentAt
+	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), models.CreateOneTimeToken(
+		ts.API.db, u.ID, u.GetEmail(),
+		crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+		models.RecoveryToken,
+		ts.Config.Mailer.OtpExpAsDuration(),
+	))
+
+	cases := []struct {
+		desc     string
+		token    string
+		expected int
+	}{
+		{"the row's OTP is rejected", "123456", http.StatusForbidden},
+		{"the legacy column's OTP is accepted", "999999", http.StatusOK},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"type":  mail.RecoveryVerification,
+				"token": c.token,
+				"email": u.GetEmail(),
+			}))
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
+			assert.Equal(ts.T(), c.expected, w.Code)
+		})
+	}
+}
+
+func (ts *VerifyTestSuite) TestVerifyTypedOtpAgreeingStoresWorkInBothModes() {
+	for _, enabled := range []bool{false, true} {
+		ts.Run(fmt.Sprintf("EnableOneTimeTokensAsSourceOfTruth=%t", enabled), func() {
+			ts.setOneTimeTokensAsSourceOfTruth(enabled)
+
+			u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+
+			sentAt := time.Now()
+			tokenHash := crypto.GenerateTokenHash(u.GetEmail(), "123456")
+
+			u.RecoveryToken = tokenHash
+			u.RecoverySentAt = &sentAt
+			require.NoError(ts.T(), ts.API.db.Update(u))
+			require.NoError(ts.T(), models.CreateOneTimeToken(
+				ts.API.db, u.ID, u.GetEmail(), tokenHash, models.RecoveryToken,
+				ts.Config.Mailer.OtpExpAsDuration(),
+			))
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"type":  mail.RecoveryVerification,
+				"token": "123456",
+				"email": u.GetEmail(),
+			}))
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
+			assert.Equal(ts.T(), http.StatusOK, w.Code)
+		})
+	}
 }
