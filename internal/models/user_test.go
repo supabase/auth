@@ -92,9 +92,14 @@ func (ts *UserTestSuite) TestFindUserByConfirmationToken() {
 	tokenHash := "test_confirmation_token"
 	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, ConfirmationToken))
 
-	n, err := FindUserByConfirmationToken(ts.db, tokenHash)
+	n, err := FindUserByOneTimeToken(ts.db, tokenHash, ConfirmationToken)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), u.ID, n.ID)
+
+	// the token type filters the lookup
+	_, err = FindUserByOneTimeToken(ts.db, tokenHash, RecoveryToken)
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err))
 }
 
 func (ts *UserTestSuite) TestFindUserByEmailAndAudience() {
@@ -272,7 +277,7 @@ func (ts *UserTestSuite) TestFindUserByRecoveryToken() {
 	tokenHash := "test_recovery_token"
 	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, RecoveryToken))
 
-	n, err := FindUserByRecoveryToken(ts.db, tokenHash)
+	n, err := FindUserByOneTimeToken(ts.db, tokenHash, RecoveryToken)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), u.ID, n.ID)
 }
@@ -702,7 +707,7 @@ func (ts *UserTestSuite) TestUpdateUserEmailClearsStaleTokens() {
 	require.Nil(ts.T(), userA.ReauthenticationSentAt)
 
 	// the one-time token must no longer be redeemable
-	_, err = FindUserByConfirmationToken(ts.db, "confirmation-token-hash")
+	_, err = FindUserByOneTimeToken(ts.db, "confirmation-token-hash", ConfirmationToken)
 	require.Error(ts.T(), err)
 }
 
