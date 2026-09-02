@@ -299,6 +299,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
 			r.Use(api.requireNotAnonymous)
 			r.Post("/", api.EnrollFactor)
+
+			r.Route("/recovery-codes", func(r *router) {
+				r.Get("/", api.RecoveryCodesStatus)
+				r.Post("/", api.RecoveryCodesGenerate)
+				r.With(api.limitHandler(api.limiterOpts.FactorVerify)).
+					Post("/verify", api.RecoveryCodesVerify)
+			})
+
 			r.Route("/{factor_id}", func(r *router) {
 				r.Use(api.loadFactor)
 

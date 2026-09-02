@@ -189,39 +189,10 @@ func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...On
 	return oneTimeToken, nil
 }
 
-// FindUserByConfirmationToken finds users with the matching confirmation token.
-func FindUserByConfirmationOrRecoveryToken(tx *storage.Connection, token string) (*User, error) {
-	ott, err := FindOneTimeToken(tx, token, ConfirmationToken, RecoveryToken)
-	if err != nil {
-		return nil, err
-	}
-
-	return FindUserByID(tx, ott.UserID)
-}
-
-// FindUserByConfirmationToken finds users with the matching confirmation token.
-func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, error) {
-	ott, err := FindOneTimeToken(tx, token, ConfirmationToken)
-	if err != nil {
-		return nil, err
-	}
-
-	return FindUserByID(tx, ott.UserID)
-}
-
-// FindUserByRecoveryToken finds a user with the matching recovery token.
-func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error) {
-	ott, err := FindOneTimeToken(tx, token, RecoveryToken)
-	if err != nil {
-		return nil, err
-	}
-
-	return FindUserByID(tx, ott.UserID)
-}
-
-// FindUserByEmailChangeToken finds a user with the matching email change token.
-func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, error) {
-	ott, err := FindOneTimeToken(tx, token, EmailChangeTokenCurrent, EmailChangeTokenNew)
+// FindUserByOneTimeToken finds the user holding the one-time token matching
+// tokenHash for any of the given token types.
+func FindUserByOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...OneTimeTokenType) (*User, error) {
+	ott, err := FindOneTimeToken(tx, tokenHash, tokenTypes...)
 	if err != nil {
 		return nil, err
 	}
