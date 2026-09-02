@@ -788,6 +788,64 @@ func isOtpValid(actual, expected string, sentAt *time.Time, otpExp uint) bool {
 	return !isOtpExpired(sentAt, otpExp) && ((actual == expected) || ("pkce_"+actual == expected))
 }
 
+// TODO(AUTH-1555): expiry moves to one_time_tokens.expires_at, retiring sentAt.
+// TODO(AUTH-1559): dual-writes stop, retiring this function.
+func legacyUserOtpState(user *models.User, tokenType models.OneTimeTokenType) (hash string, sentAt *time.Time) {
+	switch tokenType {
+	case models.ConfirmationToken:
+		return user.ConfirmationToken, user.ConfirmationSentAt
+
+	case models.RecoveryToken:
+		return user.RecoveryToken, user.RecoverySentAt
+
+	case models.EmailChangeTokenCurrent:
+		return user.EmailChangeTokenCurrent, user.EmailChangeSentAt
+
+	case models.EmailChangeTokenNew:
+		return user.EmailChangeTokenNew, user.EmailChangeSentAt
+
+	case models.PhoneChangeToken:
+		return user.PhoneChangeToken, user.PhoneChangeSentAt
+
+	case models.ReauthenticationToken:
+		return user.ReauthenticationToken, user.ReauthenticationSentAt
+
+	default:
+		return "", nil
+	}
+}
+
+func matchesTokenHash(expected, actual string) bool {
+	if expected == "" {
+		return false
+	}
+
+	return actual == expected || PKCEPrefix+actual == expected
+}
+
+// TODO(AUTH-1559): drop legacyHash and usedFallback with the legacy fallback.
+func resolveOtpMatch(
+	ott *models.OneTimeToken,
+	legacyHash string,
+	actual string,
+	sentAt *time.Time,
+	otpExp uint,
+) (valid bool, usedFallback bool) {
+	if sentAt == nil || isOtpExpired(sentAt, otpExp) {
+		return false, false
+	}
+
+	if ott != nil && matchesTokenHash(ott.TokenHash, actual) {
+		return true, false
+	}
+
+	if matchesTokenHash(legacyHash, actual) {
+		return true, true
+	}
+
+	return false, false
+}
+
 func isOtpExpired(sentAt *time.Time, otpExp uint) bool {
 	return time.Now().After(sentAt.Add(time.Second * time.Duration(otpExp))) // #nosec G115
 }
