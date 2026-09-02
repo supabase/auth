@@ -443,3 +443,60 @@ func (a *API) RecoveryCodesVerify(w http.ResponseWriter, r *http.Request) error 
 
 	return sendJSON(w, http.StatusOK, token)
 }
+
+// RecoveryCodesDelete revokes the user's recovery-code factor.
+func (a *API) RecoveryCodesDelete(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	session := getSession(ctx)
+	config := a.config
+	db := a.db.WithContext(ctx)
+
+	if session == nil || user == nil {
+		return apierrors.NewInternalServerError("A valid session and a registered user are required to delete recovery codes")
+	}
+
+	if !session.IsAAL2() {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeInsufficientAAL, "AAL2 required to delete recovery codes")
+	}
+
+	factor, err := models.FindRecoveryCodeFactorByUser(db, user.ID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeMFAFactorNotFound, "The user has not enrolled recovery codes")
+		}
+
+		return apierrors.NewInternalServerError("Database error finding recovery code factor").WithInternalError(err)
+	}
+
+	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Destroy(factor); terr != nil {
+			return apierrors.NewInternalServerError("Database error deleting recovery code factor").WithInternalError(terr)
+		}
+
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesDeletedAction, utilities.GetIPAddress(r), map[string]any{
+			"factor_id": factor.ID,
+		}); terr != nil {
+			return terr
+		}
+
+		if terr := factor.DowngradeSessionsToAAL1(tx); terr != nil {
+			return apierrors.NewInternalServerError("Database error downgrading sessions").WithInternalError(terr)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if config.Mailer.Notifications.MFAFactorUnenrolledEnabled && user.GetEmail() != "" {
+		if err := a.sendMFAFactorUnenrolledNotification(r, db, user, factor.FactorType); err != nil {
+			logrus.WithError(err).Warn("Unable to send MFA factor unenrolled notification email")
+		}
+	}
+
+	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
+		ID: factor.ID,
+	})
+}
