@@ -192,7 +192,7 @@ func FindAuditLogEntries(tx *storage.Connection, filterColumns []string, filterV
 		values := make([]interface{}, len(filterColumns))
 
 		for idx, col := range filterColumns {
-			builder.WriteString(fmt.Sprintf("payload->>'%s' ILIKE ?", col))
+			fmt.Fprintf(builder, "payload->>'%s' ILIKE ?", col)
 			values[idx] = lf
 
 			if idx+1 < len(filterColumns) {
