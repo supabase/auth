@@ -82,6 +82,7 @@ func (ts *RecoveryCodesTestSuite) SetupTest() {
 	ts.Config.MFA.MaxVerifiedFactors = 10
 	ts.Config.Hook.MFAVerificationAttempt.Enabled = false
 	ts.Config.Mailer.Notifications.MFAFactorEnrolledEnabled = false
+	ts.Config.Mailer.Notifications.MFAFactorUnenrolledEnabled = false
 	if mockMailer, ok := ts.Mailer.(*mockclient.MockMailer); ok {
 		mockMailer.Reset()
 	}
@@ -350,6 +351,9 @@ func (ts *RecoveryCodesTestSuite) TestRecoveryCodesAnonymousUserForbidden() {
 	ts.requireErrorCode(w, http.StatusForbidden, apierrors.ErrorCodeNoAuthorization)
 
 	w = ts.serveRequest(http.MethodPost, "http://localhost/factors/recovery-codes", token, nil)
+	ts.requireErrorCode(w, http.StatusForbidden, apierrors.ErrorCodeNoAuthorization)
+
+	w = ts.serveRequest(http.MethodDelete, "http://localhost/factors/recovery-codes", token, nil)
 	ts.requireErrorCode(w, http.StatusForbidden, apierrors.ErrorCodeNoAuthorization)
 }
 
@@ -844,4 +848,123 @@ func (ts *RecoveryCodesTestSuite) TestRecoveryCodesRegenerateRequiresAAL2() {
 func (ts *RecoveryCodesTestSuite) TestRecoveryCodesRegenerateNotEnrolled() {
 	w := ts.performRegenerate(ts.aal2Token())
 	ts.requireErrorCode(w, http.StatusNotFound, apierrors.ErrorCodeMFAFactorNotFound)
+}
+
+func (ts *RecoveryCodesTestSuite) performDelete(token string) *httptest.ResponseRecorder {
+	return ts.serveRequest(http.MethodDelete, "http://localhost/factors/recovery-codes", token, nil)
+}
+
+func hasRecoveryCodeAMRClaim(session *models.Session) bool {
+	for _, claim := range session.AMRClaims {
+		if claim.GetAuthenticationMethod() == models.MFARecoveryCode.String() {
+			return true
+		}
+	}
+	return false
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesDelete() {
+	generateResp, verifySession, verifyToken := ts.enrollForVerify()
+	setID := ts.recoveryCodeSetState().ID
+
+	// Upgrade the AAL1 session with a recovery code so deletion has a session to downgrade.
+	w := ts.performVerify(verifyToken, generateResp.Codes[0])
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	upgraded, err := models.FindSessionByID(ts.API.db, verifySession.ID, false)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), upgraded.IsAAL2())
+	require.NotNil(ts.T(), upgraded.FactorID)
+	require.Equal(ts.T(), generateResp.ID, *upgraded.FactorID)
+	require.True(ts.T(), hasRecoveryCodeAMRClaim(upgraded))
+
+	aal2Token := ts.aal2Token()
+	w = ts.performDelete(aal2Token)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	resp := UnenrollFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&resp))
+	require.Equal(ts.T(), generateResp.ID, resp.ID)
+
+	// The factor is gone and the FK cascade removed the set and every code.
+	_, err = models.FindFactorByFactorID(ts.API.db, generateResp.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+	_, err = models.FindRecoveryCodeSetByUser(ts.API.db, ts.TestUser.ID)
+	require.True(ts.T(), models.IsNotFoundError(err))
+	total, remaining, err := models.CountRecoveryCodes(ts.API.db, setID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), 0, total)
+	require.Equal(ts.T(), 0, remaining)
+	w = ts.serveRequest(http.MethodGet, "http://localhost/factors/recovery-codes", aal2Token, nil)
+	ts.requireErrorCode(w, http.StatusNotFound, apierrors.ErrorCodeMFAFactorNotFound)
+
+	// The session upgraded by a recovery code is downgraded and loses its AMR claim.
+	downgraded, err := models.FindSessionByID(ts.API.db, verifySession.ID, false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.AAL1.String(), downgraded.GetAAL())
+	require.Nil(ts.T(), downgraded.FactorID)
+	require.False(ts.T(), hasRecoveryCodeAMRClaim(downgraded))
+
+	// The TOTP-backed session is untouched.
+	totpSession, err := models.FindSessionByID(ts.API.db, ts.TestSession.ID, false)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), totpSession.IsAAL2())
+	require.NotNil(ts.T(), totpSession.FactorID)
+	require.Equal(ts.T(), ts.TestFactor.ID, *totpSession.FactorID)
+
+	logs, err := models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.RecoveryCodesDeletedAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1)
+	require.Equal(ts.T(), "factor", logs[0].Payload["log_type"])
+	traits, ok := logs[0].Payload["traits"].(map[string]any)
+	require.True(ts.T(), ok)
+	require.Equal(ts.T(), generateResp.ID.String(), traits["factor_id"])
+
+	// The per-user slot is free again.
+	ts.performGenerate(aal2Token, nil)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesDeleteRequiresAAL2() {
+	generateResp, _, aal1Token := ts.enrollForVerify()
+
+	w := ts.performDelete(aal1Token)
+	ts.requireErrorCode(w, http.StatusForbidden, apierrors.ErrorCodeInsufficientAAL)
+
+	_, err := models.FindFactorByFactorID(ts.API.db, generateResp.ID)
+	require.NoError(ts.T(), err, "factor must survive a rejected delete")
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesDeleteNotEnrolled() {
+	w := ts.performDelete(ts.aal2Token())
+	ts.requireErrorCode(w, http.StatusNotFound, apierrors.ErrorCodeMFAFactorNotFound)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesDeleteUnenrolledNotificationEnabled() {
+	ts.Config.Mailer.Notifications.MFAFactorUnenrolledEnabled = true
+
+	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
+	require.True(ts.T(), ok, "Mailer is not of type *MockMailer")
+	mockMailer.Reset()
+
+	token := ts.aal2Token()
+	ts.performGenerate(token, nil)
+	w := ts.performDelete(token)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	require.Len(ts.T(), mockMailer.MFAFactorUnenrolledMailCalls, 1, "Expected one MFA factor unenrolled notification email to be sent")
+	require.Equal(ts.T(), ts.TestUser.ID, mockMailer.MFAFactorUnenrolledMailCalls[0].User.ID, "Email should be sent to the correct user")
+	require.Equal(ts.T(), models.RecoveryCode, mockMailer.MFAFactorUnenrolledMailCalls[0].FactorType, "Email should specify the correct factor type")
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesDeleteUnenrolledNotificationDisabled() {
+	ts.Config.Mailer.Notifications.MFAFactorUnenrolledEnabled = false
+
+	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
+	require.True(ts.T(), ok, "Mailer is not of type *MockMailer")
+	mockMailer.Reset()
+
+	token := ts.aal2Token()
+	ts.performGenerate(token, nil)
+	w := ts.performDelete(token)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	require.Empty(ts.T(), mockMailer.MFAFactorUnenrolledMailCalls, "Expected no MFA factor unenrolled notification email to be sent")
 }

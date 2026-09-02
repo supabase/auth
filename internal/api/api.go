@@ -306,6 +306,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.With(api.limitHandler(api.limiterOpts.FactorVerify)).
 					Post("/verify", api.RecoveryCodesVerify)
 				r.Post("/regenerate", api.RecoveryCodesRegenerate)
+				r.Delete("/", api.RecoveryCodesDelete)
 			})
 
 			r.Route("/{factor_id}", func(r *router) {
