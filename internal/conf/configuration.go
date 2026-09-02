@@ -376,6 +376,12 @@ type ExperimentalConfiguration struct {
 	// Env: GOTRUE_EXPERIMENTAL_SCIM_ENABLED=true
 	ScimEnabled bool `split_words:"true" default:"false"`
 
+	// EnableOneTimeTokensAsSourceOfTruth reads OTP token hashes from
+	// auth.one_time_tokens instead of the legacy auth.users.<flow>_token
+	// columns. Does not cover expiry, which still reads <flow>_sent_at.
+	// Env: GOTRUE_EXPERIMENTAL_ENABLE_ONE_TIME_TOKENS_AS_SOURCE_OF_TRUTH=true
+	EnableOneTimeTokensAsSourceOfTruth bool `split_words:"true" default:"false"`
+
 	// CreateEmailIdentityOnPasswordSetEnabled creates the missing email provider
 	// identity for a user when a password is added to an account that didn't have
 	// one (e.g. a user who signed up with an external provider and later sets a password).
