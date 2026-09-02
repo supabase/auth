@@ -191,7 +191,7 @@ func TestCustomOIDCProvider_GetUserData_UserinfoAllowlist(t *testing.T) {
 	provider, err := NewCustomOIDCProvider(
 		context.Background(),
 		"client-id", "client-secret", "https://myapp.com/callback",
-		[]string{"openid"}, server.URL, server.URL + "/.well-known/openid-configuration", false,
+		[]string{"openid"}, server.URL, server.URL+"/.well-known/openid-configuration", false,
 		nil, nil, nil,
 		[]string{"mail", "sn"},
 		newTestOIDCProviderCache(t, 0),
@@ -257,7 +257,7 @@ func TestCustomOIDCProvider_GetUserData_IDTokenAllowlist(t *testing.T) {
 	provider, err := NewCustomOIDCProvider(
 		context.Background(),
 		"client-id", "client-secret", "https://myapp.com/callback",
-		[]string{"openid"}, server.URL, server.URL + "/.well-known/openid-configuration", false,
+		[]string{"openid"}, server.URL, server.URL+"/.well-known/openid-configuration", false,
 		nil, nil, nil,
 		[]string{"groups", "org_id"},
 		newTestOIDCProviderCache(t, 0),
