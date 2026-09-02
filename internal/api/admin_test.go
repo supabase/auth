@@ -652,7 +652,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateClearsPendingTokensOnEmailChange() 
 	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), recoveryHash, models.RecoveryToken))
 
 	// sanity check: the token is redeemable before the email change
-	_, err = models.FindUserByRecoveryToken(ts.API.db, recoveryHash)
+	_, err = models.FindUserByOneTimeToken(ts.API.db, recoveryHash, models.RecoveryToken)
 	require.NoError(ts.T(), err, "recovery token should be redeemable before the email change")
 
 	var buffer bytes.Buffer
@@ -672,7 +672,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateClearsPendingTokensOnEmailChange() 
 	require.Empty(ts.T(), updated.RecoveryToken, "recovery token should be cleared after an admin email change")
 
 	// and the one-time token row must no longer resolve to a user
-	_, err = models.FindUserByRecoveryToken(ts.API.db, recoveryHash)
+	_, err = models.FindUserByOneTimeToken(ts.API.db, recoveryHash, models.RecoveryToken)
 	require.Error(ts.T(), err, "recovery token should no longer be redeemable after an admin email change")
 	require.True(ts.T(), models.IsNotFoundError(err), "expected NotFoundError")
 }
