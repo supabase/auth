@@ -880,12 +880,15 @@ Whether captcha middleware is enabled
 
 `SECURITY_CAPTCHA_PROVIDER` - `string`
 
-for now the only options supported are: hCaptcha and Turnstile
+Supported options are hCaptcha, Turnstile, and FCaptcha.
 
 - `SECURITY_CAPTCHA_SECRET` - `string`
+- `SECURITY_CAPTCHA_PROVIDER_URL` - `string`
 - `SECURITY_CAPTCHA_TIMEOUT` - `string`
 
-Retrieve from hcaptcha or turnstile account
+`SECURITY_CAPTCHA_PROVIDER_URL` is required only for FCaptcha and points to the
+self-hosted FCaptcha base URL. `SECURITY_CAPTCHA_SECRET` must match that
+instance's `FCAPTCHA_VERIFY_SECRET`.
 
 ### Reauthentication
 
