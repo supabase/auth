@@ -196,7 +196,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 	config := s.config
 
 	if params.RefreshToken == "" {
-		return nil, apierrors.NewOAuthError("invalid_request", "refresh_token required")
+		return nil, apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidRequest, "refresh_token required")
 	}
 
 	// A 5 second retry loop is used to make sure that refresh token
@@ -299,16 +299,16 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 			if session.OAuthClientID != nil && *session.OAuthClientID != uuid.Nil {
 				// Session has an OAuth client, current request must have matching client
 				if params.ClientID == nil || *params.ClientID == uuid.Nil {
-					return apierrors.NewOAuthError("invalid_client", "Client authentication required for OAuth session")
+					return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidClient, "Client authentication required for OAuth session")
 				}
 				if *params.ClientID != *session.OAuthClientID {
-					return apierrors.NewOAuthError("invalid_client", "Client does not match the session's OAuth client")
+					return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidClient, "Client does not match the session's OAuth client")
 				}
 				sessionClientID = session.OAuthClientID
 			} else {
 				// Session has no OAuth client, current request should not have one either
 				if params.ClientID != nil && *params.ClientID != uuid.Nil {
-					return apierrors.NewOAuthError("invalid_client", "Client authentication not allowed for non-OAuth session")
+					return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidClient, "Client authentication not allowed for non-OAuth session")
 				}
 				sessionClientID = nil
 			}
