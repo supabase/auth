@@ -1,4 +1,4 @@
-.PHONY: all build deps image migrate test vet sec vulncheck format hooks lint unused release
+.PHONY: all build deps image migrate test sec vulncheck format hooks lint unused release golangci-lint
 .PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck check-go-version check-format
 CHECK_FILES ?= ./...
 
@@ -33,15 +33,14 @@ RELEASE_ARCHIVES = \
 
 TOOL_BIN_DIR = tools/bin
 TOOL_TARGETS = \
-	$(TOOL_BIN_DIR)/gosec \
-	$(TOOL_BIN_DIR)/staticcheck \
-	$(TOOL_BIN_DIR)/govulncheck
+	$(TOOL_BIN_DIR)/govulncheck \
+	$(TOOL_BIN_DIR)/golangci-lint
 
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-all: check-go-version vet sec static build ## Run the tests and build the binary.
+all: check-go-version golangci-lint build ## Run the tests and build the binary.
 
 build: auth auth-amd64 auth-arm64 auth-darwin-arm64 ## Build the binaries.
 
@@ -74,9 +73,7 @@ deps: ## Install dependencies.
 
 lint: \
 	check-go-version \
-	vet \
-	static \
-	sec \
+	golangci-lint \
 	vulncheck
 
 release-test: lint test
@@ -117,9 +114,6 @@ test: auth ## Run tests.
 	go test -failfast $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1
 	./hack/coverage.sh
 
-vet: # Vet the code
-	go vet $(CHECK_FILES)
-
 check-go-version: ## Verify the pinned Go version matches across go.mod, Dockerfiles, and submodules.
 	./hack/check-go-version.sh
 
@@ -127,31 +121,17 @@ check-go-version: ## Verify the pinned Go version matches across go.mod, Dockerf
 $(TOOL_TARGETS):
 	$(MAKE) -C tools
 
-sec: | $(TOOL_BIN_DIR)/gosec # Check for security vulnerabilities
-	$(TOOL_BIN_DIR)/gosec \
-		-quiet \
-		-exclude-generated \
-		-exclude=G117,G120,G704 \
-		$(CHECK_FILES)
-	$(TOOL_BIN_DIR)/gosec \
-		-quiet \
-		-tests \
-		-exclude-generated \
-		-exclude=G101,G104,G117,G120,G704 \
-		$(CHECK_FILES)
+sec: | $(TOOL_BIN_DIR)/golangci-lint # Check for security issues (gosec)
+	$(TOOL_BIN_DIR)/golangci-lint run --enable-only=gosec $(CHECK_FILES)
 
 vulncheck: $(TOOL_BIN_DIR)/govulncheck # Check for known vulnerabilities
 	$(TOOL_BIN_DIR)/govulncheck $(CHECK_FILES) | go run ./hack/vulncheck-filter
 
-unused: | $(TOOL_BIN_DIR)/staticcheck # Look for unused code
-	@echo "Unused code:"
-	$(TOOL_BIN_DIR)/staticcheck -checks U1000 $(CHECK_FILES)
-	@echo
-	@echo "Code used only in _test.go (do move it in those files):"
-	$(TOOL_BIN_DIR)/staticcheck -checks U1000 -tests=false $(CHECK_FILES)
+unused: | $(TOOL_BIN_DIR)/golangci-lint # Look for unused code
+	$(TOOL_BIN_DIR)/golangci-lint run --enable-only=unused $(CHECK_FILES)
 
-static: | $(TOOL_BIN_DIR)/staticcheck
-	$(TOOL_BIN_DIR)/staticcheck ./...
+golangci-lint: | $(TOOL_BIN_DIR)/golangci-lint
+	$(TOOL_BIN_DIR)/golangci-lint run $(CHECK_FILES)
 
 generate: | check-oapi-codegen
 	go generate ./...
