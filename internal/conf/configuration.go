@@ -1412,7 +1412,10 @@ func (t *MessagebirdProviderConfiguration) Validate() error {
 	if t.AccessKey == "" {
 		return errors.New("missing Messagebird access key")
 	}
-	if t.Originator == "" {
+	// A Bird platform key can send from Bird's stocked OTP template, which
+	// selects its own sender, so an originator is optional there. The legacy
+	// API has no such fallback and still requires one.
+	if t.Originator == "" && !strings.HasPrefix(t.AccessKey, "bk_") {
 		return errors.New("missing Messagebird originator")
 	}
 	return nil
