@@ -18,14 +18,20 @@ You should understand your own changes and be able to explain what they do and h
 - Add tests with your change. CI must be green.
 - Reference the accepted Discussion or issue in the pull request description.
 
+### Writing a good pull request
+
+- Explain why, not what. The diff shows what changed, the description should cover the motivation, the impact, and any tradeoffs or alternatives you weighed.
+- Include verification steps: how you tested the change and how a reviewer can confirm it works.
+- For schema or query changes, include the `EXPLAIN` (or `EXPLAIN ANALYZE`) output for the affected queries so reviewers can see the query plan.
+
 ### Commit messages
 
 Pull request titles and commits must follow [Conventional Commits](https://www.conventionalcommits.org). For example:
 
-* `feat: add support for OIDC sign-in`
-* `fix: resolve race condition in token refresh`
-* `docs: update OAuth configuration guide`
-* `chore: upgrade dependencies`
+- `feat: add support for OIDC sign-in`
+- `fix: resolve race condition in token refresh`
+- `docs: update OAuth configuration guide`
+- `chore: upgrade dependencies`
 
 ## Review
 
