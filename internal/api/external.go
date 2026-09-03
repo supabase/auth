@@ -224,10 +224,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		} else {
-			createdUser = true
-			if _, user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional); terr != nil {
+			var decision models.AccountLinkingDecision
+			if decision, user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional); terr != nil {
 				return terr
 			}
+			createdUser = decision == models.CreateAccount
 		}
 		if flowState != nil && flowState.IsPKCE() {
 			// PKCE flow: update flow state with user ID and tokens
