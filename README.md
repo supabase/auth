@@ -25,26 +25,7 @@ If you wish to contribute to the project, please refer to the [contributing guid
 
 ## Quick Start
 
-Create a `.env` file to store your own custom environment variables. See [`example.env`](example.env)
-
-1. Start the local Postgres database in a Postgres container: `docker-compose -f docker-compose-dev.yml up postgres`
-2. Build the auth binary: `make build` . You should see an output like this:
-
-```bash
-go build -ldflags "-X github.com/supabase/auth/cmd.Version=`git rev-parse HEAD`"
-GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/auth/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
-```
-
-3. Execute the auth binary: `./auth`
-
-### If you have Docker installed
-
-Create a `.env.docker` file to store your own custom env vars. See [`example.docker.env`](example.docker.env)
-
-1. `make build`
-2. `make dev`
-3. `docker ps` should show two Docker containers (`auth-auth-1` and `auth-postgres-1`)
-4. That's it! Visit the [health check endpoint](http://localhost:9999/health) to confirm that auth is running.
+To build, run, and test Auth locally, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Running in production
 
