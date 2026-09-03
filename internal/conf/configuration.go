@@ -583,6 +583,7 @@ type ProviderConfiguration struct {
 	RedirectURL             string                         `json:"redirect_url"`
 	AllowedIdTokenIssuers   []string                       `json:"allowed_id_token_issuers" split_words:"true"`
 	FlowStateExpiryDuration time.Duration                  `json:"flow_state_expiry_duration" split_words:"true"`
+	UseDistinctRedirectURIs bool                           `json:"use_distinct_redirect_uris" split_words:"true" default:"false"`
 
 	// OIDCProviderCacheTTL controls how long OIDC discovery documents are cached.
 	OIDCProviderCacheTTL time.Duration `json:"oidc_provider_cache_ttl" split_words:"true" default:"1h"`

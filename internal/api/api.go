@@ -213,6 +213,9 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Get("/", api.ExternalProviderCallback)
 		r.Post("/", api.ExternalProviderCallback)
+
+		r.Get("/{provider}", api.ExternalProviderCallback)
+		r.Post("/{provider}", api.ExternalProviderCallback)
 	})
 
 	r.Route("/", func(r *router) {
