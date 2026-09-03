@@ -412,6 +412,13 @@ type ExperimentalConfiguration struct {
 	// one (e.g. a user who signed up with an external provider and later sets a password).
 	// Env: GOTRUE_EXPERIMENTAL_CREATE_EMAIL_IDENTITY_ON_PASSWORD_SET_ENABLED=true
 	CreateEmailIdentityOnPasswordSetEnabled bool `split_words:"true" default:"false"`
+
+	// EnableOTTAsSourceOfTruth makes the typed-OTP verification path read the
+	// challenge from the one_time_tokens table instead of the users.*_token
+	// columns. A lookup miss is rejected as an expired or invalid token; there is
+	// no fallback to the users columns.
+	// Env: GOTRUE_EXPERIMENTAL_ENABLE_OTT_AS_SOURCE_OF_TRUTH=true
+	EnableOTTAsSourceOfTruth bool `split_words:"true" default:"false"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime
