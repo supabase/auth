@@ -779,6 +779,7 @@ type SmsProviderConfiguration struct {
 
 	Twilio       TwilioProviderConfiguration       `json:"twilio"`
 	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify" split_words:"true"`
+	BirdVerify   BirdVerifyProviderConfiguration   `json:"bird_verify" split_words:"true"`
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
@@ -804,6 +805,14 @@ type TwilioVerifyProviderConfiguration struct {
 	AccountSid        string `json:"account_sid" split_words:"true"`
 	AuthToken         string `json:"auth_token" split_words:"true"`
 	MessageServiceSid string `json:"message_service_sid" split_words:"true"`
+}
+
+type BirdVerifyProviderConfiguration struct {
+	ApiKey string `json:"api_key" split_words:"true"`
+	// Optional overrides. The base URL is otherwise derived from the API key's
+	// region prefix, so neither is needed for a standard Bird workspace.
+	ApiUrl string `json:"api_url" split_words:"true"`
+	Region string `json:"region"`
 }
 
 type MessagebirdProviderConfiguration struct {
@@ -1408,6 +1417,13 @@ func (t *TwilioVerifyProviderConfiguration) Validate() error {
 	return nil
 }
 
+func (t *BirdVerifyProviderConfiguration) Validate() error {
+	if t.ApiKey == "" {
+		return errors.New("missing Bird API key")
+	}
+	return nil
+}
+
 func (t *MessagebirdProviderConfiguration) Validate() error {
 	if t.AccessKey == "" {
 		return errors.New("missing Messagebird access key")
@@ -1443,6 +1459,12 @@ func (t *VonageProviderConfiguration) Validate() error {
 
 func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
 	return t.Provider == "twilio_verify"
+}
+
+// IsVerifyServiceProvider reports whether the provider runs the OTP itself, so
+// GoTrue delegates both generating and checking the code instead of storing it.
+func (t *SmsProviderConfiguration) IsVerifyServiceProvider() bool {
+	return t.Provider == "twilio_verify" || t.Provider == "bird_verify"
 }
 
 // IndexWorkerConfiguration holds the configuration for creating database indexes on the users table.
