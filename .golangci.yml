@@ -1,0 +1,46 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: standard
+  enable:
+    - gosec
+  settings:
+    gosec:
+      excludes:
+        - G117
+        - G120
+        - G704
+  exclusions:
+    rules:
+      - linters: [gosec]
+        path: _test\.go
+        text: "(G101|G104)"
+      - linters: [errcheck, ineffassign]
+        path: _test\.go
+      - linters: [errcheck]
+        path: cmd/admin_cmd.go
+      - linters: [errcheck]
+        path: cmd/migrate_cmd.go
+      - linters: [errcheck]
+        path: cmd/serve_cmd.go
+      - linters: [errcheck]
+        path: internal/conf/confload/loader.go
+      - linters: [errcheck]
+        path: internal/e2e/e2eapi/e2eapi.go
+      - linters: [errcheck]
+        path: internal/e2e/e2ehooks/e2ehooks.go
+      - linters: [errcheck]
+        path: internal/hooks/hookshttp/hookshttp.go
+      - linters: [errcheck]
+        path: internal/indexworker/indexworker.go
+      - linters: [errcheck]
+        path: internal/mailer/templatemailer/template.go
+      - linters: [errcheck]
+        path: internal/mailer/validateclient/validateclient.go
+      - linters: [errcheck]
+        path: internal/reloader/poller.go
+      - linters: [errcheck]
+        path: internal/reloader/reloader.go
+      - linters: [errcheck]
+        path: internal/utilities/oidc_discovery.go
