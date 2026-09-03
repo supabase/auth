@@ -285,7 +285,7 @@ func (ts *UserTestSuite) TestFindUserByRecoveryToken() {
 func (ts *UserTestSuite) TestFindUserByOneTimeTokenMultipleTypes() {
 	u := ts.createUser()
 	tokenHash := "test_confirmation_or_recovery_token"
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, RecoveryToken))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, RecoveryToken, time.Minute))
 
 	n, err := FindUserByOneTimeToken(ts.db, tokenHash, ConfirmationToken, RecoveryToken)
 	require.NoError(ts.T(), err)
