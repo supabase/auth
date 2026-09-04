@@ -9,7 +9,7 @@ How to build, run, and test Auth locally.
 
 ## Quick start
 
-Run Postgres in a container and Auth on your host. This matches CI and needs Go 1.27 (from `go.mod`).
+Run Postgres in a container and Auth on your host. This matches CI, which pins Go 1.27 in `go.mod`.
 
 ```bash
 # Create your local env file
@@ -30,12 +30,15 @@ curl http://localhost:9999/health
 
 ## Going further
 
+Once Auth is running, these commands cover the rest of the workflow:
+
 - `make help` lists every available command; see the `Makefile` for details.
 - `example.env` holds the full set of environment variables.
-- Run the tests with `go test ./...` (Postgres must be running). Scope with `-run`, e.g. `go test ./internal/api/... -run SCIM`.
+- Postgres must be running to run the tests: `go test ./...`. Scope with `-run`, for example `go test ./internal/api/... -run SCIM`.
 
-Optionally, install the git hooks so `gofmt` and the linters run before each commit:
+Optionally, install the git hooks so `gofmt` and the linters run before each commit. This requires [lefthook](https://github.com/evilmartians/lefthook):
 
 ```bash
+brew install lefthook
 make hooks
 ```
