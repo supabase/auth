@@ -97,3 +97,119 @@ func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenResendReplacesWindow() {
 	require.True(ts.T(), second.ExpiresAt.After(*first.ExpiresAt),
 		"resend must move expires_at forward, first=%s second=%s", first.ExpiresAt, second.ExpiresAt)
 }
+
+func (ts *OneTimeTokenTestSuite) TestFindOneTimeTokenWithPKCEFallback() {
+	ts.Run("exact hash match", func() {
+		TruncateAll(ts.db)
+		u := ts.createUser()
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "hash", ConfirmationToken, time.Minute))
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, u.ID, "hash", ConfirmationToken)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "hash", ott.TokenHash)
+		require.Equal(ts.T(), u.ID, ott.UserID)
+	})
+
+	ts.Run("falls back to pkce_ prefixed hash", func() {
+		TruncateAll(ts.db)
+		u := ts.createUser()
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "pkce_hash", ConfirmationToken, time.Minute))
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, u.ID, "hash", ConfirmationToken)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "pkce_hash", ott.TokenHash)
+		require.Equal(ts.T(), u.ID, ott.UserID)
+	})
+
+	ts.Run("prefers exact match over pkce_ prefixed hash", func() {
+		TruncateAll(ts.db)
+		u := ts.createUser()
+
+		// (user_id, token_type) is unique, so the two candidates have to be
+		// different types. Both types are passed so both are eligible.
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "hash", ConfirmationToken, time.Minute))
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "pkce_hash", RecoveryToken, time.Minute))
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, u.ID, "hash", ConfirmationToken, RecoveryToken)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "hash", ott.TokenHash)
+		require.Equal(ts.T(), ConfirmationToken, ott.TokenType)
+	})
+
+	ts.Run("not found when neither hash exists", func() {
+		TruncateAll(ts.db)
+		u := ts.createUser()
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, u.ID, "missing", ConfirmationToken)
+		require.True(ts.T(), IsNotFoundError(err), "expected not found error, got %v", err)
+		require.Nil(ts.T(), ott)
+	})
+
+	ts.Run("does not leak across users on the pkce_ fallback", func() {
+		TruncateAll(ts.db)
+		owner := ts.createUser()
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, owner.ID, owner.GetEmail(), "pkce_hash", ConfirmationToken, time.Minute))
+
+		other, err := NewUser("", "other@example.com", "password", ts.config.JWT.Aud, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.db.Create(other))
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, other.ID, "hash", ConfirmationToken)
+		require.True(ts.T(), IsNotFoundError(err), "expected not found error, got %v", err)
+		require.Nil(ts.T(), ott)
+	})
+
+	ts.Run("token type filter applies to the pkce_ fallback", func() {
+		TruncateAll(ts.db)
+		u := ts.createUser()
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "pkce_hash", RecoveryToken, time.Minute))
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, u.ID, "hash", ConfirmationToken)
+		require.True(ts.T(), IsNotFoundError(err), "expected not found error, got %v", err)
+		require.Nil(ts.T(), ott)
+	})
+}
+
+func (ts *OneTimeTokenTestSuite) TestFindOneTimeTokenByUserID() {
+	u := ts.createUser()
+
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "confirmation-hash", ConfirmationToken, time.Hour))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "recovery-hash", RecoveryToken, time.Hour))
+
+	ts.Run("returns the row for the requested token type", func() {
+		ott, err := FindOneTimeTokenByUserID(ts.db, u.ID, "confirmation-hash", ConfirmationToken)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "confirmation-hash", ott.TokenHash)
+		require.Equal(ts.T(), ConfirmationToken, ott.TokenType)
+	})
+
+	ts.Run("accepts two token types", func() {
+		ott, err := FindOneTimeTokenByUserID(ts.db, u.ID, "recovery-hash", ConfirmationToken, RecoveryToken)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "recovery-hash", ott.TokenHash)
+		require.Equal(ts.T(), RecoveryToken, ott.TokenType)
+	})
+
+	ts.Run("does not leak across token types", func() {
+		ott, err := FindOneTimeTokenByUserID(ts.db, u.ID, "confirmation-hash", RecoveryToken)
+		require.True(ts.T(), IsNotFoundError(err), "expected not found error, got %v", err)
+		require.Nil(ts.T(), ott)
+	})
+
+	ts.Run("wrong hash for the right user is a not found error", func() {
+		ott, err := FindOneTimeTokenByUserID(ts.db, u.ID, "wrong-hash", ConfirmationToken)
+		require.True(ts.T(), IsNotFoundError(err), "expected not found error, got %v", err)
+		require.Nil(ts.T(), ott)
+	})
+
+	ts.Run("does not leak across users", func() {
+		other, err := NewUser("", "other@example.com", "password", ts.config.JWT.Aud, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.db.Create(other))
+
+		// Same hash and type as u's token, different user.
+		ott, err := FindOneTimeTokenByUserID(ts.db, other.ID, "confirmation-hash", ConfirmationToken)
+		require.True(ts.T(), IsNotFoundError(err), "expected not found error, got %v", err)
+		require.Nil(ts.T(), ott)
+	})
+}

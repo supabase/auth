@@ -786,14 +786,15 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 func (a *API) verifyOneTimeToken(conn *storage.Connection, user *models.User, params *VerifyParams) (*models.User, error) {
 	config := a.config
-
+	// Twilio Verify and test OTPs are verified without a local challenge
 	if params.Type == smsVerification || params.Type == phoneChangeVerification {
-		// Test OTPs and Twilio Verify don't have a local challenge to compare against, so we skip the local validation
 		if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok && params.Token == testOTP {
 			return user, nil
 		}
 		if !config.Hook.SendSMS.Enabled && config.Sms.IsTwilioVerifyProvider() {
-			if err := a.verifyOTPWithTwilio(user, params); err != nil {
+			// For a phone change, params.Phone is the persisted phone_change
+			// number, because that is how the user was found.
+			if err := a.verifyOTPWithTwilio(params.Phone, params.Token); err != nil {
 				return nil, err
 			}
 			return user, nil
@@ -802,7 +803,7 @@ func (a *API) verifyOneTimeToken(conn *storage.Connection, user *models.User, pa
 
 	tokenTypes := verifyTypeToTokenTypes(params.Type)
 	if len(tokenTypes) == 0 {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid verification type")
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("unknown verification type")
 	}
 
 	ott, err := models.FindOneTimeTokenWithPKCEFallback(conn, user.ID, params.TokenHash, tokenTypes...)
@@ -829,21 +830,18 @@ func (a *API) verifyOneTimeToken(conn *storage.Connection, user *models.User, pa
 	return user, nil
 }
 
-// check config.Sms.IsTwilioVerifyProvider() before calling this function
-func (a *API) verifyOTPWithTwilio(user *models.User, params *VerifyParams) error {
+// verifyOTPWithTwilio asks Twilio Verify to check the code. Twilio generates
+// and delivers its own code, so there is no local challenge to compare.
+func (a *API) verifyOTPWithTwilio(phone, code string) error {
 	smsProvider, err := sms_provider.GetSmsProvider(*a.config)
 	if err != nil {
 		return apierrors.NewInternalServerError("Failed to get SMS provider").WithInternalError(err)
-	}
-	phone := params.Phone
-	if params.Type == phoneChangeVerification {
-		phone = user.PhoneChange
 	}
 	twilioVerify, ok := smsProvider.(*sms_provider.TwilioVerifyProvider)
 	if !ok {
 		return apierrors.NewInternalServerError("SMS provider is not Twilio Verify")
 	}
-	if err := twilioVerify.VerifyOTP(phone, params.Token); err != nil {
+	if err := twilioVerify.VerifyOTP(phone, code); err != nil {
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
 	}
 	return nil
