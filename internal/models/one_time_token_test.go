@@ -97,3 +97,61 @@ func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenResendReplacesWindow() {
 	require.True(ts.T(), second.ExpiresAt.After(*first.ExpiresAt),
 		"resend must move expires_at forward, first=%s second=%s", first.ExpiresAt, second.ExpiresAt)
 }
+
+func (ts *OneTimeTokenTestSuite) TestFindOneTimeTokenWithPKCEFallback() {
+	ts.Run("exact hash match", func() {
+		TruncateAll(ts.db)
+		u := ts.createUser()
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "hash", ConfirmationToken, time.Minute))
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, "hash", ConfirmationToken)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "hash", ott.TokenHash)
+		require.Equal(ts.T(), u.ID, ott.UserID)
+	})
+
+	ts.Run("falls back to pkce_ prefixed hash", func() {
+		TruncateAll(ts.db)
+		u := ts.createUser()
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "pkce_hash", ConfirmationToken, time.Minute))
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, "hash", ConfirmationToken)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "pkce_hash", ott.TokenHash)
+		require.Equal(ts.T(), u.ID, ott.UserID)
+	})
+
+	ts.Run("prefers exact match over pkce_ prefixed hash", func() {
+		TruncateAll(ts.db)
+		u := ts.createUser()
+
+		// (user_id, token_type) is unique, so the two candidates have to be
+		// different types. Both types are passed so both are eligible.
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "hash", ConfirmationToken, time.Minute))
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "pkce_hash", RecoveryToken, time.Minute))
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, "hash", ConfirmationToken, RecoveryToken)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "hash", ott.TokenHash)
+		require.Equal(ts.T(), ConfirmationToken, ott.TokenType)
+	})
+
+	ts.Run("not found when neither hash exists", func() {
+		TruncateAll(ts.db)
+		ts.createUser()
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, "missing", ConfirmationToken)
+		require.True(ts.T(), IsNotFoundError(err), "expected not found error, got %v", err)
+		require.Nil(ts.T(), ott)
+	})
+
+	ts.Run("token type filter applies to the pkce_ fallback", func() {
+		TruncateAll(ts.db)
+		u := ts.createUser()
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "pkce_hash", RecoveryToken, time.Minute))
+
+		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, "hash", ConfirmationToken)
+		require.True(ts.T(), IsNotFoundError(err), "expected not found error, got %v", err)
+		require.Nil(ts.T(), ott)
+	})
+}
