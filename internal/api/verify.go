@@ -695,43 +695,137 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 	return user, nil
 }
 
-// verifyUserAndToken verifies the token associated to the user based on the verify type
-func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
-	config := a.config
+func (a *API) verifyPhoneWithTwilio(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+	tokenType := models.ConfirmationToken
+	if params.Type == phoneChangeVerification {
+		tokenType = models.PhoneChangeToken
+	}
 
+	ott, err := models.FindOneTimeTokenByRelatesTo(conn, params.Phone, tokenType)
+	if models.IsNotFoundError(err) {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+	} else if err != nil {
+		return nil, apierrors.NewInternalServerError("Database error finding one time token").WithInternalError(err)
+	}
+
+	user, err := models.FindUserByID(conn, ott.UserID)
+	if models.IsNotFoundError(err) {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+	} else if err != nil {
+		return nil, apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
+	}
+
+	pendingPhone := user.GetPhone()
+	if params.Type == phoneChangeVerification {
+		pendingPhone = user.PhoneChange // Should we use GetPhoneChange?
+	}
+	if pendingPhone != params.Phone {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("user phone does not match")
+	}
+	if user.Aud != aud {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("user audience does not match")
+	}
+	if user.IsBanned() {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+	}
+	if err := a.verifyOTPWithTwilio(params.Phone, params.Token); err != nil {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+	}
+	return user, nil
+}
+
+// findUserForTestOTP resolves the user for a phone verification whose code
+// matched a configured test OTP. A test OTP has no local challenge.
+func (a *API) findUserForTestOTP(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
 	var user *models.User
 	var err error
-	tokenHash := params.TokenHash
 
 	switch params.Type {
 	case phoneChangeVerification:
 		user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
 	case smsVerification:
 		user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
-	case mail.EmailChangeVerification:
-		// Since the email change could be trigger via the implicit or PKCE flow,
-		// the query used has to also check if the token saved in the db contains the pkce_ prefix
-		user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
 	default:
-		user, err = models.FindUserByEmailAndAudience(conn, params.Email, aud)
+		// The caller only routes phone types here, so in practice this should never happen.
+		return nil, apierrors.NewInternalServerError("Test OTP lookup called for non-phone verification type %q", params.Type)
 	}
-
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
-		}
+	if models.IsNotFoundError(err) {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+	} else if err != nil {
 		return nil, apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
+	return user, nil
+}
 
-	var isValid bool
+// verifyUserAndToken verifies the token associated to the user based on the verify type
+func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+	config := a.config
 
 	if config.Experimental.EnableOTTAsSourceOfTruth {
-		return a.verifyOneTimeToken(conn, user, params)
+		// Twilio Verify and test OTPs are verified without a local challenge
+		if params.Type == smsVerification || params.Type == phoneChangeVerification {
+			if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok && params.Token == testOTP {
+				return a.findUserForTestOTP(conn, params, aud)
+			}
+			if !config.Hook.SendSMS.Enabled && config.Sms.IsTwilioVerifyProvider() {
+				return a.verifyPhoneWithTwilio(conn, params, aud)
+			}
+		}
+
+		ott, err := a.verifyOneTimeToken(conn, params)
+		if err != nil {
+			return nil, err
+		}
+
+		user, err := models.FindUserByID(conn, ott.UserID)
+		if models.IsNotFoundError(err) {
+			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+		} else if err != nil {
+			return nil, apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
+		}
+
+		if user.Aud != aud {
+			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("user audience does not match")
+		}
+
+		if user.IsBanned() {
+			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+		}
+		return user, nil
 	} else {
+		var user *models.User
+		var err error
+		tokenHash := params.TokenHash
+
+		var isValid bool
+		switch params.Type {
+		case phoneChangeVerification:
+			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
+		case smsVerification:
+			user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
+		case mail.EmailChangeVerification:
+			// Since the email change could be trigger via the implicit or PKCE flow,
+			// the query used has to also check if the token saved in the db contains the pkce_ prefix
+			user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
+		default:
+			user, err = models.FindUserByEmailAndAudience(conn, params.Email, aud)
+		}
+
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+			}
+			return nil, apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
+		}
+
+		if user.IsBanned() {
+			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+		}
+
 		smsProvider, _ := sms_provider.GetSmsProvider(*config)
 		switch params.Type {
 		case mail.EmailOTPVerification:
@@ -780,33 +874,17 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 		if !isValid {
 			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("token has expired or is invalid")
 		}
+		return user, nil
 	}
-	return user, nil
 }
 
-func (a *API) verifyOneTimeToken(conn *storage.Connection, user *models.User, params *VerifyParams) (*models.User, error) {
-	config := a.config
-	// Twilio Verify and test OTPs are verified without a local challenge
-	if params.Type == smsVerification || params.Type == phoneChangeVerification {
-		if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok && params.Token == testOTP {
-			return user, nil
-		}
-		if !config.Hook.SendSMS.Enabled && config.Sms.IsTwilioVerifyProvider() {
-			// For a phone change, params.Phone is the persisted phone_change
-			// number, because that is how the user was found.
-			if err := a.verifyOTPWithTwilio(params.Phone, params.Token); err != nil {
-				return nil, err
-			}
-			return user, nil
-		}
-	}
-
+func (a *API) verifyOneTimeToken(conn *storage.Connection, params *VerifyParams) (*models.OneTimeToken, error) {
 	tokenTypes := verifyTypeToTokenTypes(params.Type)
 	if len(tokenTypes) == 0 {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("unknown verification type")
 	}
 
-	ott, err := models.FindOneTimeTokenWithPKCEFallback(conn, user.ID, params.TokenHash, tokenTypes...)
+	ott, err := models.FindOneTimeTokenWithPKCEFallback(conn, params.TokenHash, tokenTypes...)
 	if models.IsNotFoundError(err) {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("one time token not found")
 	} else if err != nil {
@@ -827,7 +905,7 @@ func (a *API) verifyOneTimeToken(conn *storage.Connection, user *models.User, pa
 		}
 	}
 
-	return user, nil
+	return ott, nil
 }
 
 // verifyOTPWithTwilio asks Twilio Verify to check the code. Twilio generates

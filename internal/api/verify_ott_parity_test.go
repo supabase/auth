@@ -86,7 +86,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 		{
 			desc: "signup with a valid code confirms the user",
 			seed: func(u *models.User) map[string]interface{} {
-				ts.seedChallenge(u, models.ConfirmationToken, emailHash, now, time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, now, time.Hour)
 				return emailOTPBody(mail.SignupVerification, parityEmail)
 			},
 			expected: signedUp,
@@ -94,7 +94,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 		{
 			desc: "signup with an expired code is rejected",
 			seed: func(u *models.User) map[string]interface{} {
-				ts.seedChallenge(u, models.ConfirmationToken, emailHash, expired, -time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, expired, -time.Hour)
 				return emailOTPBody(mail.SignupVerification, parityEmail)
 			},
 			expected: forbidden,
@@ -102,7 +102,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 		{
 			desc: "signup with the wrong code is rejected",
 			seed: func(u *models.User) map[string]interface{} {
-				ts.seedChallenge(u, models.ConfirmationToken, crypto.GenerateTokenHash(parityEmail, "999999"), now, time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, crypto.GenerateTokenHash(parityEmail, "999999"), now, time.Hour)
 				return emailOTPBody(mail.SignupVerification, parityEmail)
 			},
 			expected: forbidden,
@@ -111,7 +111,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 			desc: "invite with a valid code confirms the user",
 			seed: func(u *models.User) map[string]interface{} {
 				u.InvitedAt = &now
-				ts.seedChallenge(u, models.ConfirmationToken, emailHash, now, time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, now, time.Hour)
 				return emailOTPBody(mail.InviteVerification, parityEmail)
 			},
 			expected: signedUp,
@@ -120,7 +120,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 			desc: "magiclink with a valid code signs a confirmed user in",
 			seed: func(u *models.User) map[string]interface{} {
 				u.EmailConfirmedAt = &now
-				ts.seedChallenge(u, models.RecoveryToken, emailHash, now, time.Hour)
+				ts.seedChallenge(u, models.RecoveryToken, parityEmail, emailHash, now, time.Hour)
 				return emailOTPBody(mail.MagicLinkVerification, parityEmail)
 			},
 			expected: loggedIn,
@@ -129,7 +129,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 			desc: "recovery with a valid code signs a confirmed user in",
 			seed: func(u *models.User) map[string]interface{} {
 				u.EmailConfirmedAt = &now
-				ts.seedChallenge(u, models.RecoveryToken, emailHash, now, time.Hour)
+				ts.seedChallenge(u, models.RecoveryToken, parityEmail, emailHash, now, time.Hour)
 				return emailOTPBody(mail.RecoveryVerification, parityEmail)
 			},
 			expected: loggedIn,
@@ -140,7 +140,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 			desc: "magiclink with a pkce_ prefixed stored hash accepts the plain code",
 			seed: func(u *models.User) map[string]interface{} {
 				u.EmailConfirmedAt = &now
-				ts.seedChallenge(u, models.RecoveryToken, PKCEPrefix+emailHash, now, time.Hour)
+				ts.seedChallenge(u, models.RecoveryToken, parityEmail, PKCEPrefix+emailHash, now, time.Hour)
 				return emailOTPBody(mail.MagicLinkVerification, parityEmail)
 			},
 			expected: loggedIn,
@@ -150,7 +150,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 			// stored challenge is a confirmation token.
 			desc: "email type with a confirmation token runs the signup flow",
 			seed: func(u *models.User) map[string]interface{} {
-				ts.seedChallenge(u, models.ConfirmationToken, emailHash, now, time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, now, time.Hour)
 				return emailOTPBody(mail.EmailOTPVerification, parityEmail)
 			},
 			expected: signedUp,
@@ -161,7 +161,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 			desc: "email type with a recovery token runs the magiclink flow",
 			seed: func(u *models.User) map[string]interface{} {
 				u.EmailConfirmedAt = &now
-				ts.seedChallenge(u, models.RecoveryToken, emailHash, now, time.Hour)
+				ts.seedChallenge(u, models.RecoveryToken, parityEmail, emailHash, now, time.Hour)
 				return emailOTPBody(mail.EmailOTPVerification, parityEmail)
 			},
 			expected: loggedIn,
@@ -182,7 +182,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 			},
 			seed: func(u *models.User) map[string]interface{} {
 				u.EmailChange = parityNewEmail
-				ts.seedChallenge(u, models.EmailChangeTokenNew, crypto.GenerateTokenHash(parityNewEmail, parityOTP), now, time.Hour)
+				ts.seedChallenge(u, models.EmailChangeTokenNew, parityNewEmail, crypto.GenerateTokenHash(parityNewEmail, parityOTP), now, time.Hour)
 				return emailOTPBody(mail.EmailChangeVerification, parityNewEmail)
 			},
 			expected: otpParityOutcome{
@@ -198,7 +198,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 			seed: func(u *models.User) map[string]interface{} {
 				bannedUntil := now.Add(time.Hour)
 				u.BannedUntil = &bannedUntil
-				ts.seedChallenge(u, models.ConfirmationToken, emailHash, now, time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, now, time.Hour)
 				return emailOTPBody(mail.SignupVerification, parityEmail)
 			},
 			expected: otpParityOutcome{
@@ -212,7 +212,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityEmailFlows() {
 		{
 			desc: "an unknown verification type is rejected",
 			seed: func(u *models.User) map[string]interface{} {
-				ts.seedChallenge(u, models.ConfirmationToken, emailHash, now, time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, now, time.Hour)
 				return emailOTPBody("bogus", parityEmail)
 			},
 			expected: forbidden,
@@ -250,7 +250,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 		{
 			desc: "sms with a valid code confirms the phone",
 			seed: func(u *models.User) map[string]interface{} {
-				ts.seedChallenge(u, models.ConfirmationToken, phoneHash, now, time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, phoneHash, now, time.Hour)
 				return phoneOTPBody(smsVerification, parityPhone)
 			},
 			expected: phoneSignedUp,
@@ -258,7 +258,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 		{
 			desc: "sms with an expired code is rejected",
 			seed: func(u *models.User) map[string]interface{} {
-				ts.seedChallenge(u, models.ConfirmationToken, phoneHash, expired, -time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, phoneHash, expired, -time.Hour)
 				return phoneOTPBody(smsVerification, parityPhone)
 			},
 			expected: forbidden,
@@ -266,7 +266,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 		{
 			desc: "sms with the wrong code is rejected",
 			seed: func(u *models.User) map[string]interface{} {
-				ts.seedChallenge(u, models.ConfirmationToken, crypto.GenerateTokenHash(parityPhone, "999999"), now, time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, crypto.GenerateTokenHash(parityPhone, "999999"), now, time.Hour)
 				return phoneOTPBody(smsVerification, parityPhone)
 			},
 			expected: forbidden,
@@ -275,7 +275,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 			desc: "phone change with a valid code moves the user to the new number",
 			seed: func(u *models.User) map[string]interface{} {
 				u.PhoneChange = parityNewPhone
-				ts.seedChallenge(u, models.PhoneChangeToken, crypto.GenerateTokenHash(parityNewPhone, parityOTP), now, time.Hour)
+				ts.seedChallenge(u, models.PhoneChangeToken, parityNewPhone, crypto.GenerateTokenHash(parityNewPhone, parityOTP), now, time.Hour)
 				return phoneOTPBody(phoneChangeVerification, parityNewPhone)
 			},
 			expected: phoneChanged,
@@ -311,7 +311,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 				return ts.configureTwilioVerify(map[string]interface{}{"status": "approved", "valid": true})
 			},
 			seed: func(u *models.User) map[string]interface{} {
-				ts.seedChallenge(u, models.ConfirmationToken, crypto.GenerateTokenHash(parityPhone, "999999"), now, time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, crypto.GenerateTokenHash(parityPhone, "999999"), now, time.Hour)
 				return phoneOTPBody(smsVerification, parityPhone)
 			},
 			expected: phoneSignedUp,
@@ -322,7 +322,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 				return ts.configureTwilioVerify(map[string]interface{}{"status": "pending", "valid": false})
 			},
 			seed: func(u *models.User) map[string]interface{} {
-				ts.seedChallenge(u, models.ConfirmationToken, phoneHash, now, time.Hour)
+				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, phoneHash, now, time.Hour)
 				return phoneOTPBody(smsVerification, parityPhone)
 			},
 			expected: forbidden,
@@ -380,9 +380,10 @@ func (ts *VerifyTestSuite) runOTPParityCases(cases []otpParityCase) {
 }
 
 // seedChallenge stores hash in the users column and the one_time_tokens row
-// for tokenType, mirroring what the send paths write. Any other pending
-// change on u is persisted at the same time.
-func (ts *VerifyTestSuite) seedChallenge(u *models.User, tokenType models.OneTimeTokenType, hash string, sentAt time.Time, validity time.Duration) {
+// for tokenType, mirroring what the send paths write. relatesTo is the address
+// or number the code was sent to; the Twilio Verify path finds the row by it.
+// Any other pending change on u is persisted at the same time.
+func (ts *VerifyTestSuite) seedChallenge(u *models.User, tokenType models.OneTimeTokenType, relatesTo, hash string, sentAt time.Time, validity time.Duration) {
 	switch tokenType {
 	case models.ConfirmationToken:
 		u.ConfirmationToken = hash
@@ -401,7 +402,7 @@ func (ts *VerifyTestSuite) seedChallenge(u *models.User, tokenType models.OneTim
 	}
 
 	require.NoError(ts.T(), ts.API.db.Update(u))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, "relates_to not used", hash, tokenType, validity))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, relatesTo, hash, tokenType, validity))
 }
 
 func (ts *VerifyTestSuite) postVerify(body map[string]interface{}) *httptest.ResponseRecorder {

@@ -118,8 +118,9 @@ type OneTimeToken struct {
 	ExpiresAt *time.Time `json:"expires_at" db:"expires_at"`
 }
 
+// IsExpired treats nil ExpiresAt as expired. This is a security measure to avoid accidentally treating a token with no expiration as valid.
 func (o OneTimeToken) IsExpired() bool {
-	return o.ExpiresAt != nil && time.Now().After(*o.ExpiresAt)
+	return o.ExpiresAt == nil || time.Now().After(*o.ExpiresAt)
 }
 
 func (OneTimeToken) TableName() string {
@@ -193,43 +194,31 @@ func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...On
 	return oneTimeToken, nil
 }
 
-// FindOneTimeTokenWithPKCEFallback finds the one time token of the given type that
-// belongs to the user. It returns OneTimeTokenNotFoundError when no row exists.
+// FindOneTimeTokenWithPKCEFallback finds the one time token of the given type by a token hash.
 // If the token is not found, it will try to find a token with the "pkce_" prefix.
-func FindOneTimeTokenWithPKCEFallback(tx *storage.Connection, userID uuid.UUID, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
-	oneTimeToken, err := FindOneTimeTokenByUserID(tx, userID, tokenHash, tokenTypes...)
+// It returns OneTimeTokenNotFoundError when no row exists.
+func FindOneTimeTokenWithPKCEFallback(tx *storage.Connection, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
+	oneTimeToken, err := FindOneTimeToken(tx, tokenHash, tokenTypes...)
 	if IsNotFoundError(err) {
-		oneTimeToken, err = FindOneTimeTokenByUserID(tx, userID, "pkce_"+tokenHash, tokenTypes...)
+		oneTimeToken, err = FindOneTimeToken(tx, "pkce_"+tokenHash, tokenTypes...)
 	}
 	return oneTimeToken, err
 }
 
-// FindOneTimeTokenByUserID finds the one time token of the given type that
-// belongs to the user. It returns OneTimeTokenNotFoundError when no row exists.
-func FindOneTimeTokenByUserID(tx *storage.Connection, userID uuid.UUID, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
+// FindOneTimeTokenByRelatesTo finds the newest one time token of the given token type by the relatesTo field.
+// It returns OneTimeTokenNotFoundError when no row exists.
+func FindOneTimeTokenByRelatesTo(tx *storage.Connection, relatesTo string, tokenType OneTimeTokenType) (*OneTimeToken, error) {
 	oneTimeToken := &OneTimeToken{}
 
-	query := tx.Eager().Q()
-
-	switch len(tokenTypes) {
-	case 2:
-		query = query.Where("(token_type = ? or token_type = ?) and user_id = ? and token_hash = ?", tokenTypes[0], tokenTypes[1], userID, tokenHash) // #nosec G602
-
-	case 1:
-		query = query.Where("token_type = ? and user_id = ? and token_hash = ?", tokenTypes[0], userID, tokenHash)
-
-	default:
-		panic("at most 2 token types are accepted")
-	}
-
-	if err := query.First(oneTimeToken); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, OneTimeTokenNotFoundError{}
-		}
-
+	err := tx.Eager().Q().
+		Where("token_type = ? and relates_to = ?", tokenType, strings.ToLower(relatesTo)).
+		Order("created_at desc").
+		First(oneTimeToken)
+	if errors.Cause(err) == sql.ErrNoRows {
+		return nil, OneTimeTokenNotFoundError{}
+	} else if err != nil {
 		return nil, errors.Wrap(err, "error finding one time token")
 	}
-
 	return oneTimeToken, nil
 }
 
