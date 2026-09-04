@@ -729,55 +729,143 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 	var isValid bool
 
-	smsProvider, _ := sms_provider.GetSmsProvider(*config)
-	switch params.Type {
-	case mail.EmailOTPVerification:
-		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
-		if isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
-			isValid = true
-			params.Type = mail.SignupVerification
-		} else if isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
-			isValid = true
-			params.Type = mail.MagicLinkVerification
-		} else {
-			isValid = false
-		}
-	case mail.SignupVerification, mail.InviteVerification:
-		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
-	case mail.RecoveryVerification, mail.MagicLinkVerification:
-		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
-	case mail.EmailChangeVerification:
-		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
-			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
-	case phoneChangeVerification, smsVerification:
-		if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
-			if params.Token == testOTP {
+	if config.Experimental.EnableOTTAsSourceOfTruth {
+		return a.verifyOneTimeToken(conn, user, params)
+	} else {
+		smsProvider, _ := sms_provider.GetSmsProvider(*config)
+		switch params.Type {
+		case mail.EmailOTPVerification:
+			// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
+			if isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
+				isValid = true
+				params.Type = mail.SignupVerification
+			} else if isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
+				isValid = true
+				params.Type = mail.MagicLinkVerification
+			} else {
+				isValid = false
+			}
+		case mail.SignupVerification, mail.InviteVerification:
+			isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
+		case mail.RecoveryVerification, mail.MagicLinkVerification:
+			isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
+		case mail.EmailChangeVerification:
+			isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
+				isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
+		case phoneChangeVerification, smsVerification:
+			// Check if test OP, if so skip validation and return user
+			if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
+				if params.Token == testOTP {
+					return user, nil
+				}
+			}
+
+			phone := params.Phone
+			sentAt := user.ConfirmationSentAt
+			expectedToken := user.ConfirmationToken
+			if params.Type == phoneChangeVerification {
+				phone = user.PhoneChange
+				sentAt = user.PhoneChangeSentAt
+				expectedToken = user.PhoneChangeToken
+			}
+
+			if !config.Hook.SendSMS.Enabled && config.Sms.IsTwilioVerifyProvider() {
+				if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(phone, params.Token); err != nil {
+					return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+				}
 				return user, nil
 			}
+			isValid = isOtpValid(tokenHash, expectedToken, sentAt, config.Sms.OtpExp)
 		}
-
-		phone := params.Phone
-		sentAt := user.ConfirmationSentAt
-		expectedToken := user.ConfirmationToken
-		if params.Type == phoneChangeVerification {
-			phone = user.PhoneChange
-			sentAt = user.PhoneChangeSentAt
-			expectedToken = user.PhoneChangeToken
+		if !isValid {
+			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("token has expired or is invalid")
 		}
+	}
+	return user, nil
+}
 
+func (a *API) verifyOneTimeToken(conn *storage.Connection, user *models.User, params *VerifyParams) (*models.User, error) {
+	config := a.config
+
+	if params.Type == smsVerification || params.Type == phoneChangeVerification {
+		// Test OTPs and Twilio Verify don't have a local challenge to compare against, so we skip the local validation
+		if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok && params.Token == testOTP {
+			return user, nil
+		}
 		if !config.Hook.SendSMS.Enabled && config.Sms.IsTwilioVerifyProvider() {
-			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(phone, params.Token); err != nil {
-				return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+			if err := a.verifyOTPWithTwilio(user, params); err != nil {
+				return nil, err
 			}
 			return user, nil
 		}
-		isValid = isOtpValid(tokenHash, expectedToken, sentAt, config.Sms.OtpExp)
 	}
 
-	if !isValid {
-		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("token has expired or is invalid")
+	tokenTypes := verifyTypeToTokenTypes(params.Type)
+	if len(tokenTypes) == 0 {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid verification type")
 	}
+
+	ott, err := models.FindOneTimeTokenWithPKCEFallback(conn, user.ID, params.TokenHash, tokenTypes...)
+	if models.IsNotFoundError(err) {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("one time token not found")
+	} else if err != nil {
+		return nil, apierrors.NewInternalServerError("Database error finding one time token").WithInternalError(err)
+	}
+
+	if ott.IsExpired() {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("one time token has expired")
+	}
+
+	// The generic email type needs to match to the flow that issues the token, so the caller runs the right post-verify step
+	if params.Type == mail.EmailOTPVerification {
+		switch ott.TokenType {
+		case models.ConfirmationToken:
+			params.Type = mail.SignupVerification
+		case models.RecoveryToken:
+			params.Type = mail.MagicLinkVerification
+		}
+	}
+
 	return user, nil
+}
+
+// check config.Sms.IsTwilioVerifyProvider() before calling this function
+func (a *API) verifyOTPWithTwilio(user *models.User, params *VerifyParams) error {
+	smsProvider, err := sms_provider.GetSmsProvider(*a.config)
+	if err != nil {
+		return apierrors.NewInternalServerError("Failed to get SMS provider").WithInternalError(err)
+	}
+	phone := params.Phone
+	if params.Type == phoneChangeVerification {
+		phone = user.PhoneChange
+	}
+	twilioVerify, ok := smsProvider.(*sms_provider.TwilioVerifyProvider)
+	if !ok {
+		return apierrors.NewInternalServerError("SMS provider is not Twilio Verify")
+	}
+	if err := twilioVerify.VerifyOTP(phone, params.Token); err != nil {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+	}
+	return nil
+}
+
+func verifyTypeToTokenTypes(verifyType string) []models.OneTimeTokenType {
+	switch verifyType {
+	case mail.EmailOTPVerification:
+		return []models.OneTimeTokenType{models.ConfirmationToken, models.RecoveryToken}
+	case mail.SignupVerification, mail.InviteVerification:
+		return []models.OneTimeTokenType{models.ConfirmationToken}
+	case mail.RecoveryVerification, mail.MagicLinkVerification:
+		return []models.OneTimeTokenType{models.RecoveryToken}
+	case mail.EmailChangeVerification:
+		return []models.OneTimeTokenType{models.EmailChangeTokenCurrent, models.EmailChangeTokenNew}
+	case phoneChangeVerification:
+		return []models.OneTimeTokenType{models.PhoneChangeToken}
+	case smsVerification:
+		return []models.OneTimeTokenType{models.ConfirmationToken}
+	default:
+		return nil
+	}
 }
 
 // isOtpValid checks the actual otp sent against the expected otp and ensures that it's within the valid window

@@ -118,6 +118,10 @@ type OneTimeToken struct {
 	ExpiresAt *time.Time `json:"expires_at" db:"expires_at"`
 }
 
+func (o OneTimeToken) IsExpired() bool {
+	return o.ExpiresAt != nil && time.Now().After(*o.ExpiresAt)
+}
+
 func (OneTimeToken) TableName() string {
 	return "one_time_tokens"
 }
@@ -173,6 +177,46 @@ func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...On
 
 	case 1:
 		query = query.Where("token_type = ? and token_hash = ?", tokenTypes[0], tokenHash)
+
+	default:
+		panic("at most 2 token types are accepted")
+	}
+
+	if err := query.First(oneTimeToken); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, OneTimeTokenNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error finding one time token")
+	}
+
+	return oneTimeToken, nil
+}
+
+// FindOneTimeTokenWithPKCEFallback finds the one time token of the given type that
+// belongs to the user. It returns OneTimeTokenNotFoundError when no row exists.
+// If the token is not found, it will try to find a token with the "pkce_" prefix.
+func FindOneTimeTokenWithPKCEFallback(tx *storage.Connection, userID uuid.UUID, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
+	oneTimeToken, err := FindOneTimeTokenByUserID(tx, userID, tokenHash, tokenTypes...)
+	if IsNotFoundError(err) {
+		oneTimeToken, err = FindOneTimeTokenByUserID(tx, userID, "pkce_"+tokenHash, tokenTypes...)
+	}
+	return oneTimeToken, err
+}
+
+// FindOneTimeTokenByUserID finds the one time token of the given type that
+// belongs to the user. It returns OneTimeTokenNotFoundError when no row exists.
+func FindOneTimeTokenByUserID(tx *storage.Connection, userID uuid.UUID, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
+	oneTimeToken := &OneTimeToken{}
+
+	query := tx.Eager().Q()
+
+	switch len(tokenTypes) {
+	case 2:
+		query = query.Where("(token_type = ? or token_type = ?) and user_id = ? and token_hash = ?", tokenTypes[0], tokenTypes[1], userID, tokenHash) // #nosec G602
+
+	case 1:
+		query = query.Where("token_type = ? and user_id = ? and token_hash = ?", tokenTypes[0], userID, tokenHash)
 
 	default:
 		panic("at most 2 token types are accepted")
