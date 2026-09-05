@@ -174,6 +174,60 @@ func (ts *AdminTestSuite) TestAdminUsers_SortDesc() {
 	assert.Equal(ts.T(), "test1@example.com", data.Users[1].GetEmail())
 }
 
+func (ts *AdminTestSuite) TestAdminUsers_FindByEmail() {
+	u1, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u1))
+
+	u2, err := models.NewUser("87654321", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u2))
+
+	// 1. Exact match test
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/users?email=test1@example.com", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var data struct {
+		Users []*models.User `json:"users"`
+		Aud   string         `json:"aud"`
+	}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.Len(ts.T(), data.Users, 1)
+	assert.Equal(ts.T(), "test1@example.com", data.Users[0].GetEmail())
+
+	// 2. Case-insensitivity test
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/admin/users?email=TeSt2@ExAmPlE.cOm", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var data2 struct {
+		Users []*models.User `json:"users"`
+		Aud   string         `json:"aud"`
+	}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data2))
+	require.Len(ts.T(), data2.Users, 1)
+	assert.Equal(ts.T(), "test2@example.com", data2.Users[0].GetEmail())
+
+	// 3. Not found test
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/admin/users?email=notfound@example.com", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var data3 struct {
+		Users []*models.User `json:"users"`
+		Aud   string         `json:"aud"`
+	}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data3))
+	assert.Empty(ts.T(), data3.Users)
+}
+
 type adminUsersCursorResponse struct {
 	Users      []*models.User            `json:"users"`
 	Aud        string                    `json:"aud"`
