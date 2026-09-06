@@ -482,6 +482,32 @@ func (ts *UserTestSuite) TestConfirmPhoneChange() {
 
 	require.NotNil(ts.T(), identity.IdentityData)
 	require.Equal(ts.T(), identity.IdentityData["phone"], "987654321")
+	require.Equal(ts.T(), true, user.UserMetaData["phone_verified"])
+}
+
+func (ts *UserTestSuite) TestConfirmPhone() {
+	user, err := NewUser("123456789", "", "", "authenticated", map[string]interface{}{
+		"phone_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
+
+	identity, err := NewIdentity(user, "phone", map[string]interface{}{
+		"sub":            user.ID.String(),
+		"phone_verified": false,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
+
+	require.NoError(ts.T(), user.ConfirmPhone(ts.db))
+
+	require.NotNil(ts.T(), user.PhoneConfirmedAt)
+	require.Equal(ts.T(), true, user.UserMetaData["phone_verified"])
+
+	identity, err = FindIdentityByIdAndProvider(ts.db, user.ID.String(), "phone")
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), true, identity.IdentityData["phone_verified"])
+	require.Equal(ts.T(), "123456789", identity.IdentityData["phone"])
 }
 
 func (ts *UserTestSuite) TestUpdateUserEmailSuccess() {
