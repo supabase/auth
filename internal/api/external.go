@@ -52,7 +52,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	inviteToken := query.Get("invite_token")
 	if inviteToken != "" {
-		_, userErr := models.FindUserByConfirmationToken(db, inviteToken)
+		_, userErr := models.FindUserByOneTimeToken(db, inviteToken, models.ConfirmationToken)
 		if userErr != nil {
 			if models.IsNotFoundError(userErr) {
 				return "", apierrors.NewNotFoundError(apierrors.ErrorCodeUserNotFound, "User identified by token not found")
@@ -406,7 +406,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return 0, nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
-	hasEmails := providerType != Web3Provider && !(emailOptional && decision.CandidateEmail.Email == "")
+	hasEmails := providerType != Web3Provider && (!emailOptional || decision.CandidateEmail.Email != "")
 
 	if hasEmails && !user.IsConfirmed() {
 		// The user may have other unconfirmed email + password
@@ -466,7 +466,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
 	config := a.config
 
-	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
+	user, err := models.FindUserByOneTimeToken(tx, inviteToken, models.ConfirmationToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeInviteNotFound, "Invite not found")

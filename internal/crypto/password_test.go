@@ -35,10 +35,18 @@ func TestArgon2(t *testing.T) {
 		"$argon2id$v=19$m=16,t=2,p=1,keyid=abc$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// m larger than 32 bits
 		"$argon2id$v=19$m=4294967297,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		// m exceeds the 1 GiB limit
+		"$argon2id$v=19$m=1048577,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// t larger than 32 bits
 		"$argon2id$v=19$m=16,t=4294967297,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		// t exceeds the limit of 20
+		"$argon2id$v=19$m=16,t=21,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
 		// p larger than 8 bits
 		"$argon2id$v=19$m=16,t=2,p=256$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		// p exceeds the limit of 16
+		"$argon2id$v=19$m=16,t=2,p=17$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		// argon2 prefix but not a well-formed argon2 hash
+		"$argon2id$v=19$m=16,t=2",
 		// salt not Base64
 		"$argon2id$v=19$m=16,t=2,p=1$!!!$NfEnUOuUpb7F2fQkgFUG4g",
 		// hash not Base64

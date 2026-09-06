@@ -36,6 +36,9 @@ func (factorState FactorState) String() string {
 const TOTP = "totp"
 const Phone = "phone"
 const WebAuthn = "webauthn"
+const RecoveryCode = "recovery_code"
+
+const DefaultRecoveryCodeFriendlyName = "Recovery codes"
 
 type AuthenticationMethod int
 
@@ -57,6 +60,7 @@ const (
 	Web3
 	OAuthProviderAuthorizationCode
 	PasskeyLogin
+	MFARecoveryCode
 )
 
 func (authMethod AuthenticationMethod) IsRecovery() bool {
@@ -98,6 +102,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "mfa/phone"
 	case MFAWebAuthn:
 		return "mfa/webauthn"
+	case MFARecoveryCode:
+		return "mfa/recovery_code"
 	case Web3:
 		return "web3"
 	case OAuthProviderAuthorizationCode:
@@ -139,6 +145,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return MFAPhone, nil
 	case "mfa/webauthn":
 		return MFAWebAuthn, nil
+	case "mfa/recovery_code":
+		return MFARecoveryCode, nil
 	case "web3":
 		return Web3, nil
 	case "oauth_provider/authorization_code":
@@ -268,6 +276,16 @@ func NewWebAuthnFactor(user *User, friendlyName string) *Factor {
 	return factor
 }
 
+// NewRecoveryCodeFactor creates a recovery-code factor directly in the verified
+// state: there is no challenge/verify enrollment round-trip, the codes are handed
+// to an already-AAL2 user.
+func NewRecoveryCodeFactor(user *User, friendlyName string) *Factor {
+	if strings.TrimSpace(friendlyName) == "" {
+		friendlyName = DefaultRecoveryCodeFriendlyName
+	}
+	return NewFactor(user, friendlyName, RecoveryCode, FactorStateVerified)
+}
+
 func (f *Factor) SetSecret(secret string, encrypt bool, encryptionKeyID, encryptionKey string) error {
 	f.Secret = secret
 	if encrypt {
@@ -339,6 +357,20 @@ func FindFactorByFactorID(conn *storage.Connection, factorID uuid.UUID) (*Factor
 	return &factor, nil
 }
 
+// FindRecoveryCodeFactorByUser returns the user's recovery-code factor (only one should exist per user).
+func FindRecoveryCodeFactorByUser(conn *storage.Connection, userID uuid.UUID) (*Factor, error) {
+	var factor Factor
+
+	err := conn.Q().Where("user_id = ? AND factor_type = ?", userID, RecoveryCode).First(&factor)
+	if err != nil && errors.Cause(err) == sql.ErrNoRows {
+		return nil, FactorNotFoundError{}
+	} else if err != nil {
+		return nil, err
+	}
+
+	return &factor, nil
+}
+
 func DeleteUnverifiedFactors(tx *storage.Connection, user *User, factorType string) error {
 	if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Factor{}}).TableName()+" WHERE user_id = ? and status = ? and factor_type = ?", user.ID, FactorStateUnverified.String(), factorType).Exec(); err != nil {
 		return err
@@ -407,6 +439,8 @@ func amrMethodForFactorType(factorType string) (string, error) {
 		return MFAPhone.String(), nil
 	case WebAuthn:
 		return MFAWebAuthn.String(), nil
+	case RecoveryCode:
+		return MFARecoveryCode.String(), nil
 	default:
 		return "", fmt.Errorf("no AMR authentication method mapped for factor type %q", factorType)
 	}
@@ -439,6 +473,10 @@ func (f *Factor) IsUnverified() bool {
 
 func (f *Factor) IsPhoneFactor() bool {
 	return f.FactorType == Phone
+}
+
+func (f *Factor) IsRecoveryCodeFactor() bool {
+	return f.FactorType == RecoveryCode
 }
 
 func (f *Factor) FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {

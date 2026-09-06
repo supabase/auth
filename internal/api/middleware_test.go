@@ -947,4 +947,31 @@ func (ts *MiddlewareTestSuite) TestRequireAdminCredentialsSessionCheck() {
 		_, err := ts.API.requireAdminCredentials(httptest.NewRecorder(), newRequest(token))
 		require.NoError(ts.T(), err)
 	})
+
+	ts.Run("admin token for a banned user is rejected", func() {
+		// Separate user so banning doesn't affect the other subtests.
+		bannedUser, err := models.NewUser("", "banned-admin@example.com", "password", ts.Config.JWT.Aud, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.API.db.Create(bannedUser))
+		require.NoError(ts.T(), bannedUser.Ban(ts.API.db, time.Hour))
+
+		bannedSession, err := models.NewSession(bannedUser.ID, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.API.db.Create(bannedSession))
+
+		token := signClaims(&AccessTokenClaims{
+			Role:      "supabase_admin",
+			SessionId: bannedSession.ID.String(),
+			RegisteredClaims: jwt.RegisteredClaims{
+				Subject:   bannedUser.ID.String(),
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			},
+		})
+
+		_, err = ts.API.requireAdminCredentials(httptest.NewRecorder(), newRequest(token))
+		require.Error(ts.T(), err)
+		httpErr, ok := err.(*HTTPError)
+		require.True(ts.T(), ok, "expected HTTPError, got %T", err)
+		require.Equal(ts.T(), apierrors.ErrorCodeUserBanned, httpErr.ErrorCode)
+	})
 }

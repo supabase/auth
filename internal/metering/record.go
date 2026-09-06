@@ -35,9 +35,10 @@ const (
 	ProviderPhone = "phone"
 
 	// MFA providers
-	ProviderMFATOTP     = "totp"
-	ProviderMFAPhone    = "phone"
-	ProviderMFAWebAuthn = "webauthn"
+	ProviderMFATOTP         = "totp"
+	ProviderMFAPhone        = "phone"
+	ProviderMFAWebAuthn     = "webauthn"
+	ProviderMFARecoveryCode = "recovery_code"
 
 	// SSO providers
 	ProviderSAML = "saml"

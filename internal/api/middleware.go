@@ -208,6 +208,11 @@ func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) 
 
 		session := getSession(ctx)
 		user := getUser(ctx)
+
+		if user != nil && user.IsBanned() {
+			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+		}
+
 		if session != nil && user != nil {
 			validity := session.CheckValidity(models.SessionValidityConfig{
 				Timebox:           a.config.Sessions.Timebox,

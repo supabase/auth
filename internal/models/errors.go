@@ -192,3 +192,22 @@ func (e WebAuthnChallengeNotFoundError) Error() string {
 func (e WebAuthnChallengeNotFoundError) Is(target error) bool {
 	return target == errNotFound
 }
+
+// RecoveryCodeSetNotFoundError represents when a recovery code set is not found.
+type RecoveryCodeSetNotFoundError struct{}
+
+func (e RecoveryCodeSetNotFoundError) Error() string {
+	return "Recovery code set not found"
+}
+
+func (e RecoveryCodeSetNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
+
+// RecoveryCodeAlreadyConsumedError is returned by MarkConsumed when the code
+// row was already consumed or deleted.
+type RecoveryCodeAlreadyConsumedError struct{}
+
+func (e RecoveryCodeAlreadyConsumedError) Error() string {
+	return "Recovery code already consumed"
+}
