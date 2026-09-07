@@ -2,9 +2,12 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/gofrs/uuid"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/crypto"
@@ -314,13 +317,22 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 	}
 
 	err = tx.Transaction(func(tx *storage.Connection) error {
-		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
-			return terr
-		}
-
+		// Lock the session before inserting AMR claims so a concurrent MFA
+		// verify that invalidates aal1 sessions cannot delete this session
+		// between the claim insert and the existence check (FK 23503 / 500).
 		session, terr := models.FindSessionByID(tx, sessionId, true)
 		if terr != nil {
-			return terr
+			return mapMFASessionConflictError(terr)
+		}
+
+		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
+			return mapMFASessionConflictError(terr)
+		}
+
+		// Reload so CalculateAALAndAMR sees the claim inserted above.
+		session, terr = models.FindSessionByID(tx, sessionId, false)
+		if terr != nil {
+			return mapMFASessionConflictError(terr)
 		}
 
 		if err := tx.Load(user, "Identities"); err != nil {
@@ -403,4 +415,22 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		RefreshToken: issuedRefreshToken,
 		User:         user,
 	}, nil
+}
+
+// mapMFASessionConflictError turns concurrent MFA verify races into client
+// errors instead of 500s. A peer verify may delete this aal1 session
+// (InvalidateSessionsWithAALLessThan) while claims are being written, which
+// surfaces as session-not-found, FK violation (23503), or deadlock (40P01).
+func mapMFASessionConflictError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if models.IsNotFoundError(err) {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(err)
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.ForeignKeyViolation || pgErr.Code == pgerrcode.DeadlockDetected) {
+		return apierrors.NewConflictError("Session conflict during MFA verification").WithInternalError(err)
+	}
+	return err
 }

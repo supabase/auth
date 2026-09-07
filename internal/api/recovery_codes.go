@@ -428,6 +428,9 @@ func (a *API) RecoveryCodesVerify(w http.ResponseWriter, r *http.Request) error 
 		}
 
 		if terr := models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
+			if mapped := mapMFASessionConflictError(terr); mapped != terr {
+				return mapped
+			}
 			return apierrors.NewInternalServerError("Failed to update sessions. %s", terr)
 		}
 
