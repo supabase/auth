@@ -44,7 +44,7 @@ func genPhone() string {
 	sb.WriteString("1")
 	for range 9 {
 		// #nosec G404
-		sb.WriteString(fmt.Sprintf("%d", rand.Intn(9)))
+		fmt.Fprintf(&sb, "%d", rand.Intn(9))
 	}
 	phone := sb.String()
 	return phone

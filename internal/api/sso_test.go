@@ -703,9 +703,10 @@ func (ts *SSOTestSuite) TestSingleSignOn() {
 
 		locationURLString := ""
 
-		if example.Code == http.StatusSeeOther {
+		switch example.Code {
+		case http.StatusSeeOther:
 			locationURLString = w.Header().Get("Location")
-		} else if example.Code == http.StatusOK {
+		case http.StatusOK:
 			var response struct {
 				URL string `json:"url"`
 			}
@@ -715,7 +716,7 @@ func (ts *SSOTestSuite) TestSingleSignOn() {
 			require.NotEmpty(ts.T(), response.URL)
 
 			locationURLString = response.URL
-		} else {
+		default:
 			continue
 		}
 

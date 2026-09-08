@@ -752,9 +752,10 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 			var buffer bytes.Buffer
 			// since the test user is the same, the tokens are being cleared after each successful verification attempt
 			// so we create them on each run
-			if c.payload.Type == "signup" {
+			switch c.payload.Type {
+			case "signup":
 				require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), c.payload.Token, models.ConfirmationToken, ts.Config.Mailer.OtpExpAsDuration()))
-			} else if c.payload.Type == "magiclink" {
+			case "magiclink":
 				require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), c.payload.Token, models.RecoveryToken, ts.Config.Mailer.OtpExpAsDuration()))
 			}
 
@@ -1035,10 +1036,10 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			u.EmailChangeSentAt = &c.sentTime
 			u.PhoneChangeSentAt = &c.sentTime
 
-			u.ConfirmationToken = c.expected.tokenHash
-			u.RecoveryToken = c.expected.tokenHash
-			u.EmailChangeTokenNew = c.expected.tokenHash
-			u.PhoneChangeToken = c.expected.tokenHash
+			u.ConfirmationToken = c.tokenHash
+			u.RecoveryToken = c.tokenHash
+			u.EmailChangeTokenNew = c.tokenHash
+			u.PhoneChangeToken = c.tokenHash
 
 			require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, "relates_to not used", u.ConfirmationToken, models.ConfirmationToken, ts.Config.Mailer.OtpExpAsDuration()))
 			require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, "relates_to not used", u.RecoveryToken, models.RecoveryToken, ts.Config.Mailer.OtpExpAsDuration()))
@@ -1057,7 +1058,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			// Setup response recorder
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			assert.Equal(ts.T(), c.expected.code, w.Code)
+			assert.Equal(ts.T(), c.code, w.Code)
 		})
 	}
 }

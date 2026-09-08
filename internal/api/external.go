@@ -406,7 +406,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return 0, nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
-	hasEmails := providerType != Web3Provider && !(emailOptional && decision.CandidateEmail.Email == "")
+	hasEmails := providerType != Web3Provider && (!emailOptional || decision.CandidateEmail.Email != "")
 
 	if hasEmails && !user.IsConfirmed() {
 		// The user may have other unconfirmed email + password

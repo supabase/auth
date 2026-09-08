@@ -253,7 +253,8 @@ func TestNewCustomOIDCProvider(t *testing.T) {
 	// Mock OIDC provider server
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/openid-configuration" {
+		switch r.URL.Path {
+		case "/.well-known/openid-configuration":
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"issuer":                 server.URL,
@@ -262,7 +263,7 @@ func TestNewCustomOIDCProvider(t *testing.T) {
 				"userinfo_endpoint":      server.URL + "/userinfo",
 				"jwks_uri":               server.URL + "/jwks",
 			})
-		} else if r.URL.Path == "/jwks" {
+		case "/jwks":
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"keys": []interface{}{},
@@ -385,7 +386,8 @@ func TestCustomOIDCProvider_AuthCodeURL(t *testing.T) {
 	// Mock OIDC provider server
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/openid-configuration" {
+		switch r.URL.Path {
+		case "/.well-known/openid-configuration":
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"issuer":                 server.URL,
@@ -393,7 +395,7 @@ func TestCustomOIDCProvider_AuthCodeURL(t *testing.T) {
 				"token_endpoint":         server.URL + "/token",
 				"jwks_uri":               server.URL + "/jwks",
 			})
-		} else if r.URL.Path == "/jwks" {
+		case "/jwks":
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"keys": []interface{}{},
@@ -487,7 +489,8 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 	// Mock OIDC provider server
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/openid-configuration" {
+		switch r.URL.Path {
+		case "/.well-known/openid-configuration":
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"issuer":                 server.URL,
@@ -495,7 +498,7 @@ func TestCustomOIDCProvider_RequiresPKCE(t *testing.T) {
 				"token_endpoint":         server.URL + "/token",
 				"jwks_uri":               server.URL + "/jwks",
 			})
-		} else if r.URL.Path == "/jwks" {
+		case "/jwks":
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"keys": []interface{}{},
