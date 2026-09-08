@@ -531,6 +531,19 @@ func (ts *SSOTestSuite) TestFindSSOProviderBySCIMToken() {
 		require.Nil(ts.T(), got)
 	})
 
+	ts.Run("rejects a bogus token even when a live token has a future expiry", func() {
+		provider := newProvider()
+
+		token, _ := NewSCIMToken(provider)
+		expiresAt := time.Now().Add(1 * time.Hour)
+		token.ExpiresAt = &expiresAt
+		require.NoError(ts.T(), ts.db.Create(token))
+
+		got, err := FindSSOProviderBySCIMToken(ts.db, "scim_bogusbogusbogusbogusbogusbog")
+		require.ErrorIs(ts.T(), err, SSOProviderNotFoundError{})
+		require.Nil(ts.T(), got)
+	})
+
 	ts.Run("ignores tokens for disabled providers", func() {
 		disabled := true
 		provider := newProvider()

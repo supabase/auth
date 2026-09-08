@@ -227,7 +227,7 @@ func FindSSOProviderBySCIMToken(tx *storage.Connection, raw string) (*SSOProvide
 	err := tx.Eager().Q().
 		Where("token_hash = ?", ToSCIMHash(raw)).
 		Where("revoked_at IS NULL").
-		Where("expires_at IS NULL OR expires_at > now()").
+		Where("(expires_at IS NULL OR expires_at > now())").
 		First(&token)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
