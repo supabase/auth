@@ -8,6 +8,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestNewSCIMTokenPrefix(t *testing.T) {
+	token, plaintext := NewSCIMToken(&SSOProvider{})
+
+	t.Run("stores only a short leading identifier", func(t *testing.T) {
+		assert.Equal(t, plaintext[:8], token.Prefix)
+	})
+
+	t.Run("never persists the secret body in the prefix", func(t *testing.T) {
+		secret := plaintext[len(SCIMTokenPrefix):]
+		assert.NotContains(t, secret, token.Prefix)
+	})
+}
+
 func TestNewSCIMBearerToken(t *testing.T) {
 	token, digest := NewSCIMBearerToken()
 

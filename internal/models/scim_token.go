@@ -38,7 +38,7 @@ func NewSCIMToken(provider *SSOProvider) (*SCIMToken, string) {
 		SSOProviderID: provider.ID,
 		SSOProvider:   provider,
 		TokenHash:     digest,
-		Prefix:        token[8:],
+		Prefix:        token[:8],
 	}, token
 }
 
