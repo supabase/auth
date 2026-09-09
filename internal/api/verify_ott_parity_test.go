@@ -500,3 +500,71 @@ func phoneOTPBody(verifyType, phone string) map[string]interface{} {
 		"phone": phone,
 	}
 }
+
+// TestVerifyOTPParityIdentifierBinding covers the guarantee that the
+// identifier in the request is the one the challenge was issued for. Legacy
+// gets this from its identifier-keyed user lookups: the email or phone in the
+// body is the lookup key, so a mismatch is a not-found. The one_time_tokens
+// path finds the user by token hash, so it has to check the binding itself.
+// Every case here is rejected by legacy; the one_time_tokens path must agree.
+func (ts *VerifyTestSuite) TestVerifyOTPParityIdentifierBinding() {
+	now := time.Now()
+	emailHash := crypto.GenerateTokenHash(parityEmail, parityOTP)
+	phoneHash := crypto.GenerateTokenHash(parityPhone, parityOTP)
+
+	forbidden := otpParityOutcome{
+		Status:    http.StatusForbidden,
+		ErrorCode: apierrors.ErrorCodeOTPExpired,
+		Msg:       parityForbidden,
+		Email:     parityEmail,
+		Phone:     parityPhone,
+	}
+
+	cases := []otpParityCase{
+		{
+			// The client owns the phone and has an unconfirmed email on the
+			// same account. Presenting the SMS code as an email signup must
+			// not confirm the email, because no email was ever delivered.
+			desc: "a phone code posted as signup does not confirm the email",
+			seed: func(u *models.User) map[string]interface{} {
+				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, phoneHash, now, time.Hour)
+				return phoneOTPBody(mail.SignupVerification, parityPhone)
+			},
+			expected: forbidden,
+		},
+		{
+			// supabase-js sends the generic "email" type for every email OTP.
+			// The generic type must not let a phone code through either.
+			desc: "a phone code posted as the generic email type does not confirm the email",
+			seed: func(u *models.User) map[string]interface{} {
+				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, phoneHash, now, time.Hour)
+				return phoneOTPBody(mail.EmailOTPVerification, parityPhone)
+			},
+			expected: forbidden,
+		},
+		{
+			// The mirror image: an email confirmation code presented as an
+			// SMS code must not confirm the phone.
+			desc: "an email code posted as sms does not confirm the phone",
+			seed: func(u *models.User) map[string]interface{} {
+				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, now, time.Hour)
+				return emailOTPBody(smsVerification, parityEmail)
+			},
+			expected: forbidden,
+		},
+		{
+			// Every legacy user lookup filters is_sso_user = false, so an
+			// SSO-managed account can never be signed in with a typed OTP.
+			// A challenge row for one must not change that.
+			desc: "an SSO user cannot verify a typed OTP",
+			seed: func(u *models.User) map[string]interface{} {
+				u.IsSSOUser = true
+				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, now, time.Hour)
+				return emailOTPBody(mail.SignupVerification, parityEmail)
+			},
+			expected: forbidden,
+		},
+	}
+
+	ts.runOTPParityCases(cases)
+}

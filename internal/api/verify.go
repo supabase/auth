@@ -723,8 +723,8 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 			return nil, apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 		}
 
-		if user.Aud != aud {
-			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("user audience does not match")
+		if err := validateUserForOTT(params, ott, user, aud); err != nil {
+			return nil, err
 		}
 
 		if user.IsBanned() {
@@ -943,6 +943,45 @@ func verifyTypeToTokenTypes(verifyType string) []models.OneTimeTokenType {
 	default:
 		return nil
 	}
+}
+
+// validateUserForOTT checks that the user found from a one_time_tokens row is
+// the one the request is entitled to act on. The legacy path gets these
+// guarantees for free from its identifier-keyed lookups (which also filter on
+// aud and is_sso_user), so a mismatch there is a not-found. The one_time_tokens
+// path finds the user by token hash, so it has to check the binding itself.
+func validateUserForOTT(params *VerifyParams, ott *models.OneTimeToken, user *models.User, aud string) error {
+	mismatch := apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid")
+
+	if user.IsSSOUser {
+		return mismatch.WithInternalMessage("SSO users cannot be verified with one time tokens")
+	}
+
+	if user.Aud != aud {
+		return mismatch.WithInternalMessage("user audience does not match")
+	}
+
+	// Pick the identifier on the user record that this verify type is bound to,
+	// then compare it against the identifier in the request.
+	var expected, actual, field string
+	switch params.Type {
+	case smsVerification:
+		expected, actual, field = user.GetPhone(), params.Phone, "phone"
+	case phoneChangeVerification:
+		expected, actual, field = user.PhoneChange, params.Phone, "phone"
+	case mail.EmailChangeVerification:
+		expected, actual, field = user.EmailChange, params.Email, "email"
+		if ott.TokenType == models.EmailChangeTokenCurrent {
+			expected = user.GetEmail()
+		}
+	default: // Signup, Invite, Recovery, MagicLink
+		expected, actual, field = user.GetEmail(), params.Email, "email"
+	}
+
+	if actual == "" || !strings.EqualFold(expected, actual) {
+		return mismatch.WithInternalMessage("user %s does not match", field)
+	}
+	return nil
 }
 
 // isOtpValid checks the actual otp sent against the expected otp and ensures that it's within the valid window
