@@ -165,30 +165,7 @@ func CreateOneTimeToken(
 }
 
 func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
-	oneTimeToken := &OneTimeToken{}
-
-	query := tx.Eager().Q()
-
-	switch len(tokenTypes) {
-	case 2:
-		query = query.Where("(token_type = ? or token_type = ?) and token_hash = ?", tokenTypes[0], tokenTypes[1], tokenHash) // #nosec G602
-
-	case 1:
-		query = query.Where("token_type = ? and token_hash = ?", tokenTypes[0], tokenHash)
-
-	default:
-		panic("at most 2 token types are accepted")
-	}
-
-	if err := query.First(oneTimeToken); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, OneTimeTokenNotFoundError{}
-		}
-
-		return nil, errors.Wrap(err, "error finding one time token")
-	}
-
-	return oneTimeToken, nil
+	return findOneTimeToken(tx, tokenHash, false, tokenTypes...)
 }
 
 // FindOneTimeTokenWithPKCEFallback finds the one time token of the given
@@ -196,24 +173,39 @@ func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...On
 // in a single query. An exact match is preferred over a prefixed one.
 // It returns OneTimeTokenNotFoundError when no row exists.
 func FindOneTimeTokenWithPKCEFallback(tx *storage.Connection, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
-	oneTimeToken := &OneTimeToken{}
-	pkceTokenHash := PKCEPrefix + tokenHash
+	return findOneTimeToken(tx, tokenHash, true, tokenTypes...)
+}
 
-	query := tx.Q()
+// findOneTimeToken finds the one time token of the given types by tokenHash.
+// With pkceFallback it also accepts PKCEPrefix+tokenHash and prefers the
+// exact match. It returns OneTimeTokenNotFoundError when no row exists.
+func findOneTimeToken(tx *storage.Connection, tokenHash string, pkceFallback bool, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
+	oneTimeToken := &OneTimeToken{}
+
+	query := tx.Eager().Q()
+
+	hashClause, hashArgs := "token_hash = ?", []interface{}{tokenHash}
+	if pkceFallback {
+		hashClause, hashArgs = "token_hash in (?, ?)", []interface{}{tokenHash, PKCEPrefix + tokenHash}
+	}
 
 	switch len(tokenTypes) {
 	case 2:
-		query = query.Where("(token_type = ? or token_type = ?) and token_hash in (?, ?)", tokenTypes[0], tokenTypes[1], tokenHash, pkceTokenHash) // #nosec G602
+		args := append([]interface{}{tokenTypes[0], tokenTypes[1]}, hashArgs...) // #nosec G602
+		query = query.Where("(token_type = ? or token_type = ?) and "+hashClause, args...)
 
 	case 1:
-		query = query.Where("token_type = ? and token_hash in (?, ?)", tokenTypes[0], tokenHash, pkceTokenHash)
+		args := append([]interface{}{tokenTypes[0]}, hashArgs...)
+		query = query.Where("token_type = ? and "+hashClause, args...)
 
 	default:
 		panic("at most 2 token types are accepted")
 	}
 
-	// true sorts before false in descending order, so an exact match wins
-	query = query.Order("token_hash = ? desc", tokenHash)
+	if pkceFallback {
+		// true sorts before false in descending order, so this allows us to prefer an exact match
+		query = query.Order("token_hash = ? desc", tokenHash)
+	}
 
 	if err := query.First(oneTimeToken); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
