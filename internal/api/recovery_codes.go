@@ -116,7 +116,7 @@ func (a *API) RecoveryCodesGenerate(w http.ResponseWriter, r *http.Request) erro
 		}
 	}
 
-	if !session.IsAAL2() {
+	if session == nil || !session.IsAAL2() {
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeInsufficientAAL, "AAL2 required to generate recovery codes")
 	}
 
@@ -201,7 +201,7 @@ func (a *API) RecoveryCodesRegenerate(w http.ResponseWriter, r *http.Request) er
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFARecoveryCodesEnrollDisabled, "MFA enroll is disabled for recovery codes")
 	}
 
-	if !session.IsAAL2() {
+	if session == nil || !session.IsAAL2() {
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeInsufficientAAL, "AAL2 required to regenerate recovery codes")
 	}
 
