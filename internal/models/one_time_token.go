@@ -92,6 +92,8 @@ func (t *OneTimeTokenType) Scan(src interface{}) error {
 	return nil
 }
 
+const PKCEPrefix = "pkce_"
+
 type OneTimeTokenNotFoundError struct {
 }
 
@@ -195,7 +197,7 @@ func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...On
 // It returns OneTimeTokenNotFoundError when no row exists.
 func FindOneTimeTokenWithPKCEFallback(tx *storage.Connection, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
 	oneTimeToken := &OneTimeToken{}
-	pkceTokenHash := "pkce_" + tokenHash
+	pkceTokenHash := PKCEPrefix + tokenHash
 
 	query := tx.Q()
 
@@ -267,7 +269,7 @@ func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, toke
 	}
 
 	if ott == nil {
-		ott, err = FindOneTimeToken(tx, "pkce_"+token, EmailChangeTokenCurrent)
+		ott, err = FindOneTimeToken(tx, PKCEPrefix+token, EmailChangeTokenCurrent)
 		if err != nil {
 			return nil, err
 		}
@@ -296,7 +298,7 @@ func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, a
 	}
 
 	if ott == nil {
-		ott, err = FindOneTimeToken(tx, "pkce_"+token, EmailChangeTokenNew)
+		ott, err = FindOneTimeToken(tx, PKCEPrefix+token, EmailChangeTokenNew)
 		if err != nil && !IsNotFoundError(err) {
 			return nil, err
 		}
