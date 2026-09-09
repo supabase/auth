@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gofrs/uuid"
@@ -321,6 +322,41 @@ func assertValidOAuthState(ts *ExternalTestSuite, state string, expectedProvider
 	flowState, err := models.FindFlowStateByID(ts.API.db, stateUUID.String())
 	require.NoError(ts.T(), err, "flow state should exist in database")
 	ts.Equal(expectedProvider, flowState.ProviderType, "flow state provider should match")
+}
+
+// after-user-created must fire once when the external identity creates an
+// account, and not again when the same user signs in later.
+func (ts *ExternalTestSuite) TestExternalCallbackAfterUserCreatedHookOnlyOnSignup() {
+	code := "authcode"
+	emails := `[{"email":"github-after-hook@example.com", "primary": true, "verified": true}]`
+	tokenCount, userCount := 0, 0
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	var hookCalls int32
+	hookServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hookCalls, 1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, "{}")
+	}))
+	defer hookServer.Close()
+
+	originalHook := ts.Config.Hook.AfterUserCreated
+	ts.Config.Hook.AfterUserCreated = conf.ExtensibilityPointConfiguration{
+		Enabled: true,
+		URI:     hookServer.URL,
+	}
+	defer func() { ts.Config.Hook.AfterUserCreated = originalHook }()
+
+	// First sign-in creates the account -> hook fires once.
+	performAuthorization(ts, "github", code, "")
+	require.Equal(ts.T(), int32(1), atomic.LoadInt32(&hookCalls),
+		"after-user-created hook should fire once when the account is created")
+
+	// Second sign-in with the same identity is a returning-user login -> hook must not fire again.
+	performAuthorization(ts, "github", code, "")
+	require.Equal(ts.T(), int32(1), atomic.LoadInt32(&hookCalls),
+		"after-user-created hook must not fire on subsequent external sign-ins")
 }
 
 // TestSignupExternalUnsupported tests API /authorize for an unsupported external provider
