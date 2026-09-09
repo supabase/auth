@@ -961,25 +961,27 @@ func validateUserForOTT(params *VerifyParams, ott *models.OneTimeToken, user *mo
 		return mismatch.WithInternalMessage("user audience does not match")
 	}
 
-	// Pick the identifier on the user record that this verify type is bound to,
-	// then compare it against the identifier in the request.
-	var expected, actual, field string
 	switch params.Type {
 	case smsVerification:
-		expected, actual, field = user.GetPhone(), params.Phone, "phone"
+		if params.Phone == "" || user.GetPhone() != params.Phone {
+			return mismatch.WithInternalMessage("user phone does not match")
+		}
 	case phoneChangeVerification:
-		expected, actual, field = user.PhoneChange, params.Phone, "phone"
+		if params.Phone == "" || user.PhoneChange != params.Phone {
+			return mismatch.WithInternalMessage("user phone does not match")
+		}
 	case mail.EmailChangeVerification:
-		expected, actual, field = user.EmailChange, params.Email, "email"
+		expected := user.EmailChange
 		if ott.TokenType == models.EmailChangeTokenCurrent {
 			expected = user.GetEmail()
 		}
+		if params.Email == "" || !strings.EqualFold(expected, params.Email) {
+			return mismatch.WithInternalMessage("user email does not match")
+		}
 	default: // Signup, Invite, Recovery, MagicLink
-		expected, actual, field = user.GetEmail(), params.Email, "email"
-	}
-
-	if actual == "" || !strings.EqualFold(expected, actual) {
-		return mismatch.WithInternalMessage("user %s does not match", field)
+		if params.Email == "" || !strings.EqualFold(user.GetEmail(), params.Email) {
+			return mismatch.WithInternalMessage("user email does not match")
+		}
 	}
 	return nil
 }
