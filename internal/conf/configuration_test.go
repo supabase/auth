@@ -790,6 +790,42 @@ func TestMethods(t *testing.T) {
 	}
 
 	{
+		val := &MailerConfiguration{}
+
+		// invalid otp (TestOTP map == nil)
+		got, ok := val.GetTestOTP("test@example.com", now)
+		require.False(t, ok)
+		require.Equal(t, "", got)
+
+		// valid
+		val.TestOTP = map[string]string{"test@example.com": "123456"}
+		got, ok = val.GetTestOTP("test@example.com", now)
+		require.True(t, ok)
+		require.Equal(t, "123456", got)
+
+		// valid: lookups are case-insensitive and ignore surrounding whitespace
+		got, ok = val.GetTestOTP(" Test@Example.COM ", now)
+		require.True(t, ok)
+		require.Equal(t, "123456", got)
+
+		// invalid otp (not in non-nil TestOTP map)
+		got, ok = val.GetTestOTP("other@example.com", now)
+		require.False(t, ok)
+		require.Equal(t, "", got)
+
+		// valid otp with non-zero time
+		val.TestOTPValidUntil = Time{Time: now.Add(time.Second)}
+		got, ok = val.GetTestOTP("test@example.com", now)
+		require.True(t, ok)
+		require.Equal(t, "123456", got)
+
+		// invalid otp (expired)
+		got, ok = val.GetTestOTP("test@example.com", now.Add(time.Second*2))
+		require.False(t, ok)
+		require.Equal(t, "", got)
+	}
+
+	{
 		val := &OAuthProviderConfiguration{}
 
 		err := val.ValidateOAuth()
@@ -945,6 +981,19 @@ func TestMethods(t *testing.T) {
 		}
 		err := val.ApplyDefaults()
 		require.NoError(t, err)
+	}
+	{
+		val := &GlobalConfiguration{
+			JWT: JWTConfiguration{
+				Secret: "a",
+			},
+			Mailer: MailerConfiguration{
+				TestOTP: map[string]string{" Test@Example.com ": "123456"},
+			},
+		}
+		err := val.ApplyDefaults()
+		require.NoError(t, err)
+		require.Equal(t, map[string]string{"test@example.com": "123456"}, val.Mailer.TestOTP)
 	}
 	{
 		val := &GlobalConfiguration{

@@ -664,6 +664,12 @@ type MailerConfiguration struct {
 	OtpExp    uint `json:"otp_exp" split_words:"true"`
 	OtpLength int  `json:"otp_length" split_words:"true"`
 
+	// TestOTP maps an email address (lowercase) to a fixed OTP. Requests for
+	// these addresses use the fixed code and no email is sent. Only the magic
+	// link and signup confirmation flows honor test OTPs.
+	TestOTP           map[string]string `json:"test_otp" split_words:"true"`
+	TestOTPValidUntil Time              `json:"test_otp_valid_until" split_words:"true"`
+
 	ExternalHosts []string `json:"external_hosts" split_words:"true"`
 
 	// EXPERIMENTAL: All config below here may be removed in a future release.
@@ -699,6 +705,17 @@ func (c *MailerConfiguration) Validate() error {
 	c.serviceHeadersVal = c.buildServiceHeaders()
 	c.blockedMXRecordsVal = c.buildBlockedMXRecords()
 	return nil
+}
+
+// GetTestOTP returns the configured test OTP for the given email address, if
+// one exists and the test OTP configuration has not expired.
+func (c *MailerConfiguration) GetTestOTP(email string, now time.Time) (string, bool) {
+	if c.TestOTP != nil && (c.TestOTPValidUntil.IsZero() || now.Before(c.TestOTPValidUntil.Time)) {
+		testOTP, ok := c.TestOTP[strings.ToLower(strings.TrimSpace(email))]
+		return testOTP, ok
+	}
+
+	return "", false
 }
 
 func (c *MailerConfiguration) GetEmailValidationServiceHeaders() map[string][]string {
@@ -1206,6 +1223,14 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.Mailer.OtpLength == 0 || config.Mailer.OtpLength < 6 || config.Mailer.OtpLength > 10 {
 		// 6-digit otp by default
 		config.Mailer.OtpLength = 6
+	}
+
+	if config.Mailer.TestOTP != nil {
+		formatTestOtps := make(map[string]string)
+		for email, otp := range config.Mailer.TestOTP {
+			formatTestOtps[strings.ToLower(strings.TrimSpace(email))] = otp
+		}
+		config.Mailer.TestOTP = formatTestOtps
 	}
 
 	if config.SMTP.MaxFrequency == 0 {
