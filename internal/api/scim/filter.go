@@ -2,7 +2,9 @@ package scim
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -19,6 +21,10 @@ var filterColumns = map[string]string{
 
 var loweredColumns = map[string]bool{
 	"user_name": true,
+}
+
+var uuidColumns = map[string]bool{
+	"id": true,
 }
 
 var comparators = map[filter.Operator]string{
@@ -52,6 +58,16 @@ func (f *sqlEvaluator) Compare(attribute *core.Attribute, key string, op filter.
 		return f.like(attribute, key, value, "%%%s")
 	}
 
+	if f.isUUIDColumn(key) {
+		text, ok := value.(string)
+		if !ok {
+			return sqlFragment{}, protocol.ErrInvalidValue("a string value is required")
+		}
+		if _, err := uuid.FromString(text); err != nil {
+			return sqlFragment{}, protocol.ErrInvalidValue("a valid uuid value is required")
+		}
+	}
+
 	column, placeholder := f.operand(attribute, key)
 	if op == filter.OpNotEquals {
 		return sqlFragment{sql: column + " IS DISTINCT FROM " + placeholder, args: []any{value}}, nil
@@ -78,7 +94,7 @@ func (f *sqlEvaluator) Or(left, right sqlFragment) (sqlFragment, error) {
 }
 
 func (f *sqlEvaluator) Not(operand sqlFragment) (sqlFragment, error) {
-	return sqlFragment{sql: "NOT (" + operand.sql + ")", args: operand.args}, nil
+	return sqlFragment{sql: "(" + operand.sql + ") IS NOT TRUE", args: operand.args}, nil
 }
 
 func (f *sqlEvaluator) ValuePath(attribute *core.Attribute, key string, valueFilter func() (sqlFragment, error)) (sqlFragment, error) {
@@ -98,8 +114,19 @@ func (f *sqlEvaluator) ValuePath(attribute *core.Attribute, key string, valueFil
 	return sqlFragment{sql: sql, args: inner.args}, nil
 }
 
+func (f *sqlEvaluator) isUUIDColumn(key string) bool {
+	if f.element != "" {
+		return false
+	}
+	column, ok := filterColumns[key]
+	return ok && uuidColumns[column]
+}
+
 func (f *sqlEvaluator) operand(attribute *core.Attribute, key string) (string, string) {
 	column, promoted := f.resolveColumn(attribute, key)
+	if promoted && uuidColumns[column] {
+		return column, "?"
+	}
 	if attribute.Type == core.TypeString && !attribute.CaseExact {
 		if loweredColumns[column] {
 			return column, "lower(?)"
@@ -129,15 +156,22 @@ func (f *sqlEvaluator) like(attribute *core.Attribute, key string, value any, pa
 	if !ok {
 		return sqlFragment{}, protocol.ErrInvalidValue("a string value is required")
 	}
-	arg := fmt.Sprintf(pattern, text)
-	column, _ := f.resolveColumn(attribute, key)
+	arg := fmt.Sprintf(pattern, escapeLike(text))
+	column, promoted := f.resolveColumn(attribute, key)
+	if promoted && uuidColumns[column] {
+		return sqlFragment{sql: "lower(" + column + "::text) LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
+	}
 	if attribute.Type == core.TypeString && !attribute.CaseExact {
 		if loweredColumns[column] {
-			return sqlFragment{sql: column + " LIKE lower(?)", args: []any{arg}}, nil
+			return sqlFragment{sql: column + " LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
 		}
-		return sqlFragment{sql: "lower(" + column + ") LIKE lower(?)", args: []any{arg}}, nil
+		return sqlFragment{sql: "lower(" + column + ") LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
 	}
-	return sqlFragment{sql: column + " LIKE ?", args: []any{arg}}, nil
+	return sqlFragment{sql: column + " LIKE ? ESCAPE '\\'", args: []any{arg}}, nil
+}
+
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
 }
 
 func castFor(attributeType core.AttributeType) string {

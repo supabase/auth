@@ -19,11 +19,16 @@ import (
 
 var ErrNotFound = errors.New("scim: resource not found")
 
-var userSortColumns = map[string]string{
-	"id":                "id",
-	"username":          `lower(user_name collate "C")`,
-	"meta.created":      "created_at",
-	"meta.lastmodified": "updated_at",
+var userSortColumns = buildSortColumns()
+
+func buildSortColumns() map[string]string {
+	sortable := []string{"id", "username", "meta.created", "meta.lastmodified"}
+	columns := make(map[string]string, len(sortable))
+	for _, key := range sortable {
+		columns[key] = filterColumns[key]
+	}
+	columns["username"] = `lower(` + filterColumns["username"] + ` collate "C")`
+	return columns
 }
 
 const countUsers = `SELECT COUNT(*) FROM scim_users WHERE sso_provider_id = ? AND deleted_at IS NULL%s`

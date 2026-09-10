@@ -40,13 +40,13 @@ func TestCompileFilterSQL(t *testing.T) {
 		{
 			name: "co lowers both sides",
 			text: `userName co "jen"`,
-			sql:  "user_name LIKE lower(?)",
+			sql:  "user_name LIKE lower(?) ESCAPE '\\'",
 			args: []any{"%jen%"},
 		},
 		{
 			name: "sw on a jsonb attribute uses resource text",
 			text: `displayName sw "Dr"`,
-			sql:  "lower(resource->>'displayName') LIKE lower(?)",
+			sql:  "lower(resource->>'displayName') LIKE lower(?) ESCAPE '\\'",
 			args: []any{"Dr%"},
 		},
 		{
@@ -58,7 +58,7 @@ func TestCompileFilterSQL(t *testing.T) {
 		{
 			name: "value path composes an inner and",
 			text: `emails[type eq "work" and value co "example.com"]`,
-			sql:  "EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(resource->'emails', '[]'::jsonb)) AS e WHERE (lower(e->>'type') = lower(?) AND lower(e->>'value') LIKE lower(?)))",
+			sql:  "EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(resource->'emails', '[]'::jsonb)) AS e WHERE (lower(e->>'type') = lower(?) AND lower(e->>'value') LIKE lower(?) ESCAPE '\\'))",
 			args: []any{"work", "%example.com%"},
 		},
 		{
@@ -66,6 +66,30 @@ func TestCompileFilterSQL(t *testing.T) {
 			text: `userName eq "bob" and active eq true`,
 			sql:  "(user_name = lower(?) AND active = ?)",
 			args: []any{"bob", true},
+		},
+		{
+			name: "co escapes LIKE metacharacters",
+			text: `userName co "a_b%c\\d"`,
+			sql:  "user_name LIKE lower(?) ESCAPE '\\'",
+			args: []any{`%a\_b\%c\\d%`},
+		},
+		{
+			name: "not eq is null-safe like ne",
+			text: `not (displayName eq "x")`,
+			sql:  "(lower(resource->>'displayName') = lower(?)) IS NOT TRUE",
+			args: []any{"x"},
+		},
+		{
+			name: "id eq binds a validated uuid without lowering",
+			text: `id eq "00000000-0000-0000-0000-000000000001"`,
+			sql:  "id = ?",
+			args: []any{"00000000-0000-0000-0000-000000000001"},
+		},
+		{
+			name: "id co casts the uuid column to text",
+			text: `id co "0000"`,
+			sql:  "lower(id::text) LIKE lower(?) ESCAPE '\\'",
+			args: []any{"%0000%"},
 		},
 	}
 
@@ -95,6 +119,7 @@ func TestCompileFilterRejections(t *testing.T) {
 		{name: "unknown attribute", text: `nickName eq "x"`},
 		{name: "mistyped value", text: `active eq "yes"`},
 		{name: "malformed filter", text: `userName zz "x"`},
+		{name: "id eq a non-uuid value", text: `id eq "not-a-uuid"`},
 	}
 
 	for _, tc := range cases {
