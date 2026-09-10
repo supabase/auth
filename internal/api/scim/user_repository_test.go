@@ -1,6 +1,7 @@
 package scim
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -71,8 +72,6 @@ func TestUserRepository(t *testing.T) {
 		}
 
 		t.Run("reverses the whole order when asked to descend", func(t *testing.T) {
-			// meta.created ties every resource, so only a tiebreaker that reverses
-			// with the sort makes these two the reverse of one another.
 			for _, sortBy := range []string{"id", "meta.created"} {
 				t.Run(sortBy, func(t *testing.T) {
 					ascending, _ := page(t, &protocol.SearchRequest{StartIndex: 1, Count: count, SortBy: sortBy})
@@ -141,15 +140,118 @@ func TestUserRepository(t *testing.T) {
 			assert.Equal(t, []string{"alice@example.com"}, userNamesOf(users))
 		})
 
+		t.Run("matches a userName case-insensitively against the lowered column", func(t *testing.T) {
+			users, total, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `userName eq "bjensen@example.com"`})
+			require.NoError(t, err)
+			assert.Equal(t, 1, total)
+			assert.Equal(t, []string{"BJensen@example.com"}, userNamesOf(users))
+		})
+
 		t.Run("filters case-insensitively with co", func(t *testing.T) {
 			users, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `userName co "JENSEN"`})
 			require.NoError(t, err)
 			assert.Equal(t, []string{"BJensen@example.com"}, userNamesOf(users))
 		})
 
-		t.Run("rejects a filter operator invalid for the type", func(t *testing.T) {
-			_, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `active gt true`})
-			require.ErrorIs(t, err, protocol.ErrInvalidFilter(""))
+		t.Run("filters with co on the lowered column", func(t *testing.T) {
+			users, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `userName co "jen"`})
+			require.NoError(t, err)
+			assert.Equal(t, []string{"BJensen@example.com"}, userNamesOf(users))
+		})
+
+		t.Run("filters with ne, excluding the match", func(t *testing.T) {
+			users, total, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `userName ne "bjensen@example.com"`})
+			require.NoError(t, err)
+			assert.Equal(t, count-1, total)
+			assert.NotContains(t, userNamesOf(users), "BJensen@example.com")
+		})
+
+		t.Run("filters active users", func(t *testing.T) {
+			users, total, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `active eq true`})
+			require.NoError(t, err)
+			assert.Equal(t, count-1, total)
+			assert.NotContains(t, userNamesOf(users), seedInactiveUserName)
+		})
+
+		t.Run("filters with sw on a jsonb attribute", func(t *testing.T) {
+			users, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `displayName sw "Dr"`})
+			require.NoError(t, err)
+			assert.Equal(t, []string{seedDisplayUserName}, userNamesOf(users))
+		})
+
+		t.Run("filters a value path against array elements", func(t *testing.T) {
+			users, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `emails[type eq "work"]`})
+			require.NoError(t, err)
+			assert.Equal(t, []string{seedWorkEmailUserName}, userNamesOf(users))
+		})
+
+		t.Run("filters a value path composing an inner and", func(t *testing.T) {
+			users, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `emails[type eq "work" and value co "example.com"]`})
+			require.NoError(t, err)
+			assert.Equal(t, []string{seedWorkEmailUserName}, userNamesOf(users))
+		})
+
+		t.Run("composes a top-level and", func(t *testing.T) {
+			users, total, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `userName eq "bob@example.com" and active eq true`})
+			require.NoError(t, err)
+			assert.Equal(t, 1, total)
+			assert.Equal(t, []string{"bob@example.com"}, userNamesOf(users))
+		})
+
+		t.Run("escapes LIKE metacharacters in co", func(t *testing.T) {
+			users, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `userName co "a_b%c\\d"`})
+			require.NoError(t, err)
+			assert.Equal(t, []string{seedLikeUserName}, userNamesOf(users))
+		})
+
+		t.Run("negates null-safely with not", func(t *testing.T) {
+			users, total, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `not (displayName eq "x")`})
+			require.NoError(t, err)
+			assert.Equal(t, count-1, total)
+
+			names := userNamesOf(users)
+			assert.NotContains(t, names, seedDisplayXUserName)
+			assert.Contains(t, names, "alice@example.com")
+		})
+
+		t.Run("filters by an exact id", func(t *testing.T) {
+			users, total, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: fmt.Sprintf("id eq %q", seedFixedID)})
+			require.NoError(t, err)
+			assert.Equal(t, 1, total)
+			assert.Equal(t, []string{seedWorkEmailUserName}, userNamesOf(users))
+		})
+
+		t.Run("filters id as text with co", func(t *testing.T) {
+			users, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `id co "aaaaaaaa"`})
+			require.NoError(t, err)
+			assert.Equal(t, []string{seedWorkEmailUserName}, userNamesOf(users))
+		})
+
+		t.Run("compares a typed datetime attribute", func(t *testing.T) {
+			users, total, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `meta.lastModified gt "2020-01-01T00:00:00Z"`})
+			require.NoError(t, err)
+			assert.Equal(t, count-1, total)
+			assert.NotContains(t, userNamesOf(users), seedAncientUserName)
+		})
+
+		t.Run("rejects invalid filters", func(t *testing.T) {
+			cases := []struct {
+				name   string
+				filter string
+			}{
+				{name: "invalid operator for boolean", filter: `active gt true`},
+				{name: "unknown attribute", filter: `nickName eq "x"`},
+				{name: "mistyped value", filter: `active eq "yes"`},
+				{name: "malformed filter", filter: `userName zz "x"`},
+				{name: "id eq a non-uuid value", filter: `id eq "not-a-uuid"`},
+			}
+
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					_, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: tc.filter})
+					require.Error(t, err)
+				})
+			}
 		})
 	})
 
@@ -254,28 +356,72 @@ func TestUserRepository(t *testing.T) {
 	})
 }
 
+const (
+	seedInactiveUserName  = "inactive@example.com"
+	seedDisplayUserName   = "strange@example.com"
+	seedWorkEmailUserName = "work@example.com"
+	seedLikeUserName      = "a_b%c\\d@example.com"
+	seedLikeDecoyUserName = "axbzcd@example.com"
+	seedDisplayXUserName  = "letterx@example.com"
+	seedAncientUserName   = "ancient@example.com"
+	seedFixedID           = "aaaaaaaa-0000-0000-0000-000000000001"
+)
+
 func seedUsers() []*core.User {
-	users := []*core.User{}
-	for _, userName := range []string{
-		"Zoe@example.com",
-		"alice@example.com",
-		"a-z@example.com",
-		"ab@example.com",
-		"BJensen@example.com",
-		"bob@example.com",
-		"carol1@example.com",
-		"carol-1@example.com",
-		"Dave@example.com",
-		"eve@example.com",
-		"Frank@example.com",
-		"user-00@example.com",
-	} {
+	inactive := false
+	base := time.Now().Add(-1 * time.Hour).UTC()
+	ancient := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	type seed struct {
+		id          string
+		userName    string
+		displayName string
+		active      *bool
+		emails      []core.Email
+		created     time.Time
+	}
+
+	seeds := []seed{
+		{userName: "Zoe@example.com"},
+		{userName: "alice@example.com"},
+		{userName: "a-z@example.com"},
+		{userName: "ab@example.com"},
+		{userName: "BJensen@example.com"},
+		{userName: "bob@example.com"},
+		{userName: "carol1@example.com"},
+		{userName: "carol-1@example.com"},
+		{userName: "Dave@example.com"},
+		{userName: "eve@example.com"},
+		{userName: "Frank@example.com"},
+		{userName: "user-00@example.com"},
+		{userName: seedInactiveUserName, active: &inactive},
+		{userName: seedDisplayUserName, displayName: "Dr. Strange"},
+		{userName: seedWorkEmailUserName, id: seedFixedID, emails: []core.Email{{Type: "work", Value: "member@example.com"}}},
+		{userName: seedLikeUserName},
+		{userName: seedLikeDecoyUserName},
+		{userName: seedDisplayXUserName, displayName: "x"},
+		{userName: seedAncientUserName, created: ancient},
+	}
+
+	users := make([]*core.User, 0, len(seeds))
+	for i, s := range seeds {
+		created := s.created
+		if created.IsZero() {
+			created = base
+		}
+		id := s.id
+		if id == "" {
+			id = fmt.Sprintf("00000000-0000-0000-0000-%012d", i+1)
+		}
 		users = append(users, &core.User{
-			ID:       uuid.Must(uuid.NewV4()).String(),
-			UserName: userName,
+			ID:          id,
+			UserName:    s.userName,
+			DisplayName: s.displayName,
+			Active:      s.active,
+			Emails:      s.emails,
 			Meta: core.Meta{
-				Created:      time.Now().Add(-1 * time.Hour).UTC(),
-				LastModified: time.Now().Add(-1 * time.Hour).UTC(),
+				Created:      created,
+				LastModified: created,
 			},
 		})
 	}

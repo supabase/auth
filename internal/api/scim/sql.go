@@ -10,15 +10,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
-var filterColumns = map[string]string{
-	"id":                "id",
-	"username":          "user_name",
-	"externalid":        "external_id",
-	"active":            "active",
-	"meta.created":      "created_at",
-	"meta.lastmodified": "updated_at",
-}
-
 var loweredColumns = map[string]bool{
 	"user_name": true,
 }
@@ -42,10 +33,6 @@ type sqlFragment struct {
 
 type sqlEvaluator struct {
 	element string
-}
-
-func filterSQL(schemas []*core.Schema, text string) (sqlFragment, error) {
-	return protocol.Filter[sqlFragment](schemas, text, &sqlEvaluator{})
 }
 
 func (f *sqlEvaluator) Compare(attribute *core.Attribute, key string, op filter.Operator, value any) (sqlFragment, error) {

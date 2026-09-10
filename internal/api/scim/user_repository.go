@@ -19,6 +19,15 @@ import (
 
 var ErrNotFound = errors.New("scim: resource not found")
 
+var filterColumns = map[string]string{
+	"id":                "id",
+	"username":          "user_name",
+	"externalid":        "external_id",
+	"active":            "active",
+	"meta.created":      "created_at",
+	"meta.lastmodified": "updated_at",
+}
+
 var userSortColumns = buildSortColumns()
 
 func buildSortColumns() map[string]string {
@@ -206,7 +215,7 @@ func (r *userRepository) filterClause(query *protocol.SearchRequest) (string, []
 		return "", nil, nil
 	}
 
-	fragment, err := filterSQL([]*core.Schema{r.schema}, query.Filter)
+	fragment, err := protocol.Filter[sqlFragment]([]*core.Schema{r.schema}, query.Filter, &sqlEvaluator{})
 	if err != nil {
 		return "", nil, err
 	}
