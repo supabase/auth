@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -48,10 +50,18 @@ type webAuthnUser struct {
 }
 
 func newWebAuthnUser(user *models.User, passkeyCredentials []*models.WebAuthnCredential) *webAuthnUser {
+	return newWebAuthnUserWithAssertion(user, passkeyCredentials, nil)
+}
+
+func newWebAuthnUserWithAssertion(user *models.User, passkeyCredentials []*models.WebAuthnCredential, assertion *protocol.ParsedCredentialAssertionData) *webAuthnUser {
 	credentials := make([]webauthn.Credential, len(passkeyCredentials))
 
 	for i, pc := range passkeyCredentials {
-		credentials[i] = pc.ToWebAuthnCredential()
+		cred := pc.ToWebAuthnCredential()
+		if assertion != nil && bytes.Equal(pc.CredentialID, assertion.RawID) {
+			cred.Flags.BackupEligible = assertion.Response.AuthenticatorData.Flags.HasBackupEligible()
+		}
+		credentials[i] = cred
 	}
 
 	return &webAuthnUser{
