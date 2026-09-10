@@ -268,18 +268,11 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 // runOTPParityCases runs each case against both stores and asserts that both
 // produce the expected outcome and agree with each other.
 func (ts *VerifyTestSuite) runOTPParityCases(testCases map[string]otpParityCase) {
-	originalFlag := ts.Config.Experimental.EnableOTTAsSourceOfTruth
-	defer func() { ts.Config.Experimental.EnableOTTAsSourceOfTruth = originalFlag }()
-
+	// Run order does not matter: every store run truncates and re-seeds.
 	for name, tc := range testCases {
 		ts.Run(name, func() {
-			var legacyOutcome, ottOutcome otpParityOutcome
-
-			ts.Run("legacy users columns", func() {
-				legacyOutcome = ts.runOTPParityCase(tc, false)
-			})
-			ts.Run("one_time_tokens", func() {
-				ottOutcome = ts.runOTPParityCase(tc, true)
+			legacyOutcome, ottOutcome := ts.runPerStore(func() otpParityOutcome {
+				return ts.runOTPParityCase(tc)
 			})
 
 			require.Equal(ts.T(), legacyOutcome, ottOutcome,
@@ -288,19 +281,35 @@ func (ts *VerifyTestSuite) runOTPParityCases(testCases map[string]otpParityCase)
 	}
 }
 
-// runOTPParityCase runs one case against one store and returns the outcome it
-// observed. enableOTT selects the store. It also asserts the outcome matches
-// c.expected, so a failure names the store that diverged.
-func (ts *VerifyTestSuite) runOTPParityCase(c otpParityCase, enableOTT bool) otpParityOutcome {
-	ts.SetupTest()
-	ts.Config.Experimental.EnableOTTAsSourceOfTruth = enableOTT
+// runPerStore runs run once per store, each in its own subtest with a truncated
+// database, and returns what each store produced. Tests that need more than one
+// request per store use this directly instead of the case table.
+func (ts *VerifyTestSuite) runPerStore(run func() otpParityOutcome) (legacy, ott otpParityOutcome) {
+	originalFlag := ts.Config.Experimental.EnableOTTAsSourceOfTruth
+	defer func() { ts.Config.Experimental.EnableOTTAsSourceOfTruth = originalFlag }()
+
+	ts.Run("legacy users columns", func() {
+		ts.SetupTest()
+		ts.Config.Experimental.EnableOTTAsSourceOfTruth = false
+		legacy = run()
+	})
+	ts.Run("one_time_tokens", func() {
+		ts.SetupTest()
+		ts.Config.Experimental.EnableOTTAsSourceOfTruth = true
+		ott = run()
+	})
+	return legacy, ott
+}
+
+// runOTPParityCase arranges one case, sends its request, and asserts the
+// outcome matches c.expected, so a failure names the store that diverged.
+func (ts *VerifyTestSuite) runOTPParityCase(c otpParityCase) otpParityOutcome {
 	if c.configure != nil {
 		restore := c.configure()
 		defer restore()
 	}
 
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, parityEmail, ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
+	u := ts.parityUser()
 	if c.seed != nil {
 		c.seed(u)
 	}
@@ -310,6 +319,13 @@ func (ts *VerifyTestSuite) runOTPParityCase(c otpParityCase, enableOTT bool) otp
 	outcome := ts.observeOutcome(w, u.ID, since)
 	require.Equal(ts.T(), c.expected, outcome)
 	return outcome
+}
+
+// parityUser returns the fixture user SetupTest created.
+func (ts *VerifyTestSuite) parityUser() *models.User {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, parityEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	return u
 }
 
 // saveUser persists every pending change on u. Call it from a seed that
@@ -332,6 +348,9 @@ func (ts *VerifyTestSuite) seedChallenge(u *models.User, tokenType models.OneTim
 		u.RecoverySentAt = &sentAt
 	case models.EmailChangeTokenNew:
 		u.EmailChangeTokenNew = hash
+		u.EmailChangeSentAt = &sentAt
+	case models.EmailChangeTokenCurrent:
+		u.EmailChangeTokenCurrent = hash
 		u.EmailChangeSentAt = &sentAt
 	case models.PhoneChangeToken:
 		u.PhoneChangeToken = hash
@@ -383,6 +402,90 @@ func (ts *VerifyTestSuite) observeOutcome(w *httptest.ResponseRecorder, userID u
 	}
 
 	return outcome
+}
+
+func (ts *VerifyTestSuite) TestVerifyOTPParityCodeIsSingleUse() {
+	now := time.Now()
+	emailHash := crypto.GenerateTokenHash(parityEmail, parityOTP)
+	requestBody := emailOTPBody(mail.SignupVerification, parityEmail)
+
+	legacyOutcome, ottOutcome := ts.runPerStore(func() otpParityOutcome {
+		u := ts.parityUser()
+		ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, now, time.Hour)
+
+		first := ts.observeOutcome(ts.postVerify(requestBody), u.ID, now)
+		require.Equal(ts.T(), http.StatusOK, first.Status, "the first use must succeed")
+		require.True(ts.T(), first.EmailConfirmed)
+
+		// The row must be gone/
+		_, err := models.FindOneTimeToken(ts.API.db, emailHash, models.ConfirmationToken)
+		require.True(ts.T(), models.IsNotFoundError(err),
+			"the challenge row must be deleted on success, got %v", err)
+
+		since := time.Now()
+		return ts.observeOutcome(ts.postVerify(requestBody), u.ID, since)
+	})
+
+	replayed := otpParityOutcome{
+		Status:         http.StatusForbidden,
+		ErrorCode:      apierrors.ErrorCodeOTPExpired,
+		Msg:            parityForbidden,
+		EmailConfirmed: true,
+		Email:          parityEmail,
+		Phone:          parityPhone,
+	}
+	require.Equal(ts.T(), replayed, legacyOutcome)
+	require.Equal(ts.T(), replayed, ottOutcome)
+}
+
+// TestVerifyOTPParitySecureEmailChange covers the dual-confirmation flow
+// where a code goes to both the old and the new address and both tokens must be redeemed in order to be fully verified.
+func (ts *VerifyTestSuite) TestVerifyOTPParitySecureEmailChange() {
+	now := time.Now()
+	newHash := crypto.GenerateTokenHash(parityNewEmail, parityOTP)
+	currentHash := crypto.GenerateTokenHash(parityEmail, parityOTP)
+
+	legacyOutcome, ottOutcome := ts.runPerStore(func() otpParityOutcome {
+		require.True(ts.T(), ts.Config.Mailer.SecureEmailChangeEnabled,
+			"this test covers the secure flow, which is the default")
+
+		u := ts.parityUser()
+		u.EmailChange = parityNewEmail
+		ts.seedChallenge(u, models.EmailChangeTokenNew, parityNewEmail, newHash, now, time.Hour)
+		ts.seedChallenge(u, models.EmailChangeTokenCurrent, parityEmail, currentHash, now, time.Hour)
+
+		w := ts.postVerify(emailOTPBody(mail.EmailChangeVerification, parityNewEmail))
+		require.Equal(ts.T(), http.StatusOK, w.Code, "the new address code must be accepted")
+		require.Equal(ts.T(), singleConfirmationAccepted, ts.responseMsg(w))
+
+		pending := ts.parityUser()
+		require.Equal(ts.T(), singleConfirmation, pending.EmailChangeConfirmStatus)
+		require.Equal(ts.T(), parityEmail, pending.GetEmail(),
+			"one code must not be enough to move the address")
+
+		since := time.Now()
+		return ts.observeOutcome(
+			ts.postVerify(emailOTPBody(mail.EmailChangeVerification, parityEmail)), u.ID, since)
+	})
+
+	changed := otpParityOutcome{
+		Status:         http.StatusOK,
+		Action:         string(models.UserModifiedAction),
+		EmailConfirmed: true,
+		Email:          parityNewEmail,
+		Phone:          parityPhone,
+	}
+	require.Equal(ts.T(), changed, legacyOutcome)
+	require.Equal(ts.T(), changed, ottOutcome)
+}
+
+// responseMsg reads the msg field out of a response body.
+func (ts *VerifyTestSuite) responseMsg(w *httptest.ResponseRecorder) string {
+	var body struct {
+		Msg string `json:"msg"`
+	}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&body))
+	return body.Msg
 }
 
 func emailOTPBody(verifyType, email string) map[string]interface{} {
@@ -448,6 +551,24 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityIdentifierBinding() {
 				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, now, time.Hour)
 			},
 			requestBody: emailOTPBody(mail.SignupVerification, parityEmail),
+			expected:    forbidden,
+		},
+		"a user in another audience cannot verify a typed OTP": {
+			seed: func(u *models.User) {
+				u.Aud = "other-audience"
+				ts.seedChallenge(u, models.ConfirmationToken, parityEmail, emailHash, now, time.Hour)
+			},
+			requestBody: emailOTPBody(mail.SignupVerification, parityEmail),
+			expected:    forbidden,
+		},
+		// The challenge exists, but the user has no pending change to that
+		// number, so nothing entitles the request to move the phone.
+		"a phone change code is rejected when the user has no pending change": {
+			seed: func(u *models.User) {
+				ts.seedChallenge(u, models.PhoneChangeToken, parityNewPhone,
+					crypto.GenerateTokenHash(parityNewPhone, parityOTP), now, time.Hour)
+			},
+			requestBody: phoneOTPBody(phoneChangeVerification, parityNewPhone),
 			expected:    forbidden,
 		},
 	}
