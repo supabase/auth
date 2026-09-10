@@ -41,10 +41,15 @@ const (
 	VerifyFactorAction              AuditAction = "verification_attempted"
 	DeleteFactorAction              AuditAction = "factor_deleted"
 	UpdateFactorAction              AuditAction = "factor_updated"
+	IdentityLinkAction              AuditAction = "identity_linked"
 	IdentityUnlinkAction            AuditAction = "identity_unlinked"
 	PasskeyCreatedAction            AuditAction = "passkey_created"
 	PasskeyUpdatedAction            AuditAction = "passkey_updated"
 	PasskeyDeletedAction            AuditAction = "passkey_deleted"
+	RecoveryCodesGeneratedAction    AuditAction = "recovery_codes_generated"
+	RecoveryCodesVerifiedAction     AuditAction = "recovery_codes_verified"
+	RecoveryCodesRegeneratedAction  AuditAction = "recovery_codes_regenerated"
+	RecoveryCodesDeletedAction      AuditAction = "recovery_codes_deleted"
 
 	account auditLogType = "account"
 	team    auditLogType = "team"
@@ -64,15 +69,22 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	TokenRefreshedAction:            token,
 	UserModifiedAction:              user,
 	UserRecoveryRequestedAction:     user,
+	UserReauthenticateAction:        user,
 	UserConfirmationRequestedAction: user,
 	UserRepeatedSignUpAction:        user,
 	UserUpdatePasswordAction:        user,
+	IdentityLinkAction:              user,
+	IdentityUnlinkAction:            user,
 	EnrollFactorAction:              factor,
 	UnenrollFactorAction:            factor,
 	CreateChallengeAction:           factor,
 	VerifyFactorAction:              factor,
 	DeleteFactorAction:              factor,
 	UpdateFactorAction:              factor,
+	RecoveryCodesGeneratedAction:    factor,
+	RecoveryCodesVerifiedAction:     factor,
+	RecoveryCodesRegeneratedAction:  factor,
+	RecoveryCodesDeletedAction:      factor,
 	PasskeyCreatedAction:            user,
 	PasskeyUpdatedAction:            user,
 	PasskeyDeletedAction:            user,
@@ -180,7 +192,7 @@ func FindAuditLogEntries(tx *storage.Connection, filterColumns []string, filterV
 		values := make([]interface{}, len(filterColumns))
 
 		for idx, col := range filterColumns {
-			builder.WriteString(fmt.Sprintf("payload->>'%s' ILIKE ?", col))
+			fmt.Fprintf(builder, "payload->>'%s' ILIKE ?", col)
 			values[idx] = lf
 
 			if idx+1 < len(filterColumns) {

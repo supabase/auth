@@ -12,6 +12,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 )
@@ -40,6 +41,54 @@ func (ts *ExternalTestSuite) SetupTest() {
 	ts.Config.Mailer.Autoconfirm = false
 
 	models.TruncateAll(ts.API.db)
+}
+
+func (ts *ExternalTestSuite) TestAutomaticLinkIdentityWritesAuditLog() {
+	existingUser, err := ts.createUser("", "automatic-link@example.com", "", "", "")
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), existingUser.Confirm(ts.API.db))
+
+	userData := &provider.UserProvidedData{
+		Metadata: &provider.Claims{
+			Subject:       "automatic-link-subject",
+			Email:         existingUser.GetEmail(),
+			EmailVerified: true,
+		},
+		Emails: []provider.Email{{
+			Email:    existingUser.GetEmail(),
+			Primary:  true,
+			Verified: true,
+		}},
+	}
+	r := httptest.NewRequest(http.MethodGet, "/callback", nil)
+	r.RemoteAddr = "192.0.2.1:1234"
+
+	decision, user, err := ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.LinkAccount, decision)
+	require.Equal(ts.T(), existingUser.ID, user.ID)
+
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, userData.Metadata.Subject, "google")
+	require.NoError(ts.T(), err)
+	logs, err := models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1)
+	require.Equal(ts.T(), string(models.IdentityLinkAction), logs[0].Payload["action"])
+	require.Equal(ts.T(), "user", logs[0].Payload["log_type"])
+	traits, ok := logs[0].Payload["traits"].(map[string]any)
+	require.True(ts.T(), ok)
+	require.Equal(ts.T(), identity.ID.String(), traits["identity_id"])
+	require.Equal(ts.T(), "google", traits["provider"])
+	require.Equal(ts.T(), userData.Metadata.Subject, traits["provider_id"])
+	require.Equal(ts.T(), "192.0.2.1", logs[0].IPAddress)
+
+	decision, _, err = ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.AccountExists, decision)
+
+	logs, err = models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1, "signing in with an existing identity must not emit another audit log")
 }
 
 func (ts *ExternalTestSuite) createUser(providerId string, email string, name string, avatar string, confirmationToken string) (*models.User, error) {
@@ -280,6 +329,50 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	ts.Equal(w.Code, http.StatusBadRequest)
+}
+
+// TestAuthorizeStripsReservedOAuthParams verifies that OAuth params the auth
+// server controls (see reservedOAuthParams in custom_oauth_admin.go) cannot
+// be overridden by passing them as query params on the /authorize request -
+// they must be stripped before being forwarded to the provider's authorize
+// URL. code_challenge/code_challenge_method are exercised by the dedicated
+// PKCE tests instead, since they go through separate validation.
+func (ts *ExternalTestSuite) TestAuthorizeStripsReservedOAuthParams() {
+	authorizeURL := "http://localhost/authorize?" + url.Values{
+		"provider":      {"github"},
+		"client_id":     {"attacker-client-id"},
+		"client_secret": {"attacker-client-secret"},
+		"redirect_uri":  {"https://evil.example/callback"},
+		"response_type": {"token"},
+		"state":         {"attacker-controlled-state"},
+		"code_verifier": {"attacker-code-verifier"},
+		"login_hint":    {"user@example.com"}, // non-reserved: should still pass through
+	}.Encode()
+
+	req := httptest.NewRequest(http.MethodGet, authorizeURL, nil)
+	req.Header.Set("Referer", "https://example.netlify.com/admin")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.Require().Equal(http.StatusFound, w.Code)
+
+	u, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err, "redirect url parse failed")
+	q := u.Query()
+
+	// the auth server's own values are used, not the attacker-supplied ones
+	ts.Equal("testclientid", q.Get("client_id"))
+	ts.Equal("https://identity.services.netlify.com/callback", q.Get("redirect_uri"))
+	ts.Equal("code", q.Get("response_type"))
+	assertValidOAuthState(ts, q.Get("state"), "github")
+
+	// none of the attacker-supplied reserved values made it through
+	ts.Empty(q.Get("client_secret"), "client_secret should never be forwarded to the provider")
+	ts.NotEqual("attacker-code-verifier", q.Get("code_verifier"))
+
+	// a non-reserved param is still forwarded, proving the loop isn't
+	// stripping everything
+	ts.Equal("user@example.com", q.Get("login_hint"))
 }
 
 func (ts *ExternalTestSuite) TestRedirectErrorsShouldPreserveParams() {

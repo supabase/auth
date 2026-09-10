@@ -3,18 +3,26 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	scimCore "github.com/supabase/auth/internal/api/scim/core"
 	scimProtocol "github.com/supabase/auth/internal/api/scim/protocol"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/storage"
 )
 
+const (
+	scimServiceProviderConfigPath = "/scim/v2/ServiceProviderConfig"
+	scimResourceTypesPath         = "/scim/v2/ResourceTypes"
+	scimSchemasPath               = "/scim/v2/Schemas"
+)
+
 var scimPaths = []string{
-	"/scim/v2/ServiceProviderConfig",
-	"/scim/v2/ResourceTypes",
-	"/scim/v2/Schemas",
+	scimServiceProviderConfigPath,
+	scimResourceTypesPath,
+	scimSchemasPath,
 }
 
 func TestSCIM(t *testing.T) {
@@ -56,14 +64,37 @@ func TestSCIM(t *testing.T) {
 
 		require.True(t, api.config.Experimental.ScimEnabled)
 
-		for _, path := range scimPaths {
+		t.Run(scimServiceProviderConfigPath, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, scimServiceProviderConfigPath, nil)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+			require.Contains(t, w.Body.String(), scimCore.SchemaServiceProviderConfig)
+		})
+
+		for _, path := range []string{scimResourceTypesPath, scimSchemasPath} {
 			t.Run(path, func(t *testing.T) {
 				r := httptest.NewRequest(http.MethodGet, path, nil)
 				w := httptest.NewRecorder()
 
 				api.handler.ServeHTTP(w, r)
 
-				require.Equal(t, http.StatusNotImplemented, w.Code)
+				require.Equal(t, http.StatusOK, w.Code)
+				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+				require.Contains(t, w.Body.String(), scimProtocol.SchemaListResponse)
+			})
+
+			t.Run(path+" rejects filter query parameter", func(t *testing.T) {
+				filter := url.Values{"filter": {`name eq "User"`}}.Encode()
+				r := httptest.NewRequest(http.MethodGet, path+"?"+filter, nil)
+				w := httptest.NewRecorder()
+
+				api.handler.ServeHTTP(w, r)
+
+				require.Equal(t, http.StatusForbidden, w.Code)
 				require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
 				require.Contains(t, w.Body.String(), scimProtocol.SchemaError)
 			})

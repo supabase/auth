@@ -436,11 +436,12 @@ func validateProviderParams(params *AdminCustomOAuthProviderParams, providerType
 	}
 
 	// Type-specific validations
-	if providerType == models.ProviderTypeOIDC {
+	switch providerType {
+	case models.ProviderTypeOIDC:
 		if params.Issuer == "" {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "issuer is required for OIDC providers")
 		}
-	} else if providerType == models.ProviderTypeOAuth2 {
+	case models.ProviderTypeOAuth2:
 		if params.AuthorizationURL == "" {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "authorization_url is required for OAuth2 providers")
 		}
@@ -459,12 +460,13 @@ func validateProviderParams(params *AdminCustomOAuthProviderParams, providerType
 func validateProviderURLs(params *AdminCustomOAuthProviderParams, providerType models.ProviderType) error {
 	var urls []string
 
-	if providerType == models.ProviderTypeOIDC {
+	switch providerType {
+	case models.ProviderTypeOIDC:
 		urls = append(urls, params.Issuer)
 		if params.DiscoveryURL != nil && *params.DiscoveryURL != "" {
 			urls = append(urls, *params.DiscoveryURL)
 		}
-	} else if providerType == models.ProviderTypeOAuth2 {
+	case models.ProviderTypeOAuth2:
 		urls = []string{
 			params.AuthorizationURL,
 			params.TokenURL,
@@ -643,28 +645,32 @@ func getBoolOrDefault(value *bool, defaultValue bool) bool {
 	return *value
 }
 
+// reservedOAuthParams lists OAuth2/OIDC parameters that the auth server
+// controls. They must never be overridden by client-supplied input, since
+// allowing override would be a security issue (e.g. swapping redirect_uri or
+// state). nonce is reserved here so it can't be pinned to a static value in a
+// provider's stored authorization_params; it is still allowed as a per-request
+// passthrough on the external redirect (see external.go).
+var reservedOAuthParams = []string{
+	"client_id",
+	"client_secret",
+	"redirect_uri",
+	"response_type",
+	"state",
+	"code_challenge",
+	"code_challenge_method",
+	"code_verifier",
+	"nonce",
+}
+
 // validateAuthorizationParams ensures no reserved OAuth parameters are overridden
 func validateAuthorizationParams(params map[string]interface{}) error {
 	if params == nil {
 		return nil
 	}
 
-	// Reserved OAuth2/OIDC parameters that should never be overridden
-	// These are set by the auth server and allowing override would be a security issue
-	reservedParams := []string{
-		"client_id",
-		"client_secret",
-		"redirect_uri",
-		"response_type",
-		"state",
-		"code_challenge",
-		"code_challenge_method",
-		"code_verifier",
-		"nonce", // We control nonce generation for security
-	}
-
 	for key, value := range params {
-		if slices.Contains(reservedParams, key) {
+		if slices.Contains(reservedOAuthParams, key) {
 			return apierrors.NewBadRequestError(
 				apierrors.ErrorCodeValidationFailed,
 				"Cannot override reserved OAuth parameter: %s", key,

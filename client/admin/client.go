@@ -1396,6 +1396,7 @@ type GetAdminAuditResponse struct {
 			// - verification_attempted
 			// - factor_deleted
 			// - factor_updated
+			// - identity_linked
 			// - identity_unlinked
 			// - passkey_created
 			// - passkey_updated
@@ -2023,6 +2024,7 @@ func ParseGetAdminAuditResponse(rsp *http.Response) (*GetAdminAuditResponse, err
 				// - verification_attempted
 				// - factor_deleted
 				// - factor_updated
+				// - identity_linked
 				// - identity_unlinked
 				// - passkey_created
 				// - passkey_updated

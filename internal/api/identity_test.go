@@ -91,6 +91,7 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 	}
 	// request is just used as a placeholder in the function
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
+	r.RemoteAddr = "192.0.2.1:1234"
 	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "test")
 	require.NoError(ts.T(), err)
 
@@ -99,6 +100,20 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 	require.Len(ts.T(), u.Identities, 2)
 	require.Equal(ts.T(), u.AppMetaData["provider"], "email")
 	require.Equal(ts.T(), u.AppMetaData["providers"], []string{"email", "test"})
+
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, testValidUserData.Metadata.Subject, "test")
+	require.NoError(ts.T(), err)
+	logs, err := models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1)
+	require.Equal(ts.T(), string(models.IdentityLinkAction), logs[0].Payload["action"])
+	require.Equal(ts.T(), "user", logs[0].Payload["log_type"])
+	traits, ok := logs[0].Payload["traits"].(map[string]any)
+	require.True(ts.T(), ok)
+	require.Equal(ts.T(), identity.ID.String(), traits["identity_id"])
+	require.Equal(ts.T(), "test", traits["provider"])
+	require.Equal(ts.T(), testValidUserData.Metadata.Subject, traits["provider_id"])
+	require.Equal(ts.T(), "192.0.2.1", logs[0].IPAddress)
 
 	// link an already existing identity
 	testExistingUserData := &provider.UserProvidedData{
@@ -109,6 +124,10 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email")
 	require.ErrorIs(ts.T(), err, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked"))
 	require.Nil(ts.T(), u)
+
+	logs, err = models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1, "an already-linked identity must not emit another audit log")
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
@@ -198,6 +217,7 @@ func (ts *IdentityTestSuite) TestUnlinkIdentity() {
 			req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/user/identities/%s", identity.ID), nil)
 			require.NoError(ts.T(), err)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			req.RemoteAddr = "192.0.2.1:1234"
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), http.StatusOK, w.Code)
@@ -207,6 +227,18 @@ func (ts *IdentityTestSuite) TestUnlinkIdentity() {
 			require.NoError(ts.T(), err)
 			require.Len(ts.T(), u.Identities, 1)
 			require.Equal(ts.T(), u.Identities[0].Provider, c.providerRemaining)
+
+			// an audit log entry should be recorded for the unlinked identity
+			logs, err := models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityUnlinkAction), nil)
+			require.NoError(ts.T(), err)
+			require.Len(ts.T(), logs, 1)
+			require.Equal(ts.T(), string(models.IdentityUnlinkAction), logs[0].Payload["action"])
+			require.Equal(ts.T(), "user", logs[0].Payload["log_type"])
+			traits, ok := logs[0].Payload["traits"].(map[string]any)
+			require.True(ts.T(), ok)
+			require.Equal(ts.T(), identity.ID.String(), traits["identity_id"])
+			require.Equal(ts.T(), c.provider, traits["provider"])
+			require.Equal(ts.T(), "192.0.2.1", logs[0].IPAddress)
 
 			// conditional checks depending on the provider that was unlinked
 			switch c.provider {

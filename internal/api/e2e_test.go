@@ -44,7 +44,7 @@ func genPhone() string {
 	sb.WriteString("1")
 	for range 9 {
 		// #nosec G404
-		sb.WriteString(fmt.Sprintf("%d", rand.Intn(9)))
+		fmt.Fprintf(&sb, "%d", rand.Intn(9))
 	}
 	phone := sb.String()
 	return phone
@@ -215,8 +215,8 @@ func signupAndConfirmEmail(
 	require.Equal(t, expUser.Email.String(), ott.RelatesTo)
 
 	// OTP token user matches our signup user
-	hookUser, err := models.FindUserByConfirmationToken(
-		inst.Conn, hookReq.EmailData.TokenHash)
+	hookUser, err := models.FindUserByOneTimeToken(
+		inst.Conn, hookReq.EmailData.TokenHash, models.ConfirmationToken)
 	require.NoError(t, err)
 	require.Equal(t, expUser.ID, hookUser.ID)
 	require.Equal(t, expUser.Email, hookUser.Email)
