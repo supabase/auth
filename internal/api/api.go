@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"regexp"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/scim"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
@@ -51,6 +53,8 @@ type API struct {
 	tokenService *tokens.Service
 	mailer       mailer.Mailer
 	oidcCache    *provider.OIDCProviderCache
+
+	dummyPasswordHash string
 
 	captchaVerifier security.CaptchaVerifier
 
@@ -128,6 +132,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	if api.mailer == nil {
 		tc := templatemailer.NewCache()
 		api.mailer = templatemailer.FromConfig(globalConfig, tc)
+	}
+	if api.dummyPasswordHash == "" {
+		hash, err := crypto.GenerateFromPassword(context.Background(), "dummy-password")
+		if err != nil {
+			logrus.WithError(err).Error("unable to generate dummy password hash")
+		} else {
+			api.dummyPasswordHash = hash
+		}
 	}
 
 	// Connect token service to API's time function (supports test overrides)

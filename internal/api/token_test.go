@@ -332,6 +332,23 @@ func (ts *TokenTestSuite) TestTokenPasswordGrantFailure() {
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
 }
 
+func (ts *TokenTestSuite) TestTokenPasswordGrantMissingUserChecksDummyPasswordHash() {
+	ts.API.dummyPasswordHash = "invalid-dummy-password-hash"
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    "missing@example.com",
+		"password": "password",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusInternalServerError, w.Code)
+}
+
 func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	authCode := "1234563"
 	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
