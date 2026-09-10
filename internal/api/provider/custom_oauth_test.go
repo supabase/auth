@@ -40,6 +40,7 @@ func TestNewCustomOAuthProvider(t *testing.T) {
 	assert.Equal(t, []string{"openid", "profile"}, provider.config.Scopes)
 	assert.Equal(t, "https://example.com/authorize", provider.config.Endpoint.AuthURL)
 	assert.Equal(t, "https://example.com/token", provider.config.Endpoint.TokenURL)
+	assert.Equal(t, oauth2.AuthStyleInHeader, provider.config.Endpoint.AuthStyle)
 	assert.Equal(t, "https://example.com/userinfo", provider.userinfoURL)
 	assert.True(t, provider.RequiresPKCE())
 	assert.Equal(t, []string{"ios-client-id", "android-client-id"}, provider.acceptableClientIDs)
