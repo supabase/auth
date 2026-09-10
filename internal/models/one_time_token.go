@@ -120,6 +120,11 @@ type OneTimeToken struct {
 	ExpiresAt *time.Time `json:"expires_at" db:"expires_at"`
 }
 
+// IsExpired treats nil ExpiresAt as expired. This is a security measure to avoid accidentally treating a token with no expiration as valid.
+func (o OneTimeToken) IsExpired() bool {
+	return o.ExpiresAt == nil || time.Now().After(*o.ExpiresAt)
+}
+
 func (OneTimeToken) TableName() string {
 	return "one_time_tokens"
 }
