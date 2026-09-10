@@ -83,6 +83,17 @@
           ]
         },
         {
+          "name": "displayName",
+          "type": "string",
+          "multiValued": false,
+          "description": "The name of the User, suitable for display.",
+          "required": false,
+          "caseExact": false,
+          "mutability": "readWrite",
+          "returned": "default",
+          "uniqueness": "none"
+        },
+        {
           "name": "emails",
           "type": "complex",
           "multiValued": true,
@@ -98,6 +109,17 @@
               "type": "string",
               "multiValued": false,
               "description": "An email address for the user.",
+              "required": false,
+              "caseExact": false,
+              "mutability": "readWrite",
+              "returned": "default",
+              "uniqueness": "none"
+            },
+            {
+              "name": "type",
+              "type": "string",
+              "multiValued": false,
+              "description": "The type of email address.",
               "required": false,
               "caseExact": false,
               "mutability": "readWrite",

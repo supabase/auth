@@ -26,9 +26,9 @@ var userSortColumns = map[string]string{
 	"meta.lastmodified": "updated_at",
 }
 
-const countUsers = `SELECT COUNT(*) FROM scim_users WHERE sso_provider_id = ? AND deleted_at IS NULL`
+const countUsers = `SELECT COUNT(*) FROM scim_users WHERE sso_provider_id = ? AND deleted_at IS NULL%s`
 
-const listUsers = `SELECT id, resource, active, created_at, updated_at FROM scim_users WHERE sso_provider_id = ? AND deleted_at IS NULL ORDER BY %s LIMIT ? OFFSET ?`
+const listUsers = `SELECT id, resource, active, created_at, updated_at FROM scim_users WHERE sso_provider_id = ? AND deleted_at IS NULL%s ORDER BY %s LIMIT ? OFFSET ?`
 
 type scimUser struct {
 	ID        string    `db:"id"`
@@ -45,21 +45,24 @@ func (scimUser) TableName() string {
 type userRepository struct {
 	db      *storage.Connection
 	baseURL string
+	schema  *core.Schema
 }
 
 func NewUserRepository(db *storage.Connection, baseURL string) Repository[*core.User] {
 	return &userRepository{
 		db:      db,
 		baseURL: baseURL,
+		schema:  newUserSchema(baseURL),
 	}
 }
 
 func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
-	if query.Filter != "" {
-		return nil, 0, protocol.ErrInvalidFilter("filtering is not supported")
+	orderBy, err := r.orderBy(query)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	orderBy, err := r.orderBy(query)
+	filterSQL, filterArgs, err := r.filterClause(query)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -67,8 +70,9 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 	db := r.db.WithContext(ctx)
 	tenant := r.tenant(ctx)
 
+	countArgs := append([]any{tenant}, filterArgs...)
 	var total int
-	if err := db.RawQuery(countUsers, tenant).First(&total); err != nil {
+	if err := db.RawQuery(fmt.Sprintf(countUsers, filterSQL), countArgs...).First(&total); err != nil {
 		return nil, 0, fmt.Errorf("scim: counting users: %w", err)
 	}
 
@@ -76,8 +80,9 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 		return nil, total, nil
 	}
 
+	listArgs := append(append([]any{tenant}, filterArgs...), query.Count, query.Offset())
 	var rows []scimUser
-	if err := db.RawQuery(fmt.Sprintf(listUsers, orderBy), tenant, query.Count, query.Offset()).All(&rows); err != nil {
+	if err := db.RawQuery(fmt.Sprintf(listUsers, filterSQL, orderBy), listArgs...).All(&rows); err != nil {
 		return nil, 0, fmt.Errorf("scim: listing users: %w", err)
 	}
 
@@ -189,6 +194,18 @@ func (r *userRepository) mapFrom(row *scimUser) (*core.User, error) {
 
 func (r *userRepository) tenant(ctx context.Context) string {
 	return tenantKey.Value(ctx).ID.String()
+}
+
+func (r *userRepository) filterClause(query *protocol.SearchRequest) (string, []any, error) {
+	if query.Filter == "" {
+		return "", nil, nil
+	}
+
+	fragment, err := filterSQL([]*core.Schema{r.schema}, query.Filter)
+	if err != nil {
+		return "", nil, err
+	}
+	return " AND (" + fragment.sql + ")", fragment.args, nil
 }
 
 func (r *userRepository) orderBy(query *protocol.SearchRequest) (string, error) {

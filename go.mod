@@ -149,7 +149,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20240303152453-e0e82adf1721
 	github.com/stretchr/testify v1.12.1
-	github.com/supabase-community/scim-go v0.1.0
+	github.com/supabase-community/scim-go v0.3.1-0.20260910190316-11404e693b82
 	github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.64.0

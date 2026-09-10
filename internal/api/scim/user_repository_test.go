@@ -134,8 +134,21 @@ func TestUserRepository(t *testing.T) {
 			assert.Contains(t, err.Error(), "nickName")
 		})
 
-		t.Run("refuses any filter", func(t *testing.T) {
-			_, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `userName eq "alice@example.com"`})
+		t.Run("filters by an exact userName", func(t *testing.T) {
+			users, total, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `userName eq "alice@example.com"`})
+			require.NoError(t, err)
+			assert.Equal(t, 1, total)
+			assert.Equal(t, []string{"alice@example.com"}, userNamesOf(users))
+		})
+
+		t.Run("filters case-insensitively with co", func(t *testing.T) {
+			users, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `userName co "JENSEN"`})
+			require.NoError(t, err)
+			assert.Equal(t, []string{"BJensen@example.com"}, userNamesOf(users))
+		})
+
+		t.Run("rejects a filter operator invalid for the type", func(t *testing.T) {
+			_, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count, Filter: `active gt true`})
 			require.ErrorIs(t, err, protocol.ErrInvalidFilter(""))
 		})
 	})

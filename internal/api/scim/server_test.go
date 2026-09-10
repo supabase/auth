@@ -298,14 +298,53 @@ func TestServer(t *testing.T) {
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
 		})
 
-		t.Run("?filter is rejected", func(t *testing.T) {
+		t.Run("?filter narrows the result set", func(t *testing.T) {
 			get := usersFor(t, srv, db, "alice", "bob", "carol")
 
-			w := get(filterQuery(`userName eq "bob"`))
+			body := listed[*core.User](t, get(filterQuery(`userName eq "bob"`)))
+
+			assert.Equal(t, 1, body.TotalResults)
+			assert.Equal(t, []string{"bob"}, userNamesOf(body.Resources))
+		})
+
+		t.Run("?filter co matches substrings case-insensitively", func(t *testing.T) {
+			get := usersFor(t, srv, db, "alice", "bob", "carol")
+
+			body := listed[*core.User](t, get(filterQuery(`userName co "A"`)))
+
+			assert.ElementsMatch(t, []string{"alice", "carol"}, userNamesOf(body.Resources))
+		})
+
+		t.Run("?filter rejects an operator invalid for the attribute type", func(t *testing.T) {
+			get := usersFor(t, srv, db, "alice")
+
+			w := get(filterQuery(`active gt true`))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidFilter))
+		})
+
+		t.Run("?filter matches a value path against emails", func(t *testing.T) {
+			tenant := createTenant(t, db)
+			createUser(t, db, tenant, &core.User{
+				ID:       uuid.Must(uuid.NewV4()).String(),
+				UserName: "worker",
+				Emails:   []core.Email{{Value: "worker@example.com", Type: "work"}},
+			})
+			createUser(t, db, tenant, &core.User{
+				ID:       uuid.Must(uuid.NewV4()).String(),
+				UserName: "homebody",
+				Emails:   []core.Email{{Value: "home@example.com", Type: "home"}},
+			})
+
+			r := httptest.NewRequest(http.MethodGet, BasePath+"/Users?"+filterQuery(`emails[type eq "work"]`), nil)
+			r = r.WithContext(tenantKey.WithValue(r.Context(), tenant))
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.Users(w, r))
+
+			body := listed[*core.User](t, w)
+			assert.Equal(t, []string{"worker"}, userNamesOf(body.Resources))
 		})
 	})
 

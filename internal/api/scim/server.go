@@ -39,11 +39,11 @@ func NewServer(db *storage.Connection, externalURL string) *Server {
 	return &Server{
 		db:     db,
 		limits: protocol.DefaultLimits,
-		users:  &userRepository{db: db, baseURL: baseURL},
+		users:  &userRepository{db: db, baseURL: baseURL, schema: userSchema},
 		serviceProviderConfig: newServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
-		).Sorting(),
+		).Sorting().Filtering(protocol.DefaultLimits.MaxCount),
 		resourceTypes: []*core.ResourceType{newUserResourceType(baseURL, userSchema)},
 		schemas:       []*core.Schema{userSchema},
 	}
@@ -341,10 +341,13 @@ func newUserSchema(baseURL string) *core.Schema {
 					core.NewAttribute("middleName", core.TypeString, "The middle name(s) of the User."),
 				),
 
+			core.NewAttribute("displayName", core.TypeString, "The name of the User, suitable for display."),
+
 			core.NewAttribute("emails", core.TypeComplex, "Email addresses for the user.").
 				AsMultiValued().
 				With(
 					core.NewAttribute("value", core.TypeString, "An email address for the user."),
+					core.NewAttribute("type", core.TypeString, "The type of email address."),
 					core.NewAttribute("primary", core.TypeBoolean, "The 'primary' email address"),
 				),
 
