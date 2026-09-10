@@ -138,7 +138,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
 	}
 
-	api.scim = scim.NewServer(globalConfig)
+	api.scim = scim.NewServer(db, globalConfig.API.ExternalURL)
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -467,7 +467,16 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 			r.Get("/ServiceProviderConfig", api.scim.ServiceProviderConfig)
 			r.Get("/ResourceTypes", api.scim.ResourceTypes)
+			r.Get("/ResourceTypes/{id}", api.scim.ResourceTypeByID)
 			r.Get("/Schemas", api.scim.Schemas)
+			r.Get("/Schemas/{id}", api.scim.SchemaByID)
+
+			tenant := r.WithBypass(api.scim.Tenant)
+			tenant.Get("/Users", api.scim.Users)
+			tenant.Post("/Users", api.scim.CreateUser)
+			tenant.Get("/Users/{id}", api.scim.UserByID)
+			tenant.Put("/Users/{id}", api.scim.ReplaceUser)
+			tenant.Delete("/Users/{id}", api.scim.DeleteUser)
 		})
 	})
 

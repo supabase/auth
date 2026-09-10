@@ -11,14 +11,14 @@
     "maxPayloadSize": 0
   },
   "filter": {
-    "supported": false,
-    "maxResults": 0
+    "supported": true,
+    "maxResults": 100
   },
   "changePassword": {
     "supported": false
   },
   "sort": {
-    "supported": false
+    "supported": true
   },
   "etag": {
     "supported": false
