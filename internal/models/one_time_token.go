@@ -114,6 +114,8 @@ type OneTimeToken struct {
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+
+	ExpiresAt *time.Time `json:"expires_at" db:"expires_at"`
 }
 
 func (OneTimeToken) TableName() string {
@@ -132,10 +134,17 @@ func ClearOneTimeTokenForUser(tx *storage.Connection, userID uuid.UUID, tokenTyp
 	return nil
 }
 
-func CreateOneTimeToken(tx *storage.Connection, userID uuid.UUID, relatesTo, tokenHash string, tokenType OneTimeTokenType) error {
+func CreateOneTimeToken(
+	tx *storage.Connection,
+	userID uuid.UUID,
+	relatesTo, tokenHash string,
+	tokenType OneTimeTokenType,
+	validityDuration time.Duration) error {
 	if err := ClearOneTimeTokenForUser(tx, userID, tokenType); err != nil {
 		return err
 	}
+
+	expiresAt := time.Now().Add(validityDuration)
 
 	oneTimeToken := &OneTimeToken{
 		ID:        uuid.Must(uuid.NewV4()),
@@ -143,6 +152,7 @@ func CreateOneTimeToken(tx *storage.Connection, userID uuid.UUID, relatesTo, tok
 		TokenType: tokenType,
 		TokenHash: tokenHash,
 		RelatesTo: strings.ToLower(relatesTo),
+		ExpiresAt: &expiresAt,
 	}
 
 	if err := tx.Eager().Create(oneTimeToken); err != nil {
