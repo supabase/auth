@@ -789,9 +789,12 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 // challenge in the one_time_tokens table and derives the user from that row,
 // instead of finding the user by identifier and comparing the users.*_token
 // columns. A lookup miss is rejected as an expired or invalid token; there is
-// no fallback to the users columns. Test OTPs and Twilio Verify are not handled
-// yet on this path; a follow-up PR adds them.
+// no fallback to the users columns.
+//
+// NOTE: Test OTPs and Twilio Verify are not handled yet on this path; a follow-up PR will add them.
 func (a *API) verifyUserAndTokenFromOTT(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+
+	// TODO AUTH-1553: Add support for test OTPs and Twilio Verify on this path.
 	ott, err := a.verifyOneTimeToken(conn, params)
 	if err != nil {
 		return nil, err
