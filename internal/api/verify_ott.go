@@ -23,6 +23,9 @@ func verifyUserAndTokenFromOTT(conn *storage.Connection, params *VerifyParams, a
 		return nil, err
 	}
 
+	// Resolve the generic email type to the flow that issued the token, so the caller runs the correct post-verification step.
+	params.Type = resolveEmailOTPType(params.Type, ott.TokenType)
+
 	user, err := models.FindUserByID(conn, ott.UserID)
 	if models.IsNotFoundError(err) {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
@@ -57,16 +60,6 @@ func verifyOneTimeToken(conn *storage.Connection, params *VerifyParams) (*models
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("one time token has expired")
 	}
 
-	// The generic email type needs to match to the flow that issues the token, so the caller runs the right post-verify step
-	if params.Type == mail.EmailOTPVerification {
-		switch ott.TokenType {
-		case models.ConfirmationToken:
-			params.Type = mail.SignupVerification
-		case models.RecoveryToken:
-			params.Type = mail.MagicLinkVerification
-		}
-	}
-
 	return ott, nil
 }
 
@@ -87,6 +80,18 @@ func verifyTypeToTokenTypes(verifyType string) []models.OneTimeTokenType {
 	default:
 		return nil
 	}
+}
+
+func resolveEmailOTPType(verifyType string, tokenType models.OneTimeTokenType) string {
+	if verifyType == mail.EmailOTPVerification {
+		switch tokenType {
+		case models.ConfirmationToken:
+			return mail.SignupVerification
+		case models.RecoveryToken:
+			return mail.MagicLinkVerification
+		}
+	}
+	return verifyType
 }
 
 // validateUserForOTT checks that the user found from a one_time_tokens row is
