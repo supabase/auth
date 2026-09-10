@@ -67,7 +67,7 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 		return nil, 0, err
 	}
 
-	filterSQL, filterArgs, err := r.filterClause(query)
+	filterClauseSQL, filterArgs, err := r.filterClause(query)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -77,7 +77,7 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 
 	countArgs := append([]any{tenant}, filterArgs...)
 	var total int
-	if err := db.RawQuery(fmt.Sprintf(countUsers, filterSQL), countArgs...).First(&total); err != nil {
+	if err := db.RawQuery(fmt.Sprintf(countUsers, filterClauseSQL), countArgs...).First(&total); err != nil {
 		return nil, 0, fmt.Errorf("scim: counting users: %w", err)
 	}
 
@@ -87,7 +87,7 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 
 	listArgs := append(append([]any{tenant}, filterArgs...), query.Count, query.Offset())
 	var rows []scimUser
-	if err := db.RawQuery(fmt.Sprintf(listUsers, filterSQL, orderBy), listArgs...).All(&rows); err != nil {
+	if err := db.RawQuery(fmt.Sprintf(listUsers, filterClauseSQL, orderBy), listArgs...).All(&rows); err != nil {
 		return nil, 0, fmt.Errorf("scim: listing users: %w", err)
 	}
 

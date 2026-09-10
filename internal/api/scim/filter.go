@@ -107,9 +107,6 @@ func (f *sqlEvaluator) ValuePath(attribute *core.Attribute, key string, valueFil
 	}
 
 	source := "resource->'" + attribute.Name + "'"
-	if column, ok := filterColumns[key]; ok {
-		source = column
-	}
 	sql := "EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(" + source + ", '[]'::jsonb)) AS e WHERE " + inner.sql + ")"
 	return sqlFragment{sql: sql, args: inner.args}, nil
 }
