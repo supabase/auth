@@ -3,18 +3,17 @@ package models
 import (
 	"database/sql"
 	"encoding/base64"
-	"fmt"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/storage/dbsql/sqlcgen"
 )
 
 type AuthenticatorAssuranceLevel int
@@ -275,11 +274,12 @@ func FindSessionByID(tx *storage.Connection, id uuid.UUID, forUpdate bool) (*Ses
 	session := &Session{}
 
 	if forUpdate {
-		// pop does not provide us with a way to execute FOR UPDATE
-		// queries which lock the rows affected by the query from
-		// being accessed by any other transaction that also uses FOR
-		// UPDATE
-		if err := tx.RawQuery(fmt.Sprintf("SELECT * FROM %q WHERE id = ? LIMIT 1 FOR UPDATE SKIP LOCKED;", session.TableName()), id).First(session); err != nil {
+		q, err := sqlQueries(tx)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, err := q.LockSessionForUpdate(tx.Context(), id); err != nil {
 			if errors.Cause(err) == sql.ErrNoRows {
 				return nil, SessionNotFoundError{}
 			}
@@ -324,8 +324,12 @@ func FindSessionsByFactorID(tx *storage.Connection, factorID uuid.UUID) ([]*Sess
 // sessions for the user, a nil result is returned without an error.
 func FindAllSessionsForUser(tx *storage.Connection, userId uuid.UUID, forUpdate bool) ([]*Session, error) {
 	if forUpdate {
-		user := &User{}
-		if err := tx.RawQuery(fmt.Sprintf("SELECT id FROM %q WHERE id = ? LIMIT 1 FOR UPDATE SKIP LOCKED;", user.TableName()), userId).First(user); err != nil {
+		q, err := sqlQueries(tx)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, err := q.LockUserForUpdate(tx.Context(), userId); err != nil {
 			if errors.Cause(err) == sql.ErrNoRows {
 				return nil, UserNotFoundError{}
 			}
@@ -347,31 +351,74 @@ func FindAllSessionsForUser(tx *storage.Connection, userId uuid.UUID, forUpdate 
 }
 
 func updateFactorAssociatedSessions(tx *storage.Connection, userID, factorID uuid.UUID, aal string) error {
-	return tx.RawQuery("UPDATE "+(&pop.Model{Value: Session{}}).TableName()+" set aal = ?, factor_id = ? WHERE user_id = ? AND factor_id = ?", aal, nil, userID, factorID).Exec()
+	q, err := sqlQueries(tx)
+	if err != nil {
+		return err
+	}
+
+	return q.UpdateFactorAssociatedSessions(tx.Context(), sqlcgen.UpdateFactorAssociatedSessionsParams{
+		Aal:      sqlcgen.NullAuthAalLevel{AuthAalLevel: sqlcgen.AuthAalLevel(aal), Valid: true},
+		UserID:   userID,
+		FactorID: uuid.NullUUID{UUID: factorID, Valid: true},
+	})
 }
 
 func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level string) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND aal < ?", userID, level).Exec()
+	q, err := sqlQueries(tx)
+	if err != nil {
+		return err
+	}
+
+	return q.InvalidateSessionsWithAALLessThan(tx.Context(), sqlcgen.InvalidateSessionsWithAALLessThanParams{
+		UserID: userID,
+		Aal:    sqlcgen.NullAuthAalLevel{AuthAalLevel: sqlcgen.AuthAalLevel(level), Valid: true},
+	})
 }
 
 // Logout deletes all sessions for a user.
 func Logout(tx *storage.Connection, userId uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ?", userId).Exec()
+	q, err := sqlQueries(tx)
+	if err != nil {
+		return err
+	}
+
+	return q.LogoutUserSessions(tx.Context(), userId)
 }
 
 // LogoutSession deletes the current session for a user
 func LogoutSession(tx *storage.Connection, sessionId uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id = ?", sessionId).Exec()
+	q, err := sqlQueries(tx)
+	if err != nil {
+		return err
+	}
+
+	return q.LogoutSession(tx.Context(), sessionId)
 }
 
 // LogoutAllExceptMe deletes all sessions for a user except the current one
 func LogoutAllExceptMe(tx *storage.Connection, sessionId uuid.UUID, userID uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id != ? AND user_id = ?", sessionId, userID).Exec()
+	q, err := sqlQueries(tx)
+	if err != nil {
+		return err
+	}
+
+	return q.LogoutAllExceptMe(tx.Context(), sqlcgen.LogoutAllExceptMeParams{
+		ID:     sessionId,
+		UserID: userID,
+	})
 }
 
 // RevokeOAuthSessions deletes all sessions associated with a specific OAuth client for a user
 func RevokeOAuthSessions(tx *storage.Connection, userID uuid.UUID, oauthClientID uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND oauth_client_id = ?", userID, oauthClientID).Exec()
+	q, err := sqlQueries(tx)
+	if err != nil {
+		return err
+	}
+
+	return q.RevokeOAuthSessions(tx.Context(), sqlcgen.RevokeOAuthSessionsParams{
+		UserID:        userID,
+		OauthClientID: uuid.NullUUID{UUID: oauthClientID, Valid: true},
+	})
 }
 
 func (s *Session) UpdateAALAndAssociatedFactor(tx *storage.Connection, aal AuthenticatorAssuranceLevel, factorID *uuid.UUID) error {
