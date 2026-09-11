@@ -412,7 +412,7 @@ func (c *Connection) WithContext(ctx context.Context) *Connection {
 func getExcludedColumns(model interface{}, includeColumns ...string) ([]string, error) {
 	sm := &pop.Model{Value: model}
 	st := reflect.TypeOf(model)
-	if st.Kind() == reflect.Ptr {
+	if st.Kind() == reflect.Pointer {
 		_ = st.Elem()
 	}
 

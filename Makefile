@@ -1,5 +1,5 @@
-.PHONY: all build deps image migrate test vet sec vulncheck format unused release
-.PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck check-go-version
+.PHONY: all build deps image migrate test vet sec vulncheck format hooks lint unused release
+.PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck check-go-version check-format
 CHECK_FILES ?= ./...
 
 ifdef RELEASE_VERSION
@@ -72,13 +72,14 @@ deps: ## Install dependencies.
 	@go mod download
 	@go mod verify
 
-release-test: \
+lint: \
 	check-go-version \
 	vet \
 	static \
 	sec \
-	vulncheck \
-	test
+	vulncheck
+
+release-test: lint test
 
 release: $(RELEASE_ARCHIVES)
 
@@ -183,6 +184,19 @@ docker-clean: ## Remove the development containers and volumes
 
 format:
 	gofmt -s -w .
+
+check-format: ## Verify gofmt formatting. Pass FILES="..." to scope the check.
+	@files=$$(gofmt -s -l $(or $(FILES),.)); \
+	if [ -n "$$files" ]; then \
+		echo "The following files are not gofmt-formatted:"; \
+		echo "$$files"; \
+		echo 'Run "make format" and re-stage the changes.'; \
+		exit 1; \
+	fi
+
+hooks: ## Install the git hooks defined in lefthook.yml (requires: brew install lefthook).
+	lefthook install
+	$(MAKE) -C tools
 
 clean:
 	$(MAKE) -C tools clean

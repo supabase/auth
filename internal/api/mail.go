@@ -255,9 +255,10 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			user.EmailChangeSentAt = &now
 			user.EmailChange = params.NewEmail
 			user.EmailChangeConfirmStatus = zeroConfirmation
-			if params.Type == "email_change_current" {
+			switch params.Type {
+			case "email_change_current":
 				user.EmailChangeTokenCurrent = hashedToken
-			} else if params.Type == "email_change_new" {
+			case "email_change_new":
 				user.EmailChangeTokenNew = crypto.GenerateTokenHash(params.NewEmail, otp)
 			}
 			terr = tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status")

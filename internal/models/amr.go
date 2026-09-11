@@ -22,7 +22,7 @@ func (AMRClaim) TableName() string {
 }
 
 func (cl *AMRClaim) IsAAL2Claim() bool {
-	return *cl.AuthenticationMethod == TOTPSignIn.String() || *cl.AuthenticationMethod == MFAPhone.String() || *cl.AuthenticationMethod == MFAWebAuthn.String()
+	return *cl.AuthenticationMethod == TOTPSignIn.String() || *cl.AuthenticationMethod == MFAPhone.String() || *cl.AuthenticationMethod == MFAWebAuthn.String() || *cl.AuthenticationMethod == MFARecoveryCode.String()
 }
 
 func AddClaimToSession(tx *storage.Connection, sessionId uuid.UUID, authenticationMethod AuthenticationMethod) error {

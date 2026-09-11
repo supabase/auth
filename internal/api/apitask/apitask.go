@@ -11,6 +11,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/ctxkey"
 	"github.com/supabase/auth/internal/observability"
 )
 
@@ -81,13 +82,13 @@ func With(ctx context.Context) context.Context {
 	if !ok {
 		wrk = &requestWorker{}
 	}
-	return context.WithValue(ctx, ctxKey, wrk)
+	return ctxKey.WithValue(ctx, wrk)
 }
 
-var ctxKey = new(int)
+var ctxKey = ctxkey.New[*requestWorker]("apitask_worker")
 
 func from(ctx context.Context) (*requestWorker, bool) {
-	if st, ok := ctx.Value(ctxKey).(*requestWorker); ok && st != nil {
+	if st, ok := ctxKey.Lookup(ctx); ok && st != nil {
 		return st, true
 	}
 	return nil, false

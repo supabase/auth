@@ -87,7 +87,7 @@ var internalUserInfoEndpointGoogle = UserInfoEndpointGoogle
 func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	if idToken := tok.Extra("id_token"); idToken != nil {
 		_, data, err := ParseIDToken(ctx, g.oidc, &oidc.Config{
-			ClientID: g.Config.ClientID,
+			ClientID: g.ClientID,
 		}, idToken.(string), ParseIDTokenOptions{
 			AccessToken: tok.AccessToken,
 		})
