@@ -766,8 +766,8 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 			expectedToken = user.PhoneChangeToken
 		}
 
-		if !config.Hook.SendSMS.Enabled && config.Sms.IsTwilioVerifyProvider() {
-			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(phone, params.Token); err != nil {
+		if !config.Hook.SendSMS.Enabled && config.Sms.IsVerifyServiceProvider() {
+			if err := smsProvider.VerifyOTP(phone, params.Token); err != nil {
 				return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
 			}
 			return user, nil

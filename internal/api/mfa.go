@@ -752,7 +752,7 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	var valid bool
 	var otpCode string
 	var shouldReEncrypt bool
-	if config.Sms.IsTwilioVerifyProvider() {
+	if config.Sms.IsVerifyServiceProvider() {
 		smsProvider, err := sms_provider.GetSmsProvider(*config)
 		if err != nil {
 			return apierrors.NewInternalServerError("Failed to get SMS provider").WithInternalError(err)

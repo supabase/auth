@@ -2,6 +2,7 @@ package sms_provider
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -42,6 +43,9 @@ func TestSmsProvider(t *testing.T) {
 					AccountSid:        "test_account_sid",
 					AuthToken:         "test_auth_token",
 					MessageServiceSid: "test_message_service_id",
+				},
+				BirdVerify: conf.BirdVerifyProviderConfiguration{
+					ApiKey: "bk_eu1_test_api_key",
 				},
 				Messagebird: conf.MessagebirdProviderConfiguration{
 					AccessKey:  "test_access_key",
@@ -284,4 +288,99 @@ func (ts *SmsProviderTestSuite) TestTwilioVerifySendSms() {
 			require.Equal(ts.T(), c.ExpectedError, err)
 		})
 	}
+}
+
+func (ts *SmsProviderTestSuite) TestBirdVerifySendAndCheck() {
+	defer gock.Off()
+	provider, err := NewBirdVerifyProvider(ts.Config.Sms.BirdVerify)
+	require.NoError(ts.T(), err)
+
+	birdVerifyProvider, ok := provider.(*BirdVerifyProvider)
+	require.Equal(ts.T(), true, ok)
+
+	// The base URL comes from the key's bk_{region}_ prefix.
+	require.Equal(ts.T(), "https://eu1.platform.bird.com/v1/verify/verifications", birdVerifyProvider.APIPath)
+
+	phone := "123456789"
+	authHeader := "Bearer " + birdVerifyProvider.Config.ApiKey
+
+	gock.New(birdVerifyProvider.APIPath).Post("").
+		MatchHeader("Authorization", authHeader).
+		JSON(BirdVerificationRequest{
+			To:      BirdVerifyTo{PhoneNumber: "+" + phone},
+			Options: BirdVerificationOptions{Channels: []string{SMSProvider}},
+		}).
+		Reply(200).JSON(BirdVerificationResponse{ID: "ver_abcdef", Status: "pending"})
+
+	id, err := birdVerifyProvider.SendSms(phone, "unused", SMSProvider)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), "ver_abcdef", id)
+
+	ts.Run("Correct code", func() {
+		gock.New(birdVerifyProvider.APIPath).Post("/check").
+			MatchHeader("Authorization", authHeader).
+			JSON(BirdVerificationCheckRequest{To: BirdVerifyTo{PhoneNumber: "+" + phone}, Code: "123456"}).
+			Reply(200).JSON(BirdVerificationCheckResponse{Success: true})
+
+		require.NoError(ts.T(), birdVerifyProvider.VerifyOTP(phone, "123456"))
+	})
+
+	ts.Run("Incorrect code is a 200 with success false", func() {
+		gock.New(birdVerifyProvider.APIPath).Post("/check").
+			MatchHeader("Authorization", authHeader).
+			JSON(BirdVerificationCheckRequest{To: BirdVerifyTo{PhoneNumber: "+" + phone}, Code: "000000"}).
+			Reply(200).JSON(BirdVerificationCheckResponse{Success: false, Reason: "incorrect_code"})
+
+		err := birdVerifyProvider.VerifyOTP(phone, "000000")
+		require.Error(ts.T(), err)
+		require.Contains(ts.T(), err.Error(), "incorrect_code")
+	})
+
+	ts.Run("Error responses are nested under error", func() {
+		gock.New(birdVerifyProvider.APIPath).Post("/check").
+			MatchHeader("Authorization", authHeader).
+			JSON(BirdVerificationCheckRequest{To: BirdVerifyTo{PhoneNumber: "+" + phone}, Code: "123456"}).
+			Reply(404).JSON(birdErrEnvelope{Error: BirdErrResponse{
+			Code:    "E12345",
+			Message: "No verification found for this recipient",
+		}})
+
+		err := birdVerifyProvider.VerifyOTP(phone, "123456")
+		require.Error(ts.T(), err)
+		require.Contains(ts.T(), err.Error(), "No verification found for this recipient")
+		require.Contains(ts.T(), err.Error(), "E12345")
+		require.Contains(ts.T(), err.Error(), "404")
+		// The optional fields are absent from this fixture and must not be printed.
+		require.NotContains(ts.T(), err.Error(), "request id")
+		require.NotContains(ts.T(), err.Error(), "more information")
+	})
+
+	ts.Run("Remediation and request id are surfaced", func() {
+		gock.New(birdVerifyProvider.APIPath).Post("").
+			MatchHeader("Authorization", authHeader).
+			JSON(BirdVerificationRequest{
+				To:      BirdVerifyTo{PhoneNumber: "+" + phone},
+				Options: BirdVerificationOptions{Channels: []string{SMSProvider}},
+			}).
+			Reply(422).JSON(birdErrEnvelope{Error: BirdErrResponse{
+			Type:        "validation_error",
+			Code:        "E12020",
+			Name:        "CountryNotEnabled",
+			Message:     "This destination country is not enabled for your workspace.",
+			Remediation: "Enable this destination country in your workspace's SMS destination settings, then send again.",
+			DocURL:      "https://bird.com/docs/api/errors/E12020",
+			RequestID:   "req_01ky7q3hckecgv6d7jpq865532",
+		}})
+
+		_, err := birdVerifyProvider.SendSms(phone, "unused", SMSProvider)
+		require.Error(ts.T(), err)
+		require.Contains(ts.T(), err.Error(), "Enable this destination country")
+		require.Contains(ts.T(), err.Error(), "req_01ky7q3hckecgv6d7jpq865532")
+		require.Contains(ts.T(), err.Error(), "https://bird.com/docs/api/errors/E12020")
+
+		var birdErr BirdErrResponse
+		require.True(ts.T(), errors.As(err, &birdErr))
+		require.Equal(ts.T(), "E12020", birdErr.Code)
+		require.Equal(ts.T(), 422, birdErr.StatusCode)
+	})
 }
