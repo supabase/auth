@@ -2,8 +2,10 @@ package api
 
 import (
 	"strings"
+	"time"
 
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/sms_provider"
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -13,11 +15,19 @@ import (
 // challenge in the one_time_tokens table and derives the user from that row,
 // instead of finding the user by identifier and comparing the users.*_token
 // columns. A lookup miss is rejected as an expired or invalid token.
-//
-// NOTE: Test OTPs and Twilio Verify are not handled yet on this path; a follow-up PR will add them.
-func verifyUserAndTokenFromOTT(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+func (a *API) verifyUserAndTokenFromOTT(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+	config := a.config
 
-	// TODO AUTH-1553: Add support for test OTPs and Twilio Verify on this path.
+	// Twilio Verify and test OTPs are verified without a local challenge
+	if params.Type == smsVerification || params.Type == phoneChangeVerification {
+		if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok && params.Token == testOTP {
+			return a.findUserForTestOTP(conn, params, aud)
+		}
+		if !config.Hook.SendSMS.Enabled && config.Sms.IsTwilioVerifyProvider() {
+			return a.verifyPhoneWithTwilio(conn, params, aud)
+		}
+	}
+
 	ott, err := verifyOneTimeToken(conn, params)
 	if err != nil {
 		return nil, err
@@ -43,6 +53,84 @@ func verifyUserAndTokenFromOTT(conn *storage.Connection, params *VerifyParams, a
 	return user, nil
 }
 
+func (a *API) verifyPhoneWithTwilio(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+	tokenType, ok := verifyTypeToTokenType(params.Type)
+	if !ok {
+		// The caller only routes phone types here, so in practice this should never happen.
+		return nil, apierrors.NewInternalServerError("Twilio Verify lookup called for unknown verification type %q", params.Type)
+	}
+
+	ott, err := models.FindOneTimeTokenByRelatesTo(conn, params.Phone, tokenType)
+	if models.IsNotFoundError(err) {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+	} else if err != nil {
+		return nil, apierrors.NewInternalServerError("Database error finding one time token").WithInternalError(err)
+	}
+
+	user, err := models.FindUserByID(conn, ott.UserID)
+	if models.IsNotFoundError(err) {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+	} else if err != nil {
+		return nil, apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
+	}
+
+	if err := validateUserForOTT(params, ott, user, aud); err != nil {
+		return nil, err
+	}
+
+	if user.IsBanned() {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+	}
+	if err := a.verifyOTPWithTwilio(params.Phone, params.Token); err != nil {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+	}
+	return user, nil
+}
+
+// findUserForTestOTP resolves the user for a phone verification whose code
+// matched a configured test OTP. A test OTP has no local challenge.
+func (a *API) findUserForTestOTP(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+	var user *models.User
+	var err error
+
+	switch params.Type {
+	case phoneChangeVerification:
+		user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
+	case smsVerification:
+		user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
+	default:
+		// The caller only routes phone types here, so in practice this should never happen.
+		return nil, apierrors.NewInternalServerError("Test OTP lookup called for non-phone verification type %q", params.Type)
+	}
+	if models.IsNotFoundError(err) {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+	} else if err != nil {
+		return nil, apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
+	}
+
+	if user.IsBanned() {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+	}
+	return user, nil
+}
+
+// verifyOTPWithTwilio asks Twilio Verify to check the code. Twilio generates
+// and delivers its own code, so there is no local challenge to compare.
+func (a *API) verifyOTPWithTwilio(phone, code string) error {
+	smsProvider, err := sms_provider.GetSmsProvider(*a.config)
+	if err != nil {
+		return apierrors.NewInternalServerError("Failed to get SMS provider").WithInternalError(err)
+	}
+	twilioVerify, ok := smsProvider.(*sms_provider.TwilioVerifyProvider)
+	if !ok {
+		return apierrors.NewInternalServerError("SMS provider is not Twilio Verify")
+	}
+	if err := twilioVerify.VerifyOTP(phone, code); err != nil {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+	}
+	return nil
+}
+
 func verifyOneTimeToken(conn *storage.Connection, params *VerifyParams) (*models.OneTimeToken, error) {
 	tokenTypes := verifyTypeToTokenTypes(params.Type)
 	if len(tokenTypes) == 0 {
@@ -63,22 +151,38 @@ func verifyOneTimeToken(conn *storage.Connection, params *VerifyParams) (*models
 	return ott, nil
 }
 
+// verifyTypeToTokenTypes returns nil for an unknown verification type.
 func verifyTypeToTokenTypes(verifyType string) []models.OneTimeTokenType {
 	switch verifyType {
 	case mail.EmailOTPVerification:
 		return []models.OneTimeTokenType{models.ConfirmationToken, models.RecoveryToken}
-	case mail.SignupVerification, mail.InviteVerification:
-		return []models.OneTimeTokenType{models.ConfirmationToken}
-	case mail.RecoveryVerification, mail.MagicLinkVerification:
-		return []models.OneTimeTokenType{models.RecoveryToken}
 	case mail.EmailChangeVerification:
 		return []models.OneTimeTokenType{models.EmailChangeTokenCurrent, models.EmailChangeTokenNew}
-	case phoneChangeVerification:
-		return []models.OneTimeTokenType{models.PhoneChangeToken}
-	case smsVerification:
-		return []models.OneTimeTokenType{models.ConfirmationToken}
-	default:
+	}
+
+	tokenType, ok := verifyTypeToTokenType(verifyType)
+	if !ok {
 		return nil
+	}
+	return []models.OneTimeTokenType{tokenType}
+}
+
+// verifyTypeToTokenType maps a verification type that has exactly one token
+// type. ok is false for an unknown type. ConfirmationToken is the zero value of
+// OneTimeTokenType, so callers must check ok instead of the returned type.
+func verifyTypeToTokenType(verifyType string) (models.OneTimeTokenType, bool) {
+	switch verifyType {
+	case mail.SignupVerification, mail.InviteVerification:
+		return models.ConfirmationToken, true
+	case mail.RecoveryVerification, mail.MagicLinkVerification:
+		return models.RecoveryToken, true
+	case smsVerification:
+		// phone signup codes are stored as confirmation tokens
+		return models.ConfirmationToken, true
+	case phoneChangeVerification:
+		return models.PhoneChangeToken, true
+	default:
+		return 0, false
 	}
 }
 
