@@ -865,10 +865,19 @@ Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/req
 - `SMS_TWILIO_AUTH_TOKEN`
 - `SMS_TWILIO_MESSAGE_SERVICE_SID` - can be set to your twilio sender mobile number
 
-Or Messagebird credentials, which can be obtained in the [Dashboard](https://dashboard.messagebird.com/en/developers/access):
+Or Messagebird credentials:
 
-- `SMS_MESSAGEBIRD_ACCESS_KEY` - your Messagebird access key
-- `SMS_MESSAGEBIRD_ORIGINATOR` - SMS sender (your Messagebird phone number with + or company name)
+- `SMS_MESSAGEBIRD_ACCESS_KEY` - your access key
+- `SMS_MESSAGEBIRD_ORIGINATOR` - SMS sender (a phone number with + or a company name)
+
+MessageBird is now Bird, and the two platforms issue different keys. The access
+key you hold decides which API Auth calls, so no other setting changes:
+
+- A **Bird** key (`bk_{region}_...`, from the [Bird dashboard](https://bird.com/dashboard/w/api-keys), needs the `sms` scope) calls Bird's API. The region comes from the key, so there is nothing else to configure. `SMS_MESSAGEBIRD_ORIGINATOR` becomes optional here: leave it unset and Bird sends its own one-time-passcode template, choosing a sender for the destination, which is what lets a workspace that owns no number send at all. Set it and Auth sends its own `SMS_TEMPLATE` text from that sender instead. Either way Auth still generates and verifies the code.
+- A **legacy MessageBird** access key calls the legacy API exactly as before, and still requires an originator.
+
+Before sending on Bird, enable your destination countries and fund the
+workspace wallet; a send is rejected until both are done.
 
 ### CAPTCHA
 
