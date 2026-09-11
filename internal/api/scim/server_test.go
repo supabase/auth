@@ -218,7 +218,7 @@ func TestServer(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?startIndex=first", nil)
 			w := httptest.NewRecorder()
 
-			require.NoError(t, srv.Users(w, r))
+			require.NoError(t, srv.Users.List(w, r))
 
 			require.Equal(t, http.StatusBadRequest, w.Code)
 			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
@@ -232,7 +232,7 @@ func TestServer(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?count=all", nil)
 			w := httptest.NewRecorder()
 
-			require.NoError(t, srv.Users(w, r))
+			require.NoError(t, srv.Users.List(w, r))
 
 			require.Equal(t, http.StatusBadRequest, w.Code)
 			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
@@ -341,7 +341,7 @@ func TestServer(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, BasePath+"/Users?"+filterQuery(`emails[type eq "work"]`), nil)
 			r = r.WithContext(tenantKey.WithValue(r.Context(), tenant))
 			w := httptest.NewRecorder()
-			require.NoError(t, srv.Users(w, r))
+			require.NoError(t, srv.Users.List(w, r))
 
 			body := listed[*core.User](t, w)
 			assert.Equal(t, []string{"worker"}, userNamesOf(body.Resources))
@@ -352,7 +352,7 @@ func TestServer(t *testing.T) {
 		t.Helper()
 		r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"`+userName+`"}`, tenant, nil)
 		w := httptest.NewRecorder()
-		require.NoError(t, srv.CreateUser(w, r))
+		require.NoError(t, srv.Users.Create(w, r))
 		require.Equal(t, http.StatusCreated, w.Code)
 
 		var user core.User
@@ -366,7 +366,7 @@ func TestServer(t *testing.T) {
 
 			r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen"}`, tenant, nil)
 			w := httptest.NewRecorder()
-			require.NoError(t, srv.CreateUser(w, r))
+			require.NoError(t, srv.Users.Create(w, r))
 
 			require.Equal(t, http.StatusCreated, w.Code)
 			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
@@ -383,7 +383,7 @@ func TestServer(t *testing.T) {
 
 			r := scimRequest(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen"}`, tenant, nil)
 			w := httptest.NewRecorder()
-			require.NoError(t, srv.CreateUser(w, r))
+			require.NoError(t, srv.Users.Create(w, r))
 
 			require.Equal(t, http.StatusCreated, w.Code)
 
@@ -398,7 +398,7 @@ func TestServer(t *testing.T) {
 
 			r := scimRequest(http.MethodPost, "/Users", `{"externalId":"ext-1"}`, tenant, nil)
 			w := httptest.NewRecorder()
-			require.NoError(t, srv.CreateUser(w, r))
+			require.NoError(t, srv.Users.Create(w, r))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
@@ -409,7 +409,7 @@ func TestServer(t *testing.T) {
 
 			r := scimRequest(http.MethodPost, "/Users", `{"userName":"bjensen"}`, tenant, nil)
 			w := httptest.NewRecorder()
-			require.NoError(t, srv.CreateUser(w, r))
+			require.NoError(t, srv.Users.Create(w, r))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
@@ -420,7 +420,7 @@ func TestServer(t *testing.T) {
 
 			r := scimRequest(http.MethodPost, "/Users", `{"userName":`, tenant, nil)
 			w := httptest.NewRecorder()
-			require.NoError(t, srv.CreateUser(w, r))
+			require.NoError(t, srv.Users.Create(w, r))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidSyntax))
@@ -437,7 +437,7 @@ func TestServer(t *testing.T) {
 
 			w := httptest.NewRecorder()
 
-			require.NoError(t, srv.CreateUser(w, r))
+			require.NoError(t, srv.Users.Create(w, r))
 
 			require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
 			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
@@ -452,7 +452,7 @@ func TestServer(t *testing.T) {
 			body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"carol-renamed"}`
 			r := scimRequest(http.MethodPut, "/Users/"+created.ID, body, tenant, map[string]string{"id": created.ID})
 			w := httptest.NewRecorder()
-			require.NoError(t, srv.ReplaceUser(w, r))
+			require.NoError(t, srv.Users.Replace(w, r))
 
 			require.Equal(t, http.StatusOK, w.Code)
 			var user core.User
@@ -468,7 +468,7 @@ func TestServer(t *testing.T) {
 			body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"ghost"}`
 			r := scimRequest(http.MethodPut, "/Users/"+id, body, tenant, map[string]string{"id": id})
 			w := httptest.NewRecorder()
-			require.NoError(t, srv.ReplaceUser(w, r))
+			require.NoError(t, srv.Users.Replace(w, r))
 
 			assert.Equal(t, http.StatusNotFound, w.Code)
 		})
@@ -481,14 +481,14 @@ func TestServer(t *testing.T) {
 
 			r := scimRequest(http.MethodDelete, "/Users/"+created.ID, "", tenant, map[string]string{"id": created.ID})
 			w := httptest.NewRecorder()
-			require.NoError(t, srv.DeleteUser(w, r))
+			require.NoError(t, srv.Users.Delete(w, r))
 
 			require.Equal(t, http.StatusNoContent, w.Code)
 			assert.Empty(t, w.Body.String())
 
 			get := scimRequest(http.MethodGet, "/Users/"+created.ID, "", tenant, map[string]string{"id": created.ID})
 			gw := httptest.NewRecorder()
-			require.NoError(t, srv.UserByID(gw, get))
+			require.NoError(t, srv.Users.ByID(gw, get))
 			assert.Equal(t, http.StatusNotFound, gw.Code)
 		})
 
@@ -498,7 +498,7 @@ func TestServer(t *testing.T) {
 
 			r := scimRequest(http.MethodDelete, "/Users/"+id, "", tenant, map[string]string{"id": id})
 			w := httptest.NewRecorder()
-			require.NoError(t, srv.DeleteUser(w, r))
+			require.NoError(t, srv.Users.Delete(w, r))
 
 			assert.Equal(t, http.StatusNotFound, w.Code)
 		})
@@ -546,7 +546,7 @@ func usersFor(t *testing.T, srv *Server, db *storage.Connection, userNames ...st
 		r = r.WithContext(tenantKey.WithValue(r.Context(), tenant))
 
 		w := httptest.NewRecorder()
-		require.NoError(t, srv.Users(w, r))
+		require.NoError(t, srv.Users.List(w, r))
 		return w
 	}
 }

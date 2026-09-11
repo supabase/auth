@@ -472,11 +472,11 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Get("/Schemas/{id}", api.scim.SchemaByID)
 
 			tenant := r.WithBypass(api.scim.Tenant)
-			tenant.Get("/Users", api.scim.Users)
-			tenant.Post("/Users", api.scim.CreateUser)
-			tenant.Get("/Users/{id}", api.scim.UserByID)
-			tenant.Put("/Users/{id}", api.scim.ReplaceUser)
-			tenant.Delete("/Users/{id}", api.scim.DeleteUser)
+			tenant.Get("/Users", api.scim.Users.List)
+			tenant.Post("/Users", api.scim.Users.Create)
+			tenant.Get("/Users/{id}", api.scim.Users.ByID)
+			tenant.Put("/Users/{id}", api.scim.Users.Replace)
+			tenant.Delete("/Users/{id}", api.scim.Users.Delete)
 		})
 	})
 
