@@ -26,7 +26,7 @@ const BasePath = "/scim/v2"
 type Server struct {
 	db                    *storage.Connection
 	limits                protocol.Limits
-	users                 Repository[*core.User]
+	users                 Service[*core.User]
 	serviceProviderConfig *core.ServiceProviderConfig
 	resourceTypes         []*core.ResourceType
 	schemas               []*core.Schema
@@ -39,7 +39,7 @@ func NewServer(db *storage.Connection, externalURL string) *Server {
 	return &Server{
 		db:     db,
 		limits: protocol.DefaultLimits,
-		users:  &userRepository{db: db, baseURL: baseURL, schema: userSchema},
+		users:  NewUserService(&userRepository{db: db, baseURL: baseURL, schema: userSchema}),
 		serviceProviderConfig: newServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
