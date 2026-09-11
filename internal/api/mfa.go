@@ -364,7 +364,12 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
-	otp := crypto.GenerateOtp(config.MFA.Phone.OtpLength)
+	phone := factor.Phone.String()
+
+	otp, isTestOtp := "", false
+	if otp, isTestOtp = config.Sms.GetTestOTP(phone, time.Now()); !isTestOtp {
+		otp = crypto.GenerateOtp(config.MFA.Phone.OtpLength)
+	}
 
 	challenge, err := factor.CreatePhoneChallenge(ipAddress, otp, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
 	if err != nil {
@@ -376,31 +381,31 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 		return apierrors.NewInternalServerError("error generating sms template").WithInternalError(err)
 	}
 
-	phone := factor.Phone.String()
-
-	if config.Hook.SendSMS.Enabled {
-		input := v0hooks.NewSendSMSInput(
-			r,
-			user,
-			v0hooks.SMS{
-				OTP:     otp,
-				SMSType: "mfa",
-				Phone:   phone,
-			},
-		)
-		output := v0hooks.SendSMSOutput{}
-		err := a.hooksMgr.InvokeHook(db, r, input, &output)
-		if err != nil {
-			return apierrors.NewInternalServerError("error invoking hook")
-		}
-	} else {
-		smsProvider, err := sms_provider.GetSmsProvider(*config)
-		if err != nil {
-			return apierrors.NewInternalServerError("Failed to get SMS provider").WithInternalError(err)
-		}
-		// We omit messageID for now, can consider reinstating if there are requests.
-		if _, err = smsProvider.SendMessage(phone, message, channel, otp); err != nil {
-			return apierrors.NewInternalServerError("error sending message").WithInternalError(err)
+	if !isTestOtp {
+		if config.Hook.SendSMS.Enabled {
+			input := v0hooks.NewSendSMSInput(
+				r,
+				user,
+				v0hooks.SMS{
+					OTP:     otp,
+					SMSType: "mfa",
+					Phone:   phone,
+				},
+			)
+			output := v0hooks.SendSMSOutput{}
+			err := a.hooksMgr.InvokeHook(db, r, input, &output)
+			if err != nil {
+				return apierrors.NewInternalServerError("error invoking hook")
+			}
+		} else {
+			smsProvider, err := sms_provider.GetSmsProvider(*config)
+			if err != nil {
+				return apierrors.NewInternalServerError("Failed to get SMS provider").WithInternalError(err)
+			}
+			// We omit messageID for now, can consider reinstating if there are requests.
+			if _, err = smsProvider.SendMessage(phone, message, channel, otp); err != nil {
+				return apierrors.NewInternalServerError("error sending message").WithInternalError(err)
+			}
 		}
 	}
 	if err := db.Transaction(func(tx *storage.Connection) error {
