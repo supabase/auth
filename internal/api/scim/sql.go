@@ -2,7 +2,6 @@ package scim
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -10,56 +9,34 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
-var loweredColumns = map[string]bool{
-	"user_name": true,
-}
-
-var uuidColumns = map[string]bool{
-	"id": true,
-}
-
-var comparators = map[filter.Operator]string{
-	filter.OpEquals:            "=",
-	filter.OpGreaterThan:       ">",
-	filter.OpGreaterThanEquals: ">=",
-	filter.OpLessThan:          "<",
-	filter.OpLessThanEquals:    "<=",
-}
-
-type sqlFragment struct {
-	sql  string
-	args []any
-}
-
 type sqlEvaluator struct {
 	element string
 }
 
 func (f *sqlEvaluator) Compare(attribute *core.Attribute, key string, op filter.Operator, value any) (sqlFragment, error) {
-	switch op {
-	case filter.OpContains:
-		return f.like(attribute, key, value, "%%%s%%")
-	case filter.OpStartsWith:
-		return f.like(attribute, key, value, "%s%%")
-	case filter.OpEndsWith:
-		return f.like(attribute, key, value, "%%%s")
+	if frag, matched, err := f.likeCompare(attribute, key, op, value); matched {
+		return frag, err
 	}
-
-	if f.isUUIDColumn(key) {
-		text, ok := value.(string)
-		if !ok {
-			return sqlFragment{}, protocol.ErrInvalidValue("a string value is required")
-		}
-		if _, err := uuid.FromString(text); err != nil {
-			return sqlFragment{}, protocol.ErrInvalidValue("a valid uuid value is required")
-		}
+	if err := f.requireUUID(key, value); err != nil {
+		return sqlFragment{}, err
 	}
+	return f.compareOperand(attribute, key, op, value)
+}
 
+func (f *sqlEvaluator) likeCompare(attribute *core.Attribute, key string, op filter.Operator, value any) (sqlFragment, bool, error) {
+	pattern, ok := likePatterns[op]
+	if !ok {
+		return sqlFragment{}, false, nil
+	}
+	frag, err := f.like(attribute, key, value, pattern)
+	return frag, true, err
+}
+
+func (f *sqlEvaluator) compareOperand(attribute *core.Attribute, key string, op filter.Operator, value any) (sqlFragment, error) {
 	column, placeholder := f.operand(attribute, key)
 	if op == filter.OpNotEquals {
 		return sqlFragment{sql: column + " IS DISTINCT FROM " + placeholder, args: []any{value}}, nil
 	}
-
 	symbol, ok := comparators[op]
 	if !ok {
 		return sqlFragment{}, protocol.ErrInvalidFilter(fmt.Sprintf("operator %q is not supported", op))
@@ -98,41 +75,29 @@ func (f *sqlEvaluator) ValuePath(attribute *core.Attribute, key string, valueFil
 	return sqlFragment{sql: sql, args: inner.args}, nil
 }
 
-func (f *sqlEvaluator) isUUIDColumn(key string) bool {
-	if f.element != "" {
-		return false
+func (f *sqlEvaluator) columnExpr(attribute *core.Attribute, key string) (expr string, lowered, isUUID bool) {
+	column, promoted := f.resolveColumn(attribute, key)
+	if promoted && uuidColumns[column] {
+		return column, false, true
 	}
-	column, ok := filterColumns[key]
-	return ok && uuidColumns[column]
+	if attribute.Type == core.TypeString && !attribute.CaseExact {
+		return loweredExpr(column), true, false
+	}
+	if expr, ok := castExpr(column, promoted, attribute.Type); ok {
+		return expr, false, false
+	}
+	return column, false, false
 }
 
 func (f *sqlEvaluator) operand(attribute *core.Attribute, key string) (string, string) {
-	column, promoted := f.resolveColumn(attribute, key)
-	if promoted && uuidColumns[column] {
-		return column, "?"
+	expr, lowered, isUUID := f.columnExpr(attribute, key)
+	if isUUID {
+		return expr, "?"
 	}
-	if attribute.Type == core.TypeString && !attribute.CaseExact {
-		if loweredColumns[column] {
-			return column, "lower(?)"
-		}
-		return "lower(" + column + ")", "lower(?)"
+	if lowered {
+		return expr, "lower(?)"
 	}
-	if !promoted {
-		if cast := castFor(attribute.Type); cast != "" {
-			return "(" + column + ")" + cast, "?"
-		}
-	}
-	return column, "?"
-}
-
-func (f *sqlEvaluator) resolveColumn(attribute *core.Attribute, key string) (string, bool) {
-	if f.element != "" {
-		return f.element + "->>'" + attribute.Name + "'", false
-	}
-	if column, ok := filterColumns[key]; ok {
-		return column, true
-	}
-	return "resource->>'" + attribute.Name + "'", false
+	return expr, "?"
 }
 
 func (f *sqlEvaluator) like(attribute *core.Attribute, key string, value any, pattern string) (sqlFragment, error) {
@@ -141,41 +106,34 @@ func (f *sqlEvaluator) like(attribute *core.Attribute, key string, value any, pa
 		return sqlFragment{}, protocol.ErrInvalidValue("a string value is required")
 	}
 	arg := fmt.Sprintf(pattern, escapeLike(text))
-	column, promoted := f.resolveColumn(attribute, key)
-	if promoted && uuidColumns[column] {
-		return sqlFragment{sql: "lower(" + column + "::text) LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
+	expr, lowered, isUUID := f.columnExpr(attribute, key)
+	if isUUID {
+		return sqlFragment{sql: "lower(" + expr + "::text) LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
 	}
-	if attribute.Type == core.TypeString && !attribute.CaseExact {
-		if loweredColumns[column] {
-			return sqlFragment{sql: column + " LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
-		}
-		return sqlFragment{sql: "lower(" + column + ") LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
+	if lowered {
+		return sqlFragment{sql: expr + " LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
 	}
-	return sqlFragment{sql: column + " LIKE ? ESCAPE '\\'", args: []any{arg}}, nil
+	return sqlFragment{sql: expr + " LIKE ? ESCAPE '\\'", args: []any{arg}}, nil
 }
 
-func escapeLike(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+func (f *sqlEvaluator) requireUUID(key string, value any) error {
+	if !f.isUUIDColumn(key) {
+		return nil
+	}
+	text, ok := value.(string)
+	if !ok {
+		return protocol.ErrInvalidValue("a string value is required")
+	}
+	if _, err := uuid.FromString(text); err != nil {
+		return protocol.ErrInvalidValue("a valid uuid value is required")
+	}
+	return nil
 }
 
-func castFor(attributeType core.AttributeType) string {
-	switch attributeType {
-	case core.TypeDateTime:
-		return "::timestamptz"
-	case core.TypeInteger, core.TypeDecimal:
-		return "::numeric"
-	case core.TypeBoolean:
-		return "::boolean"
+func (f *sqlEvaluator) isUUIDColumn(key string) bool {
+	if f.element != "" {
+		return false
 	}
-	return ""
-}
-
-func combine(left, right sqlFragment, op string) sqlFragment {
-	args := make([]any, 0, len(left.args)+len(right.args))
-	args = append(args, left.args...)
-	args = append(args, right.args...)
-	return sqlFragment{
-		sql:  "(" + left.sql + " " + op + " " + right.sql + ")",
-		args: args,
-	}
+	column, ok := filterColumns[key]
+	return ok && uuidColumns[column]
 }
