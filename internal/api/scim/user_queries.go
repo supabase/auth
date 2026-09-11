@@ -1,14 +1,20 @@
 package scim
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
-	"github.com/supabase/auth/internal/storage"
 )
+
+type userQuery struct {
+	filterSQL string
+	orderBy   string
+	args      []any
+}
 
 var filterColumns = map[string]string{
 	"id":                "id",
@@ -71,22 +77,23 @@ func sortDirection(query *protocol.SearchRequest) string {
 	return " ASC"
 }
 
-func (r *userRepository) count(db *storage.Connection, tenant, filterSQL string, args []any) (int, error) {
-	countArgs := append([]any{tenant}, args...)
+func (r *userRepository) count(ctx context.Context, q userQuery) (int, error) {
+	db, tenant := r.db.WithContext(ctx), r.tenant(ctx)
+	countArgs := append([]any{tenant}, q.args...)
 	var total int
-	if err := db.RawQuery(fmt.Sprintf(countUsers, filterSQL), countArgs...).First(&total); err != nil {
+	if err := db.RawQuery(fmt.Sprintf(countUsers, q.filterSQL), countArgs...).First(&total); err != nil {
 		return 0, fmt.Errorf("scim: counting users: %w", err)
 	}
 	return total, nil
 }
 
-func (r *userRepository) page(db *storage.Connection, tenant, filterSQL, orderBy string, args []any, query *protocol.SearchRequest) ([]*core.User, error) {
-	listArgs := append(append([]any{tenant}, args...), query.Count, query.Offset())
+func (r *userRepository) page(ctx context.Context, q userQuery, query *protocol.SearchRequest) ([]*core.User, error) {
+	db, tenant := r.db.WithContext(ctx), r.tenant(ctx)
+	listArgs := append(append([]any{tenant}, q.args...), query.Count, query.Offset())
 	var rows []scimUser
-	if err := db.RawQuery(fmt.Sprintf(listUsers, filterSQL, orderBy), listArgs...).All(&rows); err != nil {
+	if err := db.RawQuery(fmt.Sprintf(listUsers, q.filterSQL, q.orderBy), listArgs...).All(&rows); err != nil {
 		return nil, fmt.Errorf("scim: listing users: %w", err)
 	}
-
 	users := make([]*core.User, 0, len(rows))
 	for _, row := range rows {
 		user, err := r.mapFrom(&row)

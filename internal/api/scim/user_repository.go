@@ -39,12 +39,12 @@ func (r *userRepository) List(ctx context.Context, query *protocol.SearchRequest
 	if err != nil {
 		return nil, 0, err
 	}
-	db, tenant := r.db.WithContext(ctx), r.tenant(ctx)
-	total, err := r.count(db, tenant, filterSQL, filterArgs)
+	q := userQuery{filterSQL: filterSQL, orderBy: orderBy, args: filterArgs}
+	total, err := r.count(ctx, q)
 	if err != nil || query.Count <= 0 {
 		return nil, total, err
 	}
-	users, err := r.page(db, tenant, filterSQL, orderBy, filterArgs, query)
+	users, err := r.page(ctx, q, query)
 	return users, total, err
 }
 
