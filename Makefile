@@ -1,5 +1,6 @@
 .PHONY: all build deps image migrate test vet sec vulncheck format hooks lint unused release
 .PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck check-go-version check-format
+.PHONY: check-sqlc sqlc-schema sqlc-generate
 CHECK_FILES ?= ./...
 
 ifdef RELEASE_VERSION
@@ -159,6 +160,20 @@ generate: | check-oapi-codegen
 check-oapi-codegen:
 	@command -v oapi-codegen >/dev/null 2>&1 \
 		|| go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
+
+check-sqlc:
+	@command -v sqlc >/dev/null 2>&1 \
+		|| go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+
+sqlc-schema: ## Dump the auth schema from the dev database for sqlc to read; never commit the result.
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up -d postgres
+	$(MAKE) migrate_dev
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) exec -T postgres \
+		pg_dump -U supabase_auth_admin -d postgres --schema-only --schema=auth --no-owner --no-privileges \
+		| grep -v '^\\restrict\|^\\unrestrict' > internal/storage/dbsql/schema/schema.sql
+
+sqlc-generate: check-sqlc sqlc-schema ## Regenerate internal/storage/dbsql/sqlcgen from queries + the live schema dump.
+	sqlc generate
 
 dev: ## Run the development containers
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up

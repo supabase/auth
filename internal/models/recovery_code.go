@@ -2,12 +2,12 @@ package models
 
 import (
 	"database/sql"
-	"fmt"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/storage/dbsql/sqlcgen"
 )
 
 // RecoveryCodeSet maps to the mfa_recovery_code_sets table: one row per user,
@@ -24,6 +24,21 @@ type RecoveryCodeSet struct {
 
 func (RecoveryCodeSet) TableName() string {
 	return "mfa_recovery_code_sets"
+}
+
+func recoveryCodeSetFromRow(row sqlcgen.AuthMfaRecoveryCodeSet) *RecoveryCodeSet {
+	set := &RecoveryCodeSet{
+		ID:                      row.ID,
+		UserID:                  row.UserID,
+		MFAFactorID:             row.MfaFactorID,
+		FailedVerificationCount: int(row.FailedVerificationCount),
+		CreatedAt:               row.CreatedAt,
+		UpdatedAt:               row.UpdatedAt,
+	}
+	if row.VerificationLockedUntil.Valid {
+		set.VerificationLockedUntil = &row.VerificationLockedUntil.Time
+	}
+	return set
 }
 
 // RecoveryCodeEntry maps to the mfa_recovery_codes table: one row per single-use code.
@@ -92,12 +107,12 @@ func FindRecoveryCodeSetByUser(tx *storage.Connection, userID uuid.UUID) (*Recov
 // FindRecoveryCodeSetForUpdate takes a blocking row lock on the user's set.
 // We don't use SKIP LOCKED to ensure concurrent verifications serialize on the user's set.
 func FindRecoveryCodeSetForUpdate(tx *storage.Connection, userID uuid.UUID) (*RecoveryCodeSet, error) {
-	set := &RecoveryCodeSet{}
-	err := tx.RawQuery(
-		fmt.Sprintf("SELECT * FROM %q WHERE user_id = ? LIMIT 1 FOR UPDATE", set.TableName()),
-		userID,
-	).First(set)
+	q, err := sqlQueries(tx)
+	if err != nil {
+		return nil, err
+	}
 
+	row, err := q.LockRecoveryCodeSetByUserID(tx.Context(), userID)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, RecoveryCodeSetNotFoundError{}
@@ -106,7 +121,7 @@ func FindRecoveryCodeSetForUpdate(tx *storage.Connection, userID uuid.UUID) (*Re
 		return nil, errors.Wrap(err, "error locking recovery code set")
 	}
 
-	return set, nil
+	return recoveryCodeSetFromRow(row), nil
 }
 
 // FindUnusedRecoveryCodes returns the set's unconsumed codes in a deterministic order.
@@ -126,31 +141,32 @@ func FindUnusedRecoveryCodes(tx *storage.Connection, mfaRecoveryCodeSetID uuid.U
 
 // CountRecoveryCodes returns the total and unconsumed code counts for a set.
 func CountRecoveryCodes(tx *storage.Connection, mfaRecoveryCodeSetID uuid.UUID) (int, int, error) {
-	counts := struct {
-		Total     int `db:"total"`
-		Remaining int `db:"remaining"`
-	}{}
-	err := tx.RawQuery(
-		"SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE consumed_at IS NULL) AS remaining FROM "+
-			(RecoveryCodeEntry{}).TableName()+" WHERE mfa_recovery_code_set_id = ?",
-		mfaRecoveryCodeSetID,
-	).First(&counts)
+	q, err := sqlQueries(tx)
+	if err != nil {
+		return 0, 0, err
+	}
 
+	counts, err := q.CountRecoveryCodes(tx.Context(), mfaRecoveryCodeSetID)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "error counting recovery codes")
 	}
 
-	return counts.Total, counts.Remaining, nil
+	return int(counts.Total), int(counts.Remaining), nil
 }
 
 // MarkConsumed sets consumed_at ensuring a code can only be consumed once.
 func (rc *RecoveryCodeEntry) MarkConsumed(tx *storage.Connection) error {
 	now := time.Now()
-	count, err := tx.RawQuery(
-		"UPDATE "+rc.TableName()+" SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL",
-		now, rc.ID,
-	).ExecWithCount()
 
+	q, err := sqlQueries(tx)
+	if err != nil {
+		return err
+	}
+
+	count, err := q.MarkRecoveryCodeConsumed(tx.Context(), sqlcgen.MarkRecoveryCodeConsumedParams{
+		ConsumedAt: sql.NullTime{Time: now, Valid: true},
+		ID:         rc.ID,
+	})
 	if err != nil {
 		return errors.Wrap(err, "error consuming recovery code")
 	}
@@ -210,13 +226,13 @@ func (s *RecoveryCodeSet) ClearExpiredLockout(tx *storage.Connection, now time.T
 // ReplaceRecoveryCodes deletes all code rows for the set, inserts the new
 // batch, and resets the lockout state, all inside the caller's transaction.
 func ReplaceRecoveryCodes(tx *storage.Connection, mfaRecoveryCodeSetID uuid.UUID, newHashes []string) error {
-	// Lock the parent set before updating the recovery codes to serialize concurrent regenerations.
-	set := &RecoveryCodeSet{}
-	err := tx.RawQuery(
-		fmt.Sprintf("SELECT * FROM %q WHERE id = ? LIMIT 1 FOR UPDATE", set.TableName()),
-		mfaRecoveryCodeSetID,
-	).First(set)
+	q, err := sqlQueries(tx)
 	if err != nil {
+		return err
+	}
+
+	// Lock the parent set before updating the recovery codes to serialize concurrent regenerations.
+	if _, err := q.LockRecoveryCodeSetByID(tx.Context(), mfaRecoveryCodeSetID); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return RecoveryCodeSetNotFoundError{}
 		}
@@ -224,11 +240,7 @@ func ReplaceRecoveryCodes(tx *storage.Connection, mfaRecoveryCodeSetID uuid.UUID
 		return errors.Wrap(err, "error locking recovery code set")
 	}
 
-	err = tx.RawQuery(
-		"DELETE FROM "+(RecoveryCodeEntry{}).TableName()+" WHERE mfa_recovery_code_set_id = ?",
-		mfaRecoveryCodeSetID,
-	).Exec()
-	if err != nil {
+	if err := q.DeleteRecoveryCodesBySetID(tx.Context(), mfaRecoveryCodeSetID); err != nil {
 		return errors.Wrap(err, "error deleting recovery codes")
 	}
 
@@ -236,11 +248,10 @@ func ReplaceRecoveryCodes(tx *storage.Connection, mfaRecoveryCodeSetID uuid.UUID
 		return err
 	}
 
-	count, err := tx.RawQuery(
-		"UPDATE "+(RecoveryCodeSet{}).TableName()+
-			" SET failed_verification_count = 0, verification_locked_until = NULL, updated_at = ? WHERE id = ?",
-		time.Now(), mfaRecoveryCodeSetID,
-	).ExecWithCount()
+	count, err := q.ResetRecoveryCodeSetLockout(tx.Context(), sqlcgen.ResetRecoveryCodeSetLockoutParams{
+		UpdatedAt: time.Now(),
+		ID:        mfaRecoveryCodeSetID,
+	})
 	if err != nil {
 		return errors.Wrap(err, "error resetting recovery code set state")
 	}
