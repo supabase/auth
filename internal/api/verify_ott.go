@@ -54,9 +54,10 @@ func (a *API) verifyUserAndTokenFromOTT(conn *storage.Connection, params *Verify
 }
 
 func (a *API) verifyPhoneWithTwilio(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
-	tokenType := models.ConfirmationToken
-	if params.Type == phoneChangeVerification {
-		tokenType = models.PhoneChangeToken
+	tokenType, ok := verifyTypeToTokenType(params.Type)
+	if !ok {
+		// The caller only routes phone types here, so in practice this should never happen.
+		return nil, apierrors.NewInternalServerError("Twilio Verify lookup called for unknown verification type %q", params.Type)
 	}
 
 	ott, err := models.FindOneTimeTokenByRelatesTo(conn, params.Phone, tokenType)
@@ -73,16 +74,10 @@ func (a *API) verifyPhoneWithTwilio(conn *storage.Connection, params *VerifyPara
 		return nil, apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	pendingPhone := user.GetPhone()
-	if params.Type == phoneChangeVerification {
-		pendingPhone = user.PhoneChange
+	if err := validateUserForOTT(params, ott, user, aud); err != nil {
+		return nil, err
 	}
-	if pendingPhone != params.Phone {
-		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("user phone does not match")
-	}
-	if user.Aud != aud {
-		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("user audience does not match")
-	}
+
 	if user.IsBanned() {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
@@ -156,22 +151,38 @@ func verifyOneTimeToken(conn *storage.Connection, params *VerifyParams) (*models
 	return ott, nil
 }
 
+// verifyTypeToTokenTypes returns nil for an unknown verification type.
 func verifyTypeToTokenTypes(verifyType string) []models.OneTimeTokenType {
 	switch verifyType {
 	case mail.EmailOTPVerification:
 		return []models.OneTimeTokenType{models.ConfirmationToken, models.RecoveryToken}
-	case mail.SignupVerification, mail.InviteVerification:
-		return []models.OneTimeTokenType{models.ConfirmationToken}
-	case mail.RecoveryVerification, mail.MagicLinkVerification:
-		return []models.OneTimeTokenType{models.RecoveryToken}
 	case mail.EmailChangeVerification:
 		return []models.OneTimeTokenType{models.EmailChangeTokenCurrent, models.EmailChangeTokenNew}
-	case phoneChangeVerification:
-		return []models.OneTimeTokenType{models.PhoneChangeToken}
-	case smsVerification:
-		return []models.OneTimeTokenType{models.ConfirmationToken}
-	default:
+	}
+
+	tokenType, ok := verifyTypeToTokenType(verifyType)
+	if !ok {
 		return nil
+	}
+	return []models.OneTimeTokenType{tokenType}
+}
+
+// verifyTypeToTokenType maps a verification type that has exactly one token
+// type. ok is false for an unknown type. ConfirmationToken is the zero value of
+// OneTimeTokenType, so callers must check ok instead of the returned type.
+func verifyTypeToTokenType(verifyType string) (models.OneTimeTokenType, bool) {
+	switch verifyType {
+	case mail.SignupVerification, mail.InviteVerification:
+		return models.ConfirmationToken, true
+	case mail.RecoveryVerification, mail.MagicLinkVerification:
+		return models.RecoveryToken, true
+	case smsVerification:
+		// phone signup codes are stored as confirmation tokens
+		return models.ConfirmationToken, true
+	case phoneChangeVerification:
+		return models.PhoneChangeToken, true
+	default:
+		return 0, false
 	}
 }
 

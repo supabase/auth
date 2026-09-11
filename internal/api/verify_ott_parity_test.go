@@ -303,6 +303,19 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 			requestBody: phoneOTPBody(smsVerification, parityPhone),
 			expected:    forbidden,
 		},
+		// An SSO user has no local credentials to verify. Twilio approves the
+		// code here, so only the SSO check can reject the request.
+		"sms with Twilio Verify rejects an SSO user": {
+			configure: func() func() {
+				return ts.configureTwilioVerify(map[string]interface{}{"status": "approved", "valid": true})
+			},
+			seed: func(u *models.User) {
+				u.IsSSOUser = true
+				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, phoneHash, now, time.Hour)
+			},
+			requestBody: phoneOTPBody(smsVerification, parityPhone),
+			expected:    forbidden,
+		},
 	}
 
 	ts.runOTPParityCases(cases)
