@@ -244,6 +244,7 @@ func TestUserRepository(t *testing.T) {
 				{name: "mistyped value", filter: `active eq "yes"`},
 				{name: "malformed filter", filter: `userName zz "x"`},
 				{name: "id eq a non-uuid value", filter: `id eq "not-a-uuid"`},
+				{name: "co is not valid for a boolean value-path sub-attribute", filter: `emails[primary co "true"]`},
 			}
 
 			for _, tc := range cases {

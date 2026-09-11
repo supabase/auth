@@ -75,27 +75,27 @@ func (f *sqlEvaluator) ValuePath(attribute *core.Attribute, key string, valueFil
 	return sqlFragment{sql: sql, args: inner.args}, nil
 }
 
-func (f *sqlEvaluator) columnExpr(attribute *core.Attribute, key string) (expr string, lowered, isUUID bool) {
+func (f *sqlEvaluator) columnExpr(attribute *core.Attribute, key string) (expr string, promoted, lowered, isUUID bool) {
 	column, promoted := f.resolveColumn(attribute, key)
 	if promoted && uuidColumns[column] {
-		return column, false, true
+		return column, promoted, false, true
 	}
 	if attribute.Type == core.TypeString && !attribute.CaseExact {
-		return loweredExpr(column), true, false
+		return loweredExpr(column), promoted, true, false
 	}
-	if expr, ok := castExpr(column, promoted, attribute.Type); ok {
-		return expr, false, false
-	}
-	return column, false, false
+	return column, promoted, false, false
 }
 
 func (f *sqlEvaluator) operand(attribute *core.Attribute, key string) (string, string) {
-	expr, lowered, isUUID := f.columnExpr(attribute, key)
+	expr, promoted, lowered, isUUID := f.columnExpr(attribute, key)
 	if isUUID {
 		return expr, "?"
 	}
 	if lowered {
 		return expr, "lower(?)"
+	}
+	if cast, ok := castExpr(expr, promoted, attribute.Type); ok {
+		return cast, "?"
 	}
 	return expr, "?"
 }
@@ -106,7 +106,7 @@ func (f *sqlEvaluator) like(attribute *core.Attribute, key string, value any, pa
 		return sqlFragment{}, protocol.ErrInvalidValue("a string value is required")
 	}
 	arg := fmt.Sprintf(pattern, escapeLike(text))
-	expr, lowered, isUUID := f.columnExpr(attribute, key)
+	expr, _, lowered, isUUID := f.columnExpr(attribute, key)
 	if isUUID {
 		return sqlFragment{sql: "lower(" + expr + "::text) LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
 	}
