@@ -100,7 +100,7 @@ func TestResourceServer(t *testing.T) {
 
 		t.Run("sets the Location header from the created resource", func(t *testing.T) {
 			location := testExternalURL + BasePath + "/Users/abc"
-			svc := &fakeUserService{createResult: &core.User{Base: core.Base{Meta: core.Meta{Location: location}}}}
+			svc := &fakeUserService{createResult: &core.User{Meta: core.Meta{Location: location}}}
 			body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen"}`
 			r := httptest.NewRequest(http.MethodPost, BasePath+"/Users", strings.NewReader(body))
 			w := httptest.NewRecorder()

@@ -1,9 +1,6 @@
 package scim
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -12,9 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
-	"github.com/supabase/auth/internal/api/shared"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -32,21 +26,9 @@ func NewServer(db *storage.Connection, externalURL string) *Server {
 	baseURL := Join(externalURL, BasePath)
 	userSchema := newUserSchema(baseURL)
 
-	users := NewResourceServer(
-		protocol.DefaultLimits,
-		NewUserService(&userRepository{db: db, baseURL: baseURL, schema: userSchema}),
-		ResourceSpec[*core.User]{
-			Path:     "/Users",
-			Schema:   userSchema,
-			New:      func() *core.User { return new(core.User) },
-			Validate: validateUser,
-			Location: func(u *core.User) string { return u.Meta.Location },
-		},
-	)
-
 	return &Server{
 		db:    db,
-		Users: users,
+		Users: newUserResourceServer(db, baseURL, userSchema, protocol.DefaultLimits),
 		serviceProviderConfig: newServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
@@ -54,6 +36,20 @@ func NewServer(db *storage.Connection, externalURL string) *Server {
 		resourceTypes: []*core.ResourceType{newUserResourceType(baseURL, userSchema)},
 		schemas:       []*core.Schema{userSchema},
 	}
+}
+
+func newUserResourceServer(db *storage.Connection, baseURL string, schema *core.Schema, limits protocol.Limits) *ResourceServer[*core.User] {
+	return NewResourceServer(
+		limits,
+		NewUserService(&userRepository{db: db, baseURL: baseURL, schema: schema}),
+		ResourceSpec[*core.User]{
+			Path:     "/Users",
+			Schema:   schema,
+			New:      func() *core.User { return new(core.User) },
+			Validate: validateUser,
+			Location: func(u *core.User) string { return u.Meta.Location },
+		},
+	)
 }
 
 func Join(base, segment string) string {
@@ -68,16 +64,6 @@ func validateUser(user *core.User) *protocol.Error {
 		return protocol.ErrInvalidValue(`"schemas" must include the User schema URN`)
 	}
 	return nil
-}
-
-func (srv *Server) Tenant(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, ok := srv.tenant(w, r)
-		if !ok {
-			return
-		}
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
 }
 
 func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request) error {
@@ -121,66 +107,6 @@ func (srv *Server) byID[T core.Resource](w http.ResponseWriter, r *http.Request,
 		}
 	}
 	return NotFound(w, r)
-}
-
-func NotFound(w http.ResponseWriter, r *http.Request) error {
-	return protocol.SendError(w, protocol.ErrNotFound("Endpoint or resource does not exist"))
-}
-
-func sendError(w http.ResponseWriter, r *http.Request, err error) error {
-	if scimErr, ok := errors.AsType[*protocol.Error](err); ok {
-		return protocol.SendError(w, scimErr)
-	}
-	return internalError(w, r, err)
-}
-
-func internalError(w http.ResponseWriter, r *http.Request, err error) error {
-	observability.LogEntrySetField(r, "error", err.Error())
-	return protocol.SendError(w, protocol.ErrInternal("Internal server error"))
-}
-
-func unauthorized(w http.ResponseWriter) error {
-	w.Header().Set("WWW-Authenticate", `Bearer realm="SCIM"`)
-	return protocol.SendError(w, protocol.ErrUnauthorized("Bearer token is missing or invalid"))
-}
-
-func rejectFilter(w http.ResponseWriter, r *http.Request, unsupported *protocol.Error) (bool, error) {
-	if !r.URL.Query().Has("filter") {
-		return false, nil
-	}
-	return true, protocol.SendError(w, unsupported)
-}
-
-func (srv *Server) tenant(w http.ResponseWriter, r *http.Request) (context.Context, bool) {
-	ctx := r.Context()
-
-	tenant, err := srv.lookup(ctx, shared.Credential(r))
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			_ = unauthorized(w)
-		} else {
-			_ = internalError(w, r, err)
-		}
-		return nil, false
-	}
-
-	return tenantKey.WithValue(ctx, tenant), true
-}
-
-func (srv *Server) lookup(ctx context.Context, bearerToken string) (*Tenant, error) {
-	if !strings.HasPrefix(bearerToken, models.SCIMTokenPrefix) {
-		return nil, ErrNotFound
-	}
-
-	provider, err := models.FindSSOProviderBySCIMToken(srv.db.WithContext(ctx), bearerToken)
-	if err != nil {
-		if errors.Is(err, models.SSOProviderNotFoundError{}) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("scim: looking up token: %w", err)
-	}
-
-	return provider, nil
 }
 
 func urlParam(r *http.Request, key string) string {

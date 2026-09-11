@@ -36,17 +36,7 @@ func newUserResourceType(baseURL string, schema *core.Schema) *core.ResourceType
 }
 
 func newUserSchema(baseURL string) *core.Schema {
-	schema := &core.Schema{
-		Schemas: []core.SchemaURI{core.SchemaSchema},
-		ID:      core.SchemaUser,
-		Name:    userResourceType,
-		Meta: core.Meta{
-			ResourceType: "Schema",
-			Location:     Join(Join(baseURL, "/Schemas"), string(core.SchemaUser)),
-		},
-	}
-
-	return schema.
+	return userSchemaHeader(baseURL).
 		Describe("User Account").
 		With(
 			core.NewAttribute("userName", core.TypeString, "Unique identifier for the User").
@@ -57,6 +47,18 @@ func newUserSchema(baseURL string) *core.Schema {
 			emailsAttribute(),
 			core.NewAttribute("active", core.TypeBoolean, ""),
 		)
+}
+
+func userSchemaHeader(baseURL string) *core.Schema {
+	return &core.Schema{
+		Schemas: []core.SchemaURI{core.SchemaSchema},
+		ID:      core.SchemaUser,
+		Name:    userResourceType,
+		Meta: core.Meta{
+			ResourceType: "Schema",
+			Location:     Join(Join(baseURL, "/Schemas"), string(core.SchemaUser)),
+		},
+	}
 }
 
 func nameAttribute() *core.Attribute {

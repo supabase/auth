@@ -11,14 +11,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
-type ResourceSpec[T core.Resource] struct {
-	Path     string
-	Schema   *core.Schema
-	New      func() T
-	Validate func(T) *protocol.Error
-	Location func(T) string
-}
-
 type ResourceServer[T core.Resource] struct {
 	limits protocol.Limits
 	svc    Service[T]
@@ -30,14 +22,12 @@ func NewResourceServer[T core.Resource](limits protocol.Limits, svc Service[T], 
 }
 
 func (s *ResourceServer[T]) List(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-
 	query, err := s.limits.ParseSearchRequest(r.URL.Query())
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
 
-	items, total, err := s.svc.List(ctx, query)
+	items, total, err := s.svc.List(r.Context(), query)
 	if err != nil {
 		return sendError(w, r, err)
 	}
@@ -60,12 +50,9 @@ func (s *ResourceServer[T]) ByID(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *ResourceServer[T]) Create(w http.ResponseWriter, r *http.Request) error {
-	item, err := s.decode(r)
-	if err != nil {
-		return protocol.SendError(w, err)
-	}
-	if err := s.spec.Validate(item); err != nil {
-		return protocol.SendError(w, err)
+	item, invalid := s.decodeValid(r)
+	if invalid != nil {
+		return protocol.SendError(w, invalid)
 	}
 
 	created, err := s.svc.Create(r.Context(), item)
@@ -83,19 +70,14 @@ func (s *ResourceServer[T]) Replace(w http.ResponseWriter, r *http.Request) erro
 		return NotFound(w, r)
 	}
 
-	item, err := s.decode(r)
-	if err != nil {
-		return protocol.SendError(w, err)
+	item, invalid := s.decodeValid(r)
+	if invalid != nil {
+		return protocol.SendError(w, invalid)
 	}
-	if err := s.spec.Validate(item); err != nil {
-		return protocol.SendError(w, err)
-	}
-
 	replaced, err := s.svc.Replace(r.Context(), id, item)
 	if err != nil {
 		return notFoundOr(w, r, err)
 	}
-
 	return protocol.Send(w, http.StatusOK, replaced)
 }
 
@@ -112,7 +94,15 @@ func (s *ResourceServer[T]) Delete(w http.ResponseWriter, r *http.Request) error
 	return protocol.Send(w, http.StatusNoContent, nil)
 }
 
-func (s *ResourceServer[T]) decode(r *http.Request) (T, error) {
+func (s *ResourceServer[T]) decodeValid(r *http.Request) (T, *protocol.Error) {
+	item, err := s.decode(r)
+	if err != nil {
+		return item, err
+	}
+	return item, s.spec.Validate(item)
+}
+
+func (s *ResourceServer[T]) decode(r *http.Request) (T, *protocol.Error) {
 	item := s.spec.New()
 
 	body, err := io.ReadAll(r.Body)
