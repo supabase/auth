@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1112,4 +1113,94 @@ func (ts *MFATestSuite) TestMFAFactorUnenrolledNotificationDisabled() {
 
 	// Assert that MFA factor unenrolled notification email was sent or not based on the config
 	require.Len(ts.T(), mockMailer.MFAFactorUnenrolledMailCalls, 0, "Expected 0 MFA factor unenrolled notification email(s) to be sent")
+}
+
+func (ts *MFATestSuite) TestUpdateMFASessionAndClaimsMissingSession() {
+	grant, err := models.GrantAuthenticatedUser(ts.API.db, ts.TestUser, models.GrantParams{})
+	require.NoError(ts.T(), err)
+	token := ts.generateAAL1Token(ts.TestUser, grant.SessionId)
+
+	require.NoError(ts.T(), models.LogoutSession(ts.API.db, *grant.SessionId))
+
+	req := httptest.NewRequest(http.MethodPost, "/factors/verify", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	ctx, err := ts.API.parseJWTClaims(token, req)
+	require.NoError(ts.T(), err)
+	req = req.WithContext(ctx)
+
+	factorID := ts.TestUser.Factors[0].ID
+	_, err = ts.API.updateMFASessionAndClaims(req, ts.API.db, ts.TestUser, models.TOTPSignIn, models.GrantParams{
+		FactorID: &factorID,
+	})
+	require.Error(ts.T(), err)
+
+	var httpErr *apierrors.HTTPError
+	require.ErrorAs(ts.T(), err, &httpErr)
+	require.Equal(ts.T(), http.StatusForbidden, httpErr.HTTPStatus)
+	require.Equal(ts.T(), apierrors.ErrorCodeSessionNotFound, httpErr.ErrorCode)
+	require.NotEqual(ts.T(), http.StatusInternalServerError, httpErr.HTTPStatus)
+}
+
+func (ts *MFATestSuite) TestConcurrentMFAVerifySameUserNoInternalError() {
+	friendlyName := uuid.Must(uuid.NewV4()).String()
+	factor := models.NewTOTPFactor(ts.TestUser, friendlyName)
+	sharedSecret := ts.TestOTPKey.Secret()
+	factor.Secret = sharedSecret
+	require.NoError(ts.T(), ts.API.db.Create(factor), "Error creating test factor")
+
+	type client struct {
+		token       string
+		challengeID uuid.UUID
+	}
+	clients := make([]client, 2)
+	for i := range clients {
+		grant, err := models.GrantAuthenticatedUser(ts.API.db, ts.TestUser, models.GrantParams{})
+		require.NoError(ts.T(), err)
+		token := ts.generateAAL1Token(ts.TestUser, grant.SessionId)
+
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factor.ID), nil)
+		challenge := factor.CreateChallenge(utilities.GetIPAddress(req))
+		require.NoError(ts.T(), ts.API.db.Create(challenge), "Error creating challenge")
+		clients[i] = client{token: token, challengeID: challenge.ID}
+	}
+
+	code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
+	require.NoError(ts.T(), err)
+
+	type result struct {
+		code int
+		err  error
+	}
+	var wg sync.WaitGroup
+	results := make(chan result, len(clients))
+	for _, c := range clients {
+		wg.Add(1)
+		go func(c client) {
+			defer wg.Done()
+			var buffer bytes.Buffer
+			if err := json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"challenge_id": c.challengeID,
+				"code":         code,
+			}); err != nil {
+				results <- result{err: err}
+				return
+			}
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factor.ID), &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
+			req.Header.Set("Content-Type", "application/json")
+			ts.API.handler.ServeHTTP(w, req)
+			results <- result{code: w.Code}
+		}(c)
+	}
+	wg.Wait()
+	close(results)
+
+	statuses := make([]int, 0, len(clients))
+	for res := range results {
+		require.NoError(ts.T(), res.err)
+		statuses = append(statuses, res.code)
+		require.NotEqual(ts.T(), http.StatusInternalServerError, res.code, "concurrent MFA verify must not return 500")
+	}
+	require.Contains(ts.T(), statuses, http.StatusOK, "at least one concurrent verify should succeed")
 }

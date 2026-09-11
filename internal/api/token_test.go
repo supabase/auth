@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -956,4 +959,43 @@ func TestRefreshTokenGrantParamsValidate(t *testing.T) {
 
 	p.RefreshToken = (&crypto.RefreshToken{}).Encode(make([]byte, 32))
 	require.NoError(t, p.Validate())
+}
+
+func TestMapMFASessionConflictError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil", func(t *testing.T) {
+		require.NoError(t, mapMFASessionConflictError(nil))
+	})
+
+	t.Run("session not found", func(t *testing.T) {
+		err := mapMFASessionConflictError(models.SessionNotFoundError{})
+		var httpErr *apierrors.HTTPError
+		require.ErrorAs(t, err, &httpErr)
+		require.Equal(t, http.StatusForbidden, httpErr.HTTPStatus)
+		require.Equal(t, apierrors.ErrorCodeSessionNotFound, httpErr.ErrorCode)
+		require.NotEqual(t, http.StatusInternalServerError, httpErr.HTTPStatus)
+	})
+
+	t.Run("foreign key violation", func(t *testing.T) {
+		err := mapMFASessionConflictError(&pgconn.PgError{Code: pgerrcode.ForeignKeyViolation, Message: "fk"})
+		var httpErr *apierrors.HTTPError
+		require.ErrorAs(t, err, &httpErr)
+		require.Equal(t, http.StatusConflict, httpErr.HTTPStatus)
+		require.Equal(t, apierrors.ErrorCodeConflict, httpErr.ErrorCode)
+		require.Contains(t, httpErr.Message, "Session conflict during MFA verification")
+	})
+
+	t.Run("deadlock", func(t *testing.T) {
+		err := mapMFASessionConflictError(&pgconn.PgError{Code: pgerrcode.DeadlockDetected, Message: "deadlock"})
+		var httpErr *apierrors.HTTPError
+		require.ErrorAs(t, err, &httpErr)
+		require.Equal(t, http.StatusConflict, httpErr.HTTPStatus)
+		require.Equal(t, apierrors.ErrorCodeConflict, httpErr.ErrorCode)
+	})
+
+	t.Run("unrelated error unchanged", func(t *testing.T) {
+		original := errors.New("boom")
+		require.Equal(t, original, mapMFASessionConflictError(original))
+	})
 }
