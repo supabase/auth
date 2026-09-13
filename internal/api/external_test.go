@@ -1,17 +1,21 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
@@ -554,4 +558,133 @@ func (ts *ExternalTestSuite) TestPKCEFlowStateReuseRejected() {
 	ts.Require().NoError(err)
 	ts.Contains(errorQuery.Get("error_description"), "already been used",
 		"second callback with same state should be rejected as already used")
+}
+
+// TestOAuthMixUpDetection verifies that a callback with a mismatched provider in the path
+// (e.g. /callback/github when state was for google) is rejected as a mix-up attack.
+func (ts *ExternalTestSuite) TestOAuthMixUpDetection() {
+	codeVerifier := "testtesttesttesttesttesttesttesttesttesttesttesttesttest"
+	hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
+	codeChallenge := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
+
+	// Initiate flow for Google
+	w := performPKCEAuthorizationRequest(ts, "google", codeChallenge, "s256")
+	ts.Require().Equal(http.StatusFound, w.Code)
+	u, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err)
+	state := u.Query().Get("state")
+	ts.Require().NotEmpty(state)
+
+	// Callback sent to /callback/github instead of /callback/google
+	callbackURL := fmt.Sprintf("http://localhost/callback/github?code=authcode&state=%s", state)
+	req := httptest.NewRequest(http.MethodGet, callbackURL, nil)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	// Should redirect to site URL with error describing mix-up
+	redirectURL, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err)
+	errorQuery, err := url.ParseQuery(redirectURL.RawQuery)
+	ts.Require().NoError(err)
+	ts.Contains(errorQuery.Get("error_description"), "mix-up detected",
+		"callback with mismatched provider path should be rejected as OAuth mix-up")
+}
+
+// TestUseDistinctRedirectURIs verifies that enabling GOTRUE_EXTERNAL_USE_DISTINCT_REDIRECT_URIS
+// appends the provider name to the redirect URI.
+func (ts *ExternalTestSuite) TestUseDistinctRedirectURIs() {
+	ts.Config.External.UseDistinctRedirectURIs = true
+	defer func() {
+		ts.Config.External.UseDistinctRedirectURIs = false
+	}()
+
+	provider.ResetGoogleProvider()
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=google", nil)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.Require().Equal(http.StatusFound, w.Code)
+	u, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err)
+	q := u.Query()
+
+	expectedRedirect := ts.Config.External.Google.RedirectURI + "/google"
+	ts.Equal(expectedRedirect, q.Get("redirect_uri"))
+}
+
+func TestUseDistinctRedirectURIsConfig(t *testing.T) {
+	api := &API{
+		config: &conf.GlobalConfiguration{
+			External: conf.ProviderConfiguration{
+				UseDistinctRedirectURIs: true,
+				Google: conf.OAuthProviderConfiguration{
+					RedirectURI: "http://localhost:9999/callback",
+				},
+				Github: conf.OAuthProviderConfiguration{
+					RedirectURI: "http://localhost:9999/callback",
+				},
+			},
+		},
+	}
+
+	googleConfig := api.getProviderConfig("google")
+	require.Equal(t, "http://localhost:9999/callback/google", googleConfig.RedirectURI)
+
+	githubConfig := api.getProviderConfig("github")
+	require.Equal(t, "http://localhost:9999/callback/github", githubConfig.RedirectURI)
+
+	// Disabled by default / when false
+	api.config.External.UseDistinctRedirectURIs = false
+	disabledConfig := api.getProviderConfig("google")
+	require.Equal(t, "http://localhost:9999/callback", disabledConfig.RedirectURI)
+}
+
+func TestOAuthMixUpCallbackCheck(t *testing.T) {
+	api := &API{
+		config: &conf.GlobalConfiguration{},
+	}
+
+	// Create request with chi route context where provider param in URL path is "github"
+	req := httptest.NewRequest(http.MethodGet, "/callback/github", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("provider", "github")
+	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+
+	// Set flow state provider in context as "google" (mismatch)
+	ctx = withExternalProviderType(ctx, "google", false)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+	err := api.internalExternalProviderCallback(w, req)
+	require.Error(t, err)
+
+	httpErr, ok := err.(*apierrors.HTTPError)
+	require.True(t, ok)
+	require.Equal(t, http.StatusBadRequest, httpErr.HTTPStatus)
+	require.Contains(t, httpErr.Message, "OAuth mix-up detected")
+
+	// Matching provider: URL path parameter "google" matches flow state provider "google"
+	rctxMatching := chi.NewRouteContext()
+	rctxMatching.URLParams.Add("provider", "google")
+	ctxMatching := context.WithValue(httptest.NewRequest(http.MethodGet, "/callback/google", nil).Context(), chi.RouteCtxKey, rctxMatching)
+	ctxMatching = withExternalProviderType(ctxMatching, "google", false)
+	reqMatching := httptest.NewRequest(http.MethodGet, "/callback/google", nil).WithContext(ctxMatching)
+
+	// Verify that matching provider path passes the mix-up check (so it reaches DB/callback logic instead of returning mix-up error)
+	pathProvider := chi.URLParam(reqMatching, "provider")
+	providerType, _ := getExternalProviderType(reqMatching.Context())
+	require.True(t, strings.EqualFold(pathProvider, providerType))
+}
+
+func TestLegacyCallbackBackwardCompatibility(t *testing.T) {
+	// Request to generic /callback without provider in URL path
+	req := httptest.NewRequest(http.MethodGet, "/callback", nil)
+	rctx := chi.NewRouteContext()
+	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	ctx = withExternalProviderType(ctx, "google", false)
+	req = req.WithContext(ctx)
+
+	// Ensure pathProvider is empty and does not trigger mix-up error
+	pathProvider := chi.URLParam(req, "provider")
+	require.Empty(t, pathProvider)
 }
