@@ -46,6 +46,19 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 
 	token, err := verifier.Verify(ctx, idToken)
 	if err != nil {
+		// Fallback for secp256k1 (Telegram OIDC)
+		// go-jose does not support secp256k1, so it fails here.
+		if strings.Contains(err.Error(), "unsupported elliptic curve") {
+			fallbackToken, fallbackData, fallbackErr := verifySecp256k1Fallback(ctx, provider, idToken)
+			if fallbackErr == nil {
+				if !options.SkipAccessTokenCheck && fallbackToken.AccessTokenHash != "" {
+					if err := fallbackToken.VerifyAccessToken(options.AccessToken); err != nil {
+						return nil, nil, err
+					}
+				}
+				return fallbackToken, fallbackData, nil
+			}
+		}
 		return nil, nil, err
 	}
 
