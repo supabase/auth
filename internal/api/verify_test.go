@@ -293,6 +293,83 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	}
 }
 
+func (ts *VerifyTestSuite) TestVerifySecureEmailChangeAutoconfirmEnabled() {
+	// double-confirm must still hold when mailer_autoconfirm is enabled
+	ts.Config.Mailer.Autoconfirm = true
+	ts.Config.Mailer.SecureEmailChangeEnabled = true
+	defer func() {
+		ts.Config.Mailer.Autoconfirm = false
+		ts.Config.Mailer.SecureEmailChangeEnabled = false
+	}()
+
+	currentEmail := "test@example.com"
+	newEmail := "new@example.com"
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, currentEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	u.EmailChangeSentAt = nil
+	u.EmailChangeTokenCurrent = ""
+	u.EmailChangeTokenNew = ""
+	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": newEmail,
+	}))
+
+	req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	session, err := models.NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(session))
+
+	token, _, err := ts.API.generateAccessToken(req, ts.API.db, u, &session.ID, models.MagicLink)
+	require.NoError(ts.T(), err)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, currentEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	currentTokenHash := u.EmailChangeTokenCurrent
+	newTokenHash := u.EmailChangeTokenNew
+
+	// Verify new email: should NOT commit the change yet
+	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, newTokenHash)
+	req = httptest.NewRequest(http.MethodGet, reqURL, nil)
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusSeeOther, w.Code)
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, currentEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), singleConfirmation, u.EmailChangeConfirmStatus)
+	assert.Equal(ts.T(), currentEmail, u.GetEmail())
+
+	// Verify old email: commits the change
+	reqURL = fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, currentTokenHash)
+	req = httptest.NewRequest(http.MethodGet, reqURL, nil)
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusSeeOther, w.Code)
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, newEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
+
+	// Reset for other tests
+	u.EmailConfirmedAt = nil
+	require.NoError(ts.T(), ts.API.db.Update(u))
+}
+
 func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	// verify variant testing not necessary in this test as it's testing
 	// the ConfirmationSentAt behavior, not the ConfirmationToken behavior
