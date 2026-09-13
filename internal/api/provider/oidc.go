@@ -105,10 +105,15 @@ func parseGoogleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, 
 	}
 
 	data.Metadata = &Claims{
-		Issuer:  claims.Issuer,
-		Subject: claims.Subject,
-		Name:    claims.Name,
-		Picture: claims.AvatarURL,
+		Issuer:        claims.Issuer,
+		Subject:       claims.Subject,
+		Name:          claims.Name,
+		GivenName:     claims.GivenName,
+		FamilyName:    claims.FamilyName,
+		Picture:       claims.AvatarURL,
+		Email:         claims.Email,
+		EmailVerified: claims.IsEmailVerified(),
+		Locale:        claims.Locale,
 
 		// To be deprecated
 		AvatarURL:  claims.AvatarURL,
