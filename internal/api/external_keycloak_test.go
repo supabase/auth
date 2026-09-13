@@ -23,7 +23,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloak() {
 	ts.Equal(ts.Config.External.Keycloak.RedirectURI, q.Get("redirect_uri"))
 	ts.Equal(ts.Config.External.Keycloak.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
-	ts.Equal("profile email", q.Get("scope"))
+	ts.Equal("profile email openid", q.Get("scope"))
 
 	assertValidOAuthState(ts, q.Get("state"), "keycloak")
 }
