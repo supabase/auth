@@ -182,7 +182,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	userData := data.userData
 
 	if len(userData.Emails) == 0 && !emailOptional {
-		return apierrors.NewInternalServerError("Error getting user email from external provider")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailAddressNotProvided, "Error getting user email from external provider")
 	}
 
 	userData.Metadata.EmailVerified = false
@@ -384,7 +384,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		user = decision.User
 		identity = decision.Identities[0]
 
+		now := time.Now()
 		identity.IdentityData = identityData
+		identity.LastSignInAt = &now
 		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
 			return 0, nil, terr
 		}
