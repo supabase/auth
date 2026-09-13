@@ -571,7 +571,7 @@ func (ts *OAuthAuthorizeTestSuite) TestConsent_DenyReturnsAccessDenied() {
 	require.NotEmpty(ts.T(), resp.RedirectURL)
 	parsed, err := url.Parse(resp.RedirectURL)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), oAuth2ErrorAccessDenied, parsed.Query().Get("error"))
+	assert.Equal(ts.T(), apierrors.OAuthErrorCodeAccessDenied, parsed.Query().Get("error"))
 	assert.Empty(ts.T(), parsed.Query().Get("code"))
 
 	reloaded := ts.reload(auth.AuthorizationID)

@@ -77,41 +77,41 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 	}
 
 	if !parsedMessage.VerifySignature(signatureBytes) {
-		return apierrors.NewOAuthError("invalid_grant", "Signature does not match address in message")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signature does not match address in message")
 	}
 
 	if parsedMessage.URI.Scheme != "https" && parsedMessage.URI.Hostname() != "localhost" {
-		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using URI which does not use HTTPS")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signed Solana message is using URI which does not use HTTPS")
 	}
 
 	if !utilities.IsRedirectURLValid(config, parsedMessage.URI.String()) {
-		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using URI which is not allowed on this server, message was signed for another app")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signed Solana message is using URI which is not allowed on this server, message was signed for another app")
 	}
 
 	if parsedMessage.URI.Hostname() != "localhost" && (parsedMessage.URI.Host != parsedMessage.Domain || !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/")) {
-		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using a Domain that does not match the one in URI which is not allowed on this server")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signed Solana message is using a Domain that does not match the one in URI which is not allowed on this server")
 	}
 
 	now := a.Now()
 
 	if !parsedMessage.NotBefore.IsZero() && now.Before(parsedMessage.NotBefore) {
-		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message becomes valid in the future")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signed Solana message becomes valid in the future")
 	}
 
 	if !parsedMessage.ExpirationTime.IsZero() && now.After(parsedMessage.ExpirationTime) {
-		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is expired")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signed Solana message is expired")
 	}
 
 	latestExpiryAt := parsedMessage.IssuedAt.Add(config.External.Web3Solana.MaximumValidityDuration)
 
 	if now.After(latestExpiryAt) {
-		return apierrors.NewOAuthError("invalid_grant", "Solana message was issued too long ago")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Solana message was issued too long ago")
 	}
 
 	earliestIssuedAt := parsedMessage.IssuedAt.Add(-config.External.Web3Solana.MaximumValidityDuration)
 
 	if now.Before(earliestIssuedAt) {
-		return apierrors.NewOAuthError("invalid_grant", "Solana message was issued too far in the future")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Solana message was issued too far in the future")
 	}
 
 	const providerType = Web3Provider
@@ -180,7 +180,7 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		case *HTTPError:
 			return err
 		default:
-			return apierrors.NewOAuthError("server_error", "Internal Server Error").WithInternalError(err)
+			return apierrors.NewOAuthError(apierrors.OAuthErrorCodeServerError, "Internal Server Error").WithInternalError(err)
 		}
 	}
 	if createdUser {
@@ -223,41 +223,41 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 	}
 
 	if !parsedMessage.VerifySignature(params.Signature) {
-		return apierrors.NewOAuthError("invalid_grant", "Signature does not match address in message")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signature does not match address in message")
 	}
 
 	if parsedMessage.URI.Scheme != "https" && parsedMessage.URI.Hostname() != "localhost" {
-		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message is using URI which does not use HTTPS")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signed Ethereum message is using URI which does not use HTTPS")
 	}
 
 	if !utilities.IsRedirectURLValid(config, parsedMessage.URI.String()) {
-		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message is using URI which is not allowed on this server, message was signed for another app")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signed Ethereum message is using URI which is not allowed on this server, message was signed for another app")
 	}
 
 	if parsedMessage.URI.Hostname() != "localhost" && (parsedMessage.URI.Host != parsedMessage.Domain || !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/")) {
-		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message is using a Domain that does not match the one in URI which is not allowed on this server")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signed Ethereum message is using a Domain that does not match the one in URI which is not allowed on this server")
 	}
 
 	now := a.Now()
 
 	if parsedMessage.NotBefore != nil && !parsedMessage.NotBefore.IsZero() && now.Before(*parsedMessage.NotBefore) {
-		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message becomes valid in the future")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signed Ethereum message becomes valid in the future")
 	}
 
 	if parsedMessage.NotBefore != nil && parsedMessage.ExpirationTime != nil && !parsedMessage.ExpirationTime.IsZero() && now.After(*parsedMessage.ExpirationTime) {
-		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message is expired")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Signed Ethereum message is expired")
 	}
 
 	latestExpiryAt := parsedMessage.IssuedAt.Add(config.External.Web3Ethereum.MaximumValidityDuration)
 
 	if now.After(latestExpiryAt) {
-		return apierrors.NewOAuthError("invalid_grant", "Ethereum message was issued too long ago")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Ethereum message was issued too long ago")
 	}
 
 	earliestIssuedAt := parsedMessage.IssuedAt.Add(-config.External.Web3Ethereum.MaximumValidityDuration)
 
 	if now.Before(earliestIssuedAt) {
-		return apierrors.NewOAuthError("invalid_grant", "Ethereum message was issued too far in the future")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidGrant, "Ethereum message was issued too far in the future")
 	}
 
 	const providerType = Web3Provider
@@ -326,7 +326,7 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 		case *HTTPError:
 			return err
 		default:
-			return apierrors.NewOAuthError("server_error", "Internal Server Error").WithInternalError(err)
+			return apierrors.NewOAuthError(apierrors.OAuthErrorCodeServerError, "Internal Server Error").WithInternalError(err)
 		}
 	}
 
