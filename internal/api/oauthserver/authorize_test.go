@@ -666,3 +666,52 @@ func (ts *OAuthAuthorizeTestSuite) TestConsent_InvalidActionRejected() {
 	err := ts.Server.OAuthServerConsent(w, req)
 	ts.assertHTTPError(err, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
 }
+
+func (ts *OAuthAuthorizeTestSuite) TestAuthorize_ConfidentialClientWithoutPKCE() {
+	client := ts.createClient() // confidential by default
+	q := url.Values{
+		"client_id":     []string{client.ID.String()},
+		"redirect_uri":  []string{"https://example.com/callback"},
+		"scope":         []string{"openid"},
+		"response_type": []string{"code"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerAuthorize(w, req))
+	assert.Equal(ts.T(), http.StatusFound, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(ts.T(), err)
+	authID := loc.Query().Get("authorization_id")
+	assert.NotEmpty(ts.T(), authID)
+}
+
+func (ts *OAuthAuthorizeTestSuite) TestAuthorize_PublicClientWithoutPKCE() {
+	// Create a public client
+	params := &OAuthServerClientRegisterParams{
+		ClientName:              "Test Public Client",
+		RedirectURIs:            []string{"https://example.com/callback"},
+		RegistrationType:        "dynamic",
+		ClientType:              models.OAuthServerClientTypePublic,
+		TokenEndpointAuthMethod: models.TokenEndpointAuthMethodNone,
+	}
+	client, _, err := ts.Server.registerOAuthServerClient(context.Background(), params)
+	require.NoError(ts.T(), err)
+
+	q := url.Values{
+		"client_id":     []string{client.ID.String()},
+		"redirect_uri":  []string{"https://example.com/callback"},
+		"scope":         []string{"openid"},
+		"response_type": []string{"code"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerAuthorize(w, req))
+	assert.Equal(ts.T(), http.StatusFound, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), oAuth2ErrorInvalidRequest, loc.Query().Get("error"))
+	assert.Contains(ts.T(), loc.Query().Get("error_description"), "PKCE flow requires both code_challenge and code_challenge_method")
+}
+
