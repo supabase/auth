@@ -111,8 +111,9 @@ func NewOAuthServerAuthorization(params NewOAuthServerAuthorizationParams) *OAut
 		auth.CodeChallenge = &params.CodeChallenge
 	}
 	if params.CodeChallengeMethod != "" {
-		// Normalize code challenge method to lowercase for database storage
-		// Database enum expects 's256' and 'plain' (lowercase)
+		// Normalize code challenge method to lowercase for database storage.
+		// The OAuth 2.1 server only accepts 's256'; the legacy flow may still
+		// pass 'plain', which is handled at the validation layer.
 		normalizedMethod := strings.ToLower(params.CodeChallengeMethod)
 		auth.CodeChallengeMethod = &normalizedMethod
 	}
