@@ -91,7 +91,12 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 		return a.SmsOtp(w, r)
 	}
 
-	return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "One of email or phone must be set")
+	return apierrors.NewBadRequestError(
+    apierrors.ErrorCodeValidationFailed,
+    "One of 'email' or 'phone' must be provided in the request body. "+
+        "If you are using email OTP, ensure the 'email' field is set. "+
+        "If you are using SMS OTP, ensure the 'phone' field is set in E.164 format (e.g. +19998887777).",
+)
 }
 
 type SmsOtpResponse struct {
@@ -105,8 +110,13 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	if !config.External.Phone.Enabled {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodePhoneProviderDisabled, "Unsupported phone provider")
-	}
+    return apierrors.NewBadRequestError(
+        apierrors.ErrorCodePhoneProviderDisabled,
+        "SMS/phone authentication is not enabled for this project. "+
+            "To fix this, go to your Supabase Dashboard → Authentication → Providers → Phone, "+
+            "enable Phone Auth, and configure a provider such as Twilio or Vonage.",
+    )
+}
 	var err error
 
 	params := &SmsParams{}
