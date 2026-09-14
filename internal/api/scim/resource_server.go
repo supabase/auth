@@ -15,10 +15,10 @@ import (
 type ResourceServer[T core.Resource] struct {
 	limits protocol.Limits
 	svc    Service[T]
-	spec   ResourceSpec[T]
+	spec   ResourceDescriptor[T]
 }
 
-func NewResourceServer[T core.Resource](limits protocol.Limits, svc Service[T], spec ResourceSpec[T]) *ResourceServer[T] {
+func NewResourceServer[T core.Resource](limits protocol.Limits, svc Service[T], spec ResourceDescriptor[T]) *ResourceServer[T] {
 	return &ResourceServer[T]{limits: limits, svc: svc, spec: spec}
 }
 
@@ -135,12 +135,9 @@ func (s *ResourceServer[T]) decodeValid(r *http.Request) (T, *scimerrors.Error) 
 func (s *ResourceServer[T]) decode(r *http.Request) (T, *scimerrors.Error) {
 	item := s.spec.New()
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return item, scimerrors.ErrTooLarge("the request body is too large")
-		}
-		return item, scimerrors.ErrInvalidSyntax("could not read the request body")
+	body, invalid := readBody(r)
+	if invalid != nil {
+		return item, invalid
 	}
 
 	if err := json.Unmarshal(body, item); err != nil {
@@ -150,12 +147,9 @@ func (s *ResourceServer[T]) decode(r *http.Request) (T, *scimerrors.Error) {
 }
 
 func (s *ResourceServer[T]) decodePatch(r *http.Request) (*protocol.PatchRequest, *scimerrors.Error) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return nil, scimerrors.ErrTooLarge("the request body is too large")
-		}
-		return nil, scimerrors.ErrInvalidSyntax("could not read the request body")
+	body, invalid := readBody(r)
+	if invalid != nil {
+		return nil, invalid
 	}
 
 	req := new(protocol.PatchRequest)
@@ -166,6 +160,17 @@ func (s *ResourceServer[T]) decodePatch(r *http.Request) (*protocol.PatchRequest
 		return nil, scimerrors.ErrInvalidValue(`"Operations" must contain at least one operation`)
 	}
 	return req, nil
+}
+
+func readBody(r *http.Request) ([]byte, *scimerrors.Error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return nil, scimerrors.ErrTooLarge("the request body is too large")
+		}
+		return nil, scimerrors.ErrInvalidSyntax("could not read the request body")
+	}
+	return body, nil
 }
 
 func resourceID(r *http.Request) (string, bool) {

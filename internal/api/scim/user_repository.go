@@ -112,6 +112,9 @@ func (r *userRepository) toResource(user *core.User) ([]byte, error) {
 func (r *userRepository) buildError(action string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		if pgErr.ConstraintName == "scim_users_external_id_key" {
+			return scimerrors.ErrUniqueness("a User with this externalId already exists")
+		}
 		return scimerrors.ErrUniqueness("a User with this userName already exists")
 	}
 	return fmt.Errorf("scim: %s user: %w", action, err)

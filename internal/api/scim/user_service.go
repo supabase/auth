@@ -7,6 +7,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
+// Pass-through today; the seam for future SAML identity-linking logic, see Service[T].
 type userService struct {
 	repo Repository[*core.User]
 }

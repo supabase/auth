@@ -43,8 +43,7 @@ func newUserResourceServer(db *storage.Connection, baseURL string, schema *core.
 	return NewResourceServer(
 		limits,
 		NewUserService(&userRepository{db: db, baseURL: baseURL, schema: schema}),
-		ResourceSpec[*core.User]{
-			Path:     "/Users",
+		ResourceDescriptor[*core.User]{
 			Schema:   schema,
 			New:      func() *core.User { return new(core.User) },
 			Validate: validateUser,

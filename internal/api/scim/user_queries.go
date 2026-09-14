@@ -32,9 +32,12 @@ func buildSortColumns() map[string]string {
 	sortable := []string{"id", "username", "meta.created", "meta.lastmodified"}
 	columns := make(map[string]string, len(sortable))
 	for _, key := range sortable {
-		columns[key] = filterColumns[key]
+		column := filterColumns[key]
+		if loweredColumns[column] {
+			column = `lower(` + column + ` collate "C")`
+		}
+		columns[key] = column
 	}
-	columns["username"] = `lower(` + filterColumns["username"] + ` collate "C")`
 	return columns
 }
 

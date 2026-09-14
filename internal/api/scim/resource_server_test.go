@@ -51,8 +51,7 @@ func (f *fakeUserService) Delete(ctx context.Context, id string) error {
 }
 
 func newFakeServer(svc Service[*core.User]) *ResourceServer[*core.User] {
-	return NewResourceServer(protocol.DefaultLimits, svc, ResourceSpec[*core.User]{
-		Path:     "/Users",
+	return NewResourceServer(protocol.DefaultLimits, svc, ResourceDescriptor[*core.User]{
 		Schema:   newUserSchema(testExternalURL + BasePath),
 		New:      func() *core.User { return new(core.User) },
 		Validate: validateUser,

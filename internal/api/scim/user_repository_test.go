@@ -246,6 +246,8 @@ func TestUserRepository(t *testing.T) {
 				{name: "malformed filter", filter: `userName zz "x"`},
 				{name: "id eq a non-uuid value", filter: `id eq "not-a-uuid"`},
 				{name: "co is not valid for a boolean value-path sub-attribute", filter: `emails[primary co "true"]`},
+				{name: "co is not valid for a boolean top-level attribute", filter: `active co "true"`},
+				{name: "sw is not valid for a datetime top-level attribute", filter: `meta.created sw "2026"`},
 			}
 
 			for _, tc := range cases {

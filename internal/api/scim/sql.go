@@ -24,11 +24,10 @@ func (f *sqlEvaluator) Compare(attribute *core.Attribute, key string, op filter.
 }
 
 func (f *sqlEvaluator) likeCompare(attribute *core.Attribute, key string, op filter.Operator, value any) (sqlFragment, bool, error) {
-	pattern, ok := likePatterns[op]
-	if !ok {
+	if _, ok := likePatterns[op]; !ok {
 		return sqlFragment{}, false, nil
 	}
-	frag, err := f.like(attribute, key, value, pattern)
+	frag, err := f.like(attribute, key, op, value)
 	return frag, true, err
 }
 
@@ -100,20 +99,27 @@ func (f *sqlEvaluator) operand(attribute *core.Attribute, key string) (string, s
 	return expr, "?"
 }
 
-func (f *sqlEvaluator) like(attribute *core.Attribute, key string, value any, pattern string) (sqlFragment, error) {
+func (f *sqlEvaluator) like(attribute *core.Attribute, key string, op filter.Operator, value any) (sqlFragment, error) {
+	if attribute.Type != core.TypeString {
+		return sqlFragment{}, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not supported for a %s attribute", op, attribute.Type))
+	}
 	text, ok := value.(string)
 	if !ok {
 		return sqlFragment{}, scimerrors.ErrInvalidValue("a string value is required")
 	}
-	arg := fmt.Sprintf(pattern, escapeLike(text))
+	arg := fmt.Sprintf(likePatterns[op], escapeLike(text))
+	return f.likeFragment(attribute, key, arg), nil
+}
+
+func (f *sqlEvaluator) likeFragment(attribute *core.Attribute, key string, arg string) sqlFragment {
 	expr, _, lowered, isUUID := f.columnExpr(attribute, key)
 	if isUUID {
-		return sqlFragment{sql: "lower(" + expr + "::text) LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
+		return sqlFragment{sql: "lower(" + expr + "::text) LIKE lower(?) ESCAPE '\\'", args: []any{arg}}
 	}
 	if lowered {
-		return sqlFragment{sql: expr + " LIKE lower(?) ESCAPE '\\'", args: []any{arg}}, nil
+		return sqlFragment{sql: expr + " LIKE lower(?) ESCAPE '\\'", args: []any{arg}}
 	}
-	return sqlFragment{sql: expr + " LIKE ? ESCAPE '\\'", args: []any{arg}}, nil
+	return sqlFragment{sql: expr + " LIKE ? ESCAPE '\\'", args: []any{arg}}
 }
 
 func (f *sqlEvaluator) requireUUID(key string, value any) error {

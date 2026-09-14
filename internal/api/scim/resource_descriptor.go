@@ -5,8 +5,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-type ResourceSpec[T core.Resource] struct {
-	Path     string
+type ResourceDescriptor[T core.Resource] struct {
 	Schema   *core.Schema
 	New      func() T
 	Validate func(T) *scimerrors.Error
