@@ -8,6 +8,7 @@ import (
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 type userQuery struct {
@@ -58,7 +59,7 @@ func (r *userRepository) orderBy(query *protocol.SearchRequest) (string, error) 
 	if query.SortBy != "" {
 		sortable, ok := userSortColumns[strings.ToLower(query.SortBy)]
 		if !ok {
-			return "", protocol.ErrInvalidValue(strconv.Quote(query.SortBy) + " is not an attribute this resource can be sorted by")
+			return "", scimerrors.ErrInvalidValue(strconv.Quote(query.SortBy) + " is not an attribute this resource can be sorted by")
 		}
 		column = sortable
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -32,7 +33,7 @@ func NewServer(db *storage.Connection, externalURL string) *Server {
 		serviceProviderConfig: newServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
-		).Sorting().Filtering(protocol.DefaultLimits.MaxCount),
+		).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching(),
 		resourceTypes: []*core.ResourceType{newUserResourceType(baseURL, userSchema)},
 		schemas:       []*core.Schema{userSchema},
 	}
@@ -56,12 +57,12 @@ func Join(base, segment string) string {
 	return strings.TrimSuffix(base, "/") + "/" + strings.TrimPrefix(segment, "/")
 }
 
-func validateUser(user *core.User) *protocol.Error {
+func validateUser(user *core.User) *scimerrors.Error {
 	if user.UserName == "" {
-		return protocol.ErrInvalidValue(`"userName" is required`)
+		return scimerrors.ErrInvalidValue(`"userName" is required`)
 	}
 	if !slices.Contains(user.Schemas, core.SchemaUser) {
-		return protocol.ErrInvalidValue(`"schemas" must include the User schema URN`)
+		return scimerrors.ErrInvalidValue(`"schemas" must include the User schema URN`)
 	}
 	return nil
 }
@@ -91,7 +92,7 @@ func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (srv *Server) list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
-	if rejected, err := rejectFilter(w, r, protocol.ErrForbidden("Filtering is not supported on this endpoint")); rejected {
+	if rejected, err := rejectFilter(w, r, scimerrors.ErrForbidden("Filtering is not supported on this endpoint")); rejected {
 		return err
 	}
 

@@ -439,6 +439,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/supabase-community/scim-go v0.3.1-0.20260910190316-11404e693b82 h1:ykEY+acsy50MeXINz1Q7bwjbVK7C8TnJmSo+3FXPsW0=
 github.com/supabase-community/scim-go v0.3.1-0.20260910190316-11404e693b82/go.mod h1:oEMij9JuKtAl0wl0jeyIHDKqHvPpUmTXegKeCBKyxXw=
+github.com/supabase-community/scim-go v0.4.1-0.20260914212957-04d62eae5f01 h1:i7wlEsWQ+BkXl91QfmI9U/qh2xdBKJEoRgjp1Z/fOfU=
+github.com/supabase-community/scim-go v0.4.1-0.20260914212957-04d62eae5f01/go.mod h1:oEMij9JuKtAl0wl0jeyIHDKqHvPpUmTXegKeCBKyxXw=
 github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869 h1:VDuRtwen5Z7QQ5ctuHUse4wAv/JozkKZkdic5vUV4Lg=
 github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869/go.mod h1:eHX5nlSMSnyPjUrbYzeqrA8snCe2SKyfizKjU3dkfOw=
 github.com/supranational/blst v0.3.16-0.20250831170142-f48500c1fdbe h1:nbdqkIGOGfUAD54q1s2YBcBz/WcsxCO9HUQ4aGV5hUw=

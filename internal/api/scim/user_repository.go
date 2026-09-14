@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -111,7 +112,7 @@ func (r *userRepository) toResource(user *core.User) ([]byte, error) {
 func (r *userRepository) buildError(action string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-		return protocol.ErrUniqueness("a User with this userName already exists")
+		return scimerrors.ErrUniqueness("a User with this userName already exists")
 	}
 	return fmt.Errorf("scim: %s user: %w", action, err)
 }

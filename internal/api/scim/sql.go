@@ -6,7 +6,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
-	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 type sqlEvaluator struct {
@@ -39,7 +39,7 @@ func (f *sqlEvaluator) compareOperand(attribute *core.Attribute, key string, op 
 	}
 	symbol, ok := comparators[op]
 	if !ok {
-		return sqlFragment{}, protocol.ErrInvalidFilter(fmt.Sprintf("operator %q is not supported", op))
+		return sqlFragment{}, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not supported", op))
 	}
 	return sqlFragment{sql: column + " " + symbol + " " + placeholder, args: []any{value}}, nil
 }
@@ -103,7 +103,7 @@ func (f *sqlEvaluator) operand(attribute *core.Attribute, key string) (string, s
 func (f *sqlEvaluator) like(attribute *core.Attribute, key string, value any, pattern string) (sqlFragment, error) {
 	text, ok := value.(string)
 	if !ok {
-		return sqlFragment{}, protocol.ErrInvalidValue("a string value is required")
+		return sqlFragment{}, scimerrors.ErrInvalidValue("a string value is required")
 	}
 	arg := fmt.Sprintf(pattern, escapeLike(text))
 	expr, _, lowered, isUUID := f.columnExpr(attribute, key)
@@ -122,10 +122,10 @@ func (f *sqlEvaluator) requireUUID(key string, value any) error {
 	}
 	text, ok := value.(string)
 	if !ok {
-		return protocol.ErrInvalidValue("a string value is required")
+		return scimerrors.ErrInvalidValue("a string value is required")
 	}
 	if _, err := uuid.FromString(text); err != nil {
-		return protocol.ErrInvalidValue("a valid uuid value is required")
+		return scimerrors.ErrInvalidValue("a valid uuid value is required")
 	}
 	return nil
 }

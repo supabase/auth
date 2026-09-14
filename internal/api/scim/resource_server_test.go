@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 type fakeUserService struct {
@@ -94,7 +95,7 @@ func TestResourceServer(t *testing.T) {
 			require.NoError(t, newFakeServer(svc).Create(w, r))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
-			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
+			assert.Contains(t, w.Body.String(), string(scimerrors.InvalidValue))
 			assert.False(t, svc.createCalled)
 		})
 

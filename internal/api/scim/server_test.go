@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -223,9 +224,9 @@ func TestServer(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, w.Code)
 			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 
-			var body protocol.Error
+			var body scimerrors.Error
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-			assert.Equal(t, protocol.ScimTypeInvalidValue, body.ScimType)
+			assert.Equal(t, scimerrors.InvalidValue, body.ScimType)
 		})
 
 		t.Run("?count=all", func(t *testing.T) {
@@ -237,9 +238,9 @@ func TestServer(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, w.Code)
 			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 
-			var body protocol.Error
+			var body scimerrors.Error
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-			assert.Equal(t, protocol.ScimTypeInvalidValue, body.ScimType)
+			assert.Equal(t, scimerrors.InvalidValue, body.ScimType)
 		})
 
 		t.Run("?startIndex=2&count=2", func(t *testing.T) {
@@ -285,7 +286,7 @@ func TestServer(t *testing.T) {
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
+			assert.Contains(t, w.Body.String(), string(scimerrors.InvalidValue))
 			assert.Contains(t, w.Body.String(), "nickName")
 		})
 
@@ -295,7 +296,7 @@ func TestServer(t *testing.T) {
 			w := get("sortBy=userName&sortOrder=sideways")
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
-			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
+			assert.Contains(t, w.Body.String(), string(scimerrors.InvalidValue))
 		})
 
 		t.Run("?filter narrows the result set", func(t *testing.T) {
@@ -322,7 +323,7 @@ func TestServer(t *testing.T) {
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidFilter))
+			assert.Contains(t, w.Body.String(), string(scimerrors.InvalidFilter))
 		})
 
 		t.Run("?filter matches a value path against emails", func(t *testing.T) {
@@ -401,7 +402,7 @@ func TestServer(t *testing.T) {
 			require.NoError(t, srv.Users.Create(w, r))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
-			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
+			assert.Contains(t, w.Body.String(), string(scimerrors.InvalidValue))
 		})
 
 		t.Run("without schemas", func(t *testing.T) {
@@ -412,7 +413,7 @@ func TestServer(t *testing.T) {
 			require.NoError(t, srv.Users.Create(w, r))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
-			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidValue))
+			assert.Contains(t, w.Body.String(), string(scimerrors.InvalidValue))
 		})
 
 		t.Run("with a malformed body", func(t *testing.T) {
@@ -423,7 +424,7 @@ func TestServer(t *testing.T) {
 			require.NoError(t, srv.Users.Create(w, r))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
-			assert.Contains(t, w.Body.String(), string(protocol.ScimTypeInvalidSyntax))
+			assert.Contains(t, w.Body.String(), string(scimerrors.InvalidSyntax))
 		})
 
 		t.Run("with an oversized request body", func(t *testing.T) {
@@ -471,6 +472,139 @@ func TestServer(t *testing.T) {
 			require.NoError(t, srv.Users.Replace(w, r))
 
 			assert.Equal(t, http.StatusNotFound, w.Code)
+		})
+	})
+
+	t.Run("PATCH /Users/{id}", func(t *testing.T) {
+		patch := func(t *testing.T, tenant *Tenant, id, body string) *httptest.ResponseRecorder {
+			t.Helper()
+			r := scimRequest(http.MethodPatch, "/Users/"+id, body, tenant, map[string]string{"id": id})
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.Users.Patch(w, r))
+			return w
+		}
+
+		fetch := func(t *testing.T, tenant *Tenant, id string) *core.User {
+			t.Helper()
+			r := scimRequest(http.MethodGet, "/Users/"+id, "", tenant, map[string]string{"id": id})
+			w := httptest.NewRecorder()
+			require.NoError(t, srv.Users.ByID(w, r))
+			require.Equal(t, http.StatusOK, w.Code)
+
+			var user core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &user))
+			return &user
+		}
+
+		t.Run("replaces an attribute named by a path", func(t *testing.T) {
+			tenant := createTenant(t, db)
+			created := create(t, srv, tenant, "patch-replace")
+
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","path":"displayName","value":"Babs Jensen"}]}`
+			w := patch(t, tenant, created.ID, body)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+
+			var returned core.User
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &returned))
+			assert.Equal(t, "Babs Jensen", returned.DisplayName)
+			assert.Equal(t, "Babs Jensen", fetch(t, tenant, created.ID).DisplayName)
+		})
+
+		t.Run("adds members to a multi-valued attribute", func(t *testing.T) {
+			tenant := createTenant(t, db)
+			created := create(t, srv, tenant, "patch-add")
+
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"add","path":"emails","value":[{"value":"work@example.com","type":"work"}]}]}`
+			w := patch(t, tenant, created.ID, body)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			persisted := fetch(t, tenant, created.ID)
+			require.Len(t, persisted.Emails, 1)
+			assert.Equal(t, "work@example.com", persisted.Emails[0].Value)
+			assert.Equal(t, "work", persisted.Emails[0].Type)
+		})
+
+		t.Run("removes an attribute named by a path", func(t *testing.T) {
+			tenant := createTenant(t, db)
+			created := create(t, srv, tenant, "patch-remove")
+			seed := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","path":"displayName","value":"To Be Removed"}]}`
+			require.Equal(t, http.StatusOK, patch(t, tenant, created.ID, seed).Code)
+
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"remove","path":"displayName"}]}`
+			w := patch(t, tenant, created.ID, body)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.Empty(t, fetch(t, tenant, created.ID).DisplayName)
+		})
+
+		t.Run("merges an operation without a path", func(t *testing.T) {
+			tenant := createTenant(t, db)
+			created := create(t, srv, tenant, "patch-merge")
+
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"displayName":"Merged Name"}}]}`
+			w := patch(t, tenant, created.ID, body)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, "Merged Name", fetch(t, tenant, created.ID).DisplayName)
+		})
+
+		t.Run("applies a value-path filter to a multi-valued attribute", func(t *testing.T) {
+			tenant := createTenant(t, db)
+			created := create(t, srv, tenant, "patch-valuepath")
+			seed := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"add","path":"emails","value":[{"value":"old@example.com","type":"work"}]}]}`
+			require.Equal(t, http.StatusOK, patch(t, tenant, created.ID, seed).Code)
+
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","path":"emails[type eq \"work\"].value","value":"new@example.com"}]}`
+			w := patch(t, tenant, created.ID, body)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			persisted := fetch(t, tenant, created.ID)
+			require.Len(t, persisted.Emails, 1)
+			assert.Equal(t, "new@example.com", persisted.Emails[0].Value)
+		})
+
+		t.Run("with an unknown id", func(t *testing.T) {
+			tenant := createTenant(t, db)
+			id := uuid.Must(uuid.NewV4()).String()
+
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","path":"displayName","value":"ghost"}]}`
+			w := patch(t, tenant, id, body)
+
+			assert.Equal(t, http.StatusNotFound, w.Code)
+		})
+
+		t.Run("rejects an empty operations list", func(t *testing.T) {
+			tenant := createTenant(t, db)
+			created := create(t, srv, tenant, "patch-empty")
+
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[]}`
+			w := patch(t, tenant, created.ID, body)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), string(scimerrors.InvalidValue))
+		})
+
+		t.Run("rejects a malformed body", func(t *testing.T) {
+			tenant := createTenant(t, db)
+			created := create(t, srv, tenant, "patch-malformed")
+
+			w := patch(t, tenant, created.ID, `{"Operations":`)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), string(scimerrors.InvalidSyntax))
+		})
+
+		t.Run("rejects an unknown path", func(t *testing.T) {
+			tenant := createTenant(t, db)
+			created := create(t, srv, tenant, "patch-badpath")
+
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","path":"nickName","value":"nope"}]}`
+			w := patch(t, tenant, created.ID, body)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), string(scimerrors.InvalidPath))
 		})
 	})
 

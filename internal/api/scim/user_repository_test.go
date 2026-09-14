@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 func TestUserRepository(t *testing.T) {
@@ -129,7 +130,7 @@ func TestUserRepository(t *testing.T) {
 		t.Run("refuses to sort by an attribute it cannot order", func(t *testing.T) {
 			_, _, err := repository.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: 10, SortBy: "nickName"})
 
-			require.ErrorIs(t, err, protocol.ErrInvalidValue(""))
+			require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
 			assert.Contains(t, err.Error(), "nickName")
 		})
 
