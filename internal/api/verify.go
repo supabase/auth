@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"net/http"
 	"net/url"
@@ -786,10 +787,23 @@ func isOtpValid(actual, expected string, sentAt *time.Time, otpExp uint) bool {
 	if expected == "" || sentAt == nil {
 		return false
 	}
-	return !isOtpExpired(sentAt, otpExp) && ((actual == expected) || ("pkce_"+actual == expected))
+	if isOtpExpired(sentAt, otpExp) {
+		return false
+	}
+	// Compare the token hashes in constant time to avoid leaking how much of a
+	// guessed token is correct, consistent with the refresh token handling in
+	// internal/crypto. ConstantTimeCompare returns 0 for differing lengths, so
+	// the pkce-prefixed form is checked separately.
+	return subtle.ConstantTimeCompare([]byte(actual), []byte(expected)) == 1 ||
+		subtle.ConstantTimeCompare([]byte("pkce_"+actual), []byte(expected)) == 1
 }
 
 func isOtpExpired(sentAt *time.Time, otpExp uint) bool {
+	if sentAt == nil {
+		// No OTP was sent (the corresponding *_sent_at column is NULL), so treat
+		// it as expired rather than dereferencing a nil pointer.
+		return true
+	}
 	return time.Now().After(sentAt.Add(time.Second * time.Duration(otpExp))) // #nosec G115
 }
 
