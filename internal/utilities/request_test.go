@@ -189,6 +189,28 @@ func TestIsRedirectURLValidAllowList(t *tst.T) {
 			redirectURL:  " https://2130706433/",
 			want:         false,
 		},
+		// Backslash obfuscation of the authority: url.Parse fails, but browsers
+		// normalize "\" to "/" and resolve it as https://2130706433/.
+		{
+			desc:         "backslash-obfuscated https authority rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  `https:/\2130706433/%zz`,
+			want:         false,
+		},
+		{
+			desc:         "backslash-obfuscated http authority rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  `http:\\2130706433/%zz`,
+			want:         false,
+		},
+		// A custom deep-link scheme that merely shares the "http" prefix is not
+		// falsely rejected.
+		{
+			desc:         "custom scheme starting with http not falsely rejected",
+			uriAllowList: []string{"httpfoo://callback"},
+			redirectURL:  "httpfoo://callback",
+			want:         true,
+		},
 	}
 
 	for _, c := range cases {

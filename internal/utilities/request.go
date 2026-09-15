@@ -123,12 +123,14 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		// must still be allowed to match the admin-configured allow list,
 		// otherwise it is silently dropped and the request falls back to SiteURL.
 		//
-		// A well-formed http:// or https:// URL always parses, so one that fails
-		// to parse (e.g. an obfuscated "https://2130706433/%zz") must be rejected
-		// rather than skip the decimal-IP and hostname safety checks by reaching
-		// the allow list below.
+		// A well-formed http/https URL always parses, so one that fails to parse
+		// (e.g. an obfuscated "https://2130706433/%zz" or "https:/\2130706433/")
+		// must be rejected rather than skip the decimal-IP and hostname safety
+		// checks by reaching the allow list below. The bare "http:"/"https:"
+		// scheme prefix is matched so that slash and backslash obfuscation of the
+		// authority (which browsers normalize back to "//") cannot slip past.
 		lower := strings.ToLower(redirectURL)
-		if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		if strings.HasPrefix(lower, "http:") || strings.HasPrefix(lower, "https:") {
 			return false
 		}
 	}
