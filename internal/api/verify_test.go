@@ -505,6 +505,12 @@ func (ts *VerifyTestSuite) TestPrepPKCERedirectURL() {
 			code: "a b/c",
 			want: "com.my_cool_app.example://callback?code=a+b%2Fc#section",
 		},
+		{
+			desc: "underscore custom scheme overwrites an existing code param",
+			rurl: "com.my_cool_app.example://callback?code=attacker&foo=bar",
+			code: "server",
+			want: "com.my_cool_app.example://callback?foo=bar&code=server",
+		},
 	}
 
 	for _, c := range cases {

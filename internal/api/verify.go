@@ -547,11 +547,25 @@ func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
 	// so append the PKCE code manually, keeping it in the query component ahead
 	// of any fragment.
 	beforeFragment, fragment, hasFragment := strings.Cut(rurl, "#")
-	separator := "?"
-	if strings.Contains(beforeFragment, "?") {
-		separator = "&"
+	base, rawQuery, hasQuery := strings.Cut(beforeFragment, "?")
+
+	// Mirror the overwrite semantics of the url.Parse path above (q.Set): drop
+	// any "code" already present in the redirect URL so the client always
+	// receives the server-issued code, never a duplicate an attacker placed on
+	// an allow-listed deep link.
+	newQuery := "code=" + url.QueryEscape(code)
+	if hasQuery {
+		if q, err := url.ParseQuery(rawQuery); err == nil {
+			q.Del("code")
+			if existing := q.Encode(); existing != "" {
+				newQuery = existing + "&" + newQuery
+			}
+		} else {
+			newQuery = rawQuery + "&" + newQuery
+		}
 	}
-	result := beforeFragment + separator + "code=" + url.QueryEscape(code)
+
+	result := base + "?" + newQuery
 	if hasFragment {
 		result += "#" + fragment
 	}
