@@ -104,6 +104,71 @@ func TestIsRedirectURLValidSameOrigin(t *tst.T) {
 	}
 }
 
+func TestIsRedirectURLValidAllowList(t *tst.T) {
+	cases := []struct {
+		desc         string
+		uriAllowList []string
+		redirectURL  string
+		want         bool
+	}{
+		// url.Parse rejects an underscore in the scheme, which previously made
+		// IsRedirectURLValid return false before ever reaching the allow list,
+		// silently dropping an explicitly allow-listed deep link (#2447).
+		{
+			desc:         "allow-listed underscore scheme accepted",
+			uriAllowList: []string{"com.my_cool_app.example://callback"},
+			redirectURL:  "com.my_cool_app.example://callback",
+			want:         true,
+		},
+		{
+			desc:         "allow-listed underscore scheme via glob accepted",
+			uriAllowList: []string{"com.my_cool_app.example://**"},
+			redirectURL:  "com.my_cool_app.example://callback/path",
+			want:         true,
+		},
+		{
+			desc:         "underscore scheme not on allow list rejected",
+			uriAllowList: []string{"com.other.app://callback"},
+			redirectURL:  "com.my_cool_app.example://callback",
+			want:         false,
+		},
+		{
+			desc:         "unparseable url with empty allow list rejected",
+			uriAllowList: []string{},
+			redirectURL:  "com.my_cool_app.example://callback",
+			want:         false,
+		},
+		// The allow list must not become a way around the IP-based rejections
+		// for URLs that do parse: a parseable URL takes the same code path as
+		// before, so a decimal-form IP is still rejected before the allow list
+		// is consulted.
+		{
+			desc:         "allow-listed decimal IP still rejected",
+			uriAllowList: []string{"https://2130706433/**"},
+			redirectURL:  "https://2130706433/callback",
+			want:         false,
+		},
+		{
+			desc:         "regular allow-listed https deep link accepted",
+			uriAllowList: []string{"https://example.com/**"},
+			redirectURL:  "https://example.com/auth/callback",
+			want:         true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *tst.T) {
+			config := conf.GlobalConfiguration{
+				SiteURL:      "https://site.example.com",
+				URIAllowList: c.uriAllowList,
+				JWT:          conf.JWTConfiguration{Secret: "testsecret"},
+			}
+			require.NoError(t, config.ApplyDefaults())
+			require.Equal(t, c.want, IsRedirectURLValid(&config, c.redirectURL))
+		})
+	}
+}
+
 func TestGetIPAddressWithSBFF(t *tst.T) {
 	testCases := []struct {
 		name       string

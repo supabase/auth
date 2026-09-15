@@ -533,14 +533,29 @@ func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowT
 }
 
 func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
-	u, err := url.Parse(rurl)
-	if err != nil {
-		return "", err
+	if u, err := url.Parse(rurl); err == nil {
+		q := u.Query()
+		q.Set("code", code)
+		u.RawQuery = q.Encode()
+		return u.String(), nil
 	}
-	q := u.Query()
-	q.Set("code", code)
-	u.RawQuery = q.Encode()
-	return u.String(), nil
+
+	// Custom mobile deep-link schemes containing an underscore (e.g.
+	// com.my_cool_app.example://callback) are rejected by url.Parse because an
+	// underscore is not a valid URI scheme character per RFC 3986. The redirect
+	// URL has already passed IsRedirectURLValid (i.e. it is on the allow list),
+	// so append the PKCE code manually, keeping it in the query component ahead
+	// of any fragment.
+	beforeFragment, fragment, hasFragment := strings.Cut(rurl, "#")
+	separator := "?"
+	if strings.Contains(beforeFragment, "?") {
+		separator = "&"
+	}
+	result := beforeFragment + separator + "code=" + url.QueryEscape(code)
+	if hasFragment {
+		result += "#" + fragment
+	}
+	return result, nil
 }
 
 func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
