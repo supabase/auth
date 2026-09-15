@@ -154,6 +154,21 @@ func TestIsRedirectURLValidAllowList(t *tst.T) {
 			redirectURL:  "https://example.com/auth/callback",
 			want:         true,
 		},
+		// An http(s) URL that is deliberately malformed so url.Parse fails (here
+		// a decimal-form IP with an invalid percent-escape) must not skip the
+		// IP/hostname safety checks by falling through to the allow list.
+		{
+			desc:         "unparseable https url with decimal IP rejected despite allow list",
+			uriAllowList: []string{"https://**", "*"},
+			redirectURL:  "https://2130706433/%zz",
+			want:         false,
+		},
+		{
+			desc:         "unparseable http url rejected despite allow list",
+			uriAllowList: []string{"http://**", "*"},
+			redirectURL:  "http://example.com/%zz",
+			want:         false,
+		},
 	}
 
 	for _, c := range cases {

@@ -102,14 +102,27 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		return false
 	}
 
-	// A custom mobile deep-link scheme containing an underscore (e.g.
-	// com.my_cool_app.example://callback) is rejected by url.Parse ("first path
-	// segment in URL cannot contain colon") because an underscore is not a valid
-	// URI scheme character per RFC 3986. When the redirect URL does not parse we
-	// cannot run the same-site allowance or the IP/hostname safety checks, but it
-	// must still be allowed to match the admin-configured allow list below,
-	// otherwise it is silently dropped and the request falls back to SiteURL.
-	if refurl, rerr := url.Parse(redirectURL); rerr == nil {
+	refurl, rerr := url.Parse(redirectURL)
+	if rerr != nil {
+		// A custom mobile deep-link scheme containing an underscore (e.g.
+		// com.my_cool_app.example://callback) is rejected by url.Parse ("first
+		// path segment in URL cannot contain colon") because an underscore is
+		// not a valid URI scheme character per RFC 3986. Such a URL cannot run
+		// the same-site allowance or the IP/hostname safety checks below, but it
+		// must still be allowed to match the admin-configured allow list,
+		// otherwise it is silently dropped and the request falls back to SiteURL.
+		//
+		// A well-formed http:// or https:// URL always parses, so one that fails
+		// to parse (e.g. an obfuscated "https://2130706433/%zz") must be rejected
+		// rather than skip the decimal-IP and hostname safety checks by reaching
+		// the allow list below.
+		lower := strings.ToLower(redirectURL)
+		if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+			return false
+		}
+	}
+
+	if rerr == nil {
 		// Allow redirects back to the site: scheme, host and port must match. The port
 		// check is skipped for loopback addresses, since per RFC 8252 Section 7.3 native
 		// apps must be allowed to use variable port numbers.
