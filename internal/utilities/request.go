@@ -96,6 +96,17 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		return false
 	}
 
+	// Reject any redirect URL containing an ASCII control character or space.
+	// These are never valid in a URL, and HTTP clients strip leading ones, so a
+	// value such as "\thttps://2130706433/" would otherwise fail url.Parse, slip
+	// past the http(s) scheme check below, and then be resolved by the browser
+	// as a different, unchecked address.
+	if strings.ContainsFunc(redirectURL, func(r rune) bool {
+		return r <= 0x20 || r == 0x7f
+	}) {
+		return false
+	}
+
 	base, berr := url.Parse(config.SiteURL)
 	if berr != nil {
 		// SiteURL is misconfigured

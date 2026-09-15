@@ -169,6 +169,26 @@ func TestIsRedirectURLValidAllowList(t *tst.T) {
 			redirectURL:  "http://example.com/%zz",
 			want:         false,
 		},
+		// A leading control character (tab) makes url.Parse fail and, browsers
+		// strip it, so it must be rejected rather than reach the allow list.
+		{
+			desc:         "leading tab before https decimal IP rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  "\thttps://2130706433/",
+			want:         false,
+		},
+		{
+			desc:         "embedded newline rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  "https://example.com/\n/cb",
+			want:         false,
+		},
+		{
+			desc:         "leading space before https decimal IP rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  " https://2130706433/",
+			want:         false,
+		},
 	}
 
 	for _, c := range cases {
