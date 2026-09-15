@@ -768,6 +768,59 @@ func (ts *MFATestSuite) TestChallengeFactorNotOwnedByUser() {
 
 }
 
+func (ts *MFATestSuite) TestVerifyFactorVerifyDisabled() {
+	cases := []struct {
+		desc              string
+		factor            *models.Factor
+		disableVerify     func()
+		expectedErrorCode apierrors.ErrorCode
+	}{
+		{
+			desc:              "Phone",
+			factor:            models.NewPhoneFactor(ts.TestUser, "+1234567", "phone_factor"),
+			disableVerify:     func() { ts.Config.MFA.Phone.VerifyEnabled = false },
+			expectedErrorCode: apierrors.ErrorCodeMFAPhoneVerifyDisabled,
+		},
+		{
+			desc:              "TOTP",
+			factor:            models.NewTOTPFactor(ts.TestUser, "totp_factor"),
+			disableVerify:     func() { ts.Config.MFA.TOTP.VerifyEnabled = false },
+			expectedErrorCode: apierrors.ErrorCodeMFATOTPVerifyDisabled,
+		},
+		{
+			desc:              "WebAuthn",
+			factor:            models.NewWebAuthnFactor(ts.TestUser, "webauthn_factor"),
+			disableVerify:     func() { ts.Config.MFA.WebAuthn.VerifyEnabled = false },
+			expectedErrorCode: apierrors.ErrorCodeMFAWebAuthnVerifyDisabled,
+		},
+	}
+
+	originalMFAConfig := ts.Config.MFA
+	defer func() { ts.Config.MFA = originalMFAConfig }()
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			ts.Config.MFA = originalMFAConfig
+			require.NoError(ts.T(), ts.API.db.Create(c.factor), "Error saving new test factor")
+			c.disableVerify()
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(VerifyFactorParams{
+				ChallengeID: uuid.Must(uuid.NewV4()),
+				Code:        "123456",
+			}))
+
+			token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+			w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/verify", c.factor.ID), token, buffer)
+			require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+
+			var data HTTPError
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			require.Equal(ts.T(), c.expectedErrorCode, data.ErrorCode)
+		})
+	}
+}
+
 func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenResponse) {
 	ts.API.config.Mailer.Autoconfirm = true
 	var buffer bytes.Buffer
