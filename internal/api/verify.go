@@ -560,9 +560,11 @@ func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
 			if existing := q.Encode(); existing != "" {
 				newQuery = existing + "&" + newQuery
 			}
-		} else {
-			newQuery = rawQuery + "&" + newQuery
 		}
+		// If rawQuery cannot be parsed it is discarded rather than preserved
+		// verbatim, so a malformed, attacker-controlled query on an allow-listed
+		// deep link cannot carry a duplicate "code" ahead of the server-issued
+		// one.
 	}
 
 	result := base + "?" + newQuery

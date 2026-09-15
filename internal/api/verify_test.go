@@ -511,6 +511,12 @@ func (ts *VerifyTestSuite) TestPrepPKCERedirectURL() {
 			code: "server",
 			want: "com.my_cool_app.example://callback?foo=bar&code=server",
 		},
+		{
+			desc: "underscore custom scheme discards a malformed query",
+			rurl: "com.my_cool_app.example://callback?code=attacker&bad=%zz",
+			code: "server",
+			want: "com.my_cool_app.example://callback?code=server",
+		},
 	}
 
 	for _, c := range cases {
