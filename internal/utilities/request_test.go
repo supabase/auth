@@ -211,6 +211,20 @@ func TestIsRedirectURLValidAllowList(t *tst.T) {
 			redirectURL:  "httpfoo://callback",
 			want:         true,
 		},
+		// A protocol-relative URL that fails to parse must not fall through; a
+		// browser resolves "//2130706433" to a decimal-IP host (127.0.0.1).
+		{
+			desc:         "unparseable protocol-relative url rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  "//2130706433/%zz",
+			want:         false,
+		},
+		{
+			desc:         "unparseable url with no scheme rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  "2130706433/%zz",
+			want:         false,
+		},
 	}
 
 	for _, c := range cases {

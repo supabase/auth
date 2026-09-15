@@ -91,6 +91,10 @@ func GetReferrer(r *http.Request, config *conf.GlobalConfiguration) string {
 var decimalIPAddressPattern = regexp.MustCompile("^[0-9]+$")
 var regularHostname = regexp.MustCompile("^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$")
 
+// customSchemePattern matches a URI scheme (already lowercased) plus the
+// underscore that RFC 3986 disallows but custom mobile deep-link schemes use.
+var customSchemePattern = regexp.MustCompile(`^[a-z][a-z0-9+.\-_]*$`)
+
 func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bool {
 	if redirectURL == "" {
 		return false
@@ -115,22 +119,24 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 
 	refurl, rerr := url.Parse(redirectURL)
 	if rerr != nil {
-		// A custom mobile deep-link scheme containing an underscore (e.g.
-		// com.my_cool_app.example://callback) is rejected by url.Parse ("first
-		// path segment in URL cannot contain colon") because an underscore is
-		// not a valid URI scheme character per RFC 3986. Such a URL cannot run
-		// the same-site allowance or the IP/hostname safety checks below, but it
-		// must still be allowed to match the admin-configured allow list,
-		// otherwise it is silently dropped and the request falls back to SiteURL.
+		// A well-formed URL parses successfully. The only redirect this function
+		// needs to accept that url.Parse rejects is a custom mobile deep-link
+		// scheme containing an underscore (e.g. com.my_cool_app.example://callback),
+		// which is invalid per RFC 3986 solely because of the underscore. Such a
+		// URL cannot run the same-site allowance or the IP/hostname safety checks
+		// below, but it must still be allowed to match the admin-configured allow
+		// list, otherwise it is silently dropped and the request falls back to
+		// SiteURL.
 		//
-		// A well-formed http/https URL always parses, so one that fails to parse
-		// (e.g. an obfuscated "https://2130706433/%zz" or "https:/\2130706433/")
-		// must be rejected rather than skip the decimal-IP and hostname safety
-		// checks by reaching the allow list below. The bare "http:"/"https:"
-		// scheme prefix is matched so that slash and backslash obfuscation of the
-		// authority (which browsers normalize back to "//") cannot slip past.
-		lower := strings.ToLower(redirectURL)
-		if strings.HasPrefix(lower, "http:") || strings.HasPrefix(lower, "https:") {
+		// Only permit that fall-through for a well-formed, non-http(s) custom
+		// scheme. Anything else that fails to parse — an obfuscated http(s)
+		// authority ("https://2130706433/%zz", "https:/\2130706433/"), a
+		// protocol-relative URL ("//2130706433/"), or a missing/invalid scheme —
+		// is rejected, because a browser may still resolve it to an unchecked
+		// (e.g. loopback) address, skipping the safety checks below.
+		scheme, _, hasScheme := strings.Cut(redirectURL, ":")
+		scheme = strings.ToLower(scheme)
+		if !hasScheme || scheme == "http" || scheme == "https" || !customSchemePattern.MatchString(scheme) {
 			return false
 		}
 	}
