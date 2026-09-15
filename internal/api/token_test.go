@@ -633,6 +633,70 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 
 }
 
+func (ts *TokenTestSuite) TestTokenPKCEGrantBannedUser() {
+	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
+	codeChallenge := sha256.Sum256([]byte(codeVerifier))
+	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
+
+	// Start a PKCE magic link sign in and obtain an auth code
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(OtpParams{
+		Email:               ts.User.GetEmail(),
+		CodeChallengeMethod: "s256",
+		CodeChallenge:       challenge,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	u, err := models.FindUserByID(ts.API.db, ts.User.ID)
+	require.NoError(ts.T(), err)
+
+	requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", "magiclink", u.RecoveryToken)
+	req = httptest.NewRequest(http.MethodGet, requestUrl, nil)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusSeeOther, w.Code)
+	rURL, err := w.Result().Location()
+	require.NoError(ts.T(), err)
+	authCode := rURL.Query().Get("code")
+	require.NotEmpty(ts.T(), authCode)
+
+	// The user is banned after the auth code was issued but before it is exchanged
+	require.NoError(ts.T(), u.Ban(ts.API.db, 24*time.Hour))
+
+	sessionsBefore, err := ts.API.db.Q().Where("user_id = ?", u.ID).Count(&models.Session{})
+	require.NoError(ts.T(), err)
+
+	exchangeCode := func(verifier string) HTTPError {
+		var body bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&body).Encode(map[string]interface{}{
+			"code_verifier": verifier,
+			"auth_code":     authCode,
+		}))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &body)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+
+		var data HTTPError
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+		return data
+	}
+
+	// Without the code verifier, the ban status is not revealed
+	require.Equal(ts.T(), apierrors.ErrorCodeBadCodeVerifier, exchangeCode(codeVerifier+"invalid").ErrorCode)
+
+	require.Equal(ts.T(), apierrors.ErrorCodeUserBanned, exchangeCode(codeVerifier).ErrorCode)
+
+	sessionsAfter, err := ts.API.db.Q().Where("user_id = ?", u.ID).Count(&models.Session{})
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), sessionsBefore, sessionsAfter, "no session should be created for a banned user")
+}
+
 func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 	type verificationHookTestcase struct {
 		desc            string
