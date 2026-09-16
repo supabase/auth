@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -896,4 +897,24 @@ func (ts *UserTestSuite) TestAuthenticate() {
 			require.Equal(ts.T(), c.expectedHashCost, hashCost)
 		})
 	}
+}
+
+func TestWebAuthnCredentialsSkipsNilCredential(t *testing.T) {
+	valid := &MFAWebAuthnCredential{Credential: webauthn.Credential{ID: []byte("cred-id")}}
+	user := &User{
+		Factors: []Factor{
+			// verified WebAuthn factor with a NULL web_authn_credential must be
+			// skipped rather than panic on a nil dereference.
+			{Status: FactorStateVerified.String(), FactorType: WebAuthn, WebAuthnCredential: nil},
+			{Status: FactorStateVerified.String(), FactorType: WebAuthn, WebAuthnCredential: valid},
+			{Status: FactorStateUnverified.String(), FactorType: WebAuthn, WebAuthnCredential: nil},
+		},
+	}
+
+	var creds []webauthn.Credential
+	require.NotPanics(t, func() {
+		creds = user.WebAuthnCredentials()
+	})
+	require.Len(t, creds, 1)
+	require.Equal(t, []byte("cred-id"), creds[0].ID)
 }
