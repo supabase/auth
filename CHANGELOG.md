@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.197.0](https://github.com/supabase/auth/compare/v2.196.0...v2.197.0) (2026-09-03)
+
+
+### Features
+
+* fix golangci-lint errors ([#2776](https://github.com/supabase/auth/issues/2776)) ([5e372a9](https://github.com/supabase/auth/commit/5e372a96c05b001871f41260b2f35bdefc5d68fb))
+* **mfa:** add recovery code crypto primitives ([e3ab2df](https://github.com/supabase/auth/commit/e3ab2dfeb8d144be414a1a650ad6b4cbdd3e6a5d))
+* **mfa:** add recovery code factor model support ([cb30720](https://github.com/supabase/auth/commit/cb30720732a153c4c59992031c1c8359211e1b25))
+* **mfa:** add recovery codes configuration ([507e2ab](https://github.com/supabase/auth/commit/507e2abbac3a294a4368edc730b7f064672ea340))
+* **mfa:** add recovery codes delete endpoint ([0907af9](https://github.com/supabase/auth/commit/0907af9bd6be3c76f472c40a7dcc0dc34abeffaf))
+* **mfa:** add recovery codes regenerate endpoint ([4c82af9](https://github.com/supabase/auth/commit/4c82af989a4c8bcf6233ef6e052aeb4e8805c9d7))
+* **mfa:** add recovery codes status and generate endpoints ([6607756](https://github.com/supabase/auth/commit/6607756c37af44686fa79d4e4e39556ffdfafea2))
+* **mfa:** add recovery codes verify endpoint ([92a1569](https://github.com/supabase/auth/commit/92a156932c3f2a154a24613c2a56b95c8cea0fac))
+* **mfa:** add schema for recovery codes factor ([#2725](https://github.com/supabase/auth/issues/2725)) ([5e4bec6](https://github.com/supabase/auth/commit/5e4bec6847bb47162f28c4c3ad02af0f51b748f1))
+* **mfa:** recovery code storage model ([270d02f](https://github.com/supabase/auth/commit/270d02f083a5e50337094b3056df6b575c83f515))
+* **mfa:** recovery codes API errors ([41f0498](https://github.com/supabase/auth/commit/41f04986b6af7fdffc270af56cb53b8627177778))
+* **mfa:** recovery codes audit log events ([20b4c05](https://github.com/supabase/auth/commit/20b4c0539b0e78f57f22145337818bb0d6657a81))
+* **mfa:** recovery codes metering ([63d8d83](https://github.com/supabase/auth/commit/63d8d83e9f16c0d43e2e8090fad845627345729a))
+* **oauth:** emit login metering events for OAuth server token exchanges ([#2749](https://github.com/supabase/auth/issues/2749)) ([719db0b](https://github.com/supabase/auth/commit/719db0b75c79168fd2d75046fa48c09cacf7780b))
+* **otp:** add expires_at column to one_time_tokens table ([#2765](https://github.com/supabase/auth/issues/2765)) ([05d9aec](https://github.com/supabase/auth/commit/05d9aece5bf87e4135c9ec6706a4079ffaed1112))
+* **scim:** add scim_users, scim_tokens tables ([#2745](https://github.com/supabase/auth/issues/2745)) ([9c8b7ee](https://github.com/supabase/auth/commit/9c8b7eeba9d9baa68429790e17388e5b8eef305d))
+
 ## [2.196.0](https://github.com/supabase/auth/compare/v2.195.0...v2.196.0) (2026-08-12)
 
 
