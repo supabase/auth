@@ -8,8 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -185,13 +183,7 @@ func serve(ctx context.Context) {
 
 	lc := net.ListenConfig{
 		Control: func(network, address string, c syscall.RawConn) error {
-			var serr error
-			if err := c.Control(func(fd uintptr) {
-				serr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1) // #nosec G115
-			}); err != nil {
-				return err
-			}
-			return serr
+			return setReusePort(c)
 		},
 	}
 	listener, err := lc.Listen(ctx, "tcp", addr)
