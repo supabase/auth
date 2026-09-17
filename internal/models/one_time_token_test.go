@@ -63,7 +63,7 @@ func (ts *OneTimeTokenTestSuite) TestCreateOneTimeToken() {
 			u := ts.createUser()
 
 			before := time.Now()
-			require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), name, ConfirmationToken, validity))
+			require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), name, ConfirmationToken, validity, true))
 			after := time.Now()
 
 			ott, err := FindOneTimeToken(ts.db, name, ConfirmationToken)
@@ -81,12 +81,12 @@ func (ts *OneTimeTokenTestSuite) TestCreateOneTimeToken() {
 func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenResendReplacesWindow() {
 	u := ts.createUser()
 
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "first-hash", ConfirmationToken, time.Minute))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "first-hash", ConfirmationToken, time.Minute, true))
 	first, err := FindOneTimeToken(ts.db, "first-hash", ConfirmationToken)
 	require.NoError(ts.T(), err)
 	require.NotNil(ts.T(), first.ExpiresAt)
 
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "second-hash", ConfirmationToken, time.Hour))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "second-hash", ConfirmationToken, time.Hour, true))
 
 	_, err = FindOneTimeToken(ts.db, "first-hash", ConfirmationToken)
 	require.True(ts.T(), IsNotFoundError(err), "resend must clear the previous token, got %v", err)
@@ -96,4 +96,14 @@ func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenResendReplacesWindow() {
 	require.NotNil(ts.T(), second.ExpiresAt)
 	require.True(ts.T(), second.ExpiresAt.After(*first.ExpiresAt),
 		"resend must move expires_at forward, first=%s second=%s", first.ExpiresAt, second.ExpiresAt)
+}
+
+func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenSkipsExpiresAtWhenDisabled() {
+	u := ts.createUser()
+
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "no-expiry-hash", ConfirmationToken, 15*time.Minute, false))
+
+	ott, err := FindOneTimeToken(ts.db, "no-expiry-hash", ConfirmationToken)
+	require.NoError(ts.T(), err)
+	require.Nil(ts.T(), ott.ExpiresAt, "expires_at must stay null while the write is disabled")
 }

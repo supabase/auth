@@ -419,6 +419,11 @@ type ExperimentalConfiguration struct {
 	// one (e.g. a user who signed up with an external provider and later sets a password).
 	// Env: GOTRUE_EXPERIMENTAL_CREATE_EMAIL_IDENTITY_ON_PASSWORD_SET_ENABLED=true
 	CreateEmailIdentityOnPasswordSetEnabled bool `split_words:"true" default:"false"`
+
+	// OneTimeTokenExpiresAtWriteEnabled sets one_time_tokens.expires_at when a
+	// one-time token is created. Ships dark: nothing reads the column yet.
+	// Env: GOTRUE_EXPERIMENTAL_ONE_TIME_TOKEN_EXPIRES_AT_WRITE_ENABLED=true
+	OneTimeTokenExpiresAtWriteEnabled bool `split_words:"true" default:"false"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime

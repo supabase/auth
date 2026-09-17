@@ -37,6 +37,8 @@ func (ts *OneTimeTokenExpiryTestSuite) SetupTest() {
 	// Two different windows to ensure we're using the right config values
 	ts.Config.Mailer.OtpExp = 3600
 	ts.Config.Sms.OtpExp = 60
+
+	ts.Config.Experimental.OneTimeTokenExpiresAtWriteEnabled = true
 }
 
 func (ts *OneTimeTokenExpiryTestSuite) TestEmailTokenMatchesMailerWindow() {
