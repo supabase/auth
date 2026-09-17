@@ -3,70 +3,42 @@ package shared
 import (
 	"context"
 
+	"github.com/supabase/auth/internal/ctxkey"
 	"github.com/supabase/auth/internal/models"
 )
 
-// ContextKey is the type for context keys to avoid collisions
-type ContextKey string
-
-func (c ContextKey) String() string {
-	return "gotrue api context key " + string(c)
-}
-
-// Context keys used across packages
-const (
-	UserKey              ContextKey = "user"
-	SessionKey           ContextKey = "session"
-	OAuthServerClientKey ContextKey = "oauth_server_client"
+var (
+	UserKey              = ctxkey.New[*models.User]("user")
+	SessionKey           = ctxkey.New[*models.Session]("session")
+	OAuthServerClientKey = ctxkey.New[*models.OAuthServerClient]("oauth_server_client")
 )
 
 // GetUser reads the user from the context - shared implementation
 func GetUser(ctx context.Context) *models.User {
-	if ctx == nil {
-		return nil
-	}
-	obj := ctx.Value(UserKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.User)
+	return UserKey.Value(ctx)
 }
 
 // WithUser adds the user to the context - shared implementation
 func WithUser(ctx context.Context, u *models.User) context.Context {
-	return context.WithValue(ctx, UserKey, u)
+	return UserKey.WithValue(ctx, u)
 }
 
 // GetSession reads the session from the context - shared implementation
 func GetSession(ctx context.Context) *models.Session {
-	if ctx == nil {
-		return nil
-	}
-	obj := ctx.Value(SessionKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.Session)
+	return SessionKey.Value(ctx)
 }
 
 // WithSession adds the session to the context - shared implementation
 func WithSession(ctx context.Context, s *models.Session) context.Context {
-	return context.WithValue(ctx, SessionKey, s)
+	return SessionKey.WithValue(ctx, s)
 }
 
 // WithOAuthServerClient adds an OAuth server client to the context
 func WithOAuthServerClient(ctx context.Context, client *models.OAuthServerClient) context.Context {
-	return context.WithValue(ctx, OAuthServerClientKey, client)
+	return OAuthServerClientKey.WithValue(ctx, client)
 }
 
 // GetOAuthServerClient retrieves an OAuth server client from the context
 func GetOAuthServerClient(ctx context.Context) *models.OAuthServerClient {
-	if ctx == nil {
-		return nil
-	}
-	obj := ctx.Value(OAuthServerClientKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.OAuthServerClient)
+	return OAuthServerClientKey.Value(ctx)
 }

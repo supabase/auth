@@ -406,7 +406,8 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 	phoneIdentityWasCreated := false
 	err := conn.Transaction(func(tx *storage.Connection) error {
 
-		if params.Type == smsVerification {
+		switch params.Type {
+		case smsVerification:
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 				"provider": PhoneProvider,
 			}); terr != nil {
@@ -415,7 +416,7 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 			if terr := user.ConfirmPhone(tx); terr != nil {
 				return apierrors.NewInternalServerError("Error confirming user").WithInternalError(terr)
 			}
-		} else if params.Type == phoneChangeVerification {
+		case phoneChangeVerification:
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 				return terr
 			}
@@ -648,13 +649,13 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 	switch params.Type {
 	case mail.EmailOTPVerification:
 		// need to find user by confirmation token or recovery token with the token hash
-		user, err = models.FindUserByConfirmationOrRecoveryToken(conn, params.TokenHash)
+		user, err = models.FindUserByOneTimeToken(conn, params.TokenHash, models.ConfirmationToken, models.RecoveryToken)
 	case mail.SignupVerification, mail.InviteVerification:
-		user, err = models.FindUserByConfirmationToken(conn, params.TokenHash)
+		user, err = models.FindUserByOneTimeToken(conn, params.TokenHash, models.ConfirmationToken)
 	case mail.RecoveryVerification, mail.MagicLinkVerification:
-		user, err = models.FindUserByRecoveryToken(conn, params.TokenHash)
+		user, err = models.FindUserByOneTimeToken(conn, params.TokenHash, models.RecoveryToken)
 	case mail.EmailChangeVerification:
-		user, err = models.FindUserByEmailChangeToken(conn, params.TokenHash)
+		user, err = models.FindUserByOneTimeToken(conn, params.TokenHash, models.EmailChangeTokenCurrent, models.EmailChangeTokenNew)
 	default:
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid email verification type")
 	}

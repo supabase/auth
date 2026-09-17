@@ -374,12 +374,12 @@ func (s *Server) regenerateOAuthServerClientSecret(ctx context.Context, clientID
 
 // OAuthServerClientUpdateParams contains parameters for updating an OAuth client
 type OAuthServerClientUpdateParams struct {
-	RedirectURIs           *[]string `json:"redirect_uris,omitempty"`
-	GrantTypes             *[]string `json:"grant_types,omitempty"`
-	ClientName             *string   `json:"client_name,omitempty"`
-	ClientURI              *string   `json:"client_uri,omitempty"`
-	LogoURI                *string   `json:"logo_uri,omitempty"`
-	TokenEndpointAuthMethod *string  `json:"token_endpoint_auth_method,omitempty"`
+	RedirectURIs            *[]string `json:"redirect_uris,omitempty"`
+	GrantTypes              *[]string `json:"grant_types,omitempty"`
+	ClientName              *string   `json:"client_name,omitempty"`
+	ClientURI               *string   `json:"client_uri,omitempty"`
+	LogoURI                 *string   `json:"logo_uri,omitempty"`
+	TokenEndpointAuthMethod *string   `json:"token_endpoint_auth_method,omitempty"`
 }
 
 // isEmpty returns true if no fields are set for update

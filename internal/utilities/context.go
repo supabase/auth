@@ -3,31 +3,20 @@ package utilities
 import (
 	"context"
 	"sync"
+
+	"github.com/supabase/auth/internal/ctxkey"
 )
 
-type contextKey string
-
-func (c contextKey) String() string {
-	return "gotrue api context key " + string(c)
-}
-
-const (
-	requestIDKey = contextKey("request_id")
-)
+var requestIDKey = ctxkey.New[string]("request_id")
 
 // WithRequestID adds the provided request ID to the context.
 func WithRequestID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, requestIDKey, id)
+	return requestIDKey.WithValue(ctx, id)
 }
 
 // GetRequestID reads the request ID from the context.
 func GetRequestID(ctx context.Context) string {
-	obj := ctx.Value(requestIDKey)
-	if obj == nil {
-		return ""
-	}
-
-	return obj.(string)
+	return requestIDKey.Value(ctx)
 }
 
 // WaitForCleanup waits until all long-running goroutines shut

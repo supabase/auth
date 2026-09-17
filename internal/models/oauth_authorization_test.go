@@ -368,7 +368,7 @@ func TestFindOAuthServerAuthorizationByIDForUpdate_SkipLocked(t *testing.T) {
 	})
 	require.NoError(t, CreateOAuthServerAuthorization(db, auth))
 
-	holdTx, err := db.Connection.NewTransaction()
+	holdTx, err := db.NewTransaction()
 	require.NoError(t, err)
 	defer func() { _ = holdTx.TX.Rollback() }()
 	held := &storage.Connection{Connection: holdTx}

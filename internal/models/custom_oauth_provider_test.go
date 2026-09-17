@@ -539,7 +539,8 @@ func (ts *CustomOAuthProviderTestSuite) createTestProvider(providerType Provider
 		Enabled:      true,
 	}
 
-	if providerType == ProviderTypeOAuth2 {
+	switch providerType {
+	case ProviderTypeOAuth2:
 		authURL := "https://example.com/authorize"
 		// #nosec G101 - These are test URLs, not actual credentials
 		tokenURL := "https://example.com/token"
@@ -547,7 +548,7 @@ func (ts *CustomOAuthProviderTestSuite) createTestProvider(providerType Provider
 		provider.AuthorizationURL = &authURL
 		provider.TokenURL = &tokenURL
 		provider.UserinfoURL = &userinfoURL
-	} else if providerType == ProviderTypeOIDC {
+	case ProviderTypeOIDC:
 		// For OIDC, generate a unique issuer to avoid constraint violations
 		issuer := "https://oidc-" + identifier + ".example.com"
 		provider.Issuer = &issuer

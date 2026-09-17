@@ -528,13 +528,14 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			var f *models.Factor
 			var sharedSecret string
 
-			if v.factorType == models.TOTP {
+			switch v.factorType {
+			case models.TOTP:
 				friendlyName := uuid.Must(uuid.NewV4()).String()
 				f = models.NewTOTPFactor(ts.TestUser, friendlyName)
 				sharedSecret = ts.TestOTPKey.Secret()
 				f.Secret = sharedSecret
 				require.NoError(ts.T(), ts.API.db.Create(f), "Error updating new test factor")
-			} else if v.factorType == models.Phone {
+			case models.Phone:
 				friendlyName := uuid.Must(uuid.NewV4()).String()
 				numDigits := 10
 				otp := crypto.GenerateOtp(numDigits)
@@ -550,12 +551,13 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 
 			var c *models.Challenge
 			var code string
-			if v.factorType == models.TOTP {
+			switch v.factorType {
+			case models.TOTP:
 				c = f.CreateChallenge(utilities.GetIPAddress(req))
 				// Verify TOTP code
 				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC())
 				require.NoError(ts.T(), err)
-			} else if v.factorType == models.Phone {
+			case models.Phone:
 				code = "123456"
 				c, err = f.CreatePhoneChallenge(utilities.GetIPAddress(req), code, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey)
 				require.NoError(ts.T(), err)

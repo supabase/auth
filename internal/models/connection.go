@@ -60,6 +60,8 @@ func TruncateAll(conn *storage.Connection) error {
 			(&pop.Model{Value: AuditLogEntry{}}).TableName(),
 			(&pop.Model{Value: Session{}}).TableName(),
 			(&pop.Model{Value: Factor{}}).TableName(),
+			(&pop.Model{Value: RecoveryCodeSet{}}).TableName(),
+			(&pop.Model{Value: RecoveryCodeEntry{}}).TableName(),
 			(&pop.Model{Value: Challenge{}}).TableName(),
 			(&pop.Model{Value: AMRClaim{}}).TableName(),
 			(&pop.Model{Value: SSOProvider{}}).TableName(),

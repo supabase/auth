@@ -79,7 +79,7 @@ func (p facebookProvider) RequiresPKCE() bool {
 }
 
 func (p facebookProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	hash := hmac.New(sha256.New, []byte(p.Config.ClientSecret))
+	hash := hmac.New(sha256.New, []byte(p.ClientSecret))
 	hash.Write([]byte(tok.AccessToken))
 	appsecretProof := hex.EncodeToString(hash.Sum(nil))
 

@@ -266,10 +266,11 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 				require.NoError(ts.T(), err)
 				require.NotEmpty(ts.T(), dbUser)
 
-				if c.params["type"] == mail.SignupVerification {
+				switch c.params["type"] {
+				case mail.SignupVerification:
 					require.NotEqual(ts.T(), dbUser.ConfirmationToken, c.user.ConfirmationToken)
 					require.NotEqual(ts.T(), dbUser.ConfirmationSentAt, c.user.ConfirmationSentAt)
-				} else if c.params["type"] == mail.EmailChangeVerification {
+				case mail.EmailChangeVerification:
 					require.NotEqual(ts.T(), dbUser.EmailChangeTokenNew, c.user.EmailChangeTokenNew)
 					require.NotEqual(ts.T(), dbUser.EmailChangeSentAt, c.user.EmailChangeSentAt)
 				}
