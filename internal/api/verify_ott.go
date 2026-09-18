@@ -15,10 +15,10 @@ import (
 // columns. A lookup miss is rejected as an expired or invalid token.
 //
 // NOTE: Test OTPs and Twilio Verify are not handled yet on this path; a follow-up PR will add them.
-func verifyUserAndTokenFromOTT(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+func (a *API) verifyUserAndTokenFromOTT(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
 
 	// TODO AUTH-1553: Add support for test OTPs and Twilio Verify on this path.
-	ott, err := verifyOneTimeToken(conn, params)
+	ott, err := a.verifyOneTimeToken(conn, params)
 	if err != nil {
 		return nil, err
 	}
@@ -43,8 +43,8 @@ func verifyUserAndTokenFromOTT(conn *storage.Connection, params *VerifyParams, a
 	return user, nil
 }
 
-func verifyOneTimeToken(conn *storage.Connection, params *VerifyParams) (*models.OneTimeToken, error) {
-	tokenTypes := verifyTypeToTokenTypes(params.Type)
+func (a *API) verifyOneTimeToken(conn *storage.Connection, params *VerifyParams) (*models.OneTimeToken, error) {
+	tokenTypes := verifyTypeToTokenTypes(params.Type, a.config.Mailer.SecureEmailChangeEnabled)
 	if len(tokenTypes) == 0 {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalMessage("unknown verification type")
 	}
@@ -63,7 +63,7 @@ func verifyOneTimeToken(conn *storage.Connection, params *VerifyParams) (*models
 	return ott, nil
 }
 
-func verifyTypeToTokenTypes(verifyType string) []models.OneTimeTokenType {
+func verifyTypeToTokenTypes(verifyType string, secureEmailChangeEnabled bool) []models.OneTimeTokenType {
 	switch verifyType {
 	case mail.EmailOTPVerification:
 		return []models.OneTimeTokenType{models.ConfirmationToken, models.RecoveryToken}
@@ -72,6 +72,10 @@ func verifyTypeToTokenTypes(verifyType string) []models.OneTimeTokenType {
 	case mail.RecoveryVerification, mail.MagicLinkVerification:
 		return []models.OneTimeTokenType{models.RecoveryToken}
 	case mail.EmailChangeVerification:
+		// Secure email change off: accept the new address token only, as FindUserForEmailChange does.
+		if !secureEmailChangeEnabled {
+			return []models.OneTimeTokenType{models.EmailChangeTokenNew}
+		}
 		return []models.OneTimeTokenType{models.EmailChangeTokenCurrent, models.EmailChangeTokenNew}
 	case phoneChangeVerification:
 		return []models.OneTimeTokenType{models.PhoneChangeToken}

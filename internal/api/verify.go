@@ -701,7 +701,7 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 	config := a.config
 
 	if config.Experimental.EnableOTTAsSourceOfTruth {
-		return verifyUserAndTokenFromOTT(conn, params, aud)
+		return a.verifyUserAndTokenFromOTT(conn, params, aud)
 	}
 
 	var user *models.User

@@ -479,6 +479,39 @@ func (ts *VerifyTestSuite) TestVerifyOTPParitySecureEmailChange() {
 	require.Equal(ts.T(), changed, ottOutcome)
 }
 
+// TestVerifyOTPParitySecureEmailChangeDisabled covers a leftover code for the
+// current address, which only the secure flow sends. If secure email change is
+// off when the user verifies, that code must not complete the change, because
+// nothing confirmed the new address.
+func (ts *VerifyTestSuite) TestVerifyOTPParitySecureEmailChangeDisabled() {
+	now := time.Now()
+	currentHash := crypto.GenerateTokenHash(parityEmail, parityOTP)
+
+	cases := map[string]otpParityCase{
+		"a leftover current address code does not move the user to the new address": {
+			configure: func() func() {
+				previous := ts.Config.Mailer.SecureEmailChangeEnabled
+				ts.Config.Mailer.SecureEmailChangeEnabled = false
+				return func() { ts.Config.Mailer.SecureEmailChangeEnabled = previous }
+			},
+			seed: func(u *models.User) {
+				u.EmailChange = parityNewEmail
+				ts.seedChallenge(u, models.EmailChangeTokenCurrent, parityEmail, currentHash, now, time.Hour)
+			},
+			requestBody: emailOTPBody(mail.EmailChangeVerification, parityEmail),
+			expected: otpParityOutcome{
+				Status:    http.StatusForbidden,
+				ErrorCode: apierrors.ErrorCodeOTPExpired,
+				Msg:       parityForbidden,
+				Email:     parityEmail,
+				Phone:     parityPhone,
+			},
+		},
+	}
+
+	ts.runOTPParityCases(cases)
+}
+
 // responseMsg reads the msg field out of a response body.
 func (ts *VerifyTestSuite) responseMsg(w *httptest.ResponseRecorder) string {
 	var body struct {
