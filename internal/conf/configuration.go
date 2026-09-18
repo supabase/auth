@@ -419,6 +419,11 @@ type ExperimentalConfiguration struct {
 	// one (e.g. a user who signed up with an external provider and later sets a password).
 	// Env: GOTRUE_EXPERIMENTAL_CREATE_EMAIL_IDENTITY_ON_PASSWORD_SET_ENABLED=true
 	CreateEmailIdentityOnPasswordSetEnabled bool `split_words:"true" default:"false"`
+
+	// OneTimeTokenExpiresAtWriteEnabled sets one_time_tokens.expires_at when a
+	// one-time token is created. Ships dark: nothing reads the column yet.
+	// Env: GOTRUE_EXPERIMENTAL_ONE_TIME_TOKEN_EXPIRES_AT_WRITE_ENABLED=true
+	OneTimeTokenExpiresAtWriteEnabled bool `split_words:"true" default:"false"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime
@@ -702,6 +707,10 @@ type MailerConfiguration struct {
 	blockedMXRecordsVal cachedValue[map[string]bool]     `json:"-"`
 }
 
+func (c *MailerConfiguration) OtpExpAsDuration() time.Duration {
+	return time.Duration(c.OtpExp) * time.Second // #nosec G115 -- OtpExp comes from trusted config, not user input
+}
+
 func (c *MailerConfiguration) Validate() error {
 	c.serviceHeadersVal = c.buildServiceHeaders()
 	c.blockedMXRecordsVal = c.buildBlockedMXRecords()
@@ -789,6 +798,10 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
+}
+
+func (c *SmsProviderConfiguration) OtpExpAsDuration() time.Duration {
+	return time.Duration(c.OtpExp) * time.Second // #nosec G115 -- OtpExp comes from trusted config, not user input
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
