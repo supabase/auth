@@ -267,16 +267,12 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 		// A test OTP is accepted without any stored challenge. This is the
 		// path app store reviewers and CI rely on.
 		"sms with a test OTP succeeds with no stored challenge": {
-			configure: func() func() {
-				return ts.configureTestOTP(parityPhone, parityOTP)
-			},
+			configure:   ts.configureTestOTP(parityPhone, parityOTP),
 			requestBody: phoneOTPBody(smsVerification, parityPhone),
 			expected:    phoneSignedUp,
 		},
 		"sms with a wrong code falls through the test OTP check and is rejected": {
-			configure: func() func() {
-				return ts.configureTestOTP(parityPhone, "000000")
-			},
+			configure:   ts.configureTestOTP(parityPhone, "000000"),
 			requestBody: phoneOTPBody(smsVerification, parityPhone),
 			expected:    forbidden,
 		},
@@ -284,9 +280,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 		// stored hash never matches what the user types. Twilio's answer is the
 		// only thing that counts.
 		"sms with Twilio Verify accepts a code Twilio approves": {
-			configure: func() func() {
-				return ts.configureTwilioVerify(map[string]interface{}{"status": "approved", "valid": true})
-			},
+			configure: ts.configureTwilioVerify(map[string]interface{}{"status": "approved", "valid": true}),
 			seed: func(u *models.User) {
 				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, crypto.GenerateTokenHash(parityPhone, "999999"), now, time.Hour)
 			},
@@ -294,9 +288,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 			expected:    phoneSignedUp,
 		},
 		"sms with Twilio Verify rejects a code Twilio does not approve": {
-			configure: func() func() {
-				return ts.configureTwilioVerify(map[string]interface{}{"status": "pending", "valid": false})
-			},
+			configure: ts.configureTwilioVerify(map[string]interface{}{"status": "pending", "valid": false}),
 			seed: func(u *models.User) {
 				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, phoneHash, now, time.Hour)
 			},
@@ -306,9 +298,7 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 		// An SSO user has no local credentials to verify. Twilio approves the
 		// code here, so only the SSO check can reject the request.
 		"sms with Twilio Verify rejects an SSO user": {
-			configure: func() func() {
-				return ts.configureTwilioVerify(map[string]interface{}{"status": "approved", "valid": true})
-			},
+			configure: ts.configureTwilioVerify(map[string]interface{}{"status": "approved", "valid": true}),
 			seed: func(u *models.User) {
 				u.IsSSOUser = true
 				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, phoneHash, now, time.Hour)
@@ -577,39 +567,43 @@ func (ts *VerifyTestSuite) responseMsg(w *httptest.ResponseRecorder) string {
 	return body.Msg
 }
 
-func (ts *VerifyTestSuite) configureTestOTP(phone, otp string) func() {
-	previous := ts.Config.Sms.TestOTP
-	ts.Config.Sms.TestOTP = map[string]string{phone: otp}
-	return func() { ts.Config.Sms.TestOTP = previous }
+func (ts *VerifyTestSuite) configureTestOTP(phone, otp string) func() func() {
+	return func() func() {
+		previous := ts.Config.Sms.TestOTP
+		ts.Config.Sms.TestOTP = map[string]string{phone: otp}
+		return func() { ts.Config.Sms.TestOTP = previous }
+	}
 }
 
 // configureTwilioVerify switches the SMS provider to Twilio Verify and arms a
 // single mocked VerificationCheck response.
-func (ts *VerifyTestSuite) configureTwilioVerify(response map[string]interface{}) func() {
-	previousProvider := ts.Config.Sms.Provider
-	previousTwilio := ts.Config.Sms.TwilioVerify
-	previousMock := sms_provider.MockProvider
+func (ts *VerifyTestSuite) configureTwilioVerify(response map[string]interface{}) func() func() {
+	return func() func() {
+		previousProvider := ts.Config.Sms.Provider
+		previousTwilio := ts.Config.Sms.TwilioVerify
+		previousMock := sms_provider.MockProvider
 
-	ts.Config.Sms.Provider = "twilio_verify"
-	ts.Config.Sms.TwilioVerify = conf.TwilioVerifyProviderConfiguration{
-		AccountSid:        "AC-parity-test",
-		AuthToken:         "parity-test-token",
-		MessageServiceSid: twilioServiceSid,
-	}
-	// The mock provider would short-circuit GetSmsProvider and never reach
-	// the Twilio Verify type assertion.
-	sms_provider.MockProvider = nil
+		ts.Config.Sms.Provider = "twilio_verify"
+		ts.Config.Sms.TwilioVerify = conf.TwilioVerifyProviderConfiguration{
+			AccountSid:        "AC-parity-test",
+			AuthToken:         "parity-test-token",
+			MessageServiceSid: twilioServiceSid,
+		}
+		// The mock provider would short-circuit GetSmsProvider and never reach
+		// the Twilio Verify type assertion.
+		sms_provider.MockProvider = nil
 
-	gock.New("https://verify.twilio.com/v2/Services/" + twilioServiceSid + "/VerificationCheck").
-		Post("").
-		Reply(http.StatusOK).
-		JSON(response)
+		gock.New("https://verify.twilio.com/v2/Services/" + twilioServiceSid + "/VerificationCheck").
+			Post("").
+			Reply(http.StatusOK).
+			JSON(response)
 
-	return func() {
-		gock.OffAll()
-		sms_provider.MockProvider = previousMock
-		ts.Config.Sms.TwilioVerify = previousTwilio
-		ts.Config.Sms.Provider = previousProvider
+		return func() {
+			gock.OffAll()
+			sms_provider.MockProvider = previousMock
+			ts.Config.Sms.TwilioVerify = previousTwilio
+			ts.Config.Sms.Provider = previousProvider
+		}
 	}
 }
 
