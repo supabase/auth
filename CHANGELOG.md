@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.198.0](https://github.com/supabase/auth/compare/v2.197.0...v2.198.0) (2026-09-18)
+
+
+### Features
+
+* **mfa:** add recovery codes unenroll guards ([#2787](https://github.com/supabase/auth/issues/2787)) ([4b5069b](https://github.com/supabase/auth/commit/4b5069b3f0017b0819007f6f6f27d464bfa46a23))
+* **otp:** add link_token_hash column to one_time_tokens table ([#2800](https://github.com/supabase/auth/issues/2800)) ([4148d39](https://github.com/supabase/auth/commit/4148d39259a189d0f67830f814097dfd059e737a))
+* **otp:** add one_time_tokens query helpers ([#2797](https://github.com/supabase/auth/issues/2797)) ([f8520b4](https://github.com/supabase/auth/commit/f8520b4ade64e8fb31bc4be02e33e84a5125c082))
+* **otp:** handle test OTPs and Twilio Verify on the one_time_tokens path ([#2798](https://github.com/supabase/auth/issues/2798)) ([2e9ce6c](https://github.com/supabase/auth/commit/2e9ce6c8e46532879ced1c6f9a7acdcde3815ea6))
+* **otp:** switch one_time_tokens table to source of truth ([#2788](https://github.com/supabase/auth/issues/2788)) ([2c2acf6](https://github.com/supabase/auth/commit/2c2acf6fc9ab9ccdf4640ded5599187ad38ed845))
+* **otp:** write `expires_at` when creating `one_time_tokens` ([#2766](https://github.com/supabase/auth/issues/2766)) ([d7d6afd](https://github.com/supabase/auth/commit/d7d6afd8ad87ba5861347cdde1807ef2a8fe243e))
+
+
+### Bug Fixes
+
+* **deps:** bump google.golang.org/grpc to v1.83.1 for vulncheck ([#2818](https://github.com/supabase/auth/issues/2818)) ([8861440](https://github.com/supabase/auth/commit/8861440b97d1ef12de085e72fad1c104da20388b))
+* **mfa:** regenerate duplicate recovery codes ([#2793](https://github.com/supabase/auth/issues/2793)) ([8be2691](https://github.com/supabase/auth/commit/8be26910bc1830a2af4dd760bc2901cdec4575c2))
+* **sessions:** invalidate legacy sessions with null aal ([#2792](https://github.com/supabase/auth/issues/2792)) ([8977629](https://github.com/supabase/auth/commit/89776292a4e1b94be10dd79b4215ae16e927a0fb))
+
 ## [2.197.0](https://github.com/supabase/auth/compare/v2.196.0...v2.197.0) (2026-09-03)
 
 
