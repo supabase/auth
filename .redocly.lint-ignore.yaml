@@ -1,0 +1,25 @@
+# This file instructs Redocly's linter to ignore the rules contained for specific parts of your API.
+# See https://redocly.com/docs/cli/ for more information.
+#
+# Entries below are intentional, not oversights, verified against the Go handlers:
+# - operation-2xx-response: these operations only ever succeed via a redirect (3xx),
+#   they have no JSON 2xx success path (GET /verify, GET /authorize, GET/POST /callback,
+#   POST /saml/acs, GET /oauth/authorize).
+# - operation-4xx-response: these operations take no caller-supplied input that the
+#   handler can reject, so they have no client-error path (GET /callback -- the callback
+#   handler always redirects, converting any internal error into query params on the
+#   redirect target rather than returning JSON -- GET /saml/metadata, GET /health, GET /settings).
+openapi.yaml:
+  operation-2xx-response:
+    - '#/paths/~1verify/get/responses'
+    - '#/paths/~1authorize/get/responses'
+    - '#/paths/~1callback/get/responses'
+    - '#/paths/~1callback/post/responses'
+    - '#/paths/~1saml~1acs/post/responses'
+    - '#/paths/~1oauth~1authorize/get/responses'
+  operation-4xx-response:
+    - '#/paths/~1callback/get/responses'
+    - '#/paths/~1callback/post/responses'
+    - '#/paths/~1saml~1metadata/get/responses'
+    - '#/paths/~1health/get/responses'
+    - '#/paths/~1settings/get/responses'
