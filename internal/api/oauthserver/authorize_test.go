@@ -135,6 +135,73 @@ func TestValidateRequestOrigin(t *testing.T) {
 	}
 }
 
+func TestIsValidLoopbackRedirectURI(t *testing.T) {
+	tests := []struct {
+		name       string
+		registered string
+		requested  string
+		want       bool
+	}{
+		{
+			name:       "allows a different IPv4 loopback port",
+			registered: "http://127.0.0.1/callback",
+			requested:  "http://127.0.0.1:49152/callback",
+			want:       true,
+		},
+		{
+			name:       "allows a different IPv6 loopback port",
+			registered: "http://[::1]/callback",
+			requested:  "http://[::1]:49152/callback",
+			want:       true,
+		},
+		{
+			name:       "allows a different localhost port",
+			registered: "http://localhost/callback",
+			requested:  "http://localhost:49152/callback",
+			want:       true,
+		},
+		{
+			name:       "keeps the registered port exact for non-loopback HTTPS",
+			registered: "https://example.com:8443/callback",
+			requested:  "https://example.com:9443/callback",
+			want:       false,
+		},
+		{
+			name:       "rejects a different loopback path",
+			registered: "http://127.0.0.1/callback",
+			requested:  "http://127.0.0.1:49152/other",
+			want:       false,
+		},
+		{
+			name:       "rejects a different loopback query",
+			registered: "http://127.0.0.1/callback?client=one",
+			requested:  "http://127.0.0.1:49152/callback?client=two",
+			want:       false,
+		},
+		{
+			name:       "rejects a different loopback host",
+			registered: "http://127.0.0.1/callback",
+			requested:  "http://localhost:49152/callback",
+			want:       false,
+		},
+		{
+			name:       "rejects a custom scheme with a different port",
+			registered: "com.example.app://localhost/callback",
+			requested:  "com.example.app://localhost:49152/callback",
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &models.OAuthServerClient{}
+			client.SetRedirectURIs([]string{tt.registered})
+
+			assert.Equal(t, tt.want, (&Server{}).isValidRedirectURI(client, tt.requested))
+		})
+	}
+}
+
 func TestValidateRequestOriginEdgeCases(t *testing.T) {
 	globalConfig, err := confload.LoadGlobal(oauthServerTestConfig)
 	require.NoError(t, err)
@@ -185,7 +252,7 @@ func TestValidateRequestOriginEdgeCases(t *testing.T) {
 		req.Header.Add("Origin", "https://malicious.com") // Second header (invalid)
 
 		// Go's http.Header.Get() returns only the first header value
-		// So this should pass because first Origin is valid
+		// So this should pass because first header is valid
 		err := server.validateRequestOrigin(req)
 		assert.NoError(t, err)
 	})
@@ -465,8 +532,7 @@ func (ts *OAuthAuthorizeTestSuite) TestGetAuthorization_ExpiredCommitsMarkExpire
 	require.True(ts.T(), ok, "expected *storage.CommitWithError, got %T (%v)", err, err)
 	ts.assertHTTPError(cwe.Err, http.StatusNotFound, apierrors.ErrorCodeOAuthAuthorizationNotFound)
 
-	// The MarkExpired update must be committed even though the handler
-	// returns an error — otherwise an expired row would remain pending.
+	// The MarkExpired update must be committed even though the handler returns an error — otherwise an expired row would remain pending.
 	reloaded := ts.reload(auth.AuthorizationID)
 	assert.Equal(ts.T(), models.OAuthServerAuthorizationExpired, reloaded.Status)
 }
