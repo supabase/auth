@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
-	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/storage/dbsql/sqlcgen"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -777,11 +777,12 @@ func findUserWithLegacyRefreshToken(tx *storage.Connection, token string, forUpd
 	refreshToken := &RefreshToken{}
 
 	if forUpdate {
-		// pop does not provide us with a way to execute FOR UPDATE
-		// queries which lock the rows affected by the query from
-		// being accessed by any other transaction that also uses FOR
-		// UPDATE
-		if err := tx.RawQuery(fmt.Sprintf("SELECT * FROM %q WHERE token = ? LIMIT 1 FOR UPDATE SKIP LOCKED;", refreshToken.TableName()), token).First(refreshToken); err != nil {
+		q, err := sqlQueries(tx)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		if _, err := q.LockRefreshTokenForUpdate(tx.Context(), sql.NullString{String: token, Valid: true}); err != nil {
 			if errors.Cause(err) == sql.ErrNoRows {
 				return nil, nil, nil, RefreshTokenNotFoundError{}
 			}
@@ -1132,14 +1133,16 @@ func (u *User) SoftDeleteUserIdentities(tx *storage.Connection) error {
 			return err
 		}
 		// updating the identity.ID has to happen last since the primary key is on (provider, id)
-		// we use RawQuery here instead of UpdateOnly because UpdateOnly relies on the primary key of Identity
-		if err := tx.RawQuery(
-			"update "+
-				(&pop.Model{Value: Identity{}}).TableName()+
-				" set provider_id = ? where id = ?",
-			obfuscateIdentityProviderId(identity),
-			identity.ID,
-		).Exec(); err != nil {
+		// we use a raw update here instead of UpdateOnly because UpdateOnly relies on the primary key of Identity
+		q, err := sqlQueries(tx)
+		if err != nil {
+			return err
+		}
+
+		if err := q.UpdateIdentityProviderID(tx.Context(), sqlcgen.UpdateIdentityProviderIDParams{
+			ProviderID: obfuscateIdentityProviderId(identity),
+			ID:         identity.ID,
+		}); err != nil {
 			return err
 		}
 	}

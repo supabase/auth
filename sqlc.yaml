@@ -1,0 +1,20 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "internal/storage/dbsql/schema"
+    queries: "internal/storage/dbsql/queries"
+    gen:
+      go:
+        package: "sqlcgen"
+        out: "internal/storage/dbsql/sqlcgen"
+        sql_package: "database/sql"
+        emit_json_tags: false
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_exact_table_names: false
+        overrides:
+          - db_type: "uuid"
+            go_type: "github.com/gofrs/uuid.UUID"
+          - db_type: "uuid"
+            nullable: true
+            go_type: "github.com/gofrs/uuid.NullUUID"

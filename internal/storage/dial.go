@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"reflect"
 	"time"
+	"unsafe"
 
 	"github.com/XSAM/otelsql"
 	"github.com/gobuffalo/pop/v6"
@@ -66,6 +67,69 @@ func DialContext(
 func (c *Connection) Copy() *Connection {
 	cpy := *c
 	return &cpy
+}
+
+// SQLExecutor is the minimal database/sql-shaped executor that sqlc-generated
+// query code needs (it matches sqlc's generated DBTX interface). pop's
+// underlying *sqlx.DB and *sqlx.Tx satisfy it directly via promoted
+// embedding, which covers a freshly-dialed *Connection. But the moment a
+// connection has gone through WithContext or Transaction (i.e. on every
+// request and every transactional model call), pop rewraps Store in its
+// private contextStore type, which embeds the store *interface* rather than
+// a concrete type -- Go only promotes an embedded interface's own declared
+// method set, and that interface doesn't include QueryContext/QueryRowContext/
+// PrepareContext. So SQLExecutor() must reach past contextStore's unexported
+// field to get back to the concrete *pop.dB / *pop.Tx underneath.
+type SQLExecutor interface {
+	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
+	PrepareContext(context.Context, string) (*sql.Stmt, error)
+	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
+}
+
+// SQLExecutor returns the executor backing this connection, or its current
+// transaction if one is in progress, for use by sqlc-generated queries.
+func (c *Connection) SQLExecutor() (executor SQLExecutor, ok bool) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			executor, ok = nil, false
+		}
+	}()
+
+	var v interface{} = c.Store
+	// Bounded to guard against an unexpected wrapping shape; in practice
+	// this unwraps at most one contextStore layer.
+	for i := 0; i < 4; i++ {
+		if x, isOk := v.(SQLExecutor); isOk {
+			return x, true
+		}
+
+		next, unwrapped := unwrapFirstField(v)
+		if !unwrapped {
+			return nil, false
+		}
+		v = next
+	}
+	return nil, false
+}
+
+// unwrapFirstField returns the value of v's first struct field, even if that
+// field is unexported (as with pop's contextStore.store). Reflection alone
+// refuses .Interface() on a value reached through an unexported field, so
+// this copies v into a freshly addressable Value and re-derives the field
+// via unsafe.Pointer, which carries no such restriction.
+func unwrapFirstField(v interface{}) (interface{}, bool) {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Struct || rv.NumField() == 0 {
+		return nil, false
+	}
+
+	cp := reflect.New(rv.Type()).Elem()
+	cp.Set(rv)
+
+	field := cp.Field(0)
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem() //nolint:gosec
+	return field.Interface(), true
 }
 
 func newConnectionDetails(

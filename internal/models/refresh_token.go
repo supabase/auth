@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/conf"
@@ -85,18 +84,15 @@ func GrantRefreshTokenSwap(config conf.AuditLogConfiguration, r *http.Request, t
 
 // RevokeTokenFamily revokes all refresh tokens that descended from the provided token.
 func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
-	var err error
-	tablename := (&pop.Model{Value: RefreshToken{}}).TableName()
+	q, err := sqlQueries(tx)
+	if err != nil {
+		return err
+	}
+
 	if token.SessionId != nil {
-		err = tx.RawQuery(`update `+tablename+` set revoked = true, updated_at = now() where session_id = ? and revoked = false;`, token.SessionId).Exec()
+		err = q.RevokeTokenFamilyBySessionID(tx.Context(), uuid.NullUUID{UUID: *token.SessionId, Valid: true})
 	} else {
-		err = tx.RawQuery(`
-		with recursive token_family as (
-			select id, user_id, token, revoked, parent from `+tablename+` where parent = ?
-			union
-			select r.id, r.user_id, r.token, r.revoked, r.parent from `+tablename+` r inner join token_family t on t.token = r.parent
-		)
-		update `+tablename+` r set revoked = true from token_family where token_family.id = r.id;`, token.Token).Exec()
+		err = q.RevokeTokenFamilyByParent(tx.Context(), sql.NullString{String: token.Token, Valid: true})
 	}
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows || errors.Is(err, sql.ErrNoRows) {
