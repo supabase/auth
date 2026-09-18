@@ -48,6 +48,38 @@ func TestRecoveryCodes(t *testing.T) {
 	suite.Run(t, ts)
 }
 
+func TestUniqueRecoveryCodes(t *testing.T) {
+	t.Run("regenerates a replacement for each duplicate", func(t *testing.T) {
+		scripted := []string{"a", "b", "a", "c", "b", "d"}
+		calls := 0
+		generate := func(length int) string {
+			require.Equal(t, 16, length)
+			require.Less(t, calls, len(scripted), "generator called more times than scripted")
+			code := scripted[calls]
+			calls++
+			return code
+		}
+
+		codes := uniqueRecoveryCodes(4, 16, generate)
+
+		require.Equal(t, []string{"a", "b", "c", "d"}, codes)
+		require.Equal(t, 6, calls, "4 for the batch plus one replacement per duplicate")
+	})
+
+	t.Run("no duplicates calls the generator exactly count times", func(t *testing.T) {
+		calls := 0
+		generate := func(int) string {
+			calls++
+			return fmt.Sprintf("code-%d", calls)
+		}
+
+		codes := uniqueRecoveryCodes(10, 16, generate)
+
+		require.Len(t, codes, 10)
+		require.Equal(t, 10, calls)
+	})
+}
+
 func (ts *RecoveryCodesTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 

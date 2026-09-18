@@ -38,21 +38,35 @@ type RecoveryCodesResponse struct {
 	Codes        []string  `json:"codes,omitempty"`
 }
 
+func uniqueRecoveryCodes(count, length int, generate func(int) string) []string {
+	seen := make(map[string]struct{}, count)
+	codes := make([]string, 0, count)
+
+	for len(codes) < count {
+		code := generate(length)
+		if _, dup := seen[code]; dup {
+			continue
+		}
+
+		seen[code] = struct{}{}
+		codes = append(codes, code)
+	}
+
+	return codes
+}
+
 // generateRecoveryCodes generates the configured number of recovery codes,
 // returning the canonical plaintexts and their hashes.
 func generateRecoveryCodes(config *conf.GlobalConfiguration) ([]string, []string, error) {
-	count := config.MFA.RecoveryCodes.Count
-	codes := make([]string, 0, count)
-	hashes := make([]string, 0, count)
+	codes := uniqueRecoveryCodes(config.MFA.RecoveryCodes.Count, config.MFA.RecoveryCodes.CodeLength, crypto.GenerateRecoveryCode)
+	hashes := make([]string, 0, len(codes))
 
-	for range count {
-		code := crypto.GenerateRecoveryCode(config.MFA.RecoveryCodes.CodeLength)
+	for _, code := range codes {
 		hash, err := crypto.GenerateRecoveryCodeHash(code)
 		if err != nil {
 			return nil, nil, apierrors.NewInternalServerError("Error generating recovery codes").WithInternalError(err)
 		}
 
-		codes = append(codes, code)
 		hashes = append(hashes, hash)
 	}
 
