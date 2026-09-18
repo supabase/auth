@@ -52,7 +52,7 @@ func (ts *OneTimeTokenTestSuite) createUser() *User {
 func (ts *OneTimeTokenTestSuite) seedToken(hash string, tokenType OneTimeTokenType) *User {
 	TruncateAll(ts.db)
 	u := ts.createUser()
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), hash, tokenType, time.Minute))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), hash, tokenType, time.Minute, true))
 	return u
 }
 
@@ -71,7 +71,7 @@ func (ts *OneTimeTokenTestSuite) TestCreateOneTimeToken() {
 			u := ts.createUser()
 
 			before := time.Now()
-			require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), name, ConfirmationToken, validity))
+			require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), name, ConfirmationToken, validity, true))
 			after := time.Now()
 
 			ott, err := FindOneTimeToken(ts.db, name, ConfirmationToken)
@@ -89,12 +89,12 @@ func (ts *OneTimeTokenTestSuite) TestCreateOneTimeToken() {
 func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenResendReplacesWindow() {
 	u := ts.createUser()
 
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "first-hash", ConfirmationToken, time.Minute))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "first-hash", ConfirmationToken, time.Minute, true))
 	first, err := FindOneTimeToken(ts.db, "first-hash", ConfirmationToken)
 	require.NoError(ts.T(), err)
 	require.NotNil(ts.T(), first.ExpiresAt)
 
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "second-hash", ConfirmationToken, time.Hour))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "second-hash", ConfirmationToken, time.Hour, true))
 
 	_, err = FindOneTimeToken(ts.db, "first-hash", ConfirmationToken)
 	require.True(ts.T(), IsNotFoundError(err), "resend must clear the previous token, got %v", err)
@@ -104,6 +104,16 @@ func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenResendReplacesWindow() {
 	require.NotNil(ts.T(), second.ExpiresAt)
 	require.True(ts.T(), second.ExpiresAt.After(*first.ExpiresAt),
 		"resend must move expires_at forward, first=%s second=%s", first.ExpiresAt, second.ExpiresAt)
+}
+
+func (ts *OneTimeTokenTestSuite) TestCreateOneTimeTokenSkipsExpiresAtWhenDisabled() {
+	u := ts.createUser()
+
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "no-expiry-hash", ConfirmationToken, 15*time.Minute, false))
+
+	ott, err := FindOneTimeToken(ts.db, "no-expiry-hash", ConfirmationToken)
+	require.NoError(ts.T(), err)
+	require.Nil(ts.T(), ott.ExpiresAt, "expires_at must stay null while the write is disabled")
 }
 
 func (ts *OneTimeTokenTestSuite) TestFindOneTimeToken() {
@@ -157,7 +167,7 @@ func (ts *OneTimeTokenTestSuite) TestFindOneTimeTokenWithPKCEFallback() {
 		// (user_id, token_type) is unique, so the two candidates have to be
 		// different types. Both types are passed so both are eligible.
 		u := ts.seedToken("hash", ConfirmationToken)
-		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "pkce_hash", RecoveryToken, time.Minute))
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, u.GetEmail(), "pkce_hash", RecoveryToken, time.Minute, true))
 
 		ott, err := FindOneTimeTokenWithPKCEFallback(ts.db, "hash", ConfirmationToken, RecoveryToken)
 		require.NoError(ts.T(), err)
@@ -187,7 +197,7 @@ func (ts *OneTimeTokenTestSuite) TestFindOneTimeTokenByRelatesTo() {
 	ts.Run("returns the row matching relates_to and token type", func() {
 		TruncateAll(ts.db)
 		u := ts.createUser()
-		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "+15551234567", "hash", PhoneChangeToken, time.Minute))
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "+15551234567", "hash", PhoneChangeToken, time.Minute, true))
 
 		ott, err := FindOneTimeTokenByRelatesTo(ts.db, "+15551234567", PhoneChangeToken)
 		require.NoError(ts.T(), err)
@@ -199,7 +209,7 @@ func (ts *OneTimeTokenTestSuite) TestFindOneTimeTokenByRelatesTo() {
 	ts.Run("lowercases relates_to before matching", func() {
 		TruncateAll(ts.db)
 		u := ts.createUser()
-		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "User@Example.com", "hash", ConfirmationToken, time.Minute))
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "User@Example.com", "hash", ConfirmationToken, time.Minute, true))
 
 		ott, err := FindOneTimeTokenByRelatesTo(ts.db, "USER@EXAMPLE.COM", ConfirmationToken)
 		require.NoError(ts.T(), err)
@@ -210,7 +220,7 @@ func (ts *OneTimeTokenTestSuite) TestFindOneTimeTokenByRelatesTo() {
 	ts.Run("does not leak across token types", func() {
 		TruncateAll(ts.db)
 		u := ts.createUser()
-		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "+15551234567", "hash", PhoneChangeToken, time.Minute))
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "+15551234567", "hash", PhoneChangeToken, time.Minute, true))
 
 		ott, err := FindOneTimeTokenByRelatesTo(ts.db, "+15551234567", ConfirmationToken)
 		require.True(ts.T(), IsNotFoundError(err), "expected not found error, got %v", err)
@@ -220,7 +230,7 @@ func (ts *OneTimeTokenTestSuite) TestFindOneTimeTokenByRelatesTo() {
 	ts.Run("not found when no row has the relates_to value", func() {
 		TruncateAll(ts.db)
 		u := ts.createUser()
-		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "+15551234567", "hash", PhoneChangeToken, time.Minute))
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "+15551234567", "hash", PhoneChangeToken, time.Minute, true))
 
 		ott, err := FindOneTimeTokenByRelatesTo(ts.db, "+15559999999", PhoneChangeToken)
 		require.True(ts.T(), IsNotFoundError(err), "expected not found error, got %v", err)
@@ -235,8 +245,8 @@ func (ts *OneTimeTokenTestSuite) TestFindOneTimeTokenByRelatesTo() {
 		require.NoError(ts.T(), err)
 		require.NoError(ts.T(), ts.db.Create(second))
 
-		require.NoError(ts.T(), CreateOneTimeToken(ts.db, first.ID, "+15551234567", "first-hash", PhoneChangeToken, time.Minute))
-		require.NoError(ts.T(), CreateOneTimeToken(ts.db, second.ID, "+15551234567", "second-hash", PhoneChangeToken, time.Minute))
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, first.ID, "+15551234567", "first-hash", PhoneChangeToken, time.Minute, true))
+		require.NoError(ts.T(), CreateOneTimeToken(ts.db, second.ID, "+15551234567", "second-hash", PhoneChangeToken, time.Minute, true))
 
 		ott, err := FindOneTimeTokenByRelatesTo(ts.db, "+15551234567", PhoneChangeToken)
 		require.NoError(ts.T(), err)

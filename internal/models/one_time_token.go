@@ -141,12 +141,11 @@ func CreateOneTimeToken(
 	userID uuid.UUID,
 	relatesTo, tokenHash string,
 	tokenType OneTimeTokenType,
-	validityDuration time.Duration) error {
+	validityDuration time.Duration,
+	writeExpiresAt bool) error {
 	if err := ClearOneTimeTokenForUser(tx, userID, tokenType); err != nil {
 		return err
 	}
-
-	expiresAt := time.Now().Add(validityDuration)
 
 	oneTimeToken := &OneTimeToken{
 		ID:        uuid.Must(uuid.NewV4()),
@@ -154,7 +153,11 @@ func CreateOneTimeToken(
 		TokenType: tokenType,
 		TokenHash: tokenHash,
 		RelatesTo: strings.ToLower(relatesTo),
-		ExpiresAt: &expiresAt,
+	}
+
+	if writeExpiresAt {
+		expiresAt := time.Now().Add(validityDuration)
+		oneTimeToken.ExpiresAt = &expiresAt
 	}
 
 	if err := tx.Eager().Create(oneTimeToken); err != nil {
