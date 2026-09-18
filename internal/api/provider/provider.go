@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
@@ -131,6 +132,7 @@ type Email struct {
 
 // UserProvidedData is a struct that contains the user's data returned from the oauth provider
 type UserProvidedData struct {
+	UserID   uuid.UUID // Persists the pre-generated User ID across hook triggers and account creation (Issue #41309)
 	Emails   []Email
 	Metadata *Claims
 }
