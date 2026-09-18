@@ -700,6 +700,10 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
 	config := a.config
 
+	if config.Experimental.EnableOTTAsSourceOfTruth {
+		return verifyUserAndTokenFromOTT(conn, params, aud)
+	}
+
 	var user *models.User
 	var err error
 	tokenHash := params.TokenHash
