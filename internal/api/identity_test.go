@@ -130,6 +130,35 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 	require.Len(ts.T(), logs, 1, "an already-linked identity must not emit another audit log")
 }
 
+// TestCreateNewIdentityRace covers what happens when two concurrent link
+// requests for the same provider identity both pass linkIdentityToUser's
+// FindIdentityByIdAndProvider check before either has committed. The loser
+// of that race only finds out it lost when its own INSERT hits the
+// identities_provider_id_provider_unique constraint. createNewIdentity must
+// turn that into the same IdentityAlreadyExists conflict the pre-check
+// returns, not a raw internal error.
+func (ts *IdentityTestSuite) TestCreateNewIdentityRace() {
+	winner, err := models.FindUserByEmailAndAudience(ts.API.db, "one@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	loser, err := models.FindUserByEmailAndAudience(ts.API.db, "two@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	// the winner of the race already committed its identity by the time the
+	// loser's createNewIdentity call reaches the database
+	_, err = ts.API.createNewIdentity(ts.API.db, winner, "race_provider", map[string]interface{}{
+		"sub": "race_subject",
+	})
+	require.NoError(ts.T(), err)
+
+	// the loser already passed the not-found check earlier and now tries to
+	// insert the same (provider, provider_id) pair
+	_, err = ts.API.createNewIdentity(ts.API.db, loser, "race_provider", map[string]interface{}{
+		"sub": "race_subject",
+	})
+	require.ErrorIs(ts.T(), err, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked to another user"))
+}
+
 func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
 	manualLinkingEnabled := ts.Config.Security.ManualLinkingEnabled
 	ts.Config.Security.ManualLinkingEnabled = true
