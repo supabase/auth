@@ -185,7 +185,12 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 			logentry.Warn("SAML Metadata for identity provider will expire soon! Update its metadata_xml!")
 		}
 	} else if *ssoProvider.SAMLProvider.MetadataURL != "" && IsSAMLMetadataStale(idpMetadata, ssoProvider.SAMLProvider) {
-		rawMetadata, err := fetchSAMLMetadata(ctx, *ssoProvider.SAMLProvider.MetadataURL)
+		url := *ssoProvider.SAMLProvider.MetadataURL
+		rawMetadata, parsedMetadata, err := getSAMLMetadata(ctx, url)
+		if err == nil && parsedMetadata.EntityID != ssoProvider.SAMLProvider.EntityID {
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeSAMLEntityIDMismatch, "SAML Metadata can be updated only if the EntityID matches for the provider; expected '%s' but got '%s'", ssoProvider.SAMLProvider.EntityID, parsedMetadata.EntityID)
+		}
+
 		if err != nil {
 			// Fail silently but raise warning and continue with existing metadata
 			logentry := log.WithField("sso_provider_id", ssoProvider.ID.String())
@@ -273,26 +278,16 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 
 	providerClaims.CustomClaims = claims
 
-	var userProvidedData provider.UserProvidedData
-
-	userProvidedData.Emails = append(userProvidedData.Emails, provider.Email{
-		Email:    email,
-		Verified: true,
-		Primary:  true,
-	})
-
-	// userProvidedData.Provider.Type = "saml"
-	// userProvidedData.Provider.ID = ssoProvider.ID.String()
-	// userProvidedData.Provider.SAMLEntityID = ssoProvider.SAMLProvider.EntityID
-	// userProvidedData.Provider.SAMLInitiatedBy = initiatedBy
-
-	userProvidedData.Metadata = providerClaims
-
-	// TODO: below
-	// refreshTokenParams.SSOProviderID = ssoProvider.ID
-	// refreshTokenParams.InitiatedByProvider = initiatedBy == "idp"
-	// refreshTokenParams.NotBefore = assertion.NotBefore()
-	// refreshTokenParams.NotAfter = assertion.NotAfter()
+	userProvidedData := provider.UserProvidedData{
+		Emails: []provider.Email{
+			{
+				Email:    email,
+				Verified: true,
+				Primary:  true,
+			},
+		},
+		Metadata: providerClaims,
+	}
 
 	notAfter := assertion.NotAfter()
 
