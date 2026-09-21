@@ -23,11 +23,59 @@ const (
 	AdminAuthScopes  = "AdminAuth.Scopes"
 )
 
+// Defines values for CustomOAuthProviderSchemaProviderType.
+const (
+	CustomOAuthProviderSchemaProviderTypeOauth2 CustomOAuthProviderSchemaProviderType = "oauth2"
+	CustomOAuthProviderSchemaProviderTypeOidc   CustomOAuthProviderSchemaProviderType = "oidc"
+)
+
 // Defines values for ErrorSchemaWeakPasswordReasons.
 const (
 	Characters ErrorSchemaWeakPasswordReasons = "characters"
 	Length     ErrorSchemaWeakPasswordReasons = "length"
 	Pwned      ErrorSchemaWeakPasswordReasons = "pwned"
+)
+
+// Defines values for OAuthClientSchemaClientType.
+const (
+	OAuthClientSchemaClientTypeConfidential OAuthClientSchemaClientType = "confidential"
+	OAuthClientSchemaClientTypePublic       OAuthClientSchemaClientType = "public"
+)
+
+// Defines values for OAuthClientSchemaGrantTypes.
+const (
+	OAuthClientSchemaGrantTypesAuthorizationCode OAuthClientSchemaGrantTypes = "authorization_code"
+	OAuthClientSchemaGrantTypesRefreshToken      OAuthClientSchemaGrantTypes = "refresh_token"
+)
+
+// Defines values for OAuthClientSchemaRegistrationType.
+const (
+	Dynamic OAuthClientSchemaRegistrationType = "dynamic"
+	Manual  OAuthClientSchemaRegistrationType = "manual"
+)
+
+// Defines values for OAuthClientSchemaResponseTypes.
+const (
+	OAuthClientSchemaResponseTypesCode OAuthClientSchemaResponseTypes = "code"
+)
+
+// Defines values for OAuthClientSchemaTokenEndpointAuthMethod.
+const (
+	OAuthClientSchemaTokenEndpointAuthMethodClientSecretBasic OAuthClientSchemaTokenEndpointAuthMethod = "client_secret_basic"
+	OAuthClientSchemaTokenEndpointAuthMethodClientSecretPost  OAuthClientSchemaTokenEndpointAuthMethod = "client_secret_post"
+	OAuthClientSchemaTokenEndpointAuthMethodNone              OAuthClientSchemaTokenEndpointAuthMethod = "none"
+)
+
+// Defines values for GetAdminCustomProvidersParamsType.
+const (
+	GetAdminCustomProvidersParamsTypeOauth2 GetAdminCustomProvidersParamsType = "oauth2"
+	GetAdminCustomProvidersParamsTypeOidc   GetAdminCustomProvidersParamsType = "oidc"
+)
+
+// Defines values for PostAdminCustomProvidersJSONBodyProviderType.
+const (
+	Oauth2 PostAdminCustomProvidersJSONBodyProviderType = "oauth2"
+	Oidc   PostAdminCustomProvidersJSONBodyProviderType = "oidc"
 )
 
 // Defines values for PostAdminGenerateLinkJSONBodyType.
@@ -39,10 +87,115 @@ const (
 	Signup             PostAdminGenerateLinkJSONBodyType = "signup"
 )
 
+// Defines values for PostAdminOauthClientsJSONBodyClientType.
+const (
+	PostAdminOauthClientsJSONBodyClientTypeConfidential PostAdminOauthClientsJSONBodyClientType = "confidential"
+	PostAdminOauthClientsJSONBodyClientTypePublic       PostAdminOauthClientsJSONBodyClientType = "public"
+)
+
+// Defines values for PostAdminOauthClientsJSONBodyGrantTypes.
+const (
+	PostAdminOauthClientsJSONBodyGrantTypesAuthorizationCode PostAdminOauthClientsJSONBodyGrantTypes = "authorization_code"
+	PostAdminOauthClientsJSONBodyGrantTypesRefreshToken      PostAdminOauthClientsJSONBodyGrantTypes = "refresh_token"
+)
+
+// Defines values for PostAdminOauthClientsJSONBodyResponseTypes.
+const (
+	PostAdminOauthClientsJSONBodyResponseTypesCode PostAdminOauthClientsJSONBodyResponseTypes = "code"
+)
+
+// Defines values for PostAdminOauthClientsJSONBodyTokenEndpointAuthMethod.
+const (
+	PostAdminOauthClientsJSONBodyTokenEndpointAuthMethodClientSecretBasic PostAdminOauthClientsJSONBodyTokenEndpointAuthMethod = "client_secret_basic"
+	PostAdminOauthClientsJSONBodyTokenEndpointAuthMethodClientSecretPost  PostAdminOauthClientsJSONBodyTokenEndpointAuthMethod = "client_secret_post"
+	PostAdminOauthClientsJSONBodyTokenEndpointAuthMethodNone              PostAdminOauthClientsJSONBodyTokenEndpointAuthMethod = "none"
+)
+
+// Defines values for PutAdminOauthClientsClientIdJSONBodyGrantTypes.
+const (
+	AuthorizationCode PutAdminOauthClientsClientIdJSONBodyGrantTypes = "authorization_code"
+	RefreshToken      PutAdminOauthClientsClientIdJSONBodyGrantTypes = "refresh_token"
+)
+
+// Defines values for PutAdminOauthClientsClientIdJSONBodyTokenEndpointAuthMethod.
+const (
+	ClientSecretBasic PutAdminOauthClientsClientIdJSONBodyTokenEndpointAuthMethod = "client_secret_basic"
+	ClientSecretPost  PutAdminOauthClientsClientIdJSONBodyTokenEndpointAuthMethod = "client_secret_post"
+	None              PutAdminOauthClientsClientIdJSONBodyTokenEndpointAuthMethod = "none"
+)
+
 // Defines values for PostAdminSsoProvidersJSONBodyType.
 const (
 	Saml PostAdminSsoProvidersJSONBodyType = "saml"
 )
+
+// CustomOAuthProviderSchema Represents a custom OAuth 2.0 or OIDC provider configuration
+type CustomOAuthProviderSchema struct {
+	// AcceptableClientIds Additional acceptable client IDs for token validation
+	AcceptableClientIds *[]string `json:"acceptable_client_ids,omitempty"`
+
+	// AttributeMapping Maps provider claims to user attributes
+	AttributeMapping *map[string]interface{} `json:"attribute_mapping,omitempty"`
+
+	// AuthorizationParams Additional parameters to include in authorization requests as string key-value pairs (cannot override reserved OAuth parameters)
+	AuthorizationParams *map[string]string `json:"authorization_params,omitempty"`
+
+	// AuthorizationUrl OAuth 2.0 authorization endpoint (required for OAuth2 providers)
+	AuthorizationUrl *string `json:"authorization_url,omitempty"`
+
+	// ClientId OAuth client ID
+	ClientId  string     `json:"client_id"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+
+	// CustomClaimsAllowlist Raw IdP claim keys copied verbatim into the user's custom_claims (e.g. groups, org_id). For OIDC providers these are read from the ID token claims (falling back to the userinfo response when no ID token is returned); for OAuth2 providers they are read from the userinfo response. Empty preserves no non-standard claims.
+	CustomClaimsAllowlist *[]string `json:"custom_claims_allowlist,omitempty"`
+
+	// DiscoveryUrl OIDC discovery URL (optional, defaults to {issuer}/.well-known/openid-configuration)
+	DiscoveryUrl *string `json:"discovery_url,omitempty"`
+
+	// EmailOptional Whether email is optional for users from this provider
+	EmailOptional *bool `json:"email_optional,omitempty"`
+
+	// Enabled Whether the provider is enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Id Unique provider identifier
+	Id openapi_types.UUID `json:"id"`
+
+	// Identifier Unique identifier for the provider (must start with 'custom:' prefix)
+	Identifier string `json:"identifier"`
+
+	// Issuer OIDC issuer URL (required for OIDC providers)
+	Issuer *string `json:"issuer,omitempty"`
+
+	// JwksUri JWKS URI for token validation (optional for OAuth2 providers)
+	JwksUri *string `json:"jwks_uri,omitempty"`
+
+	// Name Human-readable name of the provider
+	Name string `json:"name"`
+
+	// PkceEnabled Whether PKCE (Proof Key for Code Exchange) is enabled
+	PkceEnabled *bool `json:"pkce_enabled,omitempty"`
+
+	// ProviderType Type of OAuth provider
+	ProviderType CustomOAuthProviderSchemaProviderType `json:"provider_type"`
+
+	// Scopes OAuth scopes to request (OIDC providers will automatically include 'openid')
+	Scopes *[]string `json:"scopes,omitempty"`
+
+	// SkipNonceCheck Skip nonce validation for OIDC (not recommended for production)
+	SkipNonceCheck *bool `json:"skip_nonce_check,omitempty"`
+
+	// TokenUrl OAuth 2.0 token endpoint (required for OAuth2 providers)
+	TokenUrl  *string    `json:"token_url,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+
+	// UserinfoUrl OAuth 2.0 userinfo endpoint (required for OAuth2 providers)
+	UserinfoUrl *string `json:"userinfo_url,omitempty"`
+}
+
+// CustomOAuthProviderSchemaProviderType Type of OAuth provider
+type CustomOAuthProviderSchemaProviderType string
 
 // ErrorSchema defines model for ErrorSchema.
 type ErrorSchema struct {
@@ -99,6 +252,7 @@ type MFAFactorSchema struct {
 	// - totp
 	// - phone
 	// - webauthn
+	// - recovery_code
 	FactorType       *string             `json:"factor_type,omitempty"`
 	FriendlyName     *string             `json:"friendly_name,omitempty"`
 	Id               *openapi_types.UUID `json:"id,omitempty"`
@@ -110,8 +264,64 @@ type MFAFactorSchema struct {
 	// - unverified
 	Status             *string    `json:"status,omitempty"`
 	UpdatedAt          *time.Time `json:"updated_at,omitempty"`
-	WebAuthnCredential *string    `json:"web_authn_credential,omitempty"`
+	WebauthnCredential *string    `json:"webauthn_credential,omitempty"`
 }
+
+// OAuthClientSchema Represents an OAuth 2.1 client
+type OAuthClientSchema struct {
+	// ClientId Unique client identifier
+	ClientId *string `json:"client_id,omitempty"`
+
+	// ClientName Human-readable name of the client application
+	ClientName *string `json:"client_name,omitempty"`
+
+	// ClientSecret Client secret for confidential clients (only returned on registration/regeneration)
+	ClientSecret *string `json:"client_secret,omitempty"`
+
+	// ClientType Type of the client
+	ClientType *OAuthClientSchemaClientType `json:"client_type,omitempty"`
+
+	// ClientUri URL of the client application's homepage
+	ClientUri *string    `json:"client_uri,omitempty"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+
+	// GrantTypes OAuth grant types the client is authorized to use
+	GrantTypes *[]OAuthClientSchemaGrantTypes `json:"grant_types,omitempty"`
+
+	// LogoUri URL of the client application's logo
+	LogoUri *string `json:"logo_uri,omitempty"`
+
+	// RedirectUris Array of redirect URIs used by the client
+	RedirectUris *[]string `json:"redirect_uris,omitempty"`
+
+	// RegistrationType Registration type of the client
+	RegistrationType *OAuthClientSchemaRegistrationType `json:"registration_type,omitempty"`
+
+	// ResponseTypes OAuth response types the client can use
+	ResponseTypes *[]OAuthClientSchemaResponseTypes `json:"response_types,omitempty"`
+
+	// Scope Space-separated list of scope values
+	Scope *string `json:"scope,omitempty"`
+
+	// TokenEndpointAuthMethod Authentication method for the token endpoint
+	TokenEndpointAuthMethod *OAuthClientSchemaTokenEndpointAuthMethod `json:"token_endpoint_auth_method,omitempty"`
+	UpdatedAt               *time.Time                                `json:"updated_at,omitempty"`
+}
+
+// OAuthClientSchemaClientType Type of the client
+type OAuthClientSchemaClientType string
+
+// OAuthClientSchemaGrantTypes defines model for OAuthClientSchema.GrantTypes.
+type OAuthClientSchemaGrantTypes string
+
+// OAuthClientSchemaRegistrationType Registration type of the client
+type OAuthClientSchemaRegistrationType string
+
+// OAuthClientSchemaResponseTypes defines model for OAuthClientSchema.ResponseTypes.
+type OAuthClientSchemaResponseTypes string
+
+// OAuthClientSchemaTokenEndpointAuthMethod Authentication method for the token endpoint
+type OAuthClientSchemaTokenEndpointAuthMethod string
 
 // SAMLAttributeMappingSchema defines model for SAMLAttributeMappingSchema.
 type SAMLAttributeMappingSchema struct {
@@ -181,6 +391,138 @@ type GetAdminAuditParams struct {
 	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
 }
 
+// GetAdminCustomProvidersParams defines parameters for GetAdminCustomProviders.
+type GetAdminCustomProvidersParams struct {
+	// Type Filter by provider type
+	Type *GetAdminCustomProvidersParamsType `form:"type,omitempty" json:"type,omitempty"`
+}
+
+// GetAdminCustomProvidersParamsType defines parameters for GetAdminCustomProviders.
+type GetAdminCustomProvidersParamsType string
+
+// PostAdminCustomProvidersJSONBody defines parameters for PostAdminCustomProviders.
+type PostAdminCustomProvidersJSONBody struct {
+	// AcceptableClientIds Additional acceptable client IDs for token validation
+	AcceptableClientIds *[]string `json:"acceptable_client_ids,omitempty"`
+
+	// AttributeMapping Map provider claims to user attributes (cannot map to protected system fields)
+	AttributeMapping *map[string]interface{} `json:"attribute_mapping,omitempty"`
+
+	// AuthorizationParams Additional authorization request parameters as string key-value pairs (cannot override reserved OAuth parameters)
+	AuthorizationParams *map[string]string `json:"authorization_params,omitempty"`
+
+	// AuthorizationUrl OAuth 2.0 authorization endpoint (required for provider_type: oauth2)
+	AuthorizationUrl *string `json:"authorization_url,omitempty"`
+
+	// ClientId OAuth client ID from the provider
+	ClientId string `json:"client_id"`
+
+	// ClientSecret OAuth client secret (will be encrypted at rest)
+	ClientSecret string `json:"client_secret"`
+
+	// CustomClaimsAllowlist Raw IdP claim keys to copy verbatim into the user's custom_claims (e.g. groups, org_id). For OIDC providers these are read from the ID token claims (falling back to the userinfo response when no ID token is returned); for OAuth2 providers they are read from the userinfo response. Empty preserves no non-standard claims.
+	CustomClaimsAllowlist *[]string `json:"custom_claims_allowlist,omitempty"`
+
+	// DiscoveryUrl OIDC discovery URL (optional for OIDC, defaults to {issuer}/.well-known/openid-configuration)
+	DiscoveryUrl *string `json:"discovery_url,omitempty"`
+
+	// EmailOptional Whether email is optional for users from this provider
+	EmailOptional *bool `json:"email_optional,omitempty"`
+
+	// Enabled Whether the provider is enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Identifier Unique identifier (will be prefixed with 'custom:' automatically). Cannot use reserved provider names.
+	Identifier string `json:"identifier"`
+
+	// Issuer OIDC issuer URL (required for provider_type: oidc)
+	Issuer *string `json:"issuer,omitempty"`
+
+	// JwksUri JWKS URI for token validation (optional for OAuth2)
+	JwksUri *string `json:"jwks_uri,omitempty"`
+
+	// Name Human-readable display name
+	Name string `json:"name"`
+
+	// PkceEnabled Enable PKCE (Proof Key for Code Exchange)
+	PkceEnabled *bool `json:"pkce_enabled,omitempty"`
+
+	// ProviderType Type of OAuth provider
+	ProviderType PostAdminCustomProvidersJSONBodyProviderType `json:"provider_type"`
+
+	// Scopes OAuth scopes to request (OIDC providers will automatically include 'openid')
+	Scopes *[]string `json:"scopes,omitempty"`
+
+	// SkipNonceCheck Skip nonce validation for OIDC (not recommended for production)
+	SkipNonceCheck *bool `json:"skip_nonce_check,omitempty"`
+
+	// TokenUrl OAuth 2.0 token endpoint (required for provider_type: oauth2)
+	TokenUrl *string `json:"token_url,omitempty"`
+
+	// UserinfoUrl OAuth 2.0 userinfo endpoint (required for provider_type: oauth2)
+	UserinfoUrl *string `json:"userinfo_url,omitempty"`
+}
+
+// PostAdminCustomProvidersJSONBodyProviderType defines parameters for PostAdminCustomProviders.
+type PostAdminCustomProvidersJSONBodyProviderType string
+
+// PutAdminCustomProvidersIdentifierJSONBody defines parameters for PutAdminCustomProvidersIdentifier.
+type PutAdminCustomProvidersIdentifierJSONBody struct {
+	// AcceptableClientIds Additional acceptable client IDs
+	AcceptableClientIds *[]string `json:"acceptable_client_ids,omitempty"`
+
+	// AttributeMapping Map provider claims to user attributes
+	AttributeMapping *map[string]interface{} `json:"attribute_mapping,omitempty"`
+
+	// AuthorizationParams Additional authorization request parameters as string key-value pairs
+	AuthorizationParams *map[string]string `json:"authorization_params,omitempty"`
+
+	// AuthorizationUrl OAuth 2.0 authorization endpoint (for OAuth2 providers)
+	AuthorizationUrl *string `json:"authorization_url,omitempty"`
+
+	// ClientId OAuth client ID
+	ClientId *string `json:"client_id,omitempty"`
+
+	// ClientSecret OAuth client secret (only provide if changing, will be encrypted)
+	ClientSecret *string `json:"client_secret,omitempty"`
+
+	// CustomClaimsAllowlist Raw IdP claim keys to copy verbatim into the user's custom_claims (e.g. groups, org_id). For OIDC providers these are read from the ID token claims (falling back to the userinfo response when no ID token is returned); for OAuth2 providers they are read from the userinfo response. Empty preserves no non-standard claims.
+	CustomClaimsAllowlist *[]string `json:"custom_claims_allowlist,omitempty"`
+
+	// DiscoveryUrl OIDC discovery URL (for OIDC providers)
+	DiscoveryUrl *string `json:"discovery_url,omitempty"`
+
+	// EmailOptional Whether email is optional
+	EmailOptional *bool `json:"email_optional,omitempty"`
+
+	// Enabled Whether the provider is enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Issuer OIDC issuer URL (for OIDC providers)
+	Issuer *string `json:"issuer,omitempty"`
+
+	// JwksUri JWKS URI for token validation (for OAuth2 providers)
+	JwksUri *string `json:"jwks_uri,omitempty"`
+
+	// Name Human-readable display name
+	Name *string `json:"name,omitempty"`
+
+	// PkceEnabled Enable PKCE
+	PkceEnabled *bool `json:"pkce_enabled,omitempty"`
+
+	// Scopes OAuth scopes to request
+	Scopes *[]string `json:"scopes,omitempty"`
+
+	// SkipNonceCheck Skip nonce validation for OIDC
+	SkipNonceCheck *bool `json:"skip_nonce_check,omitempty"`
+
+	// TokenUrl OAuth 2.0 token endpoint (for OAuth2 providers)
+	TokenUrl *string `json:"token_url,omitempty"`
+
+	// UserinfoUrl OAuth 2.0 userinfo endpoint (for OAuth2 providers)
+	UserinfoUrl *string `json:"userinfo_url,omitempty"`
+}
+
 // PostAdminGenerateLinkJSONBody defines parameters for PostAdminGenerateLink.
 type PostAdminGenerateLinkJSONBody struct {
 	Data       *map[string]interface{}           `json:"data,omitempty"`
@@ -193,6 +535,81 @@ type PostAdminGenerateLinkJSONBody struct {
 
 // PostAdminGenerateLinkJSONBodyType defines parameters for PostAdminGenerateLink.
 type PostAdminGenerateLinkJSONBodyType string
+
+// GetAdminOauthClientsParams defines parameters for GetAdminOauthClients.
+type GetAdminOauthClientsParams struct {
+	Page    *int `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// PostAdminOauthClientsJSONBody defines parameters for PostAdminOauthClients.
+type PostAdminOauthClientsJSONBody struct {
+	// ClientName Human-readable name of the client application
+	ClientName string `json:"client_name"`
+
+	// ClientType Type of the client. Optional. If not provided, will be inferred from token_endpoint_auth_method or defaults to 'confidential'. Public clients are used for applications that cannot securely store credentials (e.g., SPAs, mobile apps). Confidential clients can securely store credentials (e.g., server-side applications).
+	ClientType *PostAdminOauthClientsJSONBodyClientType `json:"client_type,omitempty"`
+
+	// ClientUri URL of the client application's homepage
+	ClientUri *string `json:"client_uri,omitempty"`
+
+	// GrantTypes OAuth grant types the client will use (defaults to both if not specified)
+	GrantTypes *[]PostAdminOauthClientsJSONBodyGrantTypes `json:"grant_types,omitempty"`
+
+	// LogoUri URL of the client application's logo
+	LogoUri *string `json:"logo_uri,omitempty"`
+
+	// RedirectUris Array of redirect URIs used by the client (maximum 10)
+	RedirectUris []string `json:"redirect_uris"`
+
+	// ResponseTypes OAuth response types the client can use
+	ResponseTypes *[]PostAdminOauthClientsJSONBodyResponseTypes `json:"response_types,omitempty"`
+
+	// Scope Space-separated list of scope values
+	Scope *string `json:"scope,omitempty"`
+
+	// TokenEndpointAuthMethod Authentication method for the token endpoint. Optional. 'none' is for public clients, 'client_secret_basic' and 'client_secret_post' are for confidential clients. If provided, must be consistent with client_type. If not provided, will be inferred from client_type.
+	TokenEndpointAuthMethod *PostAdminOauthClientsJSONBodyTokenEndpointAuthMethod `json:"token_endpoint_auth_method,omitempty"`
+}
+
+// PostAdminOauthClientsJSONBodyClientType defines parameters for PostAdminOauthClients.
+type PostAdminOauthClientsJSONBodyClientType string
+
+// PostAdminOauthClientsJSONBodyGrantTypes defines parameters for PostAdminOauthClients.
+type PostAdminOauthClientsJSONBodyGrantTypes string
+
+// PostAdminOauthClientsJSONBodyResponseTypes defines parameters for PostAdminOauthClients.
+type PostAdminOauthClientsJSONBodyResponseTypes string
+
+// PostAdminOauthClientsJSONBodyTokenEndpointAuthMethod defines parameters for PostAdminOauthClients.
+type PostAdminOauthClientsJSONBodyTokenEndpointAuthMethod string
+
+// PutAdminOauthClientsClientIdJSONBody defines parameters for PutAdminOauthClientsClientId.
+type PutAdminOauthClientsClientIdJSONBody struct {
+	// ClientName Human-readable name of the client application
+	ClientName *string `json:"client_name,omitempty"`
+
+	// ClientUri URL of the client application's homepage
+	ClientUri *string `json:"client_uri,omitempty"`
+
+	// GrantTypes OAuth grant types the client is authorized to use
+	GrantTypes *[]PutAdminOauthClientsClientIdJSONBodyGrantTypes `json:"grant_types,omitempty"`
+
+	// LogoUri URL of the client application's logo
+	LogoUri *string `json:"logo_uri,omitempty"`
+
+	// RedirectUris Array of redirect URIs used by the client
+	RedirectUris *[]string `json:"redirect_uris,omitempty"`
+
+	// TokenEndpointAuthMethod Authentication method for the token endpoint. Must be compatible with the client's current client_type. Confidential clients can use 'client_secret_basic' or 'client_secret_post'. Public clients can only use 'none'.
+	TokenEndpointAuthMethod *PutAdminOauthClientsClientIdJSONBodyTokenEndpointAuthMethod `json:"token_endpoint_auth_method,omitempty"`
+}
+
+// PutAdminOauthClientsClientIdJSONBodyGrantTypes defines parameters for PutAdminOauthClientsClientId.
+type PutAdminOauthClientsClientIdJSONBodyGrantTypes string
+
+// PutAdminOauthClientsClientIdJSONBodyTokenEndpointAuthMethod defines parameters for PutAdminOauthClientsClientId.
+type PutAdminOauthClientsClientIdJSONBodyTokenEndpointAuthMethod string
 
 // PostAdminSsoProvidersJSONBody defines parameters for PostAdminSsoProviders.
 type PostAdminSsoProvidersJSONBody struct {
@@ -229,8 +646,20 @@ type PostInviteJSONBody struct {
 	Email string                  `json:"email"`
 }
 
+// PostAdminCustomProvidersJSONRequestBody defines body for PostAdminCustomProviders for application/json ContentType.
+type PostAdminCustomProvidersJSONRequestBody PostAdminCustomProvidersJSONBody
+
+// PutAdminCustomProvidersIdentifierJSONRequestBody defines body for PutAdminCustomProvidersIdentifier for application/json ContentType.
+type PutAdminCustomProvidersIdentifierJSONRequestBody PutAdminCustomProvidersIdentifierJSONBody
+
 // PostAdminGenerateLinkJSONRequestBody defines body for PostAdminGenerateLink for application/json ContentType.
 type PostAdminGenerateLinkJSONRequestBody PostAdminGenerateLinkJSONBody
+
+// PostAdminOauthClientsJSONRequestBody defines body for PostAdminOauthClients for application/json ContentType.
+type PostAdminOauthClientsJSONRequestBody PostAdminOauthClientsJSONBody
+
+// PutAdminOauthClientsClientIdJSONRequestBody defines body for PutAdminOauthClientsClientId for application/json ContentType.
+type PutAdminOauthClientsClientIdJSONRequestBody PutAdminOauthClientsClientIdJSONBody
 
 // PostAdminSsoProvidersJSONRequestBody defines body for PostAdminSsoProviders for application/json ContentType.
 type PostAdminSsoProvidersJSONRequestBody PostAdminSsoProvidersJSONBody
@@ -323,10 +752,51 @@ type ClientInterface interface {
 	// GetAdminAudit request
 	GetAdminAudit(ctx context.Context, params *GetAdminAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAdminCustomProviders request
+	GetAdminCustomProviders(ctx context.Context, params *GetAdminCustomProvidersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAdminCustomProvidersWithBody request with any body
+	PostAdminCustomProvidersWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostAdminCustomProviders(ctx context.Context, body PostAdminCustomProvidersJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteAdminCustomProvidersIdentifier request
+	DeleteAdminCustomProvidersIdentifier(ctx context.Context, identifier string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAdminCustomProvidersIdentifier request
+	GetAdminCustomProvidersIdentifier(ctx context.Context, identifier string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutAdminCustomProvidersIdentifierWithBody request with any body
+	PutAdminCustomProvidersIdentifierWithBody(ctx context.Context, identifier string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutAdminCustomProvidersIdentifier(ctx context.Context, identifier string, body PutAdminCustomProvidersIdentifierJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostAdminGenerateLinkWithBody request with any body
 	PostAdminGenerateLinkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostAdminGenerateLink(ctx context.Context, body PostAdminGenerateLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAdminOauthClients request
+	GetAdminOauthClients(ctx context.Context, params *GetAdminOauthClientsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAdminOauthClientsWithBody request with any body
+	PostAdminOauthClientsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostAdminOauthClients(ctx context.Context, body PostAdminOauthClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteAdminOauthClientsClientId request
+	DeleteAdminOauthClientsClientId(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAdminOauthClientsClientId request
+	GetAdminOauthClientsClientId(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutAdminOauthClientsClientIdWithBody request with any body
+	PutAdminOauthClientsClientIdWithBody(ctx context.Context, clientId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutAdminOauthClientsClientId(ctx context.Context, clientId string, body PutAdminOauthClientsClientIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAdminOauthClientsClientIdRegenerateSecret request
+	PostAdminOauthClientsClientIdRegenerateSecret(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAdminSsoProviders request
 	GetAdminSsoProviders(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -390,6 +860,90 @@ func (c *Client) GetAdminAudit(ctx context.Context, params *GetAdminAuditParams,
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetAdminCustomProviders(ctx context.Context, params *GetAdminCustomProvidersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminCustomProvidersRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAdminCustomProvidersWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAdminCustomProvidersRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAdminCustomProviders(ctx context.Context, body PostAdminCustomProvidersJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAdminCustomProvidersRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteAdminCustomProvidersIdentifier(ctx context.Context, identifier string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteAdminCustomProvidersIdentifierRequest(c.Server, identifier)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAdminCustomProvidersIdentifier(ctx context.Context, identifier string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminCustomProvidersIdentifierRequest(c.Server, identifier)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAdminCustomProvidersIdentifierWithBody(ctx context.Context, identifier string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAdminCustomProvidersIdentifierRequestWithBody(c.Server, identifier, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAdminCustomProvidersIdentifier(ctx context.Context, identifier string, body PutAdminCustomProvidersIdentifierJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAdminCustomProvidersIdentifierRequest(c.Server, identifier, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) PostAdminGenerateLinkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAdminGenerateLinkRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -404,6 +958,102 @@ func (c *Client) PostAdminGenerateLinkWithBody(ctx context.Context, contentType 
 
 func (c *Client) PostAdminGenerateLink(ctx context.Context, body PostAdminGenerateLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAdminGenerateLinkRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAdminOauthClients(ctx context.Context, params *GetAdminOauthClientsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminOauthClientsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAdminOauthClientsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAdminOauthClientsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAdminOauthClients(ctx context.Context, body PostAdminOauthClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAdminOauthClientsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteAdminOauthClientsClientId(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteAdminOauthClientsClientIdRequest(c.Server, clientId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAdminOauthClientsClientId(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminOauthClientsClientIdRequest(c.Server, clientId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAdminOauthClientsClientIdWithBody(ctx context.Context, clientId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAdminOauthClientsClientIdRequestWithBody(c.Server, clientId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAdminOauthClientsClientId(ctx context.Context, clientId string, body PutAdminOauthClientsClientIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAdminOauthClientsClientIdRequest(c.Server, clientId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAdminOauthClientsClientIdRegenerateSecret(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAdminOauthClientsClientIdRegenerateSecretRequest(c.Server, clientId)
 	if err != nil {
 		return nil, err
 	}
@@ -695,6 +1345,210 @@ func NewGetAdminAuditRequest(server string, params *GetAdminAuditParams) (*http.
 	return req, nil
 }
 
+// NewGetAdminCustomProvidersRequest generates requests for GetAdminCustomProviders
+func NewGetAdminCustomProvidersRequest(server string, params *GetAdminCustomProvidersParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/custom-providers")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Type != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "type", runtime.ParamLocationQuery, *params.Type); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostAdminCustomProvidersRequest calls the generic PostAdminCustomProviders builder with application/json body
+func NewPostAdminCustomProvidersRequest(server string, body PostAdminCustomProvidersJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAdminCustomProvidersRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAdminCustomProvidersRequestWithBody generates requests for PostAdminCustomProviders with any type of body
+func NewPostAdminCustomProvidersRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/custom-providers")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteAdminCustomProvidersIdentifierRequest generates requests for DeleteAdminCustomProvidersIdentifier
+func NewDeleteAdminCustomProvidersIdentifierRequest(server string, identifier string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "identifier", runtime.ParamLocationPath, identifier)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/custom-providers/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAdminCustomProvidersIdentifierRequest generates requests for GetAdminCustomProvidersIdentifier
+func NewGetAdminCustomProvidersIdentifierRequest(server string, identifier string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "identifier", runtime.ParamLocationPath, identifier)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/custom-providers/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutAdminCustomProvidersIdentifierRequest calls the generic PutAdminCustomProvidersIdentifier builder with application/json body
+func NewPutAdminCustomProvidersIdentifierRequest(server string, identifier string, body PutAdminCustomProvidersIdentifierJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutAdminCustomProvidersIdentifierRequestWithBody(server, identifier, "application/json", bodyReader)
+}
+
+// NewPutAdminCustomProvidersIdentifierRequestWithBody generates requests for PutAdminCustomProvidersIdentifier with any type of body
+func NewPutAdminCustomProvidersIdentifierRequestWithBody(server string, identifier string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "identifier", runtime.ParamLocationPath, identifier)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/custom-providers/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewPostAdminGenerateLinkRequest calls the generic PostAdminGenerateLink builder with application/json body
 func NewPostAdminGenerateLinkRequest(server string, body PostAdminGenerateLinkJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -731,6 +1585,260 @@ func NewPostAdminGenerateLinkRequestWithBody(server string, contentType string, 
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetAdminOauthClientsRequest generates requests for GetAdminOauthClients
+func NewGetAdminOauthClientsRequest(server string, params *GetAdminOauthClientsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/oauth/clients")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page", runtime.ParamLocationQuery, *params.Page); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "per_page", runtime.ParamLocationQuery, *params.PerPage); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostAdminOauthClientsRequest calls the generic PostAdminOauthClients builder with application/json body
+func NewPostAdminOauthClientsRequest(server string, body PostAdminOauthClientsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAdminOauthClientsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAdminOauthClientsRequestWithBody generates requests for PostAdminOauthClients with any type of body
+func NewPostAdminOauthClientsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/oauth/clients")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteAdminOauthClientsClientIdRequest generates requests for DeleteAdminOauthClientsClientId
+func NewDeleteAdminOauthClientsClientIdRequest(server string, clientId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "client_id", runtime.ParamLocationPath, clientId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/oauth/clients/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAdminOauthClientsClientIdRequest generates requests for GetAdminOauthClientsClientId
+func NewGetAdminOauthClientsClientIdRequest(server string, clientId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "client_id", runtime.ParamLocationPath, clientId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/oauth/clients/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutAdminOauthClientsClientIdRequest calls the generic PutAdminOauthClientsClientId builder with application/json body
+func NewPutAdminOauthClientsClientIdRequest(server string, clientId string, body PutAdminOauthClientsClientIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutAdminOauthClientsClientIdRequestWithBody(server, clientId, "application/json", bodyReader)
+}
+
+// NewPutAdminOauthClientsClientIdRequestWithBody generates requests for PutAdminOauthClientsClientId with any type of body
+func NewPutAdminOauthClientsClientIdRequestWithBody(server string, clientId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "client_id", runtime.ParamLocationPath, clientId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/oauth/clients/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostAdminOauthClientsClientIdRegenerateSecretRequest generates requests for PostAdminOauthClientsClientIdRegenerateSecret
+func NewPostAdminOauthClientsClientIdRegenerateSecretRequest(server string, clientId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "client_id", runtime.ParamLocationPath, clientId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/oauth/clients/%s/regenerate_secret", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -1312,10 +2420,51 @@ type ClientWithResponsesInterface interface {
 	// GetAdminAuditWithResponse request
 	GetAdminAuditWithResponse(ctx context.Context, params *GetAdminAuditParams, reqEditors ...RequestEditorFn) (*GetAdminAuditResponse, error)
 
+	// GetAdminCustomProvidersWithResponse request
+	GetAdminCustomProvidersWithResponse(ctx context.Context, params *GetAdminCustomProvidersParams, reqEditors ...RequestEditorFn) (*GetAdminCustomProvidersResponse, error)
+
+	// PostAdminCustomProvidersWithBodyWithResponse request with any body
+	PostAdminCustomProvidersWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAdminCustomProvidersResponse, error)
+
+	PostAdminCustomProvidersWithResponse(ctx context.Context, body PostAdminCustomProvidersJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAdminCustomProvidersResponse, error)
+
+	// DeleteAdminCustomProvidersIdentifierWithResponse request
+	DeleteAdminCustomProvidersIdentifierWithResponse(ctx context.Context, identifier string, reqEditors ...RequestEditorFn) (*DeleteAdminCustomProvidersIdentifierResponse, error)
+
+	// GetAdminCustomProvidersIdentifierWithResponse request
+	GetAdminCustomProvidersIdentifierWithResponse(ctx context.Context, identifier string, reqEditors ...RequestEditorFn) (*GetAdminCustomProvidersIdentifierResponse, error)
+
+	// PutAdminCustomProvidersIdentifierWithBodyWithResponse request with any body
+	PutAdminCustomProvidersIdentifierWithBodyWithResponse(ctx context.Context, identifier string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAdminCustomProvidersIdentifierResponse, error)
+
+	PutAdminCustomProvidersIdentifierWithResponse(ctx context.Context, identifier string, body PutAdminCustomProvidersIdentifierJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAdminCustomProvidersIdentifierResponse, error)
+
 	// PostAdminGenerateLinkWithBodyWithResponse request with any body
 	PostAdminGenerateLinkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAdminGenerateLinkResponse, error)
 
 	PostAdminGenerateLinkWithResponse(ctx context.Context, body PostAdminGenerateLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAdminGenerateLinkResponse, error)
+
+	// GetAdminOauthClientsWithResponse request
+	GetAdminOauthClientsWithResponse(ctx context.Context, params *GetAdminOauthClientsParams, reqEditors ...RequestEditorFn) (*GetAdminOauthClientsResponse, error)
+
+	// PostAdminOauthClientsWithBodyWithResponse request with any body
+	PostAdminOauthClientsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAdminOauthClientsResponse, error)
+
+	PostAdminOauthClientsWithResponse(ctx context.Context, body PostAdminOauthClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAdminOauthClientsResponse, error)
+
+	// DeleteAdminOauthClientsClientIdWithResponse request
+	DeleteAdminOauthClientsClientIdWithResponse(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*DeleteAdminOauthClientsClientIdResponse, error)
+
+	// GetAdminOauthClientsClientIdWithResponse request
+	GetAdminOauthClientsClientIdWithResponse(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*GetAdminOauthClientsClientIdResponse, error)
+
+	// PutAdminOauthClientsClientIdWithBodyWithResponse request with any body
+	PutAdminOauthClientsClientIdWithBodyWithResponse(ctx context.Context, clientId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAdminOauthClientsClientIdResponse, error)
+
+	PutAdminOauthClientsClientIdWithResponse(ctx context.Context, clientId string, body PutAdminOauthClientsClientIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAdminOauthClientsClientIdResponse, error)
+
+	// PostAdminOauthClientsClientIdRegenerateSecretWithResponse request
+	PostAdminOauthClientsClientIdRegenerateSecretWithResponse(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*PostAdminOauthClientsClientIdRegenerateSecretResponse, error)
 
 	// GetAdminSsoProvidersWithResponse request
 	GetAdminSsoProvidersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminSsoProvidersResponse, error)
@@ -1401,6 +2550,10 @@ type GetAdminAuditResponse struct {
 			// - passkey_created
 			// - passkey_updated
 			// - passkey_deleted
+			// - recovery_codes_generated
+			// - recovery_codes_verified
+			// - recovery_codes_regenerated
+			// - recovery_codes_deleted
 			Action        *string `json:"action,omitempty"`
 			ActorId       *string `json:"actor_id,omitempty"`
 			ActorName     *string `json:"actor_name,omitempty"`
@@ -1439,6 +2592,135 @@ func (r GetAdminAuditResponse) StatusCode() int {
 	return 0
 }
 
+type GetAdminCustomProvidersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Providers *[]CustomOAuthProviderSchema `json:"providers,omitempty"`
+	}
+	JSON400 *ErrorSchema
+	JSON401 *UnauthorizedResponse
+	JSON403 *ForbiddenResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminCustomProvidersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminCustomProvidersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAdminCustomProvidersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *CustomOAuthProviderSchema
+	JSON400      *ErrorSchema
+	JSON401      *UnauthorizedResponse
+	JSON403      *ForbiddenResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAdminCustomProvidersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAdminCustomProvidersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteAdminCustomProvidersIdentifierResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ErrorSchema
+	JSON401      *UnauthorizedResponse
+	JSON403      *ForbiddenResponse
+	JSON404      *ErrorSchema
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteAdminCustomProvidersIdentifierResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteAdminCustomProvidersIdentifierResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAdminCustomProvidersIdentifierResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CustomOAuthProviderSchema
+	JSON400      *ErrorSchema
+	JSON401      *UnauthorizedResponse
+	JSON403      *ForbiddenResponse
+	JSON404      *ErrorSchema
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminCustomProvidersIdentifierResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminCustomProvidersIdentifierResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutAdminCustomProvidersIdentifierResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CustomOAuthProviderSchema
+	JSON400      *ErrorSchema
+	JSON401      *UnauthorizedResponse
+	JSON403      *ForbiddenResponse
+	JSON404      *ErrorSchema
+}
+
+// Status returns HTTPResponse.Status
+func (r PutAdminCustomProvidersIdentifierResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutAdminCustomProvidersIdentifierResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PostAdminGenerateLinkResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1467,6 +2749,158 @@ func (r PostAdminGenerateLinkResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostAdminGenerateLinkResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAdminOauthClientsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Clients *[]OAuthClientSchema `json:"clients,omitempty"`
+	}
+	JSON401 *UnauthorizedResponse
+	JSON403 *ForbiddenResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminOauthClientsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminOauthClientsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAdminOauthClientsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *OAuthClientSchema
+	JSON400      *BadRequestResponse
+	JSON401      *UnauthorizedResponse
+	JSON403      *ForbiddenResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAdminOauthClientsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAdminOauthClientsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteAdminOauthClientsClientIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *UnauthorizedResponse
+	JSON403      *ForbiddenResponse
+	JSON404      *ErrorSchema
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteAdminOauthClientsClientIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteAdminOauthClientsClientIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAdminOauthClientsClientIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *OAuthClientSchema
+	JSON401      *UnauthorizedResponse
+	JSON403      *ForbiddenResponse
+	JSON404      *ErrorSchema
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminOauthClientsClientIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminOauthClientsClientIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutAdminOauthClientsClientIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *OAuthClientSchema
+	JSON400      *ErrorSchema
+	JSON401      *UnauthorizedResponse
+	JSON403      *ForbiddenResponse
+	JSON404      *ErrorSchema
+}
+
+// Status returns HTTPResponse.Status
+func (r PutAdminOauthClientsClientIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutAdminOauthClientsClientIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAdminOauthClientsClientIdRegenerateSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *OAuthClientSchema
+	JSON400      *ErrorSchema
+	JSON401      *UnauthorizedResponse
+	JSON403      *ForbiddenResponse
+	JSON404      *ErrorSchema
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAdminOauthClientsClientIdRegenerateSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAdminOauthClientsClientIdRegenerateSecretResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1809,6 +3243,67 @@ func (c *ClientWithResponses) GetAdminAuditWithResponse(ctx context.Context, par
 	return ParseGetAdminAuditResponse(rsp)
 }
 
+// GetAdminCustomProvidersWithResponse request returning *GetAdminCustomProvidersResponse
+func (c *ClientWithResponses) GetAdminCustomProvidersWithResponse(ctx context.Context, params *GetAdminCustomProvidersParams, reqEditors ...RequestEditorFn) (*GetAdminCustomProvidersResponse, error) {
+	rsp, err := c.GetAdminCustomProviders(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminCustomProvidersResponse(rsp)
+}
+
+// PostAdminCustomProvidersWithBodyWithResponse request with arbitrary body returning *PostAdminCustomProvidersResponse
+func (c *ClientWithResponses) PostAdminCustomProvidersWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAdminCustomProvidersResponse, error) {
+	rsp, err := c.PostAdminCustomProvidersWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAdminCustomProvidersResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostAdminCustomProvidersWithResponse(ctx context.Context, body PostAdminCustomProvidersJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAdminCustomProvidersResponse, error) {
+	rsp, err := c.PostAdminCustomProviders(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAdminCustomProvidersResponse(rsp)
+}
+
+// DeleteAdminCustomProvidersIdentifierWithResponse request returning *DeleteAdminCustomProvidersIdentifierResponse
+func (c *ClientWithResponses) DeleteAdminCustomProvidersIdentifierWithResponse(ctx context.Context, identifier string, reqEditors ...RequestEditorFn) (*DeleteAdminCustomProvidersIdentifierResponse, error) {
+	rsp, err := c.DeleteAdminCustomProvidersIdentifier(ctx, identifier, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteAdminCustomProvidersIdentifierResponse(rsp)
+}
+
+// GetAdminCustomProvidersIdentifierWithResponse request returning *GetAdminCustomProvidersIdentifierResponse
+func (c *ClientWithResponses) GetAdminCustomProvidersIdentifierWithResponse(ctx context.Context, identifier string, reqEditors ...RequestEditorFn) (*GetAdminCustomProvidersIdentifierResponse, error) {
+	rsp, err := c.GetAdminCustomProvidersIdentifier(ctx, identifier, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminCustomProvidersIdentifierResponse(rsp)
+}
+
+// PutAdminCustomProvidersIdentifierWithBodyWithResponse request with arbitrary body returning *PutAdminCustomProvidersIdentifierResponse
+func (c *ClientWithResponses) PutAdminCustomProvidersIdentifierWithBodyWithResponse(ctx context.Context, identifier string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAdminCustomProvidersIdentifierResponse, error) {
+	rsp, err := c.PutAdminCustomProvidersIdentifierWithBody(ctx, identifier, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAdminCustomProvidersIdentifierResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutAdminCustomProvidersIdentifierWithResponse(ctx context.Context, identifier string, body PutAdminCustomProvidersIdentifierJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAdminCustomProvidersIdentifierResponse, error) {
+	rsp, err := c.PutAdminCustomProvidersIdentifier(ctx, identifier, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAdminCustomProvidersIdentifierResponse(rsp)
+}
+
 // PostAdminGenerateLinkWithBodyWithResponse request with arbitrary body returning *PostAdminGenerateLinkResponse
 func (c *ClientWithResponses) PostAdminGenerateLinkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAdminGenerateLinkResponse, error) {
 	rsp, err := c.PostAdminGenerateLinkWithBody(ctx, contentType, body, reqEditors...)
@@ -1824,6 +3319,76 @@ func (c *ClientWithResponses) PostAdminGenerateLinkWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParsePostAdminGenerateLinkResponse(rsp)
+}
+
+// GetAdminOauthClientsWithResponse request returning *GetAdminOauthClientsResponse
+func (c *ClientWithResponses) GetAdminOauthClientsWithResponse(ctx context.Context, params *GetAdminOauthClientsParams, reqEditors ...RequestEditorFn) (*GetAdminOauthClientsResponse, error) {
+	rsp, err := c.GetAdminOauthClients(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminOauthClientsResponse(rsp)
+}
+
+// PostAdminOauthClientsWithBodyWithResponse request with arbitrary body returning *PostAdminOauthClientsResponse
+func (c *ClientWithResponses) PostAdminOauthClientsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAdminOauthClientsResponse, error) {
+	rsp, err := c.PostAdminOauthClientsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAdminOauthClientsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostAdminOauthClientsWithResponse(ctx context.Context, body PostAdminOauthClientsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAdminOauthClientsResponse, error) {
+	rsp, err := c.PostAdminOauthClients(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAdminOauthClientsResponse(rsp)
+}
+
+// DeleteAdminOauthClientsClientIdWithResponse request returning *DeleteAdminOauthClientsClientIdResponse
+func (c *ClientWithResponses) DeleteAdminOauthClientsClientIdWithResponse(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*DeleteAdminOauthClientsClientIdResponse, error) {
+	rsp, err := c.DeleteAdminOauthClientsClientId(ctx, clientId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteAdminOauthClientsClientIdResponse(rsp)
+}
+
+// GetAdminOauthClientsClientIdWithResponse request returning *GetAdminOauthClientsClientIdResponse
+func (c *ClientWithResponses) GetAdminOauthClientsClientIdWithResponse(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*GetAdminOauthClientsClientIdResponse, error) {
+	rsp, err := c.GetAdminOauthClientsClientId(ctx, clientId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminOauthClientsClientIdResponse(rsp)
+}
+
+// PutAdminOauthClientsClientIdWithBodyWithResponse request with arbitrary body returning *PutAdminOauthClientsClientIdResponse
+func (c *ClientWithResponses) PutAdminOauthClientsClientIdWithBodyWithResponse(ctx context.Context, clientId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAdminOauthClientsClientIdResponse, error) {
+	rsp, err := c.PutAdminOauthClientsClientIdWithBody(ctx, clientId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAdminOauthClientsClientIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutAdminOauthClientsClientIdWithResponse(ctx context.Context, clientId string, body PutAdminOauthClientsClientIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAdminOauthClientsClientIdResponse, error) {
+	rsp, err := c.PutAdminOauthClientsClientId(ctx, clientId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAdminOauthClientsClientIdResponse(rsp)
+}
+
+// PostAdminOauthClientsClientIdRegenerateSecretWithResponse request returning *PostAdminOauthClientsClientIdRegenerateSecretResponse
+func (c *ClientWithResponses) PostAdminOauthClientsClientIdRegenerateSecretWithResponse(ctx context.Context, clientId string, reqEditors ...RequestEditorFn) (*PostAdminOauthClientsClientIdRegenerateSecretResponse, error) {
+	rsp, err := c.PostAdminOauthClientsClientIdRegenerateSecret(ctx, clientId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAdminOauthClientsClientIdRegenerateSecretResponse(rsp)
 }
 
 // GetAdminSsoProvidersWithResponse request returning *GetAdminSsoProvidersResponse
@@ -2029,6 +3594,10 @@ func ParseGetAdminAuditResponse(rsp *http.Response) (*GetAdminAuditResponse, err
 				// - passkey_created
 				// - passkey_updated
 				// - passkey_deleted
+				// - recovery_codes_generated
+				// - recovery_codes_verified
+				// - recovery_codes_regenerated
+				// - recovery_codes_deleted
 				Action        *string `json:"action,omitempty"`
 				ActorId       *string `json:"actor_id,omitempty"`
 				ActorName     *string `json:"actor_name,omitempty"`
@@ -2065,6 +3634,257 @@ func ParseGetAdminAuditResponse(rsp *http.Response) (*GetAdminAuditResponse, err
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAdminCustomProvidersResponse parses an HTTP response from a GetAdminCustomProvidersWithResponse call
+func ParseGetAdminCustomProvidersResponse(rsp *http.Response) (*GetAdminCustomProvidersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminCustomProvidersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Providers *[]CustomOAuthProviderSchema `json:"providers,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAdminCustomProvidersResponse parses an HTTP response from a PostAdminCustomProvidersWithResponse call
+func ParsePostAdminCustomProvidersResponse(rsp *http.Response) (*PostAdminCustomProvidersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAdminCustomProvidersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest CustomOAuthProviderSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteAdminCustomProvidersIdentifierResponse parses an HTTP response from a DeleteAdminCustomProvidersIdentifierWithResponse call
+func ParseDeleteAdminCustomProvidersIdentifierResponse(rsp *http.Response) (*DeleteAdminCustomProvidersIdentifierResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteAdminCustomProvidersIdentifierResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAdminCustomProvidersIdentifierResponse parses an HTTP response from a GetAdminCustomProvidersIdentifierWithResponse call
+func ParseGetAdminCustomProvidersIdentifierResponse(rsp *http.Response) (*GetAdminCustomProvidersIdentifierResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminCustomProvidersIdentifierResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CustomOAuthProviderSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutAdminCustomProvidersIdentifierResponse parses an HTTP response from a PutAdminCustomProvidersIdentifierWithResponse call
+func ParsePutAdminCustomProvidersIdentifierResponse(rsp *http.Response) (*PutAdminCustomProvidersIdentifierResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutAdminCustomProvidersIdentifierResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CustomOAuthProviderSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -2133,6 +3953,290 @@ func ParsePostAdminGenerateLinkResponse(rsp *http.Response) (*PostAdminGenerateL
 			return nil, err
 		}
 		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAdminOauthClientsResponse parses an HTTP response from a GetAdminOauthClientsWithResponse call
+func ParseGetAdminOauthClientsResponse(rsp *http.Response) (*GetAdminOauthClientsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminOauthClientsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Clients *[]OAuthClientSchema `json:"clients,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAdminOauthClientsResponse parses an HTTP response from a PostAdminOauthClientsWithResponse call
+func ParsePostAdminOauthClientsResponse(rsp *http.Response) (*PostAdminOauthClientsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAdminOauthClientsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest OAuthClientSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequestResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteAdminOauthClientsClientIdResponse parses an HTTP response from a DeleteAdminOauthClientsClientIdWithResponse call
+func ParseDeleteAdminOauthClientsClientIdResponse(rsp *http.Response) (*DeleteAdminOauthClientsClientIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteAdminOauthClientsClientIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAdminOauthClientsClientIdResponse parses an HTTP response from a GetAdminOauthClientsClientIdWithResponse call
+func ParseGetAdminOauthClientsClientIdResponse(rsp *http.Response) (*GetAdminOauthClientsClientIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminOauthClientsClientIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OAuthClientSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutAdminOauthClientsClientIdResponse parses an HTTP response from a PutAdminOauthClientsClientIdWithResponse call
+func ParsePutAdminOauthClientsClientIdResponse(rsp *http.Response) (*PutAdminOauthClientsClientIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutAdminOauthClientsClientIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OAuthClientSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAdminOauthClientsClientIdRegenerateSecretResponse parses an HTTP response from a PostAdminOauthClientsClientIdRegenerateSecretWithResponse call
+func ParsePostAdminOauthClientsClientIdRegenerateSecretResponse(rsp *http.Response) (*PostAdminOauthClientsClientIdRegenerateSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAdminOauthClientsClientIdRegenerateSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OAuthClientSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
