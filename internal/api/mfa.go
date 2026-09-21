@@ -134,9 +134,30 @@ func validateFactors(db *storage.Connection, user *models.User, newFactorName st
 	return nil
 }
 
-func hasVerifiedNonRecoveryFactor(factors []models.Factor, unenrollingID uuid.UUID) bool {
+func isFactorTypeVerifyEnabled(config *conf.GlobalConfiguration, factorType string) bool {
+	switch factorType {
+	case models.TOTP:
+		return config.MFA.TOTP.VerifyEnabled
+	case models.Phone:
+		return config.MFA.Phone.VerifyEnabled
+	case models.WebAuthn:
+		return config.MFA.WebAuthn.VerifyEnabled
+	case models.RecoveryCode:
+		return config.MFA.RecoveryCodes.VerifyEnabled
+	default:
+		return false
+	}
+}
+
+// hasUsableNonRecoveryFactor reports whether the user has a second factor,
+// other than recovery codes, that can actually be used at sign-in (verified and enabled in config).
+func hasUsableNonRecoveryFactor(config *conf.GlobalConfiguration, factors []models.Factor, excludeID uuid.UUID) bool {
 	for _, f := range factors {
-		if f.ID != unenrollingID && f.IsVerified() && !f.IsRecoveryCodeFactor() {
+		if f.ID == excludeID || !f.IsVerified() || f.IsRecoveryCodeFactor() {
+			continue
+		}
+
+		if isFactorTypeVerifyEnabled(config, f.FactorType) {
 			return true
 		}
 	}
@@ -1066,7 +1087,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 					return apierrors.NewInternalServerError("Database error loading factors").WithInternalError(terr)
 				}
 
-				if !hasVerifiedNonRecoveryFactor(user.Factors, factor.ID) {
+				if !hasUsableNonRecoveryFactor(config, user.Factors, factor.ID) {
 					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFARecoveryCodesSoleFactor, "Recovery codes cannot be the only verified factor. Please enroll another factor before unenrolling this one or delete your recovery codes.")
 				}
 			} else if !models.IsNotFoundError(terr) {

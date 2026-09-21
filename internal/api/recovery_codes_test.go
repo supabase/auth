@@ -320,6 +320,18 @@ func (ts *RecoveryCodesTestSuite) TestRecoveryCodesGenerateSoleFactor() {
 	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFARecoveryCodesSoleFactor)
 }
 
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesGenerateVerifyDisabledFactorNotCounted() {
+	token := ts.aal2Token()
+	// The verified TOTP factor cannot be used at sign-in once TOTP verification
+	// is disabled, so recovery codes would become the only usable factor.
+	prev := ts.Config.MFA.TOTP.VerifyEnabled
+	defer func() { ts.Config.MFA.TOTP.VerifyEnabled = prev }()
+	ts.Config.MFA.TOTP.VerifyEnabled = false
+
+	w := ts.serveRequest(http.MethodPost, "http://localhost/factors/recovery-codes", token, nil)
+	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFARecoveryCodesSoleFactor)
+}
+
 func (ts *RecoveryCodesTestSuite) TestRecoveryCodesGenerateAtFactorLimits() {
 	token := ts.aal2Token()
 
@@ -1019,6 +1031,15 @@ func (ts *RecoveryCodesTestSuite) createTOTPFactor(friendlyName string, state mo
 	return f
 }
 
+func (ts *RecoveryCodesTestSuite) createPhoneFactor(friendlyName string, state models.FactorState) *models.Factor {
+	f := models.NewPhoneFactor(ts.TestUser, "+15555555555", friendlyName)
+	require.NoError(ts.T(), ts.API.db.Create(f))
+	if state == models.FactorStateVerified {
+		require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStateVerified))
+	}
+	return f
+}
+
 // performUnenroll hits the generic DELETE /factors/{factor_id} endpoint.
 func (ts *RecoveryCodesTestSuite) performUnenroll(token string, factorID uuid.UUID) *httptest.ResponseRecorder {
 	return ts.serveRequest(http.MethodDelete, fmt.Sprintf("http://localhost/factors/%s", factorID), token, nil)
@@ -1091,6 +1112,32 @@ func (ts *RecoveryCodesTestSuite) TestRecoveryCodesUnenrollOtherSecondFactorAllo
 	// The remaining TOTP factor is now the last second factor.
 	w = ts.performUnenroll(token, ts.TestFactor.ID)
 	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFARecoveryCodesSoleFactor)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesUnenrollVerifyDisabledFactorNotCounted() {
+	token := ts.aal2Token()
+	ts.performGenerate(token, nil)
+	phone := ts.createPhoneFactor("phone_factor", models.FactorStateVerified)
+	prev := ts.Config.MFA.Phone.VerifyEnabled
+	defer func() { ts.Config.MFA.Phone.VerifyEnabled = prev }()
+
+	// A verified phone factor does not count while phone verification is disabled,
+	// so the TOTP factor is still the last usable second factor.
+	ts.Config.MFA.Phone.VerifyEnabled = false
+	w := ts.performUnenroll(token, ts.TestFactor.ID)
+	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFARecoveryCodesSoleFactor)
+	_, err := models.FindFactorByFactorID(ts.API.db, ts.TestFactor.ID)
+	require.NoError(ts.T(), err)
+
+	// Enabling phone verification makes it a usable second factor and lifts the guard.
+	ts.Config.MFA.Phone.VerifyEnabled = true
+	w = ts.performUnenroll(token, ts.TestFactor.ID)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	_, err = models.FindFactorByFactorID(ts.API.db, ts.TestFactor.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+	_, err = models.FindFactorByFactorID(ts.API.db, phone.ID)
+	require.NoError(ts.T(), err)
+	ts.recoveryCodeSetState()
 }
 
 func (ts *RecoveryCodesTestSuite) TestRecoveryCodesUnenrollUnverifiedFactorAllowed() {
