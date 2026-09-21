@@ -760,7 +760,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/responses/UnauthorizedResponse"
+                $ref: "#/components/schemas/ErrorSchema"
               examples:
                 example:
                   summary: no_authorization
@@ -771,7 +771,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/responses/ForbiddenResponse"
+                $ref: "#/components/schemas/ErrorSchema"
               examples:
                 example:
                   summary: bad_jwt
