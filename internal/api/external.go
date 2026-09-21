@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fatih/structs"
+	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -168,12 +169,24 @@ func (a *API) handleOAuthCallback(r *http.Request) (*OAuthProviderData, error) {
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+
+	providerType, emailOptional := getExternalProviderType(ctx)
+	if pathProvider := chi.URLParam(r, "provider"); pathProvider != "" {
+		if !strings.EqualFold(pathProvider, providerType) {
+			return apierrors.NewBadRequestError(
+				apierrors.ErrorCodeBadOAuthCallback,
+				"OAuth mix-up detected: callback provider '%s' does not match flow state provider '%s'",
+				pathProvider,
+				providerType,
+			)
+		}
+	}
+
 	db := a.db.WithContext(ctx)
 
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
-	providerType, emailOptional := getExternalProviderType(ctx)
 	data, err := a.handleOAuthCallback(r)
 	if err != nil {
 		return err
@@ -618,87 +631,129 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return a.loadCustomProvider(ctx, db, name, scopes)
 	}
 
+	pConfig = a.getProviderConfig(name)
+
 	switch name {
 	case AppleProvider:
-		pConfig = config.External.Apple
 		p, err = provider.NewAppleProvider(ctx, pConfig, a.oidcCache)
 	case AzureProvider:
-		pConfig = config.External.Azure
 		p, err = provider.NewAzureProvider(pConfig, scopes, a.oidcCache)
 	case BitbucketProvider:
-		pConfig = config.External.Bitbucket
 		p, err = provider.NewBitbucketProvider(pConfig)
 	case DiscordProvider:
-		pConfig = config.External.Discord
 		p, err = provider.NewDiscordProvider(pConfig, scopes)
 	case FacebookProvider:
-		pConfig = config.External.Facebook
 		p, err = provider.NewFacebookProvider(pConfig, scopes)
 	case FigmaProvider:
-		pConfig = config.External.Figma
 		p, err = provider.NewFigmaProvider(pConfig, scopes)
 	case FlyProvider:
-		pConfig = config.External.Fly
 		p, err = provider.NewFlyProvider(pConfig, scopes)
 	case GitHubProvider:
-		pConfig = config.External.Github
 		p, err = provider.NewGithubProvider(pConfig, scopes)
 	case GitLabProvider:
-		pConfig = config.External.Gitlab
 		p, err = provider.NewGitlabProvider(pConfig, scopes)
 	case GoogleProvider:
-		pConfig = config.External.Google
 		p, err = provider.NewGoogleProvider(ctx, pConfig, scopes, a.oidcCache)
 	case KakaoProvider:
-		pConfig = config.External.Kakao
 		p, err = provider.NewKakaoProvider(pConfig, scopes)
 	case KeycloakProvider:
-		pConfig = config.External.Keycloak
 		p, err = provider.NewKeycloakProvider(pConfig, scopes)
 	case LinkedInProvider:
-		pConfig = config.External.Linkedin
 		p, err = provider.NewLinkedinProvider(pConfig, scopes)
 	case LinkedInOIDCProvider:
-		pConfig = config.External.LinkedinOIDC
 		p, err = provider.NewLinkedinOIDCProvider(ctx, pConfig, scopes, a.oidcCache)
 	case NotionProvider:
-		pConfig = config.External.Notion
 		p, err = provider.NewNotionProvider(pConfig)
 	case SnapchatProvider:
-		pConfig = config.External.Snapchat
 		p, err = provider.NewSnapchatProvider(pConfig, scopes)
 	case SpotifyProvider:
-		pConfig = config.External.Spotify
 		p, err = provider.NewSpotifyProvider(pConfig, scopes)
 	case SlackProvider:
-		pConfig = config.External.Slack
 		p, err = provider.NewSlackProvider(pConfig, scopes)
 	case SlackOIDCProvider:
-		pConfig = config.External.SlackOIDC
 		p, err = provider.NewSlackOIDCProvider(pConfig, scopes)
 	case TwitchProvider:
-		pConfig = config.External.Twitch
 		p, err = provider.NewTwitchProvider(pConfig, scopes)
 	case TwitterProvider:
-		pConfig = config.External.Twitter
 		p, err = provider.NewTwitterProvider(pConfig, scopes)
 	case XProvider:
-		pConfig = config.External.X
 		p, err = provider.NewXProvider(pConfig, scopes)
 	case VercelMarketplaceProvider:
-		pConfig = config.External.VercelMarketplace
 		p, err = provider.NewVercelMarketplaceProvider(ctx, pConfig, scopes, a.oidcCache)
 	case WorkOSProvider:
-		pConfig = config.External.WorkOS
 		p, err = provider.NewWorkOSProvider(pConfig)
 	case ZoomProvider:
-		pConfig = config.External.Zoom
 		p, err = provider.NewZoomProvider(pConfig)
 	default:
 		return nil, pConfig, fmt.Errorf("Provider %s could not be found", name)
 	}
 
 	return p, pConfig, err
+}
+
+func (a *API) getProviderConfig(name string) conf.OAuthProviderConfiguration {
+	config := a.config
+	var pConfig conf.OAuthProviderConfiguration
+	switch name {
+	case AppleProvider:
+		pConfig = config.External.Apple
+	case AzureProvider:
+		pConfig = config.External.Azure
+	case BitbucketProvider:
+		pConfig = config.External.Bitbucket
+	case DiscordProvider:
+		pConfig = config.External.Discord
+	case FacebookProvider:
+		pConfig = config.External.Facebook
+	case FigmaProvider:
+		pConfig = config.External.Figma
+	case FlyProvider:
+		pConfig = config.External.Fly
+	case GitHubProvider:
+		pConfig = config.External.Github
+	case GitLabProvider:
+		pConfig = config.External.Gitlab
+	case GoogleProvider:
+		pConfig = config.External.Google
+	case KakaoProvider:
+		pConfig = config.External.Kakao
+	case NotionProvider:
+		pConfig = config.External.Notion
+	case KeycloakProvider:
+		pConfig = config.External.Keycloak
+	case LinkedInProvider:
+		pConfig = config.External.Linkedin
+	case LinkedInOIDCProvider:
+		pConfig = config.External.LinkedinOIDC
+	case SnapchatProvider:
+		pConfig = config.External.Snapchat
+	case SpotifyProvider:
+		pConfig = config.External.Spotify
+	case SlackProvider:
+		pConfig = config.External.Slack
+	case SlackOIDCProvider:
+		pConfig = config.External.SlackOIDC
+	case TwitchProvider:
+		pConfig = config.External.Twitch
+	case TwitterProvider:
+		pConfig = config.External.Twitter
+	case XProvider:
+		pConfig = config.External.X
+	case VercelMarketplaceProvider:
+		pConfig = config.External.VercelMarketplace
+	case WorkOSProvider:
+		pConfig = config.External.WorkOS
+	case ZoomProvider:
+		pConfig = config.External.Zoom
+	}
+
+	if config.External.UseDistinctRedirectURIs && pConfig.RedirectURI != "" {
+		if !strings.HasSuffix(strings.ToLower(pConfig.RedirectURI), "/"+strings.ToLower(name)) {
+			pConfig.RedirectURI = strings.TrimRight(pConfig.RedirectURI, "/") + "/" + strings.ToLower(name)
+		}
+	}
+
+	return pConfig
 }
 
 // loadCustomProvider loads a custom OAuth or OIDC provider from the database
@@ -712,6 +767,9 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		externalURL = config.CustomOAuth.ExternalURL
 	}
 	redirectURL := strings.TrimRight(externalURL, "/") + "/callback"
+	if config.External.UseDistinctRedirectURIs {
+		redirectURL = strings.TrimRight(externalURL, "/") + "/callback/" + identifier
+	}
 
 	// Parse scopes (space-separated per RFC 6749)
 	var scopeList []string
