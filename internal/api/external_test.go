@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 
 	"github.com/gofrs/uuid"
@@ -554,4 +555,84 @@ func (ts *ExternalTestSuite) TestPKCEFlowStateReuseRejected() {
 	ts.Require().NoError(err)
 	ts.Contains(errorQuery.Get("error_description"), "already been used",
 		"second callback with same state should be rejected as already used")
+}
+
+// startAfterUserCreatedHookServer points the after-user-created hook at a test
+// server and returns its invocation count.
+func startAfterUserCreatedHookServer(ts *ExternalTestSuite) (calls func() int, cleanup func()) {
+	var mu sync.Mutex
+	count := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		count++
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	}))
+
+	ts.Config.Hook.AfterUserCreated = conf.ExtensibilityPointConfiguration{
+		Enabled: true,
+		URI:     server.URL,
+	}
+
+	calls = func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return count
+	}
+	cleanup = func() {
+		server.Close()
+		ts.Config.Hook.AfterUserCreated = conf.ExtensibilityPointConfiguration{}
+	}
+
+	return calls, cleanup
+}
+
+// TestAfterUserCreatedHookOnlyFiresOnAccountCreation signs in twice with the same
+// GitHub account and asserts the hook fires only for the first sign-in.
+func (ts *ExternalTestSuite) TestAfterUserCreatedHookOnlyFiresOnAccountCreation() {
+	hookCalls, cleanup := startAfterUserCreatedHookServer(ts)
+	defer cleanup()
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
+	ts.Require().Equal(1, hookCalls())
+
+	// Signing in again resolves to models.AccountExists.
+	u = performAuthorization(ts, "github", code, "")
+	v, err := url.ParseQuery(u.Fragment)
+	ts.Require().NoError(err)
+	ts.Require().NotEmpty(v.Get("access_token"), "second sign-in should succeed")
+
+	ts.Require().Equal(1, hookCalls(), "hook must not fire again for a returning user")
+}
+
+// TestAfterUserCreatedHookNotFiredOnIdentityLinking signs in with GitHub as a user
+// who already has an email identity and asserts the hook does not fire.
+func (ts *ExternalTestSuite) TestAfterUserCreatedHookNotFiredOnIdentityLinking() {
+	hookCalls, cleanup := startAfterUserCreatedHookServer(ts)
+	defer cleanup()
+
+	// The existing email identity makes this resolve to models.LinkAccount.
+	_, err := ts.createUser("123", "github@example.com", "GitHub Test", "http://example.com/avatar", "")
+	ts.Require().NoError(err)
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
+
+	ts.Require().Equal(0, hookCalls(), "hook must not fire when an identity is linked to an existing user")
 }
