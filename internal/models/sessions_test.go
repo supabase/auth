@@ -57,6 +57,36 @@ func (ts *SessionsTestSuite) TestFindBySessionIDWithForUpdate() {
 	require.Equal(ts.T(), session.ID, found.ID)
 }
 
+func (ts *SessionsTestSuite) TestInvalidateSessionsWithAALLessThan() {
+	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	aal1Session, err := NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(aal1Session))
+
+	// Simulates a legacy session created before the aal column was backfilled.
+	legacySession := &Session{ID: uuid.Must(uuid.NewV4()), UserID: u.ID, AAL: nil}
+	require.NoError(ts.T(), ts.db.Create(legacySession))
+
+	aal2Session, err := NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	aal2Session.AAL = AAL2.PointerString()
+	require.NoError(ts.T(), ts.db.Create(aal2Session))
+
+	require.NoError(ts.T(), InvalidateSessionsWithAALLessThan(ts.db, u.ID, AAL2.String()))
+
+	_, err = FindSessionByID(ts.db, aal1Session.ID, false)
+	require.ErrorIs(ts.T(), err, SessionNotFoundError{})
+
+	_, err = FindSessionByID(ts.db, legacySession.ID, false)
+	require.ErrorIs(ts.T(), err, SessionNotFoundError{})
+
+	found, err := FindSessionByID(ts.db, aal2Session.ID, false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), aal2Session.ID, found.ID)
+}
+
 func (ts *SessionsTestSuite) TestInvalidateSessionsWithAALLessThan_PreservesOAuthSessions() {
 	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -85,6 +115,10 @@ func (ts *SessionsTestSuite) TestInvalidateSessionsWithAALLessThan_PreservesOAut
 	oauthSession.OAuthClientID = &client.ID
 	require.NoError(ts.T(), ts.db.Create(oauthSession))
 
+	// Legacy OAuth client session (AAL is nil, but oauth_client_id is set)
+	legacyOAuthSession := &Session{ID: uuid.Must(uuid.NewV4()), UserID: u.ID, AAL: nil, OAuthClientID: &client.ID}
+	require.NoError(ts.T(), ts.db.Create(legacyOAuthSession))
+
 	// Higher-assurance AAL2 session
 	aal2Session, err := NewSession(u.ID, nil)
 	require.NoError(ts.T(), err)
@@ -102,6 +136,11 @@ func (ts *SessionsTestSuite) TestInvalidateSessionsWithAALLessThan_PreservesOAut
 	foundOAuth, err := FindSessionByID(ts.db, oauthSession.ID, false)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), oauthSession.ID, foundOAuth.ID)
+
+	// Legacy OAuth client session must also be preserved
+	foundLegacyOAuth, err := FindSessionByID(ts.db, legacyOAuthSession.ID, false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), legacyOAuthSession.ID, foundLegacyOAuth.ID)
 
 	// AAL2 session must be preserved
 	foundAAL2, err := FindSessionByID(ts.db, aal2Session.ID, false)
