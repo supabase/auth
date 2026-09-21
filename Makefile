@@ -3,9 +3,9 @@
 CHECK_FILES ?= ./...
 
 ifdef RELEASE_VERSION
-	VERSION=v$(RELEASE_VERSION)
+	VERSION := v$(RELEASE_VERSION)
 else
-	VERSION=$(shell git describe --tags)
+	VERSION := $(shell git describe --tags 2>/dev/null)
 endif
 
 ifneq ($(shell docker compose version 2>/dev/null),)

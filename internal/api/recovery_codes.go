@@ -147,7 +147,7 @@ func (a *API) RecoveryCodesGenerate(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	// Recovery codes can never be the user's only second factor.
-	if !hasVerifiedNonRecoveryFactor(user.Factors, uuid.Nil) {
+	if !hasUsableNonRecoveryFactor(config, user.Factors, uuid.Nil) {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFARecoveryCodesSoleFactor, "At least one other verified factor is required to generate recovery codes")
 	}
 
