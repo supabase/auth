@@ -730,6 +730,9 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 			return terr
 		}
 		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
+			if mapped := mapMFASessionConflictError(terr); mapped != terr {
+				return mapped
+			}
 			return apierrors.NewInternalServerError("Failed to update sessions. %s", terr)
 		}
 		if terr = models.DeleteUnverifiedFactors(tx, user, factor.FactorType); terr != nil {
@@ -871,6 +874,9 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 			return terr
 		}
 		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
+			if mapped := mapMFASessionConflictError(terr); mapped != terr {
+				return mapped
+			}
 			return apierrors.NewInternalServerError("Failed to update sessions. %s", terr)
 		}
 		if terr = models.DeleteUnverifiedFactors(tx, user, factor.FactorType); terr != nil {
@@ -991,6 +997,9 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 			return terr
 		}
 		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
+			if mapped := mapMFASessionConflictError(terr); mapped != terr {
+				return mapped
+			}
 			return apierrors.NewInternalServerError("Failed to update session").WithInternalError(terr)
 		}
 		if terr = models.DeleteUnverifiedFactors(tx, user, models.WebAuthn); terr != nil {
