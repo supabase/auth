@@ -87,14 +87,20 @@ func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 	var avatarURL string
 	extension := "png"
 	if u.Avatar == "" {
-		if intDiscriminator, err := strconv.Atoi(u.Discriminator); err != nil {
-			return nil, err
-		} else {
-			// https://discord.com/developers/docs/reference#image-formatting-cdn-endpoints:
-			// In the case of the Default User Avatar endpoint, the value for
-			// user_discriminator in the path should be the user's discriminator modulo 5
-			avatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.%s", intDiscriminator%5, extension)
+		// https://discord.com/developers/docs/reference#image-formatting-cdn-endpoints
+		// Default user avatar index: users on the new username system have a
+		// discriminator of "0" and use (id >> 22) % 6; legacy users use
+		// discriminator % 5. A cosmetic default-avatar calculation must not fail
+		// sign-in, so fall back to index 0 when the value cannot be parsed.
+		var index uint64
+		if u.Discriminator == "0" || u.Discriminator == "" {
+			if id, err := strconv.ParseUint(u.ID, 10, 64); err == nil {
+				index = (id >> 22) % 6
+			}
+		} else if discriminator, err := strconv.Atoi(u.Discriminator); err == nil && discriminator >= 0 {
+			index = uint64(discriminator % 5)
 		}
+		avatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.%s", index, extension)
 	} else {
 		// https://discord.com/developers/docs/reference#image-formatting:
 		// "In the case of endpoints that support GIFs, the hash will begin with a_
