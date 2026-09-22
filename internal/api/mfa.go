@@ -1044,7 +1044,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return a.verifyTOTPFactor(w, r, params)
 	case models.WebAuthn:
 		if !config.MFA.WebAuthn.VerifyEnabled {
-			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFAWebAuthnEnrollDisabled, "MFA verification is disabled for WebAuthn")
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFAWebAuthnVerifyDisabled, "MFA verification is disabled for WebAuthn")
 		}
 		return a.verifyWebAuthnFactor(w, r, params)
 	default:
