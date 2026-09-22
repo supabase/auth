@@ -467,6 +467,68 @@ func (ts *VerifyTestSuite) TestExpiredRecoveryToken() {
 	assert.Equal(ts.T(), http.StatusSeeOther, w.Code, w.Body.String())
 }
 
+func (ts *VerifyTestSuite) TestPrepPKCERedirectURL() {
+	cases := []struct {
+		desc string
+		rurl string
+		code string
+		want string
+	}{
+		{
+			desc: "https url without query",
+			rurl: "https://example.com/callback",
+			code: "abc123",
+			want: "https://example.com/callback?code=abc123",
+		},
+		{
+			desc: "https url with existing query",
+			rurl: "https://example.com/callback?foo=bar",
+			code: "abc123",
+			want: "https://example.com/callback?code=abc123&foo=bar",
+		},
+		// url.Parse rejects an underscore in the scheme, so the code must be
+		// appended manually to keep the deep link working (#2447).
+		{
+			desc: "underscore custom scheme without query",
+			rurl: "com.my_cool_app.example://callback",
+			code: "abc123",
+			want: "com.my_cool_app.example://callback?code=abc123",
+		},
+		{
+			desc: "underscore custom scheme with existing query",
+			rurl: "com.my_cool_app.example://callback?foo=bar",
+			code: "abc123",
+			want: "com.my_cool_app.example://callback?foo=bar&code=abc123",
+		},
+		{
+			desc: "underscore custom scheme keeps code ahead of fragment",
+			rurl: "com.my_cool_app.example://callback#section",
+			code: "a b/c",
+			want: "com.my_cool_app.example://callback?code=a+b%2Fc#section",
+		},
+		{
+			desc: "underscore custom scheme overwrites an existing code param",
+			rurl: "com.my_cool_app.example://callback?code=attacker&foo=bar",
+			code: "server",
+			want: "com.my_cool_app.example://callback?foo=bar&code=server",
+		},
+		{
+			desc: "underscore custom scheme discards a malformed query",
+			rurl: "com.my_cool_app.example://callback?code=attacker&bad=%zz",
+			code: "server",
+			want: "com.my_cool_app.example://callback?code=server",
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			got, err := ts.API.prepPKCERedirectURL(c.rurl, c.code)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), c.want, got)
+		})
+	}
+}
+
 func (ts *VerifyTestSuite) TestVerifyPermitedCustomUri() {
 	// verify variant testing not necessary in this test as it's testing
 	// the redirect URL behavior, not the RecoveryToken behavior
