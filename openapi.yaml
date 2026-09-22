@@ -1470,6 +1470,466 @@ paths:
                   value:
                     error_code: mfa_recovery_codes_enroll_not_enabled
 
+  /passkeys/authentication/options:
+    post:
+      summary: Begin signing in with a passkey.
+      description: >
+        Starts a discoverable-credential (passkey) sign-in ceremony. Returns `PublicKeyCredentialRequestOptions` to pass to `navigator.credentials.get()` together with a `challenge_id` that must be sent back to `POST /passkeys/authentication/verify`. No user identifier is supplied and `allowCredentials` is left empty; the authenticator picks the account from the passkeys it holds for this Relying Party. The challenge is single-use and expires after `GOTRUE_WEBAUTHN_CHALLENGE_EXPIRY_DURATION` (5 minutes by default). Requires `GOTRUE_PASSKEY_ENABLED=true` on the server.
+      tags:
+        - auth
+      security:
+        - APIKeyAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                gotrue_meta_security:
+                  $ref: "#/components/schemas/GoTrueSecurity"
+      responses:
+        200:
+          description: >
+            A new authentication challenge was created. Pass `options` to `navigator.credentials.get({ publicKey: options })` and send the resulting credential to `POST /passkeys/authentication/verify` before `expires_at`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeyAuthenticationOptionsResponse"
+        400:
+          description: Bad request. CAPTCHA verification was not successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: captcha_failed
+                  value:
+                    error_code: captcha_failed
+        404:
+          description: Passkeys are disabled on the server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: passkey_disabled
+                  value:
+                    error_code: passkey_disabled
+        429:
+          $ref: "#/components/responses/RateLimitResponse"
+
+  /passkeys/authentication/verify:
+    post:
+      summary: Complete signing in with a passkey.
+      description: >
+        Verifies the assertion produced by `navigator.credentials.get()` against the challenge created by `POST /passkeys/authentication/options` and, on success, issues access and refresh tokens for the user who owns the passkey. The issued access token has an `amr` claim that includes `passkey`.
+      tags:
+        - auth
+      security:
+        - APIKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - challenge_id
+                - credential
+              properties:
+                challenge_id:
+                  type: string
+                  format: uuid
+                  description: The `challenge_id` returned by `POST /passkeys/authentication/options`.
+                credential:
+                  $ref: "#/components/schemas/CredentialAssertionResponse"
+      responses:
+        200:
+          description: The passkey was verified and the user is signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessTokenResponseSchema"
+        400:
+          description: >
+            Bad request. The body could not be parsed (`bad_json`); `challenge_id` or `credential` is missing or `challenge_id` is not a UUID (`validation_failed`); the challenge does not exist or was already used (`webauthn_challenge_not_found`); the challenge has expired (`webauthn_challenge_expired`); or the assertion failed verification, including an unknown credential, a user with no passkeys, a bad signature or a mismatched origin or Relying Party (`webauthn_verification_failed`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: bad_json
+                  value:
+                    error_code: bad_json
+                example1:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                example2:
+                  summary: webauthn_challenge_not_found
+                  value:
+                    error_code: webauthn_challenge_not_found
+                example3:
+                  summary: webauthn_challenge_expired
+                  value:
+                    error_code: webauthn_challenge_expired
+                example4:
+                  summary: webauthn_verification_failed
+                  value:
+                    error_code: webauthn_verification_failed
+        403:
+          description: Forbidden error. The user's email or phone number is not confirmed, or the user is banned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: email_not_confirmed
+                  value:
+                    error_code: email_not_confirmed
+                example1:
+                  summary: phone_not_confirmed
+                  value:
+                    error_code: phone_not_confirmed
+                example2:
+                  summary: user_banned
+                  value:
+                    error_code: user_banned
+        404:
+          description: Passkeys are disabled on the server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: passkey_disabled
+                  value:
+                    error_code: passkey_disabled
+
+  /passkeys/registration/options:
+    post:
+      summary: Begin registering a new passkey for the current user.
+      description: >
+        Starts a WebAuthn registration ceremony that adds a passkey to the authenticated user's account. Returns `PublicKeyCredentialCreationOptions` to pass to `navigator.credentials.create()` together with a `challenge_id` that must be sent back to `POST /passkeys/registration/verify`. The options request a discoverable (resident) credential with user verification preferred and no attestation, and list the user's existing passkeys in `excludeCredentials`. Anonymous users and SSO users cannot register passkeys. When the user has a verified MFA factor the session must be at AAL2. The challenge is single-use and expires after `GOTRUE_WEBAUTHN_CHALLENGE_EXPIRY_DURATION` (5 minutes by default). Requires `GOTRUE_PASSKEY_ENABLED=true` on the server. No request body is needed.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      responses:
+        200:
+          description: >
+            A new registration challenge was created. Pass `options` to `navigator.credentials.create({ publicKey: options })` and send the resulting credential to `POST /passkeys/registration/verify` before `expires_at`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeyRegistrationOptionsResponse"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          description: Forbidden error. Anonymous users cannot register passkeys; an AAL2 session is required when the user has MFA enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: no_authorization
+                  value:
+                    error_code: no_authorization
+                example1:
+                  summary: insufficient_aal
+                  value:
+                    error_code: insufficient_aal
+        404:
+          description: Passkeys are disabled on the server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: passkey_disabled
+                  value:
+                    error_code: passkey_disabled
+        422:
+          description: >
+            Unprocessable entity. SSO users cannot register passkeys (`validation_failed`), or the user has reached the maximum number of passkeys set by `GOTRUE_PASSKEY_MAX_PASSKEYS_PER_USER`, 10 by default (`too_many_passkeys`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                example1:
+                  summary: too_many_passkeys
+                  value:
+                    error_code: too_many_passkeys
+
+  /passkeys/registration/verify:
+    post:
+      summary: Complete registering a new passkey for the current user.
+      description: >
+        Verifies the attestation produced by `navigator.credentials.create()` against the challenge created by `POST /passkeys/registration/options` and stores the new passkey on the authenticated user's account. The challenge must have been created for the same user and is consumed on the first verification attempt, whether or not it succeeds. A `friendly_name` is derived from the authenticator's AAGUID when it is known; use `PATCH /passkeys/{passkeyId}` to change it. Has the same access requirements as `POST /passkeys/registration/options`.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - challenge_id
+                - credential
+              properties:
+                challenge_id:
+                  type: string
+                  format: uuid
+                  description: The `challenge_id` returned by `POST /passkeys/registration/options`.
+                credential:
+                  $ref: "#/components/schemas/CredentialCreationResponse"
+      responses:
+        200:
+          description: The passkey was created. `last_used_at` is absent until the passkey is first used to sign in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeySchema"
+        400:
+          description: >
+            Bad request. The body could not be parsed (`bad_json`); `challenge_id` or `credential` is missing or `challenge_id` is not a UUID (`validation_failed`); the challenge does not exist, was already used or was created for a different user (`webauthn_challenge_not_found`); the challenge has expired (`webauthn_challenge_expired`); or the attestation failed verification (`webauthn_verification_failed`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: bad_json
+                  value:
+                    error_code: bad_json
+                example1:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                example2:
+                  summary: webauthn_challenge_not_found
+                  value:
+                    error_code: webauthn_challenge_not_found
+                example3:
+                  summary: webauthn_challenge_expired
+                  value:
+                    error_code: webauthn_challenge_expired
+                example4:
+                  summary: webauthn_verification_failed
+                  value:
+                    error_code: webauthn_verification_failed
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          description: Forbidden error. Anonymous users cannot register passkeys; an AAL2 session is required when the user has MFA enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: no_authorization
+                  value:
+                    error_code: no_authorization
+                example1:
+                  summary: insufficient_aal
+                  value:
+                    error_code: insufficient_aal
+        404:
+          description: Passkeys are disabled on the server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: passkey_disabled
+                  value:
+                    error_code: passkey_disabled
+        422:
+          description: >
+            Unprocessable entity. SSO users cannot register passkeys (`validation_failed`), the user has reached the maximum number of passkeys (`too_many_passkeys`), or this credential is already registered (`webauthn_credential_exists`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                example1:
+                  summary: too_many_passkeys
+                  value:
+                    error_code: too_many_passkeys
+                example2:
+                  summary: webauthn_credential_exists
+                  value:
+                    error_code: webauthn_credential_exists
+
+  /passkeys:
+    get:
+      summary: List the current user's passkeys.
+      description: >
+        Returns the authenticated user's passkeys. Credential IDs and public keys are never returned. Requires `GOTRUE_PASSKEY_ENABLED=true` on the server.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      responses:
+        200:
+          description: The user's passkeys. An empty array when the user has none.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PasskeySchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        404:
+          description: Passkeys are disabled on the server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: passkey_disabled
+                  value:
+                    error_code: passkey_disabled
+
+  /passkeys/{passkeyId}:
+    parameters:
+      - name: passkeyId
+        in: path
+        required: true
+        example: 2b306a77-21dc-4110-ba71-537cb56b9e98
+        schema:
+          type: string
+          format: uuid
+    patch:
+      summary: Rename one of the current user's passkeys.
+      description: >
+        Updates the `friendly_name` of a passkey owned by the authenticated user. Requires `GOTRUE_PASSKEY_ENABLED=true` on the server.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - friendly_name
+              properties:
+                friendly_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                  example: My MacBook
+      responses:
+        200:
+          description: The updated passkey.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeySchema"
+        400:
+          description: Bad request. The body could not be parsed, or `friendly_name` is missing, empty or longer than 120 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: bad_json
+                  value:
+                    error_code: bad_json
+                example1:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        404:
+          description: Passkeys are disabled on the server (`passkey_disabled`), or the current user has no passkey with this ID (`validation_failed`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: passkey_disabled
+                  value:
+                    error_code: passkey_disabled
+                example1:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+    delete:
+      summary: Remove one of the current user's passkeys.
+      description: >
+        Deletes a passkey owned by the authenticated user. When the user has a verified MFA factor the session must be at AAL2. Requires `GOTRUE_PASSKEY_ENABLED=true` on the server.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      responses:
+        204:
+          description: The passkey was deleted.
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          description: Forbidden error. An AAL2 session is required when the user has MFA enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: insufficient_aal
+                  value:
+                    error_code: insufficient_aal
+        404:
+          description: Passkeys are disabled on the server (`passkey_disabled`), or the current user has no passkey with this ID (`validation_failed`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: passkey_disabled
+                  value:
+                    error_code: passkey_disabled
+                example1:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+
   /callback:
     get:
       summary: Redirects OAuth flow errors to the frontend app.
@@ -2075,6 +2535,80 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: There is no such user and/or factor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+
+  /admin/users/{userId}/passkeys:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: List all of the passkeys for a user.
+      description: >
+        Returns the user's passkeys ordered by creation time, oldest first. Credential IDs and public keys are never returned.
+      tags:
+        - admin
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        200:
+          description: User's passkeys.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PasskeySchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+        404:
+          description: There is no such user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+
+  /admin/users/{userId}/passkeys/{passkeyId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: passkeyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      summary: Remove a user's passkey.
+      description: >
+        Deletes the passkey.
+      tags:
+        - admin
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        204:
+          description: The passkey was deleted.
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+        404:
+          description: There is no such user and/or passkey.
           content:
             application/json:
               schema:
@@ -3439,6 +3973,10 @@ paths:
                     type: boolean
                     example: true
                     description: Whether SAML is enabled on this API server. Defaults to false.
+                  passkeys_enabled:
+                    type: boolean
+                    example: false
+                    description: Whether passkey sign-in and registration (the `/passkeys` endpoints) are enabled on this API server. Defaults to false.
                   external:
                     type: object
                     description: Which external identity providers are enabled.
@@ -4041,6 +4579,172 @@ components:
           items:
             type: string
             enum: [usb, nfc, ble, internal, hybrid]
+
+    PasskeySchema:
+      type: object
+      description: Represents a passkey (a discoverable WebAuthn credential) registered on a user's account. The credential ID and public key are never returned.
+      required:
+        - id
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 2b306a77-21dc-4110-ba71-537cb56b9e98
+        friendly_name:
+          type: string
+          description: Human-readable name of the passkey. Derived from the authenticator's AAGUID at registration when it is known, otherwise absent until set with `PATCH /passkeys/{passkeyId}`.
+          example: iCloud Keychain
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          description: When the passkey was last used to sign in. Absent if it has never been used.
+
+    PasskeyAuthenticationOptionsResponse:
+      type: object
+      required:
+        - challenge_id
+        - options
+        - expires_at
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+          example: 14c1560e-2749-4522-bb62-d1458451830a
+          description: ID of the challenge. Send it back in `POST /passkeys/authentication/verify`.
+        options:
+          $ref: "#/components/schemas/CredentialRequestOptions"
+        expires_at:
+          type: integer
+          example: 1674840917
+          description: UNIX seconds of the timestamp past which the challenge can no longer be verified.
+
+    PasskeyRegistrationOptionsResponse:
+      type: object
+      required:
+        - challenge_id
+        - options
+        - expires_at
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+          example: 14c1560e-2749-4522-bb62-d1458451830a
+          description: ID of the challenge. Send it back in `POST /passkeys/registration/verify`.
+        options:
+          $ref: "#/components/schemas/CredentialCreationOptions"
+        expires_at:
+          type: integer
+          example: 1674840917
+          description: UNIX seconds of the timestamp past which the challenge can no longer be verified.
+
+    CredentialCreationResponse:
+      type: object
+      description: >
+        JSON serialization of the `PublicKeyCredential` returned by `navigator.credentials.create()`, as produced by `PublicKeyCredential.toJSON()` or a library such as `@simplewebauthn/browser`. Binary fields are base64url encoded.
+      required:
+        - id
+        - rawId
+        - type
+        - response
+      properties:
+        id:
+          type: string
+          format: base64url
+          description: Credential ID.
+        rawId:
+          type: string
+          format: base64url
+          description: Credential ID. The same value as `id`.
+        type:
+          type: string
+          enum: [public-key]
+        authenticatorAttachment:
+          type: string
+          enum: [platform, cross-platform]
+        clientExtensionResults:
+          type: object
+          description: Results of any client extensions that were requested.
+        response:
+          type: object
+          description: The `AuthenticatorAttestationResponse` produced by the authenticator.
+          required:
+            - clientDataJSON
+            - attestationObject
+          properties:
+            clientDataJSON:
+              type: string
+              format: base64url
+            attestationObject:
+              type: string
+              format: base64url
+            transports:
+              type: array
+              description: Transports the authenticator reports supporting.
+              items:
+                type: string
+            authenticatorData:
+              type: string
+              format: base64url
+            publicKey:
+              type: string
+              format: base64url
+            publicKeyAlgorithm:
+              type: integer
+              description: COSE algorithm identifier of the credential public key.
+
+    CredentialAssertionResponse:
+      type: object
+      description: >
+        JSON serialization of the `PublicKeyCredential` returned by `navigator.credentials.get()`, as produced by `PublicKeyCredential.toJSON()`. Binary fields are base64url encoded.
+      required:
+        - id
+        - rawId
+        - type
+        - response
+      properties:
+        id:
+          type: string
+          format: base64url
+          description: Credential ID.
+        rawId:
+          type: string
+          format: base64url
+          description: Credential ID. The same value as `id`.
+        type:
+          type: string
+          enum: [public-key]
+        authenticatorAttachment:
+          type: string
+          enum: [platform, cross-platform]
+        clientExtensionResults:
+          type: object
+          description: Results of any client extensions that were requested.
+        response:
+          type: object
+          description: The `AuthenticatorAssertionResponse` produced by the authenticator.
+          required:
+            - clientDataJSON
+            - authenticatorData
+            - signature
+            - userHandle
+          properties:
+            clientDataJSON:
+              type: string
+              format: base64url
+            authenticatorData:
+              type: string
+              format: base64url
+            signature:
+              type: string
+              format: base64url
+            userHandle:
+              type: string
+              format: base64url
+              description: The user handle stored in the passkey. Identifies the account to sign in to; passkeys created by this server always include it.
 
     OAuthClientSchema:
       type: object

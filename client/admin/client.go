@@ -547,6 +547,22 @@ type OAuthClientSchemaResponseTypes string
 // OAuthClientSchemaTokenEndpointAuthMethod Authentication method for the token endpoint
 type OAuthClientSchemaTokenEndpointAuthMethod string
 
+// PasskeySchema Represents a passkey (a discoverable WebAuthn credential) registered on a user's account. The credential ID and public key are never returned.
+type PasskeySchema struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// FriendlyName Human-readable name of the passkey. Derived from the authenticator's AAGUID at registration when it is known, otherwise absent until set with `PATCH /passkeys/{passkeyId}`.
+	//
+	// Example: iCloud Keychain
+	FriendlyName *string `json:"friendly_name,omitempty"`
+
+	// Id Example: 2b306a77-21dc-4110-ba71-537cb56b9e98
+	Id openapi_types.UUID `json:"id"`
+
+	// LastUsedAt When the passkey was last used to sign in. Absent if it has never been used.
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+}
+
 // SAMLAttributeMappingSchema defines model for SAMLAttributeMappingSchema.
 type SAMLAttributeMappingSchema struct {
 	Keys *map[string]interface{} `json:"keys,omitempty"`
@@ -1372,6 +1388,20 @@ type ClientInterface interface {
 	// Corresponds with PUT /admin/users/{userId}/factors/{factorId} (the `PutAdminUsersUserIdFactorsFactorId` operationId).
 	PutAdminUsersUserIdFactorsFactorId(ctx context.Context, userId openapi_types.UUID, factorId openapi_types.UUID, body PutAdminUsersUserIdFactorsFactorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAdminUsersUserIdPasskeys List all of the passkeys for a user.
+	//
+	// Returns the user's passkeys ordered by creation time, oldest first. Credential IDs and public keys are never returned.
+	//
+	// Corresponds with GET /admin/users/{userId}/passkeys (the `GetAdminUsersUserIdPasskeys` operationId).
+	GetAdminUsersUserIdPasskeys(ctx context.Context, userId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteAdminUsersUserIdPasskeysPasskeyId Remove a user's passkey.
+	//
+	// Deletes the passkey.
+	//
+	// Corresponds with DELETE /admin/users/{userId}/passkeys/{passkeyId} (the `DeleteAdminUsersUserIdPasskeysPasskeyId` operationId).
+	DeleteAdminUsersUserIdPasskeysPasskeyId(ctx context.Context, userId openapi_types.UUID, passkeyId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostInviteWithBody Invite a user by email.
 	//
 	// Sends an invitation email which contains a link that allows the user to sign-in.
@@ -1961,6 +1991,40 @@ func (c *Client) PutAdminUsersUserIdFactorsFactorIdWithBody(ctx context.Context,
 // Corresponds with PUT /admin/users/{userId}/factors/{factorId} (the `PutAdminUsersUserIdFactorsFactorId` operationId).
 func (c *Client) PutAdminUsersUserIdFactorsFactorId(ctx context.Context, userId openapi_types.UUID, factorId openapi_types.UUID, body PutAdminUsersUserIdFactorsFactorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutAdminUsersUserIdFactorsFactorIdRequest(c.Server, userId, factorId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAdminUsersUserIdPasskeys List all of the passkeys for a user.
+//
+// Returns the user's passkeys ordered by creation time, oldest first. Credential IDs and public keys are never returned.
+//
+// Corresponds with GET /admin/users/{userId}/passkeys (the `GetAdminUsersUserIdPasskeys` operationId).
+func (c *Client) GetAdminUsersUserIdPasskeys(ctx context.Context, userId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminUsersUserIdPasskeysRequest(c.Server, userId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteAdminUsersUserIdPasskeysPasskeyId Remove a user's passkey.
+//
+// Deletes the passkey.
+//
+// Corresponds with DELETE /admin/users/{userId}/passkeys/{passkeyId} (the `DeleteAdminUsersUserIdPasskeysPasskeyId` operationId).
+func (c *Client) DeleteAdminUsersUserIdPasskeysPasskeyId(ctx context.Context, userId openapi_types.UUID, passkeyId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteAdminUsersUserIdPasskeysPasskeyIdRequest(c.Server, userId, passkeyId)
 	if err != nil {
 		return nil, err
 	}
@@ -3071,6 +3135,81 @@ func NewPutAdminUsersUserIdFactorsFactorIdRequestWithBody(server string, userId 
 	return req, nil
 }
 
+// NewGetAdminUsersUserIdPasskeysRequest constructs an http.Request for the GetAdminUsersUserIdPasskeys method
+func NewGetAdminUsersUserIdPasskeysRequest(server string, userId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "userId", userId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/users/%s/passkeys", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDeleteAdminUsersUserIdPasskeysPasskeyIdRequest constructs an http.Request for the DeleteAdminUsersUserIdPasskeysPasskeyId method
+func NewDeleteAdminUsersUserIdPasskeysPasskeyIdRequest(server string, userId openapi_types.UUID, passkeyId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "userId", userId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "passkeyId", passkeyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/admin/users/%s/passkeys/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPostInviteRequest calls the generic PostInvite builder with application/json body
 func NewPostInviteRequest(server string, body PostInviteJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -3426,6 +3565,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /admin/users/{userId}/factors/{factorId} (the `PutAdminUsersUserIdFactorsFactorId` operationId).
 	PutAdminUsersUserIdFactorsFactorIdWithResponse(ctx context.Context, userId openapi_types.UUID, factorId openapi_types.UUID, body PutAdminUsersUserIdFactorsFactorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAdminUsersUserIdFactorsFactorIdResponse, error)
+
+	// GetAdminUsersUserIdPasskeysWithResponse List all of the passkeys for a user.
+	//
+	// Returns the user's passkeys ordered by creation time, oldest first. Credential IDs and public keys are never returned.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /admin/users/{userId}/passkeys (the `GetAdminUsersUserIdPasskeys` operationId).
+	GetAdminUsersUserIdPasskeysWithResponse(ctx context.Context, userId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAdminUsersUserIdPasskeysResponse, error)
+
+	// DeleteAdminUsersUserIdPasskeysPasskeyIdWithResponse Remove a user's passkey.
+	//
+	// Deletes the passkey.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /admin/users/{userId}/passkeys/{passkeyId} (the `DeleteAdminUsersUserIdPasskeysPasskeyId` operationId).
+	DeleteAdminUsersUserIdPasskeysPasskeyIdWithResponse(ctx context.Context, userId openapi_types.UUID, passkeyId openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteAdminUsersUserIdPasskeysPasskeyIdResponse, error)
 
 	// PostInviteWithBodyWithResponse Invite a user by email.
 	//
@@ -5120,6 +5277,123 @@ func (r PutAdminUsersUserIdFactorsFactorIdResponse) ContentType() string {
 	return ""
 }
 
+type GetAdminUsersUserIdPasskeysResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]PasskeySchema
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *UnauthorizedResponse
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *ForbiddenResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *ErrorSchema
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAdminUsersUserIdPasskeysResponse) GetJSON200() *[]PasskeySchema {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetAdminUsersUserIdPasskeysResponse) GetJSON401() *UnauthorizedResponse {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetAdminUsersUserIdPasskeysResponse) GetJSON403() *ForbiddenResponse {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetAdminUsersUserIdPasskeysResponse) GetJSON404() *ErrorSchema {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAdminUsersUserIdPasskeysResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminUsersUserIdPasskeysResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminUsersUserIdPasskeysResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAdminUsersUserIdPasskeysResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteAdminUsersUserIdPasskeysPasskeyIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *UnauthorizedResponse
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *ForbiddenResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *ErrorSchema
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r DeleteAdminUsersUserIdPasskeysPasskeyIdResponse) GetJSON401() *UnauthorizedResponse {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r DeleteAdminUsersUserIdPasskeysPasskeyIdResponse) GetJSON403() *ForbiddenResponse {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r DeleteAdminUsersUserIdPasskeysPasskeyIdResponse) GetJSON404() *ErrorSchema {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteAdminUsersUserIdPasskeysPasskeyIdResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteAdminUsersUserIdPasskeysPasskeyIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteAdminUsersUserIdPasskeysPasskeyIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteAdminUsersUserIdPasskeysPasskeyIdResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type PostInviteResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5649,6 +5923,36 @@ func (c *ClientWithResponses) PutAdminUsersUserIdFactorsFactorIdWithResponse(ctx
 		return nil, err
 	}
 	return ParsePutAdminUsersUserIdFactorsFactorIdResponse(rsp)
+}
+
+// GetAdminUsersUserIdPasskeysWithResponse List all of the passkeys for a user.
+//
+// Returns the user's passkeys ordered by creation time, oldest first. Credential IDs and public keys are never returned.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /admin/users/{userId}/passkeys (the `GetAdminUsersUserIdPasskeys` operationId).
+func (c *ClientWithResponses) GetAdminUsersUserIdPasskeysWithResponse(ctx context.Context, userId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAdminUsersUserIdPasskeysResponse, error) {
+	rsp, err := c.GetAdminUsersUserIdPasskeys(ctx, userId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminUsersUserIdPasskeysResponse(rsp)
+}
+
+// DeleteAdminUsersUserIdPasskeysPasskeyIdWithResponse Remove a user's passkey.
+//
+// Deletes the passkey.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /admin/users/{userId}/passkeys/{passkeyId} (the `DeleteAdminUsersUserIdPasskeysPasskeyId` operationId).
+func (c *ClientWithResponses) DeleteAdminUsersUserIdPasskeysPasskeyIdWithResponse(ctx context.Context, userId openapi_types.UUID, passkeyId openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteAdminUsersUserIdPasskeysPasskeyIdResponse, error) {
+	rsp, err := c.DeleteAdminUsersUserIdPasskeysPasskeyId(ctx, userId, passkeyId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteAdminUsersUserIdPasskeysPasskeyIdResponse(rsp)
 }
 
 // PostInviteWithBodyWithResponse Invite a user by email.
@@ -6897,6 +7201,96 @@ func ParsePutAdminUsersUserIdFactorsFactorIdResponse(rsp *http.Response) (*PutAd
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAdminUsersUserIdPasskeysResponse parses an HTTP response from a GetAdminUsersUserIdPasskeysWithResponse call
+func ParseGetAdminUsersUserIdPasskeysResponse(rsp *http.Response) (*GetAdminUsersUserIdPasskeysResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminUsersUserIdPasskeysResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []PasskeySchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest UnauthorizedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorSchema
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteAdminUsersUserIdPasskeysPasskeyIdResponse parses an HTTP response from a DeleteAdminUsersUserIdPasskeysPasskeyIdWithResponse call
+func ParseDeleteAdminUsersUserIdPasskeysPasskeyIdResponse(rsp *http.Response) (*DeleteAdminUsersUserIdPasskeysPasskeyIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteAdminUsersUserIdPasskeysPasskeyIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest UnauthorizedResponse
