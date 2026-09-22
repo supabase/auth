@@ -59,8 +59,12 @@ func NewIdentity(user *User, provider string, identityData map[string]interface{
 		Provider:     provider,
 		LastSignInAt: &now,
 	}
-	if email, ok := identityData["email"]; ok {
-		identity.Email = storage.NullString(email.(string))
+	// identityData may originate from user-supplied metadata (e.g. the
+	// signup `data` field), so the email may be absent or a non-string
+	// value. Only set the email when it is actually a string to avoid a
+	// panic from an unchecked type assertion.
+	if email, ok := identityData["email"].(string); ok {
+		identity.Email = storage.NullString(email)
 	}
 
 	return identity, nil
@@ -71,8 +75,8 @@ func (i *Identity) BeforeCreate(tx *pop.Connection) error {
 }
 
 func (i *Identity) BeforeUpdate(tx *pop.Connection) error {
-	if _, ok := i.IdentityData["email"]; ok {
-		i.IdentityData["email"] = strings.ToLower(i.IdentityData["email"].(string))
+	if email, ok := i.IdentityData["email"].(string); ok {
+		i.IdentityData["email"] = strings.ToLower(email)
 	}
 	return nil
 }
