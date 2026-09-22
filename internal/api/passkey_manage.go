@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
@@ -74,7 +75,7 @@ func (a *API) PasskeyUpdate(w http.ResponseWriter, r *http.Request) error {
 	if params.FriendlyName == "" {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "friendly_name is required")
 	}
-	if len(params.FriendlyName) > 120 {
+	if utf8.RuneCountInString(params.FriendlyName) > 120 {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "friendly_name must be 120 characters or less")
 	}
 
