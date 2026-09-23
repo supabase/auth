@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	scimCore "github.com/supabase/auth/internal/api/scim/core"
-	scimProtocol "github.com/supabase/auth/internal/api/scim/protocol"
+	scimCore "github.com/supabase-community/scim-go/pkg/core"
+	scimProtocol "github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/storage"
 )

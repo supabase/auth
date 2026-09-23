@@ -4,8 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/supabase/auth/internal/api/scim/core"
-	"github.com/supabase/auth/internal/api/scim/protocol"
+	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/conf"
 )
 
@@ -16,11 +17,10 @@ type Server struct {
 }
 
 func NewServer(config *conf.GlobalConfiguration) *Server {
+	serviceProviderConfig := core.NewServiceProviderConfig().Authentication(core.NewOAuthBearerToken().AsPrimary())
+	serviceProviderConfig.Meta.Location = strings.TrimRight(config.API.ExternalURL, "/") + BasePath + "/ServiceProviderConfig"
 	return &Server{
-		serviceProviderConfig: core.NewServiceProviderConfig(
-			strings.TrimRight(config.API.ExternalURL, "/")+BasePath,
-			core.NewOAuthBearerToken().AsPrimary(),
-		),
+		serviceProviderConfig: serviceProviderConfig,
 	}
 }
 
@@ -37,12 +37,12 @@ func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
-	return protocol.SendError(w, http.StatusNotFound, "", "Endpoint or resource does not exist")
+	return protocol.SendError(w, scimerrors.ErrNotFound("Endpoint or resource does not exist"))
 }
 
 func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
 	if r.URL.Query().Has("filter") {
-		return protocol.SendError(w, http.StatusForbidden, "", "Filtering is not supported on this endpoint")
+		return protocol.SendError(w, scimerrors.ErrForbidden("Filtering is not supported on this endpoint"))
 	}
-	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(resources))
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(resources), resources))
 }

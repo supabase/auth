@@ -98,6 +98,7 @@ require (
 	github.com/speakeasy-api/openapi v1.24.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
+	github.com/supabase-community/scim-go v0.5.1-0.20260923174142-197b654ebc7c // indirect
 	github.com/supranational/blst v0.3.16-0.20250831170142-f48500c1fdbe // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
