@@ -130,27 +130,20 @@ func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
 }
 
 func (p *CreateSSOProviderParams) metadata(ctx context.Context) ([]byte, *saml.EntityDescriptor, error) {
-	var rawMetadata []byte
-	var err error
-
-	if p.MetadataXML != "" {
-		rawMetadata = []byte(p.MetadataXML)
-	} else if p.MetadataURL != "" {
-		rawMetadata, err = fetchSAMLMetadata(ctx, p.MetadataURL)
+	switch {
+	case p.MetadataXML != "":
+		rawMetadata := []byte(p.MetadataXML)
+		parsedMetadata, err := parseSAMLMetadata(rawMetadata)
 		if err != nil {
 			return nil, nil, err
 		}
-	} else {
+		return rawMetadata, parsedMetadata, nil
+	case p.MetadataURL != "":
+		return getSAMLMetadata(ctx, p.MetadataURL)
+	default:
 		// impossible situation if you called validate() prior
 		return nil, nil, nil
 	}
-
-	metadata, err := parseSAMLMetadata(rawMetadata)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return rawMetadata, metadata, nil
 }
 
 func parseSAMLMetadata(rawMetadata []byte) (*saml.EntityDescriptor, error) {
@@ -205,6 +198,19 @@ func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+func getSAMLMetadata(ctx context.Context, url string) ([]byte, *saml.EntityDescriptor, error) {
+	data, err := fetchSAMLMetadata(ctx, url)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	md, err := parseSAMLMetadata(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	return data, md, nil
 }
 
 // adminSSOProvidersCreate creates a new SAML Identity Provider in the system.
