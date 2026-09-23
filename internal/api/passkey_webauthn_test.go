@@ -190,3 +190,59 @@ func (ts *PasskeyWebAuthnTestSuite) TestWebAuthnUserWithCredentials() {
 	ts.True(webauthnCreds[1].Flags.BackupEligible)
 	ts.True(webauthnCreds[1].Flags.BackupState)
 }
+
+func (ts *PasskeyWebAuthnTestSuite) TestWebAuthnUserWithAssertionAlignsBackupEligible() {
+	user := &models.User{
+		ID: uuid.Must(uuid.NewV4()),
+	}
+	user.Email = "user@example.com"
+
+	credID := []byte("cred-be-flip")
+	creds := []*models.WebAuthnCredential{
+		{
+			ID:              uuid.Must(uuid.NewV4()),
+			UserID:          user.ID,
+			CredentialID:    credID,
+			PublicKey:       []byte("pk-1"),
+			AttestationType: "none",
+			SignCount:       0,
+			BackupEligible:  false,
+			BackedUp:        false,
+		},
+	}
+
+	assertion := &protocol.ParsedCredentialAssertionData{
+		ParsedPublicKeyCredential: protocol.ParsedPublicKeyCredential{
+			RawID: credID,
+		},
+		Response: protocol.ParsedAssertionResponse{
+			AuthenticatorData: protocol.AuthenticatorData{
+				Flags: protocol.FlagBackupEligible, // BE = true
+			},
+		},
+	}
+
+	wu := newWebAuthnUserWithAssertion(user, creds, assertion)
+	webauthnCreds := wu.WebAuthnCredentials()
+	ts.Require().Len(webauthnCreds, 1)
+
+	// Verify that BackupEligible is updated to true matching assertion
+	ts.True(webauthnCreds[0].Flags.BackupEligible)
+
+	// Non-matching assertion leaves BackupEligible unchanged
+	otherAssertion := &protocol.ParsedCredentialAssertionData{
+		ParsedPublicKeyCredential: protocol.ParsedPublicKeyCredential{
+			RawID: []byte("other-cred-id"),
+		},
+		Response: protocol.ParsedAssertionResponse{
+			AuthenticatorData: protocol.AuthenticatorData{
+				Flags: protocol.FlagBackupEligible,
+			},
+		},
+	}
+
+	wuOther := newWebAuthnUserWithAssertion(user, creds, otherAssertion)
+	webauthnCredsOther := wuOther.WebAuthnCredentials()
+	ts.Require().Len(webauthnCredsOther, 1)
+	ts.False(webauthnCredsOther[0].Flags.BackupEligible)
+}
