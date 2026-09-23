@@ -98,7 +98,6 @@ require (
 	github.com/speakeasy-api/openapi v1.24.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
-	github.com/supabase-community/scim-go v0.5.1-0.20260923212102-1e8ff08a7bf6 // indirect
 	github.com/supranational/blst v0.3.16-0.20250831170142-f48500c1fdbe // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
@@ -164,6 +163,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20240303152453-e0e82adf1721
 	github.com/stretchr/testify v1.12.1
+	github.com/supabase-community/scim-go v0.5.1-0.20260923224747-a303208562e4
 	github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.64.0

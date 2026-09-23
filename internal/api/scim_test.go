@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,7 @@ const (
 	scimServiceProviderConfigPath = "/scim/v2/ServiceProviderConfig"
 	scimResourceTypesPath         = "/scim/v2/ResourceTypes"
 	scimSchemasPath               = "/scim/v2/Schemas"
+	scimUsersPath                 = "/scim/v2/Users"
 )
 
 var scimPaths = []string{
@@ -100,6 +102,31 @@ func TestSCIM(t *testing.T) {
 			})
 		}
 
+		t.Run("Every route is served by the SCIM server", func(t *testing.T) {
+			for _, tc := range []struct{ method, path string }{
+				{http.MethodGet, scimServiceProviderConfigPath},
+				{http.MethodGet, scimResourceTypesPath},
+				{http.MethodGet, scimResourceTypesPath + "/User"},
+				{http.MethodGet, scimSchemasPath},
+				{http.MethodGet, scimSchemasPath + "/" + string(scimCore.SchemaUser)},
+				{http.MethodGet, scimUsersPath},
+				{http.MethodPost, scimUsersPath},
+				{http.MethodGet, scimUsersPath + "/missing"},
+				{http.MethodPut, scimUsersPath + "/missing"},
+				{http.MethodPatch, scimUsersPath + "/missing"},
+				{http.MethodDelete, scimUsersPath + "/missing"},
+			} {
+				t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+					r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
+					w := httptest.NewRecorder()
+
+					api.handler.ServeHTTP(w, r)
+
+					require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"), w.Body.String())
+				})
+			}
+		})
+
 		t.Run("Returns a SCIM 404 for an unknown endpoint", func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Unknown", nil)
 			w := httptest.NewRecorder()
@@ -124,6 +151,24 @@ func TestSCIM(t *testing.T) {
 						require.Equal(t, []string{http.MethodGet}, w.Header().Values("Allow"))
 					})
 				}
+			}
+
+			for _, tc := range []struct {
+				method, path string
+				allow        []string
+			}{
+				{http.MethodPut, scimUsersPath, []string{http.MethodGet, http.MethodPost}},
+				{http.MethodPost, scimUsersPath + "/missing", []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete}},
+			} {
+				t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+					r := httptest.NewRequest(tc.method, tc.path, nil)
+					w := httptest.NewRecorder()
+
+					api.handler.ServeHTTP(w, r)
+
+					require.Equal(t, http.StatusMethodNotAllowed, w.Code)
+					require.ElementsMatch(t, tc.allow, w.Header().Values("Allow"))
+				})
 			}
 		})
 	})
