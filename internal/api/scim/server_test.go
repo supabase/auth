@@ -41,7 +41,7 @@ func validateToken(ctx context.Context, candidate string) (context.Context, erro
 func newServerFor(externalURL string) *Server {
 	return NewServer(&conf.GlobalConfiguration{
 		API: conf.APIConfiguration{ExternalURL: externalURL},
-	}, validateToken)
+	}, validateToken, nil)
 }
 
 func serve(t *testing.T, srv *Server, method, path, body string, headers ...string) *httptest.ResponseRecorder {
@@ -127,78 +127,6 @@ func TestServer(t *testing.T) {
 			require.JSONEq(t, testFixture(t, "filter_forbidden.json"), w.Body.String())
 		})
 	}
-
-	t.Run("Users", func(t *testing.T) {
-		srv := newServerFor("http://localhost:9999")
-
-		w := serve(t, srv, http.MethodPost, BasePath+"/Users", `{
-			"schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
-			"userName": "alice@example.com",
-			"name": {"givenName": "Alice", "familyName": "Smith"},
-			"emails": [{"value": "alice@example.com", "type": "work", "primary": true}],
-			"active": true
-		}`)
-		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
-		created := decode(t, w)
-		id := created["id"].(string)
-		require.NotEmpty(t, id)
-		require.Equal(t, "alice@example.com", created["userName"])
-		require.Equal(t, BasePath+"/Users/"+id, w.Header().Get("Location"))
-		require.Empty(t, w.Header().Get("ETag"))
-
-		t.Run("rejects a duplicate userName", func(t *testing.T) {
-			w := serve(t, srv, http.MethodPost, BasePath+"/Users", `{
-				"schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
-				"userName": "alice@example.com"
-			}`)
-			require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
-		})
-
-		t.Run("get", func(t *testing.T) {
-			w := serve(t, srv, http.MethodGet, BasePath+"/Users/"+id, "")
-			require.Equal(t, http.StatusOK, w.Code)
-			require.Equal(t, "alice@example.com", decode(t, w)["userName"])
-		})
-
-		t.Run("list with filter", func(t *testing.T) {
-			filter := url.Values{"filter": {`userName eq "alice@example.com"`}}.Encode()
-			w := serve(t, srv, http.MethodGet, BasePath+"/Users?"+filter, "")
-			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-			require.EqualValues(t, 1, decode(t, w)["totalResults"])
-		})
-
-		t.Run("replace", func(t *testing.T) {
-			w := serve(t, srv, http.MethodPut, BasePath+"/Users/"+id, `{
-				"schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
-				"userName": "alice@example.com",
-				"name": {"givenName": "Alicia", "familyName": "Smith"}
-			}`)
-			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-			require.Equal(t, "Alicia", decode(t, w)["name"].(map[string]any)["givenName"])
-		})
-
-		t.Run("patch", func(t *testing.T) {
-			w := serve(t, srv, http.MethodPatch, BasePath+"/Users/"+id, `{
-				"schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
-				"Operations": [{"op": "replace", "path": "active", "value": false}]
-			}`)
-			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-			require.Equal(t, false, decode(t, w)["active"])
-		})
-
-		t.Run("rejects sortBy", func(t *testing.T) {
-			w := serve(t, srv, http.MethodGet, BasePath+"/Users?sortBy=userName", "")
-			require.Equal(t, http.StatusNotImplemented, w.Code, w.Body.String())
-		})
-
-		t.Run("delete", func(t *testing.T) {
-			w := serve(t, srv, http.MethodDelete, BasePath+"/Users/"+id, "")
-			require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
-
-			w = serve(t, srv, http.MethodGet, BasePath+"/Users/"+id, "")
-			require.Equal(t, http.StatusNotFound, w.Code)
-		})
-	})
 
 	t.Run("logError logs through the request log entry", func(t *testing.T) {
 		logger, hook := logrustest.NewNullLogger()

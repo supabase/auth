@@ -221,3 +221,19 @@ func (e SCIMTokenNotFoundError) Error() string {
 func (e SCIMTokenNotFoundError) Is(target error) bool {
 	return target == errNotFound
 }
+
+type SCIMUserNotFoundError struct{}
+
+func (e SCIMUserNotFoundError) Error() string {
+	return "SCIM user not found"
+}
+
+func (e SCIMUserNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
+
+type SCIMUserConflictError struct{}
+
+func (e SCIMUserConflictError) Error() string {
+	return "SCIM user conflicts with an existing user"
+}

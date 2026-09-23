@@ -21,7 +21,7 @@ type Server struct {
 	server *server.Server
 }
 
-func NewServer(config *conf.GlobalConfiguration, validate server.TokenValidator) *Server {
+func NewServer(config *conf.GlobalConfiguration, validate server.TokenValidator, users server.Repository[*core.User]) *Server {
 	serviceProviderConfig := core.NewServiceProviderConfig(BasePath).
 		Filtering(protocol.DefaultLimits.MaxCount).
 		Patching()
@@ -31,7 +31,7 @@ func NewServer(config *conf.GlobalConfiguration, validate server.TokenValidator)
 	return &Server{
 		server: server.New(serviceProviderConfig,
 			server.ErrorHandler(logError),
-			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields())),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithRepository(users)),
 			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
 		),
 	}
