@@ -857,7 +857,7 @@ Controls the number of digits of the SMS OTP sent.
 
 `SMS_PROVIDER` - `string`
 
-Available options are: `twilio`, `messagebird`, `textlocal`, and `vonage`
+Available options are: `twilio`, `twilio_verify`, `bird_verify`, `messagebird`, `textlocal`, and `vonage`
 
 Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/requests-to-twilio#credentials):
 
@@ -869,6 +869,14 @@ Or Messagebird credentials, which can be obtained in the [Dashboard](https://das
 
 - `SMS_MESSAGEBIRD_ACCESS_KEY` - your Messagebird access key
 - `SMS_MESSAGEBIRD_ORIGINATOR` - SMS sender (your Messagebird phone number with + or company name)
+
+#### Bird Verify
+
+`bird_verify` uses [Bird Verify](https://bird.com), a managed OTP service: Bird generates, delivers, and checks the passcode, so Auth never stores it. Create an API key with the `verify:write` scope in the [Bird dashboard](https://bird.com/dashboard). Both the `sms` and `whatsapp` channels are supported, and the requested channel is pinned per request rather than left to the workspace's configured channel order.
+
+- `SMS_BIRD_VERIFY_API_KEY` - your Bird API key (`bk_{region}_{token}`)
+- `SMS_BIRD_VERIFY_REGION` - optional; the region is otherwise read from the API key's prefix
+- `SMS_BIRD_VERIFY_API_URL` - optional; overrides the whole base URL, which is otherwise `https://{region}.platform.bird.com`
 
 ### CAPTCHA
 
