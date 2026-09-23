@@ -211,3 +211,13 @@ type RecoveryCodeAlreadyConsumedError struct{}
 func (e RecoveryCodeAlreadyConsumedError) Error() string {
 	return "Recovery code already consumed"
 }
+
+type SCIMTokenNotFoundError struct{}
+
+func (e SCIMTokenNotFoundError) Error() string {
+	return "SCIM token not found"
+}
+
+func (e SCIMTokenNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}

@@ -2,6 +2,7 @@
   "schemas": [
     "urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"
   ],
+  "documentationUri": "https://supabase.com/docs/guides/auth/enterprise-sso/scim",
   "patch": {
     "supported": true
   },
@@ -18,10 +19,10 @@
     "supported": false
   },
   "sort": {
-    "supported": true
+    "supported": false
   },
   "etag": {
-    "supported": true
+    "supported": false
   },
   "authenticationSchemes": [
     {

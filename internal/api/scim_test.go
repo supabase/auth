@@ -11,6 +11,7 @@ import (
 	scimCore "github.com/supabase-community/scim-go/pkg/core"
 	scimProtocol "github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -66,10 +67,16 @@ func TestSCIM(t *testing.T) {
 
 		require.True(t, api.config.Experimental.ScimEnabled)
 
+		provider := &models.SSOProvider{}
+		require.NoError(t, api.db.Create(provider))
+		_, token, err := models.CreateSCIMToken(api.db, provider, nil)
+		require.NoError(t, err)
+
 		t.Run(scimServiceProviderConfigPath, func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, scimServiceProviderConfigPath, nil)
 			w := httptest.NewRecorder()
 
+			r.Header.Set("Authorization", "Bearer "+token)
 			api.handler.ServeHTTP(w, r)
 
 			require.Equal(t, http.StatusOK, w.Code)
@@ -82,6 +89,7 @@ func TestSCIM(t *testing.T) {
 				r := httptest.NewRequest(http.MethodGet, path, nil)
 				w := httptest.NewRecorder()
 
+				r.Header.Set("Authorization", "Bearer "+token)
 				api.handler.ServeHTTP(w, r)
 
 				require.Equal(t, http.StatusOK, w.Code)
@@ -94,6 +102,7 @@ func TestSCIM(t *testing.T) {
 				r := httptest.NewRequest(http.MethodGet, path+"?"+filter, nil)
 				w := httptest.NewRecorder()
 
+				r.Header.Set("Authorization", "Bearer "+token)
 				api.handler.ServeHTTP(w, r)
 
 				require.Equal(t, http.StatusForbidden, w.Code)
@@ -120,6 +129,7 @@ func TestSCIM(t *testing.T) {
 					r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
 					w := httptest.NewRecorder()
 
+					r.Header.Set("Authorization", "Bearer "+token)
 					api.handler.ServeHTTP(w, r)
 
 					require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"), w.Body.String())
@@ -127,10 +137,52 @@ func TestSCIM(t *testing.T) {
 			}
 		})
 
+		t.Run("Requires an active SCIM token", func(t *testing.T) {
+			revoked, revokedToken, err := models.CreateSCIMToken(api.db, provider, nil)
+			require.NoError(t, err)
+			require.NoError(t, revoked.Revoke(api.db))
+
+			for _, tc := range []struct{ name, authorization string }{
+				{"missing", ""},
+				{"unknown", "Bearer scim_0000000000000000000000000000000000000000"},
+				{"revoked", "Bearer " + revokedToken},
+			} {
+				for _, path := range append(scimPaths, scimUsersPath) {
+					t.Run(tc.name+" "+path, func(t *testing.T) {
+						r := httptest.NewRequest(http.MethodGet, path, nil)
+						if tc.authorization != "" {
+							r.Header.Set("Authorization", tc.authorization)
+						}
+						w := httptest.NewRecorder()
+
+						api.handler.ServeHTTP(w, r)
+
+						require.Equal(t, http.StatusUnauthorized, w.Code)
+						require.Equal(t, scimProtocol.MediaType, w.Header().Get("Content-Type"))
+						require.True(t, strings.HasPrefix(w.Header().Get("WWW-Authenticate"), "Bearer"))
+					})
+				}
+			}
+		})
+
+		t.Run("Records when a token is used", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, scimUsersPath, nil)
+			r.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+
+			api.handler.ServeHTTP(w, r)
+			require.Equal(t, http.StatusOK, w.Code)
+
+			found, err := models.FindSCIMTokenByPrefix(api.db, provider.ID, token[:12])
+			require.NoError(t, err)
+			require.NotNil(t, found.LastUsedAt)
+		})
+
 		t.Run("Returns a SCIM 404 for an unknown endpoint", func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Unknown", nil)
 			w := httptest.NewRecorder()
 
+			r.Header.Set("Authorization", "Bearer "+token)
 			api.handler.ServeHTTP(w, r)
 
 			require.Equal(t, http.StatusNotFound, w.Code)
@@ -145,6 +197,7 @@ func TestSCIM(t *testing.T) {
 						r := httptest.NewRequest(method, path, nil)
 						w := httptest.NewRecorder()
 
+						r.Header.Set("Authorization", "Bearer "+token)
 						api.handler.ServeHTTP(w, r)
 
 						require.Equal(t, http.StatusMethodNotAllowed, w.Code)
@@ -164,6 +217,7 @@ func TestSCIM(t *testing.T) {
 					r := httptest.NewRequest(tc.method, tc.path, nil)
 					w := httptest.NewRecorder()
 
+					r.Header.Set("Authorization", "Bearer "+token)
 					api.handler.ServeHTTP(w, r)
 
 					require.Equal(t, http.StatusMethodNotAllowed, w.Code)

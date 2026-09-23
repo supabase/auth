@@ -1,6 +1,7 @@
 package scim
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -28,15 +29,25 @@ func testFixture(t *testing.T, file string) string {
 	return string(data)
 }
 
+const validToken = "scim_valid"
+
+func validateToken(ctx context.Context, candidate string) (context.Context, error) {
+	if candidate != validToken {
+		return ctx, errInvalidToken
+	}
+	return ctx, nil
+}
+
 func newServerFor(externalURL string) *Server {
 	return NewServer(&conf.GlobalConfiguration{
 		API: conf.APIConfiguration{ExternalURL: externalURL},
-	})
+	}, validateToken)
 }
 
 func serve(t *testing.T, srv *Server, method, path, body string, headers ...string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
 	r.Header.Set("Content-Type", protocol.MediaType)
+	r.Header.Set("Authorization", "Bearer "+validToken)
 	for i := 0; i+1 < len(headers); i += 2 {
 		r.Header.Set(headers[i], headers[i+1])
 	}
@@ -133,7 +144,7 @@ func TestServer(t *testing.T) {
 		require.NotEmpty(t, id)
 		require.Equal(t, "alice@example.com", created["userName"])
 		require.Equal(t, BasePath+"/Users/"+id, w.Header().Get("Location"))
-		require.NotEmpty(t, w.Header().Get("ETag"))
+		require.Empty(t, w.Header().Get("ETag"))
 
 		t.Run("rejects a duplicate userName", func(t *testing.T) {
 			w := serve(t, srv, http.MethodPost, BasePath+"/Users", `{
@@ -175,9 +186,9 @@ func TestServer(t *testing.T) {
 			require.Equal(t, false, decode(t, w)["active"])
 		})
 
-		t.Run("delete with a stale version", func(t *testing.T) {
-			w := serve(t, srv, http.MethodDelete, BasePath+"/Users/"+id, "", "If-Match", `W/"stale"`)
-			require.Equal(t, http.StatusPreconditionFailed, w.Code, w.Body.String())
+		t.Run("rejects sortBy", func(t *testing.T) {
+			w := serve(t, srv, http.MethodGet, BasePath+"/Users?sortBy=userName", "")
+			require.Equal(t, http.StatusNotImplemented, w.Code, w.Body.String())
 		})
 
 		t.Run("delete", func(t *testing.T) {
@@ -201,6 +212,27 @@ func TestServer(t *testing.T) {
 		require.Equal(t, logrus.ErrorLevel, hook.LastEntry().Level)
 		require.Equal(t, "req-1", hook.LastEntry().Data["request_id"])
 		require.EqualError(t, hook.LastEntry().Data[logrus.ErrorKey].(error), "broken pipe")
+	})
+
+	t.Run("requires a bearer token", func(t *testing.T) {
+		for _, tc := range []struct {
+			name, authorization string
+			status              int
+			challenge           string
+		}{
+			{"missing header", "", http.StatusUnauthorized, "Bearer"},
+			{"wrong scheme", "Basic " + validToken, http.StatusUnauthorized, "Bearer"},
+			{"empty token", "Bearer ", http.StatusBadRequest, `Bearer error="invalid_request", error_description="missing bearer token"`},
+			{"invalid token", "Bearer scim_invalid", http.StatusUnauthorized, `Bearer error="invalid_token", error_description="invalid token"`},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				w := serve(t, srv, http.MethodGet, BasePath+"/Users", "", "Authorization", tc.authorization)
+
+				require.Equal(t, tc.status, w.Code)
+				require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+				require.Equal(t, tc.challenge, w.Header().Get("WWW-Authenticate"))
+			})
+		}
 	})
 
 	t.Run("NotFound", func(t *testing.T) {

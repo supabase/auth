@@ -138,7 +138,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
 	}
 
-	api.scim = scim.NewServer(globalConfig)
+	api.scim = scim.NewServer(globalConfig, scim.NewTokenValidator(db))
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -404,6 +404,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Get("/", api.adminSSOProvidersGet)
 						r.Put("/", api.adminSSOProvidersUpdate)
 						r.Delete("/", api.adminSSOProvidersDelete)
+
+						r.Route("/scim/tokens", func(r *router) {
+							r.Use(api.requireScimServerEnabled)
+
+							r.Get("/", api.adminSCIMTokensList)
+							r.Post("/", api.adminSCIMTokensCreate)
+							r.Delete("/{prefix}", api.adminSCIMTokenRevoke)
+						})
 					})
 				})
 			})
