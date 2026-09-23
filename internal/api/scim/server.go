@@ -50,5 +50,5 @@ func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
 }
 
 func logError(r *http.Request, err error) {
-	observability.GetLogEntry(r).Entry.WithError(err).Error("scim: unable to send response")
+	observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
 }
