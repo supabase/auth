@@ -129,7 +129,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 
 	// From this point on, we have valid client + redirect_uri + all params, so we can redirect errors
 	// validate all other parameters - now we can redirect errors
-	if err := s.validateRemainingAuthorizeParams(params); err != nil {
+	if err := s.validateRemainingAuthorizeParams(params, client); err != nil {
 		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorInvalidRequest, err.Error(), params.State)
 		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
 		return nil
@@ -444,7 +444,7 @@ func (s *Server) validateBasicAuthorizeParams(params *AuthorizeParams) (*Authori
 }
 
 // validateRemainingAuthorizeParams validates all other parameters (can redirect errors since we have valid client + redirect_uri)
-func (s *Server) validateRemainingAuthorizeParams(params *AuthorizeParams) error {
+func (s *Server) validateRemainingAuthorizeParams(params *AuthorizeParams, client *models.OAuthServerClient) error {
 	if params.ResponseType == "" {
 		params.ResponseType = models.OAuthServerResponseTypeCode.String()
 	}
@@ -468,18 +468,24 @@ func (s *Server) validateRemainingAuthorizeParams(params *AuthorizeParams) error
 	}
 
 	// PKCE validation
-	if err := s.validatePKCEParams(params.CodeChallengeMethod, params.CodeChallenge); err != nil {
+	if err := s.validatePKCEParams(params.CodeChallengeMethod, params.CodeChallenge, client); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s *Server) validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
-	// PKCE is mandatory for the authorization code flow OAuth2.1
-	// Both code_challenge and code_challenge_method must be provided together
+func (s *Server) validatePKCEParams(codeChallengeMethod, codeChallenge string, client *models.OAuthServerClient) error {
+	// PKCE is mandatory for public clients in the authorization code flow
+	// For confidential clients, it is optional.
 	if codeChallenge == "" || codeChallengeMethod == "" {
-		return errors.New("PKCE flow requires both code_challenge and code_challenge_method")
+		if client.IsPublic() {
+			return errors.New("PKCE flow requires both code_challenge and code_challenge_method for public clients")
+		}
+		if codeChallenge != "" || codeChallengeMethod != "" {
+			return errors.New("PKCE flow requires both code_challenge and code_challenge_method")
+		}
+		return nil
 	}
 
 	// Validate code challenge method (case-insensitive)
