@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -200,14 +201,16 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, cfg.EmailOptional, nil
 }
 
-// oidcNonceMatches matches an id_token nonce claim against the hex or base64url SHA-256 of the nonce.
+// oidcNonceMatches checks the id_token nonce claim against the hex or base64url SHA-256 of the request nonce
 func oidcNonceMatches(nonce, tokenNonce string) bool {
 	if nonce == "" || tokenNonce == "" {
 		return false
 	}
-	sum := sha256.Sum256([]byte(nonce))
-	return tokenNonce == hex.EncodeToString(sum[:]) ||
-		tokenNonce == base64.RawURLEncoding.EncodeToString(sum[:])
+	hashedNonce := sha256.Sum256([]byte(nonce))
+	hexNonce := hex.EncodeToString(hashedNonce[:])
+	base64Nonce := base64.RawURLEncoding.EncodeToString(hashedNonce[:])
+	return subtle.ConstantTimeCompare([]byte(tokenNonce), []byte(hexNonce)) == 1 ||
+		subtle.ConstantTimeCompare([]byte(tokenNonce), []byte(base64Nonce)) == 1
 }
 
 // IdTokenGrant implements the id_token grant type flow
