@@ -226,7 +226,17 @@ func (ts *SCIMUsersTestSuite) TestTenantIsolation() {
 	w, got := ts.do(ts.TokenB, http.MethodGet, "/Users/"+idB, "")
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 	require.Equal(ts.T(), "bob@example.com", got["userName"])
-	require.Nil(ts.T(), got["active"])
+	require.Equal(ts.T(), true, got["active"])
+}
+
+func (ts *SCIMUsersTestSuite) TestActiveDefaultsToTrue() {
+	w, created := ts.do(ts.TokenA, http.MethodPost, "/Users", userWith("alice@example.com", "a-1"))
+	require.Equal(ts.T(), http.StatusCreated, w.Code)
+	require.Equal(ts.T(), true, created["active"])
+
+	w, replaced := ts.do(ts.TokenA, http.MethodPut, "/Users/"+created["id"].(string), userWith("alice@example.com", "a-1"))
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.Equal(ts.T(), true, replaced["active"])
 }
 
 func (ts *SCIMUsersTestSuite) TestPagination() {

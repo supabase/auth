@@ -133,6 +133,8 @@ func (r *userRepository) toUser(row *models.SCIMUser) (*core.User, error) {
 	if err := json.Unmarshal(row.Resource, user); err != nil {
 		return nil, err
 	}
+	active := row.Active
+	user.Active = &active
 	user.SetID(row.ID.String())
 	user.SetSchemas([]core.SchemaURI{core.SchemaUser})
 	user.SetMeta(core.Meta{
