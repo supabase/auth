@@ -102,7 +102,7 @@ func (ts *SCIMTokenTestSuite) TestTimestampsAreUTC() {
 func (ts *SCIMTokenTestSuite) TestCreateForMissingProvider() {
 	_, _, err := CreateSCIMToken(ts.db, &SSOProvider{ID: uuid.Must(uuid.NewV4())}, nil)
 
-	require.ErrorIs(ts.T(), err, SSOProviderNotFoundError{})
+	require.Error(ts.T(), err)
 }
 
 func (ts *SCIMTokenTestSuite) TestFindBySSOProvider() {

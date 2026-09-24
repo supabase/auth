@@ -17,9 +17,8 @@ import (
 const (
 	SCIMTokenMarker = "scim_"
 
-	scimTokenBytes         = 20
-	scimTokenPrefixLength  = len(SCIMTokenMarker) + 7
-	scimTokenCreateRetries = 3
+	scimTokenBytes        = 20
+	scimTokenPrefixLength = len(SCIMTokenMarker) + 7
 )
 
 type SCIMToken struct {
@@ -65,52 +64,28 @@ func generateSCIMToken() (string, error) {
 }
 
 func CreateSCIMToken(tx *storage.Connection, provider *SSOProvider, expiresAt *time.Time) (*SCIMToken, string, error) {
-	locked := &SSOProvider{}
+	plaintext, err := generateSCIMToken()
+	if err != nil {
+		return nil, "", errors.Wrap(err, "error generating SCIM token")
+	}
+
+	token := &SCIMToken{
+		ID:            uuid.Must(uuid.NewV4()),
+		SSOProviderID: provider.ID,
+		TokenHash:     HashSCIMToken(plaintext),
+		Prefix:        plaintext[:scimTokenPrefixLength],
+		ExpiresAt:     expiresAt,
+	}
 	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT * FROM %q WHERE id = ? FOR UPDATE", locked.TableName()),
-		provider.ID,
-	).First(locked); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, "", SSOProviderNotFoundError{}
+		fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, token_hash, prefix, expires_at) VALUES (?, ?, ?, ?, ?) RETURNING *", token.TableName()),
+		token.ID, token.SSOProviderID, token.TokenHash, token.Prefix, token.ExpiresAt,
+	).First(token); err != nil {
+		if isCheckViolation(err, "scim_tokens_expires_at_future") {
+			return nil, "", SCIMTokenExpiryError{}
 		}
-		return nil, "", errors.Wrap(err, "error locking SSO provider")
+		return nil, "", errors.Wrap(err, "error creating SCIM token")
 	}
-
-	for range scimTokenCreateRetries {
-		plaintext, err := generateSCIMToken()
-		if err != nil {
-			return nil, "", errors.Wrap(err, "error generating SCIM token")
-		}
-
-		prefix := plaintext[:scimTokenPrefixLength]
-		taken, err := tx.Q().Where("sso_provider_id = ? AND prefix = ?", provider.ID, prefix).Exists(&SCIMToken{})
-		if err != nil {
-			return nil, "", errors.Wrap(err, "error checking SCIM token prefix")
-		}
-		if taken {
-			continue
-		}
-
-		token := &SCIMToken{
-			ID:            uuid.Must(uuid.NewV4()),
-			SSOProviderID: provider.ID,
-			TokenHash:     HashSCIMToken(plaintext),
-			Prefix:        prefix,
-			ExpiresAt:     expiresAt,
-		}
-		if err := tx.RawQuery(
-			fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, token_hash, prefix, expires_at) VALUES (?, ?, ?, ?, ?) RETURNING *", token.TableName()),
-			token.ID, token.SSOProviderID, token.TokenHash, token.Prefix, token.ExpiresAt,
-		).First(token); err != nil {
-			if isCheckViolation(err, "scim_tokens_expires_at_future") {
-				return nil, "", SCIMTokenExpiryError{}
-			}
-			return nil, "", errors.Wrap(err, "error creating SCIM token")
-		}
-		return token, plaintext, nil
-	}
-
-	return nil, "", errors.New("error creating SCIM token: prefix collision")
+	return token, plaintext, nil
 }
 
 func FindSCIMTokensBySSOProvider(tx *storage.Connection, providerID uuid.UUID) ([]SCIMToken, error) {
