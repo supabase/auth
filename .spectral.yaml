@@ -1,0 +1,13 @@
+extends:
+  - "spectral:oas"
+
+# Soft start: warn rather than error on style nits.
+# Tighten over time once the spec passes the strict ruleset.
+rules:
+  operation-tag-defined: warn
+  operation-description: warn
+  operation-tags: warn
+  oas3-unused-component: warn
+  info-contact: off
+  info-license: off
+  oas3-server-not-example.com: off
