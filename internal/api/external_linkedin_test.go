@@ -15,12 +15,15 @@ const (
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalLinkedin() {
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=linkedin", nil)
+	ts.Config.External.Linkedin.URL = ""
+	req :=httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=linkedin", nil)
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	ts.Require().Equal(http.StatusFound, w.Code)
 	u, err := url.Parse(w.Header().Get("Location"))
 	ts.Require().NoError(err, "redirect url parse failed")
+	ts.Equal("www.linkedin.com", u.Host)
+	ts.Equal("/oauth/v2/authorization", u.Path)
 	q := u.Query()
 	ts.Equal(ts.Config.External.Linkedin.RedirectURI, q.Get("redirect_uri"))
 	ts.Equal(ts.Config.External.Linkedin.ClientID, []string{q.Get("client_id")})

@@ -8,8 +8,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// LinkedIn serves its OAuth endpoints on www.linkedin.com and its REST API on api.linkedin.com.
 const (
-	defaultLinkedinAPIBase = "api.linkedin.com"
+	defaultLinkedinAuthBase = "www.linkedin.com"
+	defaultLinkedinAPIBase  = "api.linkedin.com"
 )
 
 type linkedinProvider struct {
@@ -71,6 +73,7 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 		return nil, err
 	}
 
+	authHost := chooseHost(ext.URL, defaultLinkedinAuthBase)
 	apiPath := chooseHost(ext.URL, defaultLinkedinAPIBase)
 
 	oauthScopes := []string{
@@ -87,8 +90,8 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  apiPath + "/oauth/v2/authorization",
-				TokenURL: apiPath + "/oauth/v2/accessToken",
+				AuthURL:  authHost + "/oauth/v2/authorization",
+				TokenURL: authHost + "/oauth/v2/accessToken",
 			},
 			Scopes:      oauthScopes,
 			RedirectURL: ext.RedirectURI,
