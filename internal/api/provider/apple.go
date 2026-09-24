@@ -175,5 +175,7 @@ func (p AppleProvider) ParseUser(data string, userData *UserProvidedData) error 
 
 	userData.Metadata.Name = strings.TrimSpace(u.Name.FirstName + " " + u.Name.LastName)
 	userData.Metadata.FullName = strings.TrimSpace(u.Name.FirstName + " " + u.Name.LastName)
+	userData.Metadata.GivenName = u.Name.FirstName
+	userData.Metadata.FamilyName = u.Name.LastName
 	return nil
 }
