@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -104,12 +107,16 @@ func (r *userRepository) Replace(ctx context.Context, user *core.User) (*core.Us
 	if err != nil {
 		return nil, errUserNotFound()
 	}
+	updatedAt, err := parseVersion(user.GetMeta().Version)
+	if err != nil {
+		return nil, err
+	}
 	resource, err := toResource(user)
 	if err != nil {
 		return nil, err
 	}
 
-	row, err := models.ReplaceSCIMUser(r.db.WithContext(ctx), providerID, userID, resource)
+	row, err := models.ReplaceSCIMUser(r.db.WithContext(ctx), providerID, userID, resource, updatedAt)
 	if err != nil {
 		return nil, translate(err)
 	}
@@ -142,6 +149,7 @@ func (r *userRepository) toUser(row *models.SCIMUser) (*core.User, error) {
 		Created:      row.CreatedAt.UTC(),
 		LastModified: row.UpdatedAt.UTC(),
 		Location:     r.location + row.ID.String(),
+		Version:      version(row.UpdatedAt),
 	})
 	return user, nil
 }
@@ -161,12 +169,32 @@ func toResource(user *core.User) ([]byte, error) {
 	return json.Marshal(resource)
 }
 
+func version(updatedAt time.Time) string {
+	return `W/"` + strconv.FormatInt(updatedAt.UnixMicro(), 10) + `"`
+}
+
+func parseVersion(version string) (*time.Time, error) {
+	if version == "" {
+		return nil, nil
+	}
+	micros, err := strconv.ParseInt(strings.TrimSuffix(strings.TrimPrefix(version, `W/"`), `"`), 10, 64)
+	if err != nil {
+		return nil, errStale()
+	}
+	updatedAt := time.UnixMicro(micros)
+	return &updatedAt, nil
+}
+
 func providerFrom(ctx context.Context) (uuid.UUID, error) {
 	providerID, ok := SSOProviderID(ctx)
 	if !ok || providerID == uuid.Nil {
 		return uuid.Nil, errMissingSSOProvider
 	}
 	return providerID, nil
+}
+
+func errStale() error {
+	return scimerrors.ErrPreconditionFailed("resource has changed on the server")
 }
 
 func errUserNotFound() error {
@@ -179,6 +207,8 @@ func translate(err error) error {
 		return nil
 	case models.IsNotFoundError(err):
 		return errUserNotFound()
+	case errors.Is(err, models.SCIMUserStaleError{}):
+		return errStale()
 	case errors.Is(err, models.SCIMUserConflictError{}):
 		return scimerrors.ErrUniqueness(`"userName" and "externalId" must be unique`)
 	}

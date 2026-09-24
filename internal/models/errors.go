@@ -238,6 +238,12 @@ func (e SCIMUserNotFoundError) Is(target error) bool {
 	return target == errNotFound
 }
 
+type SCIMUserStaleError struct{}
+
+func (e SCIMUserStaleError) Error() string {
+	return "SCIM user has changed since it was read"
+}
+
 type SCIMUserConflictError struct{}
 
 func (e SCIMUserConflictError) Error() string {

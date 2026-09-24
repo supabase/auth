@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -201,6 +202,47 @@ func (ts *SCIMUsersTestSuite) TestUniqueIndexIsTheBackstop() {
 	var scimErr *scimerrors.Error
 	require.ErrorAs(ts.T(), err, &scimErr)
 	require.Equal(ts.T(), http.StatusConflict, scimErr.StatusCode())
+}
+
+func (ts *SCIMUsersTestSuite) TestReplaceRejectsStaleVersion() {
+	ctx, err := scim.NewTokenValidator(ts.API.db)(context.Background(), ts.TokenA)
+	require.NoError(ts.T(), err)
+	users := scim.NewUserRepository(ts.API.config, ts.API.db)
+
+	created, err := users.Create(ctx, &core.User{UserName: "alice@example.com"})
+	require.NoError(ts.T(), err)
+	read, err := users.Get(ctx, created.ResourceID())
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), created.GetMeta().Version, read.GetMeta().Version)
+
+	winner := &core.User{UserName: "alice@example.com", Title: "winner"}
+	winner.SetID(read.ResourceID())
+	winner.SetMeta(core.Meta{Version: read.GetMeta().Version})
+	replaced, err := users.Replace(ctx, winner)
+	require.NoError(ts.T(), err)
+	require.NotEqual(ts.T(), read.GetMeta().Version, replaced.GetMeta().Version)
+
+	for _, version := range []string{read.GetMeta().Version, `W/"garbage"`} {
+		loser := &core.User{UserName: "alice@example.com", Title: "loser"}
+		loser.SetID(read.ResourceID())
+		loser.SetMeta(core.Meta{Version: version})
+		_, err = users.Replace(ctx, loser)
+		var scimErr *scimerrors.Error
+		require.ErrorAs(ts.T(), err, &scimErr, version)
+		require.Equal(ts.T(), http.StatusPreconditionFailed, scimErr.StatusCode(), version)
+	}
+
+	missing := &core.User{UserName: "bob@example.com"}
+	missing.SetID(uuid.Must(uuid.NewV4()).String())
+	missing.SetMeta(core.Meta{Version: read.GetMeta().Version})
+	_, err = users.Replace(ctx, missing)
+	var scimErr *scimerrors.Error
+	require.ErrorAs(ts.T(), err, &scimErr)
+	require.Equal(ts.T(), http.StatusNotFound, scimErr.StatusCode())
+
+	var stored models.SCIMUser
+	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", read.ResourceID()).First(&stored))
+	require.Contains(ts.T(), string(stored.Resource), "winner")
 }
 
 func (ts *SCIMUsersTestSuite) TestTenantIsolation() {

@@ -112,14 +112,19 @@ func FindSCIMUsers(tx *storage.Connection, providerID uuid.UUID, filter SCIMUser
 	return users, rows[0].Total, nil
 }
 
-func ReplaceSCIMUser(tx *storage.Connection, providerID, id uuid.UUID, resource []byte) (*SCIMUser, error) {
+func ReplaceSCIMUser(tx *storage.Connection, providerID, id uuid.UUID, resource []byte, updatedAt *time.Time) (*SCIMUser, error) {
 	user := &SCIMUser{}
 	err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND deleted_at IS NULL RETURNING "+scimUserColumns, user.TableName()),
-		string(resource), id, providerID,
+		fmt.Sprintf("UPDATE %q SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND deleted_at IS NULL AND (?::timestamptz IS NULL OR updated_at = ?) RETURNING "+scimUserColumns, user.TableName()),
+		string(resource), id, providerID, updatedAt, updatedAt,
 	).First(user)
 	if err != nil {
 		switch {
+		case errors.Cause(err) == sql.ErrNoRows && updatedAt != nil:
+			if _, findErr := FindSCIMUser(tx, providerID, id); findErr != nil {
+				return nil, findErr
+			}
+			return nil, SCIMUserStaleError{}
 		case errors.Cause(err) == sql.ErrNoRows:
 			return nil, SCIMUserNotFoundError{}
 		case isUniqueViolation(err):
