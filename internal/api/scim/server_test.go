@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
 )
@@ -33,7 +34,7 @@ const validToken = "scim_valid"
 
 func validateToken(ctx context.Context, candidate string) (context.Context, error) {
 	if candidate != validToken {
-		return ctx, errInvalidToken
+		return ctx, server.ErrInvalidToken
 	}
 	return ctx, nil
 }
@@ -151,7 +152,7 @@ func TestServer(t *testing.T) {
 			{"missing header", "", http.StatusUnauthorized, "Bearer"},
 			{"wrong scheme", "Basic " + validToken, http.StatusUnauthorized, "Bearer"},
 			{"empty token", "Bearer ", http.StatusBadRequest, `Bearer error="invalid_request", error_description="missing bearer token"`},
-			{"invalid token", "Bearer scim_invalid", http.StatusUnauthorized, `Bearer error="invalid_token", error_description="invalid token"`},
+			{"invalid token", "Bearer scim_invalid", http.StatusUnauthorized, `Bearer error="invalid_token", error_description="The access token is invalid"`},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				w := serve(t, srv, http.MethodGet, BasePath+"/Users", "", "Authorization", tc.authorization)

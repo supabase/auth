@@ -16,6 +16,7 @@ import (
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase/auth/internal/api/scim"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
@@ -130,9 +131,15 @@ func (ts *SCIMTokensTestSuite) TestTokenValidatorResolvesSSOProvider() {
 	require.Equal(ts.T(), ts.Provider.ID, providerID)
 
 	ctx, err = validate(context.Background(), "scim_invalid")
-	require.Error(ts.T(), err)
+	require.ErrorIs(ts.T(), err, server.ErrInvalidToken)
 	_, ok = scim.SSOProviderID(ctx)
 	require.False(ts.T(), ok)
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = validate(cancelled, created.Token)
+	require.Error(ts.T(), err)
+	require.NotErrorIs(ts.T(), err, server.ErrInvalidToken)
 }
 
 func (ts *SCIMTokensTestSuite) TestCreateWithExpiry() {

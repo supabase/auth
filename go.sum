@@ -498,8 +498,10 @@ github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
-github.com/supabase-community/scim-go v0.5.1-0.20260924001149-2e87497eda3f h1:UVvgGr+HGDAfGVBRb1VtmMBbY52IqivuQ8bYMEbPK7Y=
-github.com/supabase-community/scim-go v0.5.1-0.20260924001149-2e87497eda3f/go.mod h1:oEMij9JuKtAl0wl0jeyIHDKqHvPpUmTXegKeCBKyxXw=
+github.com/supabase-community/scim-go v0.5.1-0.20260924003429-66841db7a0e3 h1:iWCOdQ09Tx/hvdKYeSttBhaTK79vk9ZzTx3CaSq2/QQ=
+github.com/supabase-community/scim-go v0.5.1-0.20260924003429-66841db7a0e3/go.mod h1:oEMij9JuKtAl0wl0jeyIHDKqHvPpUmTXegKeCBKyxXw=
+github.com/supabase-community/scim-go v0.5.1-0.20260924003646-578022cf57d4 h1:evE6iS4IwcKNeWaeIVfwhEHBSUAdtnFYfPnQsttMfOA=
+github.com/supabase-community/scim-go v0.5.1-0.20260924003646-578022cf57d4/go.mod h1:oEMij9JuKtAl0wl0jeyIHDKqHvPpUmTXegKeCBKyxXw=
 github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869 h1:VDuRtwen5Z7QQ5ctuHUse4wAv/JozkKZkdic5vUV4Lg=
 github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869/go.mod h1:eHX5nlSMSnyPjUrbYzeqrA8snCe2SKyfizKjU3dkfOw=
 github.com/supranational/blst v0.3.16-0.20250831170142-f48500c1fdbe h1:nbdqkIGOGfUAD54q1s2YBcBz/WcsxCO9HUQ4aGV5hUw=
