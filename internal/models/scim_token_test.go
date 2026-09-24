@@ -75,6 +75,30 @@ func (ts *SCIMTokenTestSuite) TestCreateWithPastExpiry() {
 	require.ErrorIs(ts.T(), err, SCIMTokenExpiryError{})
 }
 
+func (ts *SCIMTokenTestSuite) TestTimestampsAreUTC() {
+	local := time.Local
+	time.Local = time.FixedZone("UTC-7", -7*60*60)
+	defer func() { time.Local = local }()
+
+	expiresAt := time.Now().Add(time.Hour)
+	token, plaintext := ts.createToken(&expiresAt)
+	authenticated, err := AuthenticateSCIMToken(ts.db, plaintext)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), authenticated.Revoke(ts.db))
+	found, err := FindSCIMTokensBySSOProvider(ts.db, ts.provider.ID)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), found, 1)
+
+	for _, t := range []*SCIMToken{token, authenticated, &found[0]} {
+		require.Equal(ts.T(), time.UTC, t.CreatedAt.Location())
+		require.Equal(ts.T(), time.UTC, t.ExpiresAt.Location())
+	}
+	for _, t := range []*SCIMToken{authenticated, &found[0]} {
+		require.Equal(ts.T(), time.UTC, t.LastUsedAt.Location())
+		require.Equal(ts.T(), time.UTC, t.RevokedAt.Location())
+	}
+}
+
 func (ts *SCIMTokenTestSuite) TestCreateForMissingProvider() {
 	_, _, err := CreateSCIMToken(ts.db, &SSOProvider{ID: uuid.Must(uuid.NewV4())}, nil)
 

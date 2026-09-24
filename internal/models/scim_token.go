@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/storage"
@@ -34,6 +35,16 @@ type SCIMToken struct {
 
 func (SCIMToken) TableName() string {
 	return "scim_tokens"
+}
+
+func (t *SCIMToken) AfterFind(*pop.Connection) error {
+	t.CreatedAt = t.CreatedAt.UTC()
+	for _, at := range []*time.Time{t.ExpiresAt, t.RevokedAt, t.LastUsedAt} {
+		if at != nil {
+			*at = at.UTC()
+		}
+	}
+	return nil
 }
 
 func (t *SCIMToken) IsRevoked() bool {
