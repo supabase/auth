@@ -48,6 +48,7 @@ func TestSCIMUsers(t *testing.T) {
 	api, _, err := setupAPIForTestWithCallback(func(config *conf.GlobalConfiguration, conn *storage.Connection) {
 		if config != nil {
 			config.Experimental.ScimEnabled = true
+			config.RateLimitScim = 1
 		}
 	})
 	require.NoError(t, err)
@@ -334,4 +335,28 @@ func (ts *SCIMUsersTestSuite) TestRequiresSSOProviderOnContext() {
 	require.Error(ts.T(), err)
 	_, err = users.Get(context.Background(), "00000000-0000-0000-0000-000000000000")
 	require.Error(ts.T(), err)
+}
+
+func (ts *SCIMUsersTestSuite) TestRateLimit() {
+	get := func(ip string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
+		r.Header.Set("Authorization", "Bearer "+ts.TokenA)
+		r.Header.Set(ts.API.config.RateLimitHeader, ip)
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, r)
+		return w
+	}
+
+	for range 30 {
+		w := get("192.0.2.1")
+		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	}
+
+	w := get("192.0.2.1")
+	require.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
+	require.Equal(ts.T(), protocol.MediaType, w.Header().Get("Content-Type"))
+	require.JSONEq(ts.T(), `{"schemas":["urn:ietf:params:scim:api:messages:2.0:Error"],"detail":"Request rate limit reached","status":"429"}`, w.Body.String())
+
+	w = get("192.0.2.2")
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 }

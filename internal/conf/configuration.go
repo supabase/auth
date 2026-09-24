@@ -487,6 +487,7 @@ type GlobalConfiguration struct {
 	RateLimitVerify                     float64 `split_words:"true" default:"30"`
 	RateLimitTokenRefresh               float64 `split_words:"true" default:"150"`
 	RateLimitSso                        float64 `split_words:"true" default:"30"`
+	RateLimitScim                       float64 `split_words:"true" default:"3000"`
 	RateLimitAnonymousUsers             float64 `split_words:"true" default:"30"`
 	RateLimitOtp                        float64 `split_words:"true" default:"30"`
 	RateLimitWeb3                       float64 `split_words:"true" default:"30"`

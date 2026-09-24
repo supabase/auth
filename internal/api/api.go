@@ -471,6 +471,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Route(scim.BasePath, func(r *router) {
 			r.Use(api.requireScimServerEnabled)
+			r.UseBypass(api.limitSCIMHandler(api.limiterOpts.SCIM))
 			r.NotFound(api.scim.NotFound)
 
 			r.Method(http.MethodGet, "/ServiceProviderConfig", api.scim)

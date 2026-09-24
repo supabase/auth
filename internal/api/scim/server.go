@@ -49,6 +49,10 @@ func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
 	return protocol.SendError(w, scimerrors.ErrNotFound("Endpoint or resource does not exist"))
 }
 
+func (srv *Server) TooManyRequests(w http.ResponseWriter, r *http.Request) error {
+	return protocol.SendError(w, scimerrors.NewError(http.StatusTooManyRequests, "", "Request rate limit reached"))
+}
+
 func logError(r *http.Request, err error) {
 	observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
 }
