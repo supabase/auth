@@ -84,23 +84,32 @@ func FindSCIMUser(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMUser, 
 func FindSCIMUsers(tx *storage.Connection, providerID uuid.UUID, filter SCIMUserFilter, offset, limit int) ([]SCIMUser, int, error) {
 	where, args := filter.where(providerID)
 
-	total, err := tx.Q().Where(where, args...).Count(&SCIMUser{})
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "error counting SCIM users")
+	rows := []struct {
+		SCIMUser
+		Total int `db:"total"`
+	}{}
+	if limit > 0 {
+		err := tx.RawQuery(
+			fmt.Sprintf("SELECT "+scimUserColumns+", count(*) OVER () AS total FROM %q WHERE %s ORDER BY created_at ASC, id ASC OFFSET ? LIMIT ?", (&SCIMUser{}).TableName(), where),
+			append(args, offset, limit)...,
+		).All(&rows)
+		if err != nil {
+			return nil, 0, errors.Wrap(err, "error finding SCIM users")
+		}
+	}
+	if len(rows) == 0 {
+		total, err := tx.Q().Where(where, args...).Count(&SCIMUser{})
+		if err != nil {
+			return nil, 0, errors.Wrap(err, "error counting SCIM users")
+		}
+		return []SCIMUser{}, total, nil
 	}
 
-	users := []SCIMUser{}
-	if limit == 0 || offset >= total {
-		return users, total, nil
+	users := make([]SCIMUser, len(rows))
+	for i := range rows {
+		users[i] = rows[i].SCIMUser
 	}
-	err = tx.RawQuery(
-		fmt.Sprintf("SELECT "+scimUserColumns+" FROM %q WHERE %s ORDER BY created_at ASC, id ASC OFFSET ? LIMIT ?", (&SCIMUser{}).TableName(), where),
-		append(args, offset, limit)...,
-	).All(&users)
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "error finding SCIM users")
-	}
-	return users, total, nil
+	return users, rows[0].Total, nil
 }
 
 func ReplaceSCIMUser(tx *storage.Connection, providerID, id uuid.UUID, resource []byte) (*SCIMUser, error) {

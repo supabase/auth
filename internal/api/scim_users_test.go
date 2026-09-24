@@ -245,6 +245,11 @@ func (ts *SCIMUsersTestSuite) TestPagination() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 	require.EqualValues(ts.T(), 3, page["totalResults"])
 	require.Empty(ts.T(), page["Resources"])
+
+	w, page = ts.do(ts.TokenA, http.MethodGet, "/Users?startIndex=10&count=5", "")
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.EqualValues(ts.T(), 3, page["totalResults"])
+	require.Empty(ts.T(), page["Resources"])
 }
 
 func (ts *SCIMUsersTestSuite) TestUnsupportedFilters() {
