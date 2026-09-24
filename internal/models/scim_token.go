@@ -142,14 +142,23 @@ func (t *SCIMToken) Revoke(tx *storage.Connection) error {
 func AuthenticateSCIMToken(tx *storage.Connection, plaintext string) (*SCIMToken, error) {
 	token := &SCIMToken{}
 	err := tx.RawQuery(
-		fmt.Sprintf(`UPDATE %[1]q AS t SET last_used_at = now()
-FROM %[2]q AS p
-WHERE p.id = t.sso_provider_id
-  AND (p.disabled IS NULL OR p.disabled = false)
-  AND t.token_hash = ?
-  AND t.revoked_at IS NULL
-  AND (t.expires_at IS NULL OR t.expires_at > now())
-RETURNING t.*`, token.TableName(), (&SSOProvider{}).TableName()),
+		fmt.Sprintf(`WITH authenticated AS (
+  SELECT t.* FROM %[1]q AS t
+  JOIN %[2]q AS p ON p.id = t.sso_provider_id
+  WHERE (p.disabled IS NULL OR p.disabled = false)
+    AND t.token_hash = ?
+    AND t.revoked_at IS NULL
+    AND (t.expires_at IS NULL OR t.expires_at > now())
+), touched AS (
+  UPDATE %[1]q AS t SET last_used_at = now()
+  FROM authenticated AS a
+  WHERE t.id = a.id
+    AND (a.last_used_at IS NULL OR a.last_used_at < now() - interval '1 minute')
+  RETURNING t.*
+)
+SELECT * FROM touched
+UNION ALL
+SELECT * FROM authenticated WHERE NOT EXISTS (SELECT 1 FROM touched)`, token.TableName(), (&SSOProvider{}).TableName()),
 		HashSCIMToken(plaintext),
 	).First(token)
 	if err != nil {

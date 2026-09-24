@@ -155,7 +155,12 @@ func (ts *SCIMTokenTestSuite) TestAuthenticate() {
 
 	again, err := AuthenticateSCIMToken(ts.db, plaintext)
 	require.NoError(ts.T(), err)
-	require.False(ts.T(), again.LastUsedAt.Before(first))
+	require.True(ts.T(), first.Equal(*again.LastUsedAt))
+
+	require.NoError(ts.T(), ts.db.RawQuery("UPDATE scim_tokens SET last_used_at = now() - interval '2 minutes' WHERE id = ?", token.ID).Exec())
+	stale, err := AuthenticateSCIMToken(ts.db, plaintext)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), stale.LastUsedAt.After(first.Add(-time.Minute)))
 }
 
 func (ts *SCIMTokenTestSuite) TestAuthenticateRejects() {
