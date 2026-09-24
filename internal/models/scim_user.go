@@ -67,9 +67,17 @@ func CreateSCIMUser(tx *storage.Connection, providerID uuid.UUID, resource []byt
 }
 
 func FindSCIMUser(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMUser, error) {
+	return findSCIMUser(tx, providerID, id, "")
+}
+
+func FindSCIMUserForUpdate(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMUser, error) {
+	return findSCIMUser(tx, providerID, id, " FOR UPDATE")
+}
+
+func findSCIMUser(tx *storage.Connection, providerID, id uuid.UUID, lock string) (*SCIMUser, error) {
 	user := &SCIMUser{}
 	err := tx.RawQuery(
-		fmt.Sprintf("SELECT "+scimUserColumns+" FROM %q WHERE id = ? AND sso_provider_id = ? AND deleted_at IS NULL", user.TableName()),
+		fmt.Sprintf("SELECT "+scimUserColumns+" FROM %q WHERE id = ? AND sso_provider_id = ? AND deleted_at IS NULL"+lock, user.TableName()),
 		id, providerID,
 	).First(user)
 	if err != nil {
@@ -135,7 +143,7 @@ func ReplaceSCIMUser(tx *storage.Connection, providerID, id uuid.UUID, resource 
 	return user, nil
 }
 
-func DeleteSCIMUser(tx *storage.Connection, providerID, id uuid.UUID) error {
+func DeleteSCIMUser(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMUser, error) {
 	user := &SCIMUser{}
 	err := tx.RawQuery(
 		fmt.Sprintf("UPDATE %q SET deleted_at = now(), updated_at = now() WHERE id = ? AND sso_provider_id = ? AND deleted_at IS NULL RETURNING "+scimUserColumns, user.TableName()),
@@ -143,11 +151,11 @@ func DeleteSCIMUser(tx *storage.Connection, providerID, id uuid.UUID) error {
 	).First(user)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return SCIMUserNotFoundError{}
+			return nil, SCIMUserNotFoundError{}
 		}
-		return errors.Wrap(err, "error deleting SCIM user")
+		return nil, errors.Wrap(err, "error deleting SCIM user")
 	}
-	return nil
+	return user, nil
 }
 
 func LinkSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) error {
@@ -174,6 +182,14 @@ func LinkSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) erro
 	}
 	user.UserID = &userID
 	return nil
+}
+
+func HasDeletedSCIMUser(tx *storage.Connection, providerID, userID uuid.UUID) (bool, error) {
+	deleted, err := tx.Q().Where("sso_provider_id = ? AND user_id = ? AND deleted_at IS NOT NULL", providerID, userID).Exists(&SCIMUser{})
+	if err != nil {
+		return false, errors.Wrap(err, "error finding deleted SCIM user")
+	}
+	return deleted, nil
 }
 
 func isUniqueViolation(err error) bool {

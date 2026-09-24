@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,16 +86,12 @@ func (ts *SCIMUsersTestSuite) TestCreateLinksByEmailWithinProvider() {
 
 func (ts *SCIMUsersTestSuite) TestCreateInactiveBansAndLogsOut() {
 	existing := ts.ssoUser(ts.A, "Alice@Example.com", "alice@example.com")
-	session, err := models.NewSession(existing.ID, nil)
-	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.API.db.Create(session))
+	ts.session(existing)
 
 	user := ts.linkedUser(ts.create(ts.TokenA, strings.Replace(oktaUser, `"active": true`, `"active": false`, 1)))
 
 	require.True(ts.T(), user.IsBanned())
-	count, err := ts.API.db.Q().Where("user_id = ?", user.ID).Count(&models.Session{})
-	require.NoError(ts.T(), err)
-	require.Zero(ts.T(), count)
+	require.Zero(ts.T(), ts.sessions(user))
 }
 
 func (ts *SCIMUsersTestSuite) TestCreateRejectsSharedUser() {
@@ -127,4 +124,83 @@ func (ts *SCIMUsersTestSuite) TestCreateLeavesNoUserOnConflict() {
 	count, err := ts.API.db.Q().Where("email = ?", "bob@example.com").Count(&models.User{})
 	require.NoError(ts.T(), err)
 	require.Zero(ts.T(), count)
+}
+
+func (ts *SCIMUsersTestSuite) session(user *models.User) {
+	session, err := models.NewSession(user.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(session))
+}
+
+func (ts *SCIMUsersTestSuite) sessions(user *models.User) int {
+	count, err := ts.API.db.Q().Where("user_id = ?", user.ID).Count(&models.Session{})
+	require.NoError(ts.T(), err)
+	return count
+}
+
+func (ts *SCIMUsersTestSuite) setActive(id string, active bool) {
+	w, _ := ts.do(ts.TokenA, http.MethodPatch, "/Users/"+id, `{
+		"schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+		"Operations": [{"op": "replace", "value": {"active": `+strconv.FormatBool(active)+`}}]
+	}`)
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+}
+
+func (ts *SCIMUsersTestSuite) TestReplaceDeactivatesAndReactivates() {
+	id := ts.create(ts.TokenA, oktaUser)
+	ts.session(ts.linkedUser(id))
+
+	ts.setActive(id, false)
+	user := ts.linkedUser(id)
+	require.True(ts.T(), user.IsBanned())
+	require.Zero(ts.T(), ts.sessions(user))
+
+	ts.setActive(id, true)
+	require.False(ts.T(), ts.linkedUser(id).IsBanned())
+}
+
+func (ts *SCIMUsersTestSuite) TestReplaceKeepsAdminBanWhenActiveDoesNotChange() {
+	id := ts.create(ts.TokenA, oktaUser)
+	require.NoError(ts.T(), ts.linkedUser(id).Ban(ts.API.db, time.Hour))
+
+	ts.setActive(id, true)
+	require.True(ts.T(), ts.linkedUser(id).IsBanned())
+}
+
+func (ts *SCIMUsersTestSuite) TestReplaceLinksUnlinkedRow() {
+	row, err := models.CreateSCIMUser(ts.API.db, ts.A.ID, []byte(`{"userName":"Alice@Example.com"}`))
+	require.NoError(ts.T(), err)
+
+	w, _ := ts.do(ts.TokenA, http.MethodPut, "/Users/"+row.ID.String(), strings.Replace(oktaUser, `"active": true`, `"active": false`, 1))
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+
+	user := ts.linkedUser(row.ID.String())
+	require.Equal(ts.T(), "alice@example.com", user.GetEmail())
+	require.True(ts.T(), user.IsBanned())
+}
+
+func (ts *SCIMUsersTestSuite) TestDeleteBansAndLogsOut() {
+	id := ts.create(ts.TokenA, oktaUser)
+	user := ts.linkedUser(id)
+	ts.session(user)
+
+	w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Users/"+id, "")
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	user, err := models.FindUserByID(ts.API.db, user.ID)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), user.IsBanned())
+	require.Zero(ts.T(), ts.sessions(user))
+}
+
+func (ts *SCIMUsersTestSuite) TestCreateUnbansAfterDelete() {
+	id := ts.create(ts.TokenA, oktaUser)
+	user := ts.linkedUser(id)
+	w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Users/"+id, "")
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	relinked := ts.linkedUser(ts.create(ts.TokenA, oktaUser))
+
+	require.Equal(ts.T(), user.ID, relinked.ID)
+	require.False(ts.T(), relinked.IsBanned())
 }

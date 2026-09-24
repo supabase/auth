@@ -29,30 +29,15 @@ func newSCIMProvisioner(api *API) scim.Provisioner {
 
 func (p *scimProvisioner) CreateUser(ctx context.Context, providerID uuid.UUID, input scim.UserInput) (*models.SCIMUser, error) {
 	if input.Email == "" {
-		return nil, scimerrors.ErrInvalidValue(`"emails" is required`)
+		return nil, errEmailRequired()
 	}
-
 	r, err := p.request(ctx)
 	if err != nil {
 		return nil, err
 	}
 	db := p.api.db.WithContext(ctx)
-	providerType := "sso:" + providerID.String()
-
-	if p.api.hooksMgr.Enabled(v0hooks.BeforeUserCreated) {
-		decision, err := p.decide(db, providerType, input)
-		if err != nil {
-			return nil, err
-		}
-		if decision.Decision == models.CreateAccount {
-			user, err := p.newUser(providerType, decision, input)
-			if err != nil {
-				return nil, err
-			}
-			if err := p.api.triggerBeforeUserCreated(r, db, user); err != nil {
-				return nil, hookError(err)
-			}
-		}
+	if err := p.beforeCreate(r, db, providerID, input); err != nil {
+		return nil, err
 	}
 
 	var row *models.SCIMUser
@@ -62,78 +47,172 @@ func (p *scimProvisioner) CreateUser(ctx context.Context, providerID uuid.UUID, 
 		if row, terr = models.CreateSCIMUser(tx, providerID, input.Resource); terr != nil {
 			return terr
 		}
-
-		decision, terr := p.decide(tx, providerType, input)
+		user, isNew, terr := p.link(tx, row, input)
 		if terr != nil {
 			return terr
 		}
-
-		var user *models.User
-		switch decision.Decision {
-		case models.AccountExists:
-			user = decision.User
-		case models.LinkAccount:
-			user = decision.User
-			if _, terr = p.api.createNewIdentity(tx, user, providerType, identityData(input)); terr != nil {
-				return terr
-			}
-			if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
-				return terr
-			}
-		case models.CreateAccount:
-			if user, terr = p.newUser(providerType, decision, input); terr != nil {
-				return terr
-			}
-			if user, terr = p.api.signupNewUser(tx, user); terr != nil {
-				return terr
-			}
-			if _, terr = p.api.createNewIdentity(tx, user, providerType, identityData(input)); terr != nil {
-				return terr
-			}
+		if isNew {
 			created = user
-		case models.MultipleAccounts:
-			return scimerrors.ErrUniqueness("multiple users share this email in the SSO provider")
-		default:
-			return apierrors.NewInternalServerError("Unknown automatic linking decision: %v", decision.Decision)
 		}
-
-		if terr = models.LinkSCIMUser(tx, row, user.ID); terr != nil {
-			return terr
+		if !input.Active {
+			return deactivate(tx, user)
 		}
-		if input.Active {
+		if !user.IsBanned() {
 			return nil
 		}
-		if terr = user.Ban(tx, scimBanDuration); terr != nil {
+		deleted, terr := models.HasDeletedSCIMUser(tx, providerID, user.ID)
+		if terr != nil || !deleted {
 			return terr
 		}
-		return models.Logout(tx, user.ID)
+		return user.Ban(tx, 0)
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	if created != nil {
-		if err := p.api.triggerAfterUserCreated(r, db, created); err != nil {
-			logrus.WithError(err).WithField("user_id", created.ID).Error("scim: after user created hook failed")
-		}
-	}
+	p.afterCreate(r, db, created)
 	return row, nil
 }
 
 func (p *scimProvisioner) ReplaceUser(ctx context.Context, providerID, id uuid.UUID, input scim.UserInput, updatedAt *time.Time) (*models.SCIMUser, error) {
+	r, err := p.request(ctx)
+	if err != nil {
+		return nil, err
+	}
+	db := p.api.db.WithContext(ctx)
+	existing, err := models.FindSCIMUser(db, providerID, id)
+	if err != nil {
+		return nil, err
+	}
+	if existing.UserID == nil {
+		if input.Email == "" {
+			return nil, errEmailRequired()
+		}
+		if err := p.beforeCreate(r, db, providerID, input); err != nil {
+			return nil, err
+		}
+	}
+
 	var row *models.SCIMUser
-	err := p.api.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		var terr error
-		row, terr = models.ReplaceSCIMUser(tx, providerID, id, input.Resource, updatedAt)
-		return terr
+	var created *models.User
+	err = db.Transaction(func(tx *storage.Connection) error {
+		old, terr := models.FindSCIMUserForUpdate(tx, providerID, id)
+		if terr != nil {
+			return terr
+		}
+		if row, terr = models.ReplaceSCIMUser(tx, providerID, id, input.Resource, updatedAt); terr != nil {
+			return terr
+		}
+
+		if old.UserID == nil {
+			if input.Email == "" {
+				return errEmailRequired()
+			}
+			user, isNew, terr := p.link(tx, row, input)
+			if terr != nil {
+				return terr
+			}
+			if isNew {
+				created = user
+			}
+			if !row.Active {
+				return deactivate(tx, user)
+			}
+			return nil
+		}
+
+		user, terr := models.FindUserByID(tx, *old.UserID)
+		if terr != nil {
+			return terr
+		}
+		switch {
+		case old.Active && !row.Active:
+			return deactivate(tx, user)
+		case !old.Active && row.Active:
+			return user.Ban(tx, 0)
+		}
+		return nil
 	})
-	return row, err
+	if err != nil {
+		return nil, err
+	}
+	p.afterCreate(r, db, created)
+	return row, nil
 }
 
 func (p *scimProvisioner) DeleteUser(ctx context.Context, providerID, id uuid.UUID) error {
 	return p.api.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		return models.DeleteSCIMUser(tx, providerID, id)
+		row, err := models.DeleteSCIMUser(tx, providerID, id)
+		if err != nil || row.UserID == nil {
+			return err
+		}
+		user, err := models.FindUserByID(tx, *row.UserID)
+		if err != nil {
+			return err
+		}
+		return deactivate(tx, user)
 	})
+}
+
+func (p *scimProvisioner) link(tx *storage.Connection, row *models.SCIMUser, input scim.UserInput) (*models.User, bool, error) {
+	providerType := "sso:" + row.SSOProviderID.String()
+	decision, err := p.decide(tx, providerType, input)
+	if err != nil {
+		return nil, false, err
+	}
+
+	user := decision.User
+	switch decision.Decision {
+	case models.AccountExists:
+	case models.LinkAccount:
+		if _, err = p.api.createNewIdentity(tx, user, providerType, identityData(input)); err != nil {
+			return nil, false, err
+		}
+		if err = user.UpdateAppMetaDataProviders(tx); err != nil {
+			return nil, false, err
+		}
+	case models.CreateAccount:
+		if user, err = p.newUser(providerType, decision, input); err != nil {
+			return nil, false, err
+		}
+		if user, err = p.api.signupNewUser(tx, user); err != nil {
+			return nil, false, err
+		}
+		if _, err = p.api.createNewIdentity(tx, user, providerType, identityData(input)); err != nil {
+			return nil, false, err
+		}
+		return user, true, models.LinkSCIMUser(tx, row, user.ID)
+	case models.MultipleAccounts:
+		return nil, false, scimerrors.ErrUniqueness("multiple users share this email in the SSO provider")
+	default:
+		return nil, false, apierrors.NewInternalServerError("Unknown automatic linking decision: %v", decision.Decision)
+	}
+
+	return user, false, models.LinkSCIMUser(tx, row, user.ID)
+}
+
+func (p *scimProvisioner) beforeCreate(r *http.Request, db *storage.Connection, providerID uuid.UUID, input scim.UserInput) error {
+	if !p.api.hooksMgr.Enabled(v0hooks.BeforeUserCreated) {
+		return nil
+	}
+	providerType := "sso:" + providerID.String()
+	decision, err := p.decide(db, providerType, input)
+	if err != nil || decision.Decision != models.CreateAccount {
+		return err
+	}
+	user, err := p.newUser(providerType, decision, input)
+	if err != nil {
+		return err
+	}
+	return hookError(p.api.triggerBeforeUserCreated(r, db, user))
+}
+
+func (p *scimProvisioner) afterCreate(r *http.Request, db *storage.Connection, user *models.User) {
+	if user == nil {
+		return
+	}
+	if err := p.api.triggerAfterUserCreated(r, db, user); err != nil {
+		logrus.WithError(err).WithField("user_id", user.ID).Error("scim: after user created hook failed")
+	}
 }
 
 func (p *scimProvisioner) request(ctx context.Context) (*http.Request, error) {
@@ -163,6 +242,17 @@ func (p *scimProvisioner) newUser(providerType string, decision models.AccountLi
 	now := time.Now()
 	user.EmailConfirmedAt = &now
 	return user, nil
+}
+
+func deactivate(tx *storage.Connection, user *models.User) error {
+	if err := user.Ban(tx, scimBanDuration); err != nil {
+		return err
+	}
+	return models.Logout(tx, user.ID)
+}
+
+func errEmailRequired() error {
+	return scimerrors.ErrInvalidValue(`"emails" is required`)
 }
 
 func identityData(input scim.UserInput) map[string]any {
