@@ -31,7 +31,7 @@ func NewUserRepository(config *conf.GlobalConfiguration, db *storage.Connection)
 	return &userRepository{
 		db:       db,
 		location: BaseURL(config) + "/Users/",
-		schemas:  []*core.Schema{core.NewSchema(core.SchemaUser).With(userFields().Attributes()...)},
+		schemas:  []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)},
 	}
 }
 

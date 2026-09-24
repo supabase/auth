@@ -31,7 +31,7 @@ func NewServer(config *conf.GlobalConfiguration, validate server.TokenValidator,
 	return &Server{
 		server: server.New(serviceProviderConfig,
 			server.ErrorHandler(logError),
-			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithRepository(users)),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(users)),
 			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
 		),
 	}

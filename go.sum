@@ -506,6 +506,8 @@ github.com/supabase-community/scim-go v0.5.1-0.20260924142755-f509ca2b7140 h1:6T
 github.com/supabase-community/scim-go v0.5.1-0.20260924142755-f509ca2b7140/go.mod h1:oEMij9JuKtAl0wl0jeyIHDKqHvPpUmTXegKeCBKyxXw=
 github.com/supabase-community/scim-go v0.5.1-0.20260924153130-7fa21f3b44a3 h1:1f0Ba4V64+meMzGhCVidduV9VwI96vZJ06szYkPpO9c=
 github.com/supabase-community/scim-go v0.5.1-0.20260924153130-7fa21f3b44a3/go.mod h1:oEMij9JuKtAl0wl0jeyIHDKqHvPpUmTXegKeCBKyxXw=
+github.com/supabase-community/scim-go v0.5.1-0.20260924162459-305a1a9fbf95 h1:/zYyRaqYg94+lU4uXriVO5sZhlY9vrP9O0rahmhqjaM=
+github.com/supabase-community/scim-go v0.5.1-0.20260924162459-305a1a9fbf95/go.mod h1:oEMij9JuKtAl0wl0jeyIHDKqHvPpUmTXegKeCBKyxXw=
 github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869 h1:VDuRtwen5Z7QQ5ctuHUse4wAv/JozkKZkdic5vUV4Lg=
 github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869/go.mod h1:eHX5nlSMSnyPjUrbYzeqrA8snCe2SKyfizKjU3dkfOw=
 github.com/supranational/blst v0.3.16-0.20250831170142-f48500c1fdbe h1:nbdqkIGOGfUAD54q1s2YBcBz/WcsxCO9HUQ4aGV5hUw=
