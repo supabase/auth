@@ -22,16 +22,18 @@ import (
 var errMissingSSOProvider = errors.New("scim: request has no SSO provider")
 
 type userRepository struct {
-	db       *storage.Connection
-	location string
-	schemas  []*core.Schema
+	db          *storage.Connection
+	provisioner Provisioner
+	location    string
+	schemas     []*core.Schema
 }
 
-func NewUserRepository(config *conf.GlobalConfiguration, db *storage.Connection) server.Repository[*core.User] {
+func NewUserRepository(config *conf.GlobalConfiguration, db *storage.Connection, provisioner Provisioner) server.Repository[*core.User] {
 	return &userRepository{
-		db:       db,
-		location: BaseURL(config) + "/Users/",
-		schemas:  []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)},
+		db:          db,
+		provisioner: provisioner,
+		location:    BaseURL(config) + "/Users/",
+		schemas:     []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)},
 	}
 }
 
@@ -86,12 +88,12 @@ func (r *userRepository) Create(ctx context.Context, user *core.User) (*core.Use
 	if err != nil {
 		return nil, err
 	}
-	resource, err := toResource(user)
+	input, err := toInput(user)
 	if err != nil {
 		return nil, err
 	}
 
-	row, err := models.CreateSCIMUser(r.db.WithContext(ctx), providerID, resource)
+	row, err := r.provisioner.CreateUser(ctx, providerID, input)
 	if err != nil {
 		return nil, translate(err)
 	}
@@ -111,12 +113,12 @@ func (r *userRepository) Replace(ctx context.Context, user *core.User) (*core.Us
 	if err != nil {
 		return nil, err
 	}
-	resource, err := toResource(user)
+	input, err := toInput(user)
 	if err != nil {
 		return nil, err
 	}
 
-	row, err := models.ReplaceSCIMUser(r.db.WithContext(ctx), providerID, userID, resource, updatedAt)
+	row, err := r.provisioner.ReplaceUser(ctx, providerID, userID, input, updatedAt)
 	if err != nil {
 		return nil, translate(err)
 	}
@@ -132,7 +134,7 @@ func (r *userRepository) Delete(ctx context.Context, id, _ string) error {
 	if err != nil {
 		return errUserNotFound()
 	}
-	return translate(models.DeleteSCIMUser(r.db.WithContext(ctx), providerID, userID))
+	return translate(r.provisioner.DeleteUser(ctx, providerID, userID))
 }
 
 func (r *userRepository) toUser(row *models.SCIMUser) (*core.User, error) {

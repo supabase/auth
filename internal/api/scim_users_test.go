@@ -194,7 +194,7 @@ func (ts *SCIMUsersTestSuite) TestUniquenessWithinProvider() {
 func (ts *SCIMUsersTestSuite) TestUniqueIndexIsTheBackstop() {
 	ctx, err := scim.NewTokenValidator(ts.API.db)(context.Background(), ts.TokenA)
 	require.NoError(ts.T(), err)
-	users := scim.NewUserRepository(ts.API.config, ts.API.db)
+	users := scim.NewUserRepository(ts.API.config, ts.API.db, newSCIMProvisioner(ts.API))
 
 	_, err = users.Create(ctx, &core.User{UserName: "alice@example.com"})
 	require.NoError(ts.T(), err)
@@ -208,7 +208,7 @@ func (ts *SCIMUsersTestSuite) TestUniqueIndexIsTheBackstop() {
 func (ts *SCIMUsersTestSuite) TestReplaceRejectsStaleVersion() {
 	ctx, err := scim.NewTokenValidator(ts.API.db)(context.Background(), ts.TokenA)
 	require.NoError(ts.T(), err)
-	users := scim.NewUserRepository(ts.API.config, ts.API.db)
+	users := scim.NewUserRepository(ts.API.config, ts.API.db, newSCIMProvisioner(ts.API))
 
 	created, err := users.Create(ctx, &core.User{UserName: "alice@example.com"})
 	require.NoError(ts.T(), err)
@@ -329,7 +329,7 @@ func (ts *SCIMUsersTestSuite) TestUnknownID() {
 }
 
 func (ts *SCIMUsersTestSuite) TestRequiresSSOProviderOnContext() {
-	users := scim.NewUserRepository(ts.API.config, ts.API.db)
+	users := scim.NewUserRepository(ts.API.config, ts.API.db, newSCIMProvisioner(ts.API))
 
 	_, _, err := users.List(context.Background(), &protocol.SearchRequest{Count: 10})
 	require.Error(ts.T(), err)
