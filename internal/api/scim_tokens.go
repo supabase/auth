@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -32,11 +33,7 @@ func (a *API) adminSCIMTokensCreate(w http.ResponseWriter, r *http.Request) erro
 	provider := getSSOProvider(ctx)
 
 	params := &AdminSCIMTokenCreateParams{}
-	body, err := utilities.GetBodyBytes(r)
-	if err != nil {
-		return apierrors.NewInternalServerError("Could not read body into byte slice").WithInternalError(err)
-	}
-	if len(body) > 0 {
+	if body, err := utilities.GetBodyBytes(r); err != nil || len(body) > 0 {
 		if err := retrieveRequestParams(r, params); err != nil {
 			return err
 		}
@@ -54,6 +51,9 @@ func (a *API) adminSCIMTokensCreate(w http.ResponseWriter, r *http.Request) erro
 		token, plaintext, err = models.CreateSCIMToken(tx, provider, params.ExpiresAt)
 		return err
 	}); err != nil {
+		if errors.Is(err, models.SCIMTokenExpiryError{}) {
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "expires_at must be in the future")
+		}
 		return apierrors.NewInternalServerError("Error creating SCIM token").WithInternalError(err)
 	}
 

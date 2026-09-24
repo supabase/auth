@@ -222,6 +222,12 @@ func (e SCIMTokenNotFoundError) Is(target error) bool {
 	return target == errNotFound
 }
 
+type SCIMTokenExpiryError struct{}
+
+func (e SCIMTokenExpiryError) Error() string {
+	return "SCIM token must expire after it is created"
+}
+
 type SCIMUserNotFoundError struct{}
 
 func (e SCIMUserNotFoundError) Error() string {

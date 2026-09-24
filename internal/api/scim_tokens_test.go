@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -148,6 +149,24 @@ func (ts *SCIMTokensTestSuite) TestCreateRejectsPastExpiry() {
 
 	require.Equal(ts.T(), http.StatusBadRequest, w.Code, w.Body.String())
 	require.Contains(ts.T(), w.Body.String(), "validation_failed")
+}
+
+func (ts *SCIMTokensTestSuite) TestCreateRejectsExpiryBeforeDatabaseClock() {
+	expiresAt := time.Now().Add(-time.Minute)
+	ts.API.overrideTime = func() time.Time { return expiresAt.Add(-time.Hour) }
+	defer func() { ts.API.overrideTime = nil }()
+
+	w := ts.request(http.MethodPost, ts.tokensPath(ts.Provider), map[string]any{"expires_at": expiresAt})
+
+	require.Equal(ts.T(), http.StatusBadRequest, w.Code, w.Body.String())
+	require.Contains(ts.T(), w.Body.String(), "validation_failed")
+}
+
+func (ts *SCIMTokensTestSuite) TestCreateRejectsOversizedBody() {
+	w := ts.request(http.MethodPost, ts.tokensPath(ts.Provider), strings.Repeat("a", 1<<20))
+
+	require.Equal(ts.T(), http.StatusRequestEntityTooLarge, w.Code, w.Body.String())
+	require.Contains(ts.T(), w.Body.String(), "request_entity_too_large")
 }
 
 func (ts *SCIMTokensTestSuite) TestCreateForUnknownProvider() {

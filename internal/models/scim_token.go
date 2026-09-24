@@ -91,6 +91,9 @@ func CreateSCIMToken(tx *storage.Connection, provider *SSOProvider, expiresAt *t
 			fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, token_hash, prefix, expires_at) VALUES (?, ?, ?, ?, ?) RETURNING *", token.TableName()),
 			token.ID, token.SSOProviderID, token.TokenHash, token.Prefix, token.ExpiresAt,
 		).First(token); err != nil {
+			if isCheckViolation(err, "scim_tokens_expires_at_future") {
+				return nil, "", SCIMTokenExpiryError{}
+			}
 			return nil, "", errors.Wrap(err, "error creating SCIM token")
 		}
 		return token, plaintext, nil

@@ -68,6 +68,13 @@ func (ts *SCIMTokenTestSuite) TestCreateWithExpiry() {
 	require.True(ts.T(), expiresAt.Equal(*token.ExpiresAt))
 }
 
+func (ts *SCIMTokenTestSuite) TestCreateWithPastExpiry() {
+	expiresAt := time.Now().Add(-time.Minute)
+	_, _, err := CreateSCIMToken(ts.db, ts.createProvider(), &expiresAt)
+
+	require.ErrorIs(ts.T(), err, SCIMTokenExpiryError{})
+}
+
 func (ts *SCIMTokenTestSuite) TestCreateForMissingProvider() {
 	_, _, err := CreateSCIMToken(ts.db, &SSOProvider{ID: uuid.Must(uuid.NewV4())}, nil)
 
