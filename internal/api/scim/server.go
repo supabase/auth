@@ -12,10 +12,7 @@ import (
 	"github.com/supabase/auth/internal/observability"
 )
 
-const (
-	BasePath         = "/scim/v2"
-	DocumentationURI = "https://supabase.com/docs/guides/auth/enterprise-sso/scim"
-)
+const BasePath = "/scim/v2"
 
 type Server struct {
 	server *server.Server
@@ -25,7 +22,6 @@ func NewServer(config *conf.GlobalConfiguration, validate server.TokenValidator,
 	serviceProviderConfig := core.NewServiceProviderConfig(BasePath).
 		Filtering(protocol.DefaultLimits.MaxCount).
 		Patching()
-	serviceProviderConfig.DocumentationURI = DocumentationURI
 	serviceProviderConfig.Meta.Location = BaseURL(config) + "/ServiceProviderConfig"
 
 	return &Server{
