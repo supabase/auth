@@ -213,6 +213,8 @@ func translate(err error) error {
 		return errStale()
 	case errors.Is(err, models.SCIMUserConflictError{}):
 		return scimerrors.ErrUniqueness(`"userName" and "externalId" must be unique`)
+	case errors.Is(err, models.SCIMUserLinkedError{}):
+		return scimerrors.ErrUniqueness("user is already provisioned by this provider")
 	}
 	return err
 }

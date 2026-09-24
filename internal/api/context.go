@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 
 	"github.com/gofrs/uuid"
@@ -29,6 +30,7 @@ var (
 	externalHostKey     = ctxkey.New[*url.URL]("external_host")
 	oauthClientStateKey = ctxkey.New[uuid.UUID]("oauth_client_state_id")
 	flowStateContextKey = ctxkey.New[*models.FlowState]("flow_state")
+	scimRequestKey      = ctxkey.New[*http.Request]("scim_request")
 )
 
 // withToken adds the JWT token to the context.

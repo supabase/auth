@@ -16,6 +16,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
+	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase/auth/internal/api/scim"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
@@ -102,7 +103,18 @@ func (ts *SCIMUsersTestSuite) list(token, filter string) map[string]any {
 }
 
 func userWith(userName, externalID string) string {
-	return `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"` + userName + `","externalId":"` + externalID + `"}`
+	return `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"` + userName + `","externalId":"` + externalID + `","emails":[{"primary":true,"value":"` + userName + `"}]}`
+}
+
+func (ts *SCIMUsersTestSuite) repository() (context.Context, server.Repository[*core.User]) {
+	ctx, err := scim.NewTokenValidator(ts.API.db)(context.Background(), ts.TokenA)
+	require.NoError(ts.T(), err)
+	ctx = scimRequestKey.WithValue(ctx, httptest.NewRequest(http.MethodPost, "/scim/v2/Users", nil))
+	return ctx, scim.NewUserRepository(ts.API.config, ts.API.db, newSCIMProvisioner(ts.API))
+}
+
+func emails(value string) []core.Email {
+	return []core.Email{{Value: value, Primary: new(true)}}
 }
 
 func (ts *SCIMUsersTestSuite) TestOktaLifecycle() {
@@ -192,25 +204,21 @@ func (ts *SCIMUsersTestSuite) TestUniquenessWithinProvider() {
 }
 
 func (ts *SCIMUsersTestSuite) TestUniqueIndexIsTheBackstop() {
-	ctx, err := scim.NewTokenValidator(ts.API.db)(context.Background(), ts.TokenA)
-	require.NoError(ts.T(), err)
-	users := scim.NewUserRepository(ts.API.config, ts.API.db, newSCIMProvisioner(ts.API))
+	ctx, users := ts.repository()
 
-	_, err = users.Create(ctx, &core.User{UserName: "alice@example.com"})
+	_, err := users.Create(ctx, &core.User{UserName: "alice@example.com", Emails: emails("alice@example.com")})
 	require.NoError(ts.T(), err)
 
-	_, err = users.Create(ctx, &core.User{UserName: "Alice@Example.com"})
+	_, err = users.Create(ctx, &core.User{UserName: "Alice@Example.com", Emails: emails("alice@example.com")})
 	var scimErr *scimerrors.Error
 	require.ErrorAs(ts.T(), err, &scimErr)
 	require.Equal(ts.T(), http.StatusConflict, scimErr.StatusCode())
 }
 
 func (ts *SCIMUsersTestSuite) TestReplaceRejectsStaleVersion() {
-	ctx, err := scim.NewTokenValidator(ts.API.db)(context.Background(), ts.TokenA)
-	require.NoError(ts.T(), err)
-	users := scim.NewUserRepository(ts.API.config, ts.API.db, newSCIMProvisioner(ts.API))
+	ctx, users := ts.repository()
 
-	created, err := users.Create(ctx, &core.User{UserName: "alice@example.com"})
+	created, err := users.Create(ctx, &core.User{UserName: "alice@example.com", Emails: emails("alice@example.com")})
 	require.NoError(ts.T(), err)
 	read, err := users.Get(ctx, created.ResourceID())
 	require.NoError(ts.T(), err)

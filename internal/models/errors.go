@@ -249,3 +249,9 @@ type SCIMUserConflictError struct{}
 func (e SCIMUserConflictError) Error() string {
 	return "SCIM user conflicts with an existing user"
 }
+
+type SCIMUserLinkedError struct{}
+
+func (e SCIMUserLinkedError) Error() string {
+	return "user is already linked to a SCIM user in this provider"
+}

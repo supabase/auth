@@ -150,6 +150,32 @@ func DeleteSCIMUser(tx *storage.Connection, providerID, id uuid.UUID) error {
 	return nil
 }
 
+func LinkSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) error {
+	if err := tx.RawQuery(
+		fmt.Sprintf("SELECT id FROM %q WHERE id = ? FOR UPDATE", (&User{}).TableName()),
+		userID,
+	).Exec(); err != nil {
+		return errors.Wrap(err, "error locking user")
+	}
+
+	linked, err := tx.Q().Where("sso_provider_id = ? AND user_id = ? AND deleted_at IS NULL", user.SSOProviderID, userID).Exists(&SCIMUser{})
+	if err != nil {
+		return errors.Wrap(err, "error finding linked SCIM user")
+	}
+	if linked {
+		return SCIMUserLinkedError{}
+	}
+
+	if err := tx.RawQuery(
+		fmt.Sprintf("UPDATE %q SET user_id = ? WHERE id = ?", user.TableName()),
+		userID, user.ID,
+	).Exec(); err != nil {
+		return errors.Wrap(err, "error linking SCIM user")
+	}
+	user.UserID = &userID
+	return nil
+}
+
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
