@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -184,12 +185,37 @@ func LinkSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) erro
 	return nil
 }
 
-func HasDeletedSCIMUser(tx *storage.Connection, providerID, userID uuid.UUID) (bool, error) {
-	deleted, err := tx.Q().Where("sso_provider_id = ? AND user_id = ? AND deleted_at IS NOT NULL", providerID, userID).Exists(&SCIMUser{})
+func RenameSCIMIdentity(tx *storage.Connection, userID uuid.UUID, provider, from, to string, data map[string]any) error {
+	encoded, err := json.Marshal(data)
 	if err != nil {
-		return false, errors.Wrap(err, "error finding deleted SCIM user")
+		return errors.Wrap(err, "error encoding identity data")
 	}
-	return deleted, nil
+	count, err := tx.RawQuery(
+		fmt.Sprintf("UPDATE %q SET provider_id = ?, identity_data = identity_data || ?::jsonb, updated_at = now() WHERE user_id = ? AND provider = ? AND provider_id = ?", (&Identity{}).TableName()),
+		to, string(encoded), userID, provider, from,
+	).ExecWithCount()
+	if err != nil {
+		if isUniqueViolation(err) {
+			return SCIMUserConflictError{}
+		}
+		return errors.Wrap(err, "error renaming SCIM identity")
+	}
+	if count == 0 {
+		return SCIMIdentityNotFoundError{}
+	}
+	return nil
+}
+
+// LockAccountLinking serializes SCIM account-linking decisions for a given
+// (provider, email) pair via a transaction-scoped advisory lock, so two
+// concurrent creates can't both observe "no account exists yet" and each
+// create a distinct user for the same email.
+func LockAccountLinking(tx *storage.Connection, providerType, email string) error {
+	key := providerType + "|" + strings.ToLower(email)
+	if err := tx.RawQuery("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", key).Exec(); err != nil {
+		return errors.Wrap(err, "error locking account linking")
+	}
+	return nil
 }
 
 func isUniqueViolation(err error) bool {

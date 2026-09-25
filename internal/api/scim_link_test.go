@@ -2,11 +2,14 @@ package api
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -84,13 +87,13 @@ func (ts *SCIMUsersTestSuite) TestCreateLinksByEmailWithinProvider() {
 	require.Len(ts.T(), ts.identities(user), 2)
 }
 
-func (ts *SCIMUsersTestSuite) TestCreateInactiveBansAndLogsOut() {
+func (ts *SCIMUsersTestSuite) TestCreateInactiveLogsOutWithoutBanning() {
 	existing := ts.ssoUser(ts.A, "Alice@Example.com", "alice@example.com")
 	ts.session(existing)
 
 	user := ts.linkedUser(ts.create(ts.TokenA, strings.Replace(oktaUser, `"active": true`, `"active": false`, 1)))
 
-	require.True(ts.T(), user.IsBanned())
+	require.False(ts.T(), user.IsBanned())
 	require.Zero(ts.T(), ts.sessions(user))
 }
 
@@ -152,7 +155,7 @@ func (ts *SCIMUsersTestSuite) TestReplaceDeactivatesAndReactivates() {
 
 	ts.setActive(id, false)
 	user := ts.linkedUser(id)
-	require.True(ts.T(), user.IsBanned())
+	require.False(ts.T(), user.IsBanned())
 	require.Zero(ts.T(), ts.sessions(user))
 
 	ts.setActive(id, true)
@@ -176,10 +179,10 @@ func (ts *SCIMUsersTestSuite) TestReplaceLinksUnlinkedRow() {
 
 	user := ts.linkedUser(row.ID.String())
 	require.Equal(ts.T(), "alice@example.com", user.GetEmail())
-	require.True(ts.T(), user.IsBanned())
+	require.False(ts.T(), user.IsBanned())
 }
 
-func (ts *SCIMUsersTestSuite) TestDeleteBansAndLogsOut() {
+func (ts *SCIMUsersTestSuite) TestDeleteLogsOutWithoutBanning() {
 	id := ts.create(ts.TokenA, oktaUser)
 	user := ts.linkedUser(id)
 	ts.session(user)
@@ -189,11 +192,11 @@ func (ts *SCIMUsersTestSuite) TestDeleteBansAndLogsOut() {
 
 	user, err := models.FindUserByID(ts.API.db, user.ID)
 	require.NoError(ts.T(), err)
-	require.True(ts.T(), user.IsBanned())
+	require.False(ts.T(), user.IsBanned())
 	require.Zero(ts.T(), ts.sessions(user))
 }
 
-func (ts *SCIMUsersTestSuite) TestCreateUnbansAfterDelete() {
+func (ts *SCIMUsersTestSuite) TestCreateDoesNotBanAfterDelete() {
 	id := ts.create(ts.TokenA, oktaUser)
 	user := ts.linkedUser(id)
 	w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Users/"+id, "")
@@ -203,4 +206,80 @@ func (ts *SCIMUsersTestSuite) TestCreateUnbansAfterDelete() {
 
 	require.Equal(ts.T(), user.ID, relinked.ID)
 	require.False(ts.T(), relinked.IsBanned())
+}
+
+func (ts *SCIMUsersTestSuite) TestCreateConcurrentSameEmailLinksToOneUser() {
+	body := func(userName, externalID string) string {
+		return `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"` + userName + `","externalId":"` + externalID + `","emails":[{"primary":true,"value":"race@example.com"}]}`
+	}
+	bodies := []string{body("race-a", "race-a"), body("race-b", "race-b")}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	codes := make([]int, len(bodies))
+	for i := range bodies {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			r := httptest.NewRequest(http.MethodPost, "/scim/v2/Users", strings.NewReader(bodies[i]))
+			r.Header.Set("Authorization", "Bearer "+ts.TokenA)
+			r.Header.Set("Content-Type", protocol.MediaType)
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, r)
+			codes[i] = w.Code
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	// The lock serializes the two creates: whichever commits first creates the
+	// user, the other observes that account under the same provider and is
+	// rejected as already linked -- never silently creating a second user.
+	created := 0
+	for _, code := range codes {
+		if code == http.StatusCreated {
+			created++
+		} else {
+			require.Equal(ts.T(), http.StatusConflict, code)
+		}
+	}
+	require.Equal(ts.T(), 1, created)
+
+	count, err := ts.API.db.Q().Where("email = ?", "race@example.com").Count(&models.User{})
+	require.NoError(ts.T(), err)
+	require.EqualValues(ts.T(), 1, count)
+}
+
+func (ts *SCIMUsersTestSuite) rename(id, userName string) (int, string) {
+	w, _ := ts.do(ts.TokenA, http.MethodPut, "/Users/"+id, strings.Replace(oktaUser, `"userName": "Alice@Example.com"`, `"userName": "`+userName+`"`, 1))
+	return w.Code, w.Body.String()
+}
+
+func (ts *SCIMUsersTestSuite) TestReplaceRenamesSSOIdentity() {
+	id := ts.create(ts.TokenA, oktaUser)
+	user := ts.linkedUser(id)
+
+	code, body := ts.rename(id, "alice2@example.com")
+	require.Equal(ts.T(), http.StatusOK, code, body)
+
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, "alice2@example.com", "sso:"+ts.A.ID.String())
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), user.ID, identity.UserID)
+	require.Equal(ts.T(), "alice2@example.com", identity.IdentityData["sub"])
+	require.Len(ts.T(), ts.identities(user), 1)
+}
+
+func (ts *SCIMUsersTestSuite) TestReplaceRejectsRenameToTakenIdentity() {
+	id := ts.create(ts.TokenA, oktaUser)
+	ts.ssoUser(ts.A, "bob@example.com", "bob@example.com")
+
+	code, body := ts.rename(id, "bob@example.com")
+	require.Equal(ts.T(), http.StatusConflict, code, body)
+
+	var row models.SCIMUser
+	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&row))
+	require.Equal(ts.T(), "alice@example.com", row.UserName)
+	_, err := models.FindIdentityByIdAndProvider(ts.API.db, "Alice@Example.com", "sso:"+ts.A.ID.String())
+	require.NoError(ts.T(), err)
 }

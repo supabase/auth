@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -16,8 +17,6 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
-
-const scimBanDuration = 100 * 365 * 24 * time.Hour
 
 type scimProvisioner struct {
 	api *API
@@ -43,6 +42,9 @@ func (p *scimProvisioner) CreateUser(ctx context.Context, providerID uuid.UUID, 
 	var row *models.SCIMUser
 	var created *models.User
 	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.LockAccountLinking(tx, "sso:"+providerID.String(), input.Email); terr != nil {
+			return terr
+		}
 		var terr error
 		if row, terr = models.CreateSCIMUser(tx, providerID, input.Resource); terr != nil {
 			return terr
@@ -57,14 +59,7 @@ func (p *scimProvisioner) CreateUser(ctx context.Context, providerID uuid.UUID, 
 		if !input.Active {
 			return deactivate(tx, user)
 		}
-		if !user.IsBanned() {
-			return nil
-		}
-		deleted, terr := models.HasDeletedSCIMUser(tx, providerID, user.ID)
-		if terr != nil || !deleted {
-			return terr
-		}
-		return user.Ban(tx, 0)
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -95,6 +90,9 @@ func (p *scimProvisioner) ReplaceUser(ctx context.Context, providerID, id uuid.U
 	var row *models.SCIMUser
 	var created *models.User
 	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.LockAccountLinking(tx, "sso:"+providerID.String(), input.Email); terr != nil {
+			return terr
+		}
 		old, terr := models.FindSCIMUserForUpdate(tx, providerID, id)
 		if terr != nil {
 			return terr
@@ -124,11 +122,17 @@ func (p *scimProvisioner) ReplaceUser(ctx context.Context, providerID, id uuid.U
 		if terr != nil {
 			return terr
 		}
-		switch {
-		case old.Active && !row.Active:
+		if from := userName(old.Resource); from != input.UserName {
+			data := map[string]any{"sub": input.UserName}
+			if input.Email != "" {
+				data["email"] = input.Email
+			}
+			if terr := models.RenameSCIMIdentity(tx, user.ID, "sso:"+providerID.String(), from, input.UserName, data); terr != nil {
+				return terr
+			}
+		}
+		if old.Active && !row.Active {
 			return deactivate(tx, user)
-		case !old.Active && row.Active:
-			return user.Ban(tx, 0)
 		}
 		return nil
 	})
@@ -245,9 +249,6 @@ func (p *scimProvisioner) newUser(providerType string, decision models.AccountLi
 }
 
 func deactivate(tx *storage.Connection, user *models.User) error {
-	if err := user.Ban(tx, scimBanDuration); err != nil {
-		return err
-	}
 	return models.Logout(tx, user.ID)
 }
 
@@ -261,6 +262,14 @@ func identityData(input scim.UserInput) map[string]any {
 		"email":          input.Email,
 		"email_verified": true,
 	}
+}
+
+func userName(resource []byte) string {
+	var r struct {
+		UserName string `json:"userName"`
+	}
+	_ = json.Unmarshal(resource, &r)
+	return r.UserName
 }
 
 func hookError(err error) error {

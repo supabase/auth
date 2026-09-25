@@ -255,3 +255,13 @@ type SCIMUserLinkedError struct{}
 func (e SCIMUserLinkedError) Error() string {
 	return "user is already linked to a SCIM user in this provider"
 }
+
+type SCIMIdentityNotFoundError struct{}
+
+func (e SCIMIdentityNotFoundError) Error() string {
+	return "SCIM identity not found"
+}
+
+func (e SCIMIdentityNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
