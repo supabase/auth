@@ -311,6 +311,12 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		identityData = structs.Map(userData.Metadata)
 	}
 
+	if strings.HasPrefix(providerType, "sso:") && userData.Metadata.Email != "" {
+		if terr := models.LockAccountLinking(tx, providerType, userData.Metadata.Email); terr != nil {
+			return 0, nil, terr
+		}
+	}
+
 	decision, terr := models.DetermineAccountLinking(tx, config, userData.Emails, aud, providerType, userData.Metadata.Subject)
 	if terr != nil {
 		return 0, nil, terr
