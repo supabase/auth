@@ -54,6 +54,57 @@ func TestMFA(t *testing.T) {
 	suite.Run(t, ts)
 }
 
+func TestIsFactorTypeVerifyEnabled(t *testing.T) {
+	config := &conf.GlobalConfiguration{}
+	config.MFA.TOTP.VerifyEnabled = true
+	config.MFA.Phone.VerifyEnabled = false
+	config.MFA.WebAuthn.VerifyEnabled = true
+	config.MFA.RecoveryCodes.VerifyEnabled = false
+
+	cases := map[string]bool{
+		models.TOTP:         true,
+		models.Phone:        false,
+		models.WebAuthn:     true,
+		models.RecoveryCode: false,
+		"unknown":           false,
+	}
+	for factorType, want := range cases {
+		require.Equal(t, want, isFactorTypeVerifyEnabled(config, factorType), factorType)
+	}
+}
+
+func TestHasUsableNonRecoveryFactor(t *testing.T) {
+	config := &conf.GlobalConfiguration{}
+	config.MFA.TOTP.VerifyEnabled = true
+	config.MFA.Phone.VerifyEnabled = false
+	config.MFA.RecoveryCodes.VerifyEnabled = true
+
+	factor := func(factorType string, state models.FactorState) models.Factor {
+		return models.Factor{ID: uuid.Must(uuid.NewV4()), FactorType: factorType, Status: state.String()}
+	}
+	verifiedTOTP := factor(models.TOTP, models.FactorStateVerified)
+
+	cases := []struct {
+		name    string
+		factors []models.Factor
+		exclude uuid.UUID
+		want    bool
+	}{
+		{name: "no factors", want: false},
+		{name: "verified factor of a verify-enabled type", factors: []models.Factor{verifiedTOTP}, want: true},
+		{name: "unverified factor", factors: []models.Factor{factor(models.TOTP, models.FactorStateUnverified)}, want: false},
+		{name: "verified factor of a verify-disabled type", factors: []models.Factor{factor(models.Phone, models.FactorStateVerified)}, want: false},
+		{name: "recovery-code factor never counts even when verify is enabled", factors: []models.Factor{factor(models.RecoveryCode, models.FactorStateVerified)}, want: false},
+		{name: "excluded factor is skipped", factors: []models.Factor{verifiedTOTP}, exclude: verifiedTOTP.ID, want: false},
+		{name: "another usable factor besides the excluded one", factors: []models.Factor{verifiedTOTP, factor(models.TOTP, models.FactorStateVerified)}, exclude: verifiedTOTP.ID, want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, hasUsableNonRecoveryFactor(config, tc.factors, tc.exclude))
+		})
+	}
+}
+
 func (ts *MFATestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 

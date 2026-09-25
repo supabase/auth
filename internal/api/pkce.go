@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	PKCEPrefix                    = "pkce_"
+	PKCEPrefix                    = models.PKCEPrefix
 	MinCodeChallengeLength        = 43
 	MaxCodeChallengeLength        = 128
 	InvalidPKCEParamsErrorMessage = "PKCE flow requires code_challenge_method and code_challenge"

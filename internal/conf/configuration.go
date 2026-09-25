@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"regexp"
 	"strings"
@@ -24,6 +25,12 @@ const defaultMinPasswordLength int = 6
 const defaultChallengeExpiryDuration float64 = 300
 const defaultFactorExpiryDuration time.Duration = 300 * time.Second
 const defaultFlowStateExpiryDuration time.Duration = 300 * time.Second
+
+// maxOtpExp is the largest OTP validity window, in seconds, that survives
+// conversion to a time.Duration, which counts nanoseconds in an int64. That is
+// roughly 292 years. ApplyDefaults clamps OtpExp to it so the conversion cannot
+// overflow into a negative duration, which would expire tokens at creation.
+const maxOtpExp uint = math.MaxInt64 / uint(time.Second)
 
 // See: https://www.postgresql.org/docs/7.0/syntax525.htm
 var postgresNamesRegexp = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
@@ -412,6 +419,18 @@ type ExperimentalConfiguration struct {
 	// one (e.g. a user who signed up with an external provider and later sets a password).
 	// Env: GOTRUE_EXPERIMENTAL_CREATE_EMAIL_IDENTITY_ON_PASSWORD_SET_ENABLED=true
 	CreateEmailIdentityOnPasswordSetEnabled bool `split_words:"true" default:"false"`
+
+	// EnableOTTAsSourceOfTruth makes the typed-OTP verification path read the
+	// challenge from the one_time_tokens table instead of the users.*_token
+	// columns. A lookup miss is rejected as an expired or invalid token; there is
+	// no fallback to the users columns.
+	// Env: GOTRUE_EXPERIMENTAL_ENABLE_OTT_AS_SOURCE_OF_TRUTH=true
+	EnableOTTAsSourceOfTruth bool `split_words:"true" default:"false"`
+
+	// OneTimeTokenExpiresAtWriteEnabled sets one_time_tokens.expires_at when a
+	// one-time token is created. Ships dark: nothing reads the column yet.
+	// Env: GOTRUE_EXPERIMENTAL_ONE_TIME_TOKEN_EXPIRES_AT_WRITE_ENABLED=true
+	OneTimeTokenExpiresAtWriteEnabled bool `split_words:"true" default:"false"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime
@@ -695,6 +714,10 @@ type MailerConfiguration struct {
 	blockedMXRecordsVal cachedValue[map[string]bool]     `json:"-"`
 }
 
+func (c *MailerConfiguration) OtpExpAsDuration() time.Duration {
+	return time.Duration(c.OtpExp) * time.Second // #nosec G115 -- OtpExp comes from trusted config, not user input
+}
+
 func (c *MailerConfiguration) Validate() error {
 	c.serviceHeadersVal = c.buildServiceHeaders()
 	c.blockedMXRecordsVal = c.buildBlockedMXRecords()
@@ -782,6 +805,10 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
+}
+
+func (c *SmsProviderConfiguration) OtpExpAsDuration() time.Duration {
+	return time.Duration(c.OtpExp) * time.Second // #nosec G115 -- OtpExp comes from trusted config, not user input
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
@@ -1203,6 +1230,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.Mailer.OtpExp = 86400 // 1 day
 	}
 
+	if config.Mailer.OtpExp > maxOtpExp {
+		config.Mailer.OtpExp = maxOtpExp
+	}
+
 	if config.Mailer.OtpLength == 0 || config.Mailer.OtpLength < 6 || config.Mailer.OtpLength > 10 {
 		// 6-digit otp by default
 		config.Mailer.OtpLength = 6
@@ -1218,6 +1249,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if config.Sms.OtpExp == 0 {
 		config.Sms.OtpExp = 60
+	}
+
+	if config.Sms.OtpExp > maxOtpExp {
+		config.Sms.OtpExp = maxOtpExp
 	}
 
 	if config.Sms.OtpLength == 0 || config.Sms.OtpLength < 6 || config.Sms.OtpLength > 10 {
