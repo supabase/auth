@@ -864,6 +864,68 @@ func (ts *AdminTestSuite) TestAdminUserDelete() {
 	}
 }
 
+func (ts *AdminTestSuite) createLinkedSCIMUser(email string) (*models.SCIMUser, *models.User) {
+	provider := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(provider))
+
+	u, err := models.NewUser("", email, "", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	u.IsSSOUser = true
+	require.NoError(ts.T(), ts.API.db.Create(u))
+
+	scimUser, err := models.CreateSCIMUser(ts.API.db, provider.ID, []byte(`{"userName":"`+email+`"}`))
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), models.LinkSCIMUser(ts.API.db, scimUser, u.ID))
+
+	return scimUser, u
+}
+
+func (ts *AdminTestSuite) findSCIMUserByID(id uuid.UUID) *models.SCIMUser {
+	var row models.SCIMUser
+	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&row))
+	return &row
+}
+
+// TestAdminUserDeleteSoftDeletesSCIMUser tests that deleting a user, whether
+// soft or hard, also soft-deletes any SCIM user linked to it so the IdP
+// doesn't keep seeing a live, linked resource for a deleted account.
+func (ts *AdminTestSuite) TestAdminUserDeleteSoftDeletesSCIMUser() {
+	cases := []struct {
+		desc      string
+		body      map[string]interface{}
+		wantEmail string
+	}{
+		{
+			desc:      "hard delete",
+			body:      map[string]interface{}{"should_soft_delete": false},
+			wantEmail: "scim-hard-delete@example.com",
+		},
+		{
+			desc:      "soft delete",
+			body:      map[string]interface{}{"should_soft_delete": true},
+			wantEmail: "scim-soft-delete@example.com",
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			scimUser, u := ts.createLinkedSCIMUser(c.wantEmail)
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+
+			row := ts.findSCIMUserByID(scimUser.ID)
+			require.NotNil(ts.T(), row.DeletedAt)
+		})
+	}
+}
+
 func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
 	// create user
 	u, err := models.NewUser("123456789", "test@example.com", "secret", ts.Config.JWT.Aud, map[string]interface{}{"name": "test"})

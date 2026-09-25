@@ -311,6 +311,12 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		identityData = structs.Map(userData.Metadata)
 	}
 
+	if strings.HasPrefix(providerType, "sso:") && userData.Metadata.Email != "" {
+		if terr := models.LockAccountLinking(tx, providerType, userData.Metadata.Email); terr != nil {
+			return 0, nil, terr
+		}
+	}
+
 	decision, terr := models.DetermineAccountLinking(tx, config, userData.Emails, aud, providerType, userData.Metadata.Subject)
 	if terr != nil {
 		return 0, nil, terr
@@ -405,6 +411,20 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 
 	if user.IsBanned() {
 		return 0, nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+	}
+
+	if ssoProviderID, ok := strings.CutPrefix(providerType, "sso:"); ok {
+		providerID, terr := uuid.FromString(ssoProviderID)
+		if terr != nil {
+			return 0, nil, apierrors.NewInternalServerError("Invalid SSO provider id in provider type").WithInternalError(terr)
+		}
+		deprovisioned, terr := models.IsSCIMDeprovisioned(tx, providerID, user.ID)
+		if terr != nil {
+			return 0, nil, terr
+		}
+		if deprovisioned {
+			return 0, nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+		}
 	}
 
 	hasEmails := providerType != Web3Provider && (!emailOptional || decision.CandidateEmail.Email != "")

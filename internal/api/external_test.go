@@ -16,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type ExternalTestSuite struct {
@@ -90,6 +91,65 @@ func (ts *ExternalTestSuite) TestAutomaticLinkIdentityWritesAuditLog() {
 	logs, err = models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), logs, 1, "signing in with an existing identity must not emit another audit log")
+}
+
+func (ts *ExternalTestSuite) TestSSOConcurrentCreateSameEmailLinksToOneUser() {
+	ssoProvider := &models.SSOProvider{}
+	require.NoError(ts.T(), ts.API.db.Create(ssoProvider))
+	providerType := "sso:" + ssoProvider.ID.String()
+
+	userData := func(sub string) *provider.UserProvidedData {
+		return &provider.UserProvidedData{
+			Metadata: &provider.Claims{
+				Subject:       sub,
+				Email:         "sso-race@example.com",
+				EmailVerified: true,
+			},
+			Emails: []provider.Email{{
+				Email:    "sso-race@example.com",
+				Primary:  true,
+				Verified: true,
+			}},
+		}
+	}
+	r := httptest.NewRequest(http.MethodPost, "/sso/saml/acs", nil)
+
+	subs := []string{"sub-a", "sub-b"}
+	decisions := make([]models.AccountLinkingDecision, len(subs))
+	errs := make([]error, len(subs))
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i, sub := range subs {
+		wg.Add(1)
+		go func(i int, sub string) {
+			defer wg.Done()
+			<-start
+			errs[i] = ts.API.db.Transaction(func(tx *storage.Connection) error {
+				decision, _, terr := ts.API.createAccountFromExternalIdentity(tx, r, userData(sub), providerType, false)
+				decisions[i] = decision
+				return terr
+			})
+		}(i, sub)
+	}
+	close(start)
+	wg.Wait()
+
+	for _, err := range errs {
+		require.NoError(ts.T(), err)
+	}
+
+	created := 0
+	for _, decision := range decisions {
+		if decision == models.CreateAccount {
+			created++
+		}
+	}
+	require.Equal(ts.T(), 1, created, "the lock must serialize concurrent SSO creates for the same email so only one account is created")
+
+	count, err := ts.API.db.Q().Where("email = ?", "sso-race@example.com").Count(&models.User{})
+	require.NoError(ts.T(), err)
+	require.EqualValues(ts.T(), 1, count)
 }
 
 func (ts *ExternalTestSuite) createUser(providerId string, email string, name string, avatar string, confirmationToken string) (*models.User, error) {

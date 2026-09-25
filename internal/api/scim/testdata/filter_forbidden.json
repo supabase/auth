@@ -2,6 +2,6 @@
   "schemas": [
     "urn:ietf:params:scim:api:messages:2.0:Error"
   ],
-  "detail": "Filtering is not supported on this endpoint",
+  "detail": "\"filter\" is not supported on this endpoint",
   "status": "403"
 }

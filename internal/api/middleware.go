@@ -433,6 +433,22 @@ func (a *API) requireScimServerEnabled(w http.ResponseWriter, req *http.Request)
 	return ctx, nil
 }
 
+func (a *API) withSCIMRequest(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	return scimRequestKey.WithValue(req.Context(), req), nil
+}
+
+func (a *API) limitSCIMHandler(lmt *limiter.Limiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := a.performRateLimiting(lmt, r); err != nil {
+				handler(a.scim.TooManyRequests)(w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func (a *API) databaseCleanup(cleanup models.Cleaner) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

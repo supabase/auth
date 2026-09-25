@@ -627,6 +627,10 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 				return apierrors.NewInternalServerError("Error soft deleting user").WithInternalError(terr)
 			}
 
+			if terr := models.SoftDeleteSCIMUsersByUserID(tx, user.ID); terr != nil {
+				return apierrors.NewInternalServerError("Error deleting user's SCIM users").WithInternalError(terr)
+			}
+
 			if terr := user.SoftDeleteUserIdentities(tx); terr != nil {
 				return apierrors.NewInternalServerError("Error soft deleting user identities").WithInternalError(terr)
 			}
@@ -644,6 +648,12 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 				return apierrors.NewInternalServerError("Error deleting user's sessions").WithInternalError(terr)
 			}
 		} else {
+			if terr := models.LockUserForSCIM(tx, user.ID); terr != nil {
+				return apierrors.NewInternalServerError("Error locking user").WithInternalError(terr)
+			}
+			if terr := models.SoftDeleteSCIMUsersByUserID(tx, user.ID); terr != nil {
+				return apierrors.NewInternalServerError("Error deleting user's SCIM users").WithInternalError(terr)
+			}
 			if terr := tx.Destroy(user); terr != nil {
 				return apierrors.NewInternalServerError("Database error deleting user").WithInternalError(terr)
 			}

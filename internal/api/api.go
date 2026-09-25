@@ -138,7 +138,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
 	}
 
-	api.scim = scim.NewServer(globalConfig)
+	api.scim = scim.NewServer(globalConfig, scim.NewTokenValidator(db), scim.NewUserRepository(globalConfig, db, newSCIMProvisioner(api)))
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -404,6 +404,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Get("/", api.adminSSOProvidersGet)
 						r.Put("/", api.adminSSOProvidersUpdate)
 						r.Delete("/", api.adminSSOProvidersDelete)
+
+						r.Route("/scim/tokens", func(r *router) {
+							r.Use(api.requireScimServerEnabled)
+
+							r.Get("/", api.adminSCIMTokensList)
+							r.Post("/", api.adminSCIMTokensCreate)
+							r.Delete("/{prefix}", api.adminSCIMTokenRevoke)
+						})
 					})
 				})
 			})
@@ -463,11 +471,21 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Route(scim.BasePath, func(r *router) {
 			r.Use(api.requireScimServerEnabled)
+			r.Use(api.withSCIMRequest)
+			r.UseBypass(api.limitSCIMHandler(api.limiterOpts.SCIM))
 			r.NotFound(api.scim.NotFound)
 
-			r.Get("/ServiceProviderConfig", api.scim.ServiceProviderConfig)
-			r.Get("/ResourceTypes", api.scim.ResourceTypes)
-			r.Get("/Schemas", api.scim.Schemas)
+			r.Method(http.MethodGet, "/ServiceProviderConfig", api.scim)
+			r.Method(http.MethodGet, "/ResourceTypes", api.scim)
+			r.Method(http.MethodGet, "/ResourceTypes/{id}", api.scim)
+			r.Method(http.MethodGet, "/Schemas", api.scim)
+			r.Method(http.MethodGet, "/Schemas/{id}", api.scim)
+			r.Method(http.MethodGet, "/Users", api.scim)
+			r.Method(http.MethodPost, "/Users", api.scim)
+			r.Method(http.MethodGet, "/Users/{id}", api.scim)
+			r.Method(http.MethodPut, "/Users/{id}", api.scim)
+			r.Method(http.MethodPatch, "/Users/{id}", api.scim)
+			r.Method(http.MethodDelete, "/Users/{id}", api.scim)
 		})
 	})
 
