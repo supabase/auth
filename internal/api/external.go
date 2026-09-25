@@ -413,6 +413,20 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return 0, nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
+	if ssoProviderID, ok := strings.CutPrefix(providerType, "sso:"); ok {
+		providerID, terr := uuid.FromString(ssoProviderID)
+		if terr != nil {
+			return 0, nil, apierrors.NewInternalServerError("Invalid SSO provider id in provider type").WithInternalError(terr)
+		}
+		deprovisioned, terr := models.IsSCIMDeprovisioned(tx, providerID, user.ID)
+		if terr != nil {
+			return 0, nil, terr
+		}
+		if deprovisioned {
+			return 0, nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+		}
+	}
+
 	hasEmails := providerType != Web3Provider && (!emailOptional || decision.CandidateEmail.Email != "")
 
 	if hasEmails && !user.IsConfirmed() {

@@ -10,7 +10,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 func (ts *SCIMUsersTestSuite) ssoUser(provider *models.SSOProvider, sub, email string) *models.User {
@@ -139,6 +141,111 @@ func (ts *SCIMUsersTestSuite) sessions(user *models.User) int {
 	count, err := ts.API.db.Q().Where("user_id = ?", user.ID).Count(&models.Session{})
 	require.NoError(ts.T(), err)
 	return count
+}
+
+func (ts *SCIMUsersTestSuite) samlLogin(ssoProvider *models.SSOProvider, sub, email string) (*models.User, error) {
+	userData := &provider.UserProvidedData{
+		Metadata: &provider.Claims{
+			Subject:       sub,
+			Email:         email,
+			EmailVerified: true,
+		},
+		Emails: []provider.Email{{
+			Email:    email,
+			Primary:  true,
+			Verified: true,
+		}},
+	}
+	r := httptest.NewRequest(http.MethodPost, "/sso/saml/acs", nil)
+
+	var user *models.User
+	err := ts.API.db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		_, user, terr = ts.API.createAccountFromExternalIdentity(tx, r, userData, "sso:"+ssoProvider.ID.String(), false)
+		return terr
+	})
+	return user, err
+}
+
+func (ts *SCIMUsersTestSuite) TestSAMLLoginAllowedForActiveSCIMUser() {
+	id := ts.create(ts.TokenA, oktaUser)
+	linked := ts.linkedUser(id)
+
+	user, err := ts.samlLogin(ts.A, "Alice@Example.com", "alice@example.com")
+
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), linked.ID, user.ID)
+}
+
+func (ts *SCIMUsersTestSuite) TestSAMLLoginBlockedWhilePATCHedInactive() {
+	id := ts.create(ts.TokenA, oktaUser)
+	ts.setActive(id, false)
+
+	_, err := ts.samlLogin(ts.A, "Alice@Example.com", "alice@example.com")
+	require.Error(ts.T(), err)
+
+	ts.setActive(id, true)
+	linked := ts.linkedUser(id)
+
+	user, err := ts.samlLogin(ts.A, "Alice@Example.com", "alice@example.com")
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), linked.ID, user.ID)
+}
+
+func (ts *SCIMUsersTestSuite) TestSAMLLoginBlockedAfterDelete() {
+	id := ts.create(ts.TokenA, oktaUser)
+
+	w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Users/"+id, "")
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	_, err := ts.samlLogin(ts.A, "Alice@Example.com", "alice@example.com")
+	require.Error(ts.T(), err)
+
+	relinked := ts.linkedUser(ts.create(ts.TokenA, oktaUser))
+	user, err := ts.samlLogin(ts.A, "Alice@Example.com", "alice@example.com")
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), relinked.ID, user.ID)
+}
+
+func (ts *SCIMUsersTestSuite) TestSAMLLoginBlockedWhenCreatedInactive() {
+	id := ts.create(ts.TokenA, strings.Replace(oktaUser, `"active": true`, `"active": false`, 1))
+	ts.linkedUser(id)
+
+	_, err := ts.samlLogin(ts.A, "Alice@Example.com", "alice@example.com")
+	require.Error(ts.T(), err)
+}
+
+func (ts *SCIMUsersTestSuite) TestSAMLLoginAllowedWhenActiveOmitted() {
+	id := ts.create(ts.TokenA, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"Alice@Example.com","emails":[{"primary":true,"value":"alice@example.com"}]}`)
+	linked := ts.linkedUser(id)
+
+	user, err := ts.samlLogin(ts.A, "Alice@Example.com", "alice@example.com")
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), linked.ID, user.ID)
+}
+
+func (ts *SCIMUsersTestSuite) TestSAMLLoginAllowedWithoutSCIMRow() {
+	existing := ts.ssoUser(ts.A, "jit-user", "jit@example.com")
+
+	user, err := ts.samlLogin(ts.A, "jit-user", "jit@example.com")
+
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), existing.ID, user.ID)
+}
+
+func (ts *SCIMUsersTestSuite) TestSAMLLoginNotBlockedByOtherProvider() {
+	id := ts.create(ts.TokenB, oktaUser)
+	w, _ := ts.do(ts.TokenB, http.MethodPatch, "/Users/"+id, `{
+		"schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+		"Operations": [{"op": "replace", "value": {"active": false}}]
+	}`)
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+
+	existing := ts.ssoUser(ts.A, "Alice@Example.com", "alice@example.com")
+	user, err := ts.samlLogin(ts.A, "Alice@Example.com", "alice@example.com")
+
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), existing.ID, user.ID)
 }
 
 func (ts *SCIMUsersTestSuite) setActive(id string, active bool) {

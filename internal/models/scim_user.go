@@ -202,6 +202,21 @@ func LinkSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) erro
 	return nil
 }
 
+func IsSCIMDeprovisioned(tx *storage.Connection, providerID, userID uuid.UUID) (bool, error) {
+	provisioned, err := tx.Q().Where("sso_provider_id = ? AND user_id = ?", providerID, userID).Exists(&SCIMUser{})
+	if err != nil {
+		return false, errors.Wrap(err, "error finding SCIM user")
+	}
+	if !provisioned {
+		return false, nil
+	}
+	live, err := tx.Q().Where("sso_provider_id = ? AND user_id = ? AND deleted_at IS NULL AND active", providerID, userID).Exists(&SCIMUser{})
+	if err != nil {
+		return false, errors.Wrap(err, "error finding live SCIM user")
+	}
+	return !live, nil
+}
+
 func RenameSCIMIdentity(tx *storage.Connection, userID uuid.UUID, provider, from, to string, data map[string]any) error {
 	encoded, err := json.Marshal(data)
 	if err != nil {
