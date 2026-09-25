@@ -408,7 +408,13 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 
 		switch params.Type {
 		case smsVerification:
-			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			// A phone that is already confirmed belongs to an existing user,
+			// so this verification is a sign-in, not a signup.
+			action := models.UserSignedUpAction
+			if user.IsPhoneConfirmed() {
+				action = models.LoginAction
+			}
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, action, "", map[string]interface{}{
 				"provider": PhoneProvider,
 			}); terr != nil {
 				return terr
