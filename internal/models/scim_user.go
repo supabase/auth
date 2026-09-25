@@ -159,12 +159,29 @@ func DeleteSCIMUser(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMUser
 	return user, nil
 }
 
-func LinkSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) error {
+func LockUserForSCIM(tx *storage.Connection, userID uuid.UUID) error {
 	if err := tx.RawQuery(
 		fmt.Sprintf("SELECT id FROM %q WHERE id = ? FOR UPDATE", (&User{}).TableName()),
 		userID,
 	).Exec(); err != nil {
 		return errors.Wrap(err, "error locking user")
+	}
+	return nil
+}
+
+func SoftDeleteSCIMUsersByUserID(tx *storage.Connection, userID uuid.UUID) error {
+	if err := tx.RawQuery(
+		fmt.Sprintf("UPDATE %q SET deleted_at = now(), updated_at = now() WHERE user_id = ? AND deleted_at IS NULL", (&SCIMUser{}).TableName()),
+		userID,
+	).Exec(); err != nil {
+		return errors.Wrap(err, "error deleting SCIM users by user id")
+	}
+	return nil
+}
+
+func LinkSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) error {
+	if err := LockUserForSCIM(tx, userID); err != nil {
+		return err
 	}
 
 	linked, err := tx.Q().Where("sso_provider_id = ? AND user_id = ? AND deleted_at IS NULL", user.SSOProviderID, userID).Exists(&SCIMUser{})
@@ -206,10 +223,6 @@ func RenameSCIMIdentity(tx *storage.Connection, userID uuid.UUID, provider, from
 	return nil
 }
 
-// LockAccountLinking serializes SCIM account-linking decisions for a given
-// (provider, email) pair via a transaction-scoped advisory lock, so two
-// concurrent creates can't both observe "no account exists yet" and each
-// create a distinct user for the same email.
 func LockAccountLinking(tx *storage.Connection, providerType, email string) error {
 	key := providerType + "|" + strings.ToLower(email)
 	if err := tx.RawQuery("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", key).Exec(); err != nil {
