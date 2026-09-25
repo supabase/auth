@@ -19,18 +19,16 @@ type Server struct {
 }
 
 func NewServer(config *conf.GlobalConfiguration, validate server.TokenValidator, users server.Repository[*core.User]) *Server {
-	serviceProviderConfig := core.NewServiceProviderConfig(BasePath).
-		Filtering(protocol.DefaultLimits.MaxCount).
-		Patching()
+	serviceProviderConfig := core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching()
+
+	srv := server.New(BasePath, serviceProviderConfig,
+		server.ErrorHandler(logError),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(users)),
+		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
+	)
 	serviceProviderConfig.Meta.Location = BaseURL(config) + "/ServiceProviderConfig"
 
-	return &Server{
-		server: server.New(serviceProviderConfig,
-			server.ErrorHandler(logError),
-			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(users)),
-			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
-		),
-	}
+	return &Server{server: srv}
 }
 
 func BaseURL(config *conf.GlobalConfiguration) string {
