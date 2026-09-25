@@ -19,7 +19,7 @@ type UserInput struct {
 type Provisioner interface {
 	CreateUser(ctx context.Context, providerID uuid.UUID, user UserInput) (*models.SCIMUser, error)
 	ReplaceUser(ctx context.Context, providerID, id uuid.UUID, user UserInput, updatedAt *time.Time) (*models.SCIMUser, error)
-	DeleteUser(ctx context.Context, providerID, id uuid.UUID) error
+	DeleteUser(ctx context.Context, providerID, id uuid.UUID, updatedAt *time.Time) error
 }
 
 func toInput(user *core.User) (UserInput, error) {

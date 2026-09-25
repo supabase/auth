@@ -254,6 +254,40 @@ func (ts *SCIMUsersTestSuite) TestReplaceRejectsStaleVersion() {
 	require.Contains(ts.T(), string(stored.Resource), "winner")
 }
 
+func (ts *SCIMUsersTestSuite) TestDeleteRejectsStaleVersion() {
+	ctx, users := ts.repository()
+
+	created, err := users.Create(ctx, &core.User{UserName: "alice@example.com", Emails: emails("alice@example.com")})
+	require.NoError(ts.T(), err)
+
+	updated := &core.User{UserName: "alice@example.com", Title: "renamed"}
+	updated.ID = created.ID
+	updated.Meta = core.Meta{Version: created.Meta.Version}
+	replaced, err := users.Replace(ctx, updated)
+	require.NoError(ts.T(), err)
+
+	for _, version := range []string{created.Meta.Version, `W/"garbage"`} {
+		err := users.Delete(ctx, created.ID, version)
+		var scimErr *scimerrors.Error
+		require.ErrorAs(ts.T(), err, &scimErr, version)
+		require.Equal(ts.T(), http.StatusPreconditionFailed, scimErr.StatusCode(), version)
+	}
+
+	var stored models.SCIMUser
+	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", created.ID).First(&stored))
+	require.Nil(ts.T(), stored.DeletedAt)
+
+	missing := uuid.Must(uuid.NewV4()).String()
+	var scimErr *scimerrors.Error
+	err = users.Delete(ctx, missing, "")
+	require.ErrorAs(ts.T(), err, &scimErr)
+	require.Equal(ts.T(), http.StatusNotFound, scimErr.StatusCode())
+
+	require.NoError(ts.T(), users.Delete(ctx, created.ID, replaced.Meta.Version))
+	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", created.ID).First(&stored))
+	require.NotNil(ts.T(), stored.DeletedAt)
+}
+
 func (ts *SCIMUsersTestSuite) TestTenantIsolation() {
 	idA := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
 	idB := ts.create(ts.TokenB, userWith("bob@example.com", "b-1"))

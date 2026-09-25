@@ -143,9 +143,9 @@ func (p *scimProvisioner) ReplaceUser(ctx context.Context, providerID, id uuid.U
 	return row, nil
 }
 
-func (p *scimProvisioner) DeleteUser(ctx context.Context, providerID, id uuid.UUID) error {
+func (p *scimProvisioner) DeleteUser(ctx context.Context, providerID, id uuid.UUID, updatedAt *time.Time) error {
 	return p.api.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		row, err := models.DeleteSCIMUser(tx, providerID, id)
+		row, err := models.DeleteSCIMUser(tx, providerID, id, updatedAt)
 		if err != nil || row.UserID == nil {
 			return err
 		}

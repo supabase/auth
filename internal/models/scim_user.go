@@ -144,14 +144,20 @@ func ReplaceSCIMUser(tx *storage.Connection, providerID, id uuid.UUID, resource 
 	return user, nil
 }
 
-func DeleteSCIMUser(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMUser, error) {
+func DeleteSCIMUser(tx *storage.Connection, providerID, id uuid.UUID, updatedAt *time.Time) (*SCIMUser, error) {
 	user := &SCIMUser{}
 	err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET deleted_at = now(), updated_at = now() WHERE id = ? AND sso_provider_id = ? AND deleted_at IS NULL RETURNING "+scimUserColumns, user.TableName()),
-		id, providerID,
+		fmt.Sprintf("UPDATE %q SET deleted_at = now(), updated_at = now() WHERE id = ? AND sso_provider_id = ? AND deleted_at IS NULL AND (?::timestamptz IS NULL OR updated_at = ?) RETURNING "+scimUserColumns, user.TableName()),
+		id, providerID, updatedAt, updatedAt,
 	).First(user)
 	if err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
+		switch {
+		case errors.Cause(err) == sql.ErrNoRows && updatedAt != nil:
+			if _, findErr := FindSCIMUser(tx, providerID, id); findErr != nil {
+				return nil, findErr
+			}
+			return nil, SCIMUserStaleError{}
+		case errors.Cause(err) == sql.ErrNoRows:
 			return nil, SCIMUserNotFoundError{}
 		}
 		return nil, errors.Wrap(err, "error deleting SCIM user")

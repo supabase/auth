@@ -125,7 +125,7 @@ func (r *userRepository) Replace(ctx context.Context, user *core.User) (*core.Us
 	return r.toUser(row)
 }
 
-func (r *userRepository) Delete(ctx context.Context, id, _ string) error {
+func (r *userRepository) Delete(ctx context.Context, id, version string) error {
 	providerID, err := providerFrom(ctx)
 	if err != nil {
 		return err
@@ -134,7 +134,11 @@ func (r *userRepository) Delete(ctx context.Context, id, _ string) error {
 	if err != nil {
 		return errUserNotFound()
 	}
-	return translate(r.provisioner.DeleteUser(ctx, providerID, userID))
+	updatedAt, err := parseVersion(version)
+	if err != nil {
+		return err
+	}
+	return translate(r.provisioner.DeleteUser(ctx, providerID, userID, updatedAt))
 }
 
 func (r *userRepository) toUser(row *models.SCIMUser) (*core.User, error) {
