@@ -105,11 +105,11 @@ func (r *userRepository) Replace(ctx context.Context, user *core.User) (*core.Us
 	if err != nil {
 		return nil, err
 	}
-	userID, err := uuid.FromString(user.ResourceID())
+	userID, err := uuid.FromString(user.ID)
 	if err != nil {
 		return nil, errUserNotFound()
 	}
-	updatedAt, err := parseVersion(user.GetMeta().Version)
+	updatedAt, err := parseVersion(user.Meta.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -144,15 +144,15 @@ func (r *userRepository) toUser(row *models.SCIMUser) (*core.User, error) {
 	}
 	active := row.Active
 	user.Active = &active
-	user.SetID(row.ID.String())
-	user.SetSchemas([]core.SchemaURI{core.SchemaUser})
-	user.SetMeta(core.Meta{
+	user.ID = row.ID.String()
+	user.Schemas = []core.SchemaURI{core.SchemaUser}
+	user.Meta = core.Meta{
 		ResourceType: "User",
 		Created:      row.CreatedAt.UTC(),
 		LastModified: row.UpdatedAt.UTC(),
 		Location:     r.location + row.ID.String(),
 		Version:      version(row.UpdatedAt),
-	})
+	}
 	return user, nil
 }
 

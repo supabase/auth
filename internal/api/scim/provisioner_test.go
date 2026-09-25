@@ -46,8 +46,8 @@ func TestToInput(t *testing.T) {
 
 	t.Run("drops id, meta and password from the resource", func(t *testing.T) {
 		user := &core.User{UserName: "alice", Password: "secret"}
-		user.SetID("abc")
-		user.SetMeta(core.Meta{Version: `W/"1"`})
+		user.ID = "abc"
+		user.Meta = core.Meta{Version: `W/"1"`}
 
 		input, err := toInput(user)
 		require.NoError(t, err)

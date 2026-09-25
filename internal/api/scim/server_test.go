@@ -149,10 +149,10 @@ func TestServer(t *testing.T) {
 			status              int
 			challenge           string
 		}{
-			{"missing header", "", http.StatusUnauthorized, "Bearer"},
-			{"wrong scheme", "Basic " + validToken, http.StatusUnauthorized, "Bearer"},
-			{"empty token", "Bearer ", http.StatusBadRequest, `Bearer error="invalid_request", error_description="missing bearer token"`},
-			{"invalid token", "Bearer scim_invalid", http.StatusUnauthorized, `Bearer error="invalid_token", error_description="The access token is invalid"`},
+			{"missing header", "", http.StatusUnauthorized, `Bearer realm="scim"`},
+			{"wrong scheme", "Basic " + validToken, http.StatusUnauthorized, `Bearer realm="scim"`},
+			{"empty token", "Bearer ", http.StatusBadRequest, `Bearer realm="scim", error="invalid_request", error_description="missing bearer token"`},
+			{"invalid token", "Bearer scim_invalid", http.StatusUnauthorized, `Bearer realm="scim", error="invalid_token", error_description="The access token is invalid"`},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				w := serve(t, srv, http.MethodGet, BasePath+"/Users", "", "Authorization", tc.authorization)

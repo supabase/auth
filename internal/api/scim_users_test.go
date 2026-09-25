@@ -220,21 +220,21 @@ func (ts *SCIMUsersTestSuite) TestReplaceRejectsStaleVersion() {
 
 	created, err := users.Create(ctx, &core.User{UserName: "alice@example.com", Emails: emails("alice@example.com")})
 	require.NoError(ts.T(), err)
-	read, err := users.Get(ctx, created.ResourceID())
+	read, err := users.Get(ctx, created.ID)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), created.GetMeta().Version, read.GetMeta().Version)
+	require.Equal(ts.T(), created.Meta.Version, read.Meta.Version)
 
 	winner := &core.User{UserName: "alice@example.com", Title: "winner"}
-	winner.SetID(read.ResourceID())
-	winner.SetMeta(core.Meta{Version: read.GetMeta().Version})
+	winner.ID = read.ID
+	winner.Meta = core.Meta{Version: read.Meta.Version}
 	replaced, err := users.Replace(ctx, winner)
 	require.NoError(ts.T(), err)
-	require.NotEqual(ts.T(), read.GetMeta().Version, replaced.GetMeta().Version)
+	require.NotEqual(ts.T(), read.Meta.Version, replaced.Meta.Version)
 
-	for _, version := range []string{read.GetMeta().Version, `W/"garbage"`} {
+	for _, version := range []string{read.Meta.Version, `W/"garbage"`} {
 		loser := &core.User{UserName: "alice@example.com", Title: "loser"}
-		loser.SetID(read.ResourceID())
-		loser.SetMeta(core.Meta{Version: version})
+		loser.ID = read.ID
+		loser.Meta = core.Meta{Version: version}
 		_, err = users.Replace(ctx, loser)
 		var scimErr *scimerrors.Error
 		require.ErrorAs(ts.T(), err, &scimErr, version)
@@ -242,15 +242,15 @@ func (ts *SCIMUsersTestSuite) TestReplaceRejectsStaleVersion() {
 	}
 
 	missing := &core.User{UserName: "bob@example.com"}
-	missing.SetID(uuid.Must(uuid.NewV4()).String())
-	missing.SetMeta(core.Meta{Version: read.GetMeta().Version})
+	missing.ID = uuid.Must(uuid.NewV4()).String()
+	missing.Meta = core.Meta{Version: read.Meta.Version}
 	_, err = users.Replace(ctx, missing)
 	var scimErr *scimerrors.Error
 	require.ErrorAs(ts.T(), err, &scimErr)
 	require.Equal(ts.T(), http.StatusNotFound, scimErr.StatusCode())
 
 	var stored models.SCIMUser
-	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", read.ResourceID()).First(&stored))
+	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", read.ID).First(&stored))
 	require.Contains(ts.T(), string(stored.Resource), "winner")
 }
 
