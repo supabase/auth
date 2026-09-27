@@ -312,9 +312,15 @@ type ConnLimits struct {
 }
 
 func newConnLimitsFromConfig(dbCfg *conf.DBConfiguration) *ConnLimits {
+	maxIdleConns := dbCfg.MaxIdlePoolSize
+	if maxIdleConns == 0 {
+		// match pop's default when no idle pool size is configured
+		maxIdleConns = 2
+	}
+
 	return &ConnLimits{
 		MaxOpenConns:    dbCfg.MaxPoolSize,
-		MaxIdleConns:    dbCfg.MaxIdlePoolSize,
+		MaxIdleConns:    maxIdleConns,
 		ConnMaxLifetime: dbCfg.ConnMaxLifetime,
 		ConnMaxIdleTime: dbCfg.ConnMaxIdleTime,
 		Strategy:        connLimitsErrorStrategy,
