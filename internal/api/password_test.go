@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -114,5 +116,38 @@ func TestPasswordStrengthChecks(t *testing.T) {
 		default:
 			require.NoError(t, err, "Example %d failed with error", i)
 		}
+	}
+}
+
+func TestPasswordStrengthMaximumLengthBytes(t *testing.T) {
+	api := &API{config: &conf.GlobalConfiguration{
+		Password: conf.PasswordConfiguration{MinLength: 6},
+	}}
+
+	for _, tc := range []struct {
+		name     string
+		password string
+		tooLong  bool
+	}{
+		{"ASCII at limit", strings.Repeat("a", 72), false},
+		{"ASCII over limit", strings.Repeat("a", 73), true},
+		{"Korean at limit", strings.Repeat("가", 24), false},
+		{"Korean over limit", strings.Repeat("가", 25), true},
+		{"emoji at limit", strings.Repeat("😀", 18), false},
+		{"emoji over limit", strings.Repeat("😀", 19), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := api.checkPasswordStrength(context.Background(), tc.password)
+			if !tc.tooLong {
+				require.NoError(t, err)
+				return
+			}
+
+			var httpErr *HTTPError
+			require.ErrorAs(t, err, &httpErr)
+			require.Equal(t, http.StatusBadRequest, httpErr.HTTPStatus)
+			require.Equal(t, apierrors.ErrorCodeValidationFailed, httpErr.ErrorCode)
+			require.Equal(t, "Password cannot be longer than 72 bytes", httpErr.Message)
+		})
 	}
 }
