@@ -29,9 +29,10 @@ type CaptchaVerifier interface {
 
 // HTTPCaptchaVerifier is the default implementation that calls out to hCaptcha / Turnstile.
 type HTTPCaptchaVerifier struct {
-	client   *http.Client
-	secret   string
-	provider string
+	client      *http.Client
+	secret      string
+	provider    string
+	providerURL string
 }
 
 func NewCaptchaVerifier(cfg *conf.CaptchaConfiguration) *HTTPCaptchaVerifier {
@@ -41,14 +42,15 @@ func NewCaptchaVerifier(cfg *conf.CaptchaConfiguration) *HTTPCaptchaVerifier {
 	}
 
 	return &HTTPCaptchaVerifier{
-		client:   &http.Client{Timeout: timeout},
-		secret:   strings.TrimSpace(cfg.Secret),
-		provider: cfg.Provider,
+		client:      &http.Client{Timeout: timeout},
+		secret:      strings.TrimSpace(cfg.Secret),
+		provider:    cfg.Provider,
+		providerURL: cfg.ProviderURL,
 	}
 }
 
 func (v *HTTPCaptchaVerifier) Verify(ctx context.Context, token, clientIP string) (*VerificationResponse, error) {
-	captchaURL, err := getCaptchaURL(v.provider)
+	captchaURL, err := getCaptchaURL(v.provider, v.providerURL)
 	if err != nil {
 		return nil, err
 	}
@@ -84,12 +86,17 @@ func (v *HTTPCaptchaVerifier) verifyCaptchaCode(ctx context.Context, token, clie
 	return &verificationResponse, nil
 }
 
-func getCaptchaURL(captchaProvider string) (string, error) {
+func getCaptchaURL(captchaProvider, providerURL string) (string, error) {
 	switch captchaProvider {
 	case "hcaptcha":
 		return "https://hcaptcha.com/siteverify", nil
 	case "turnstile":
 		return "https://challenges.cloudflare.com/turnstile/v0/siteverify", nil
+	case "fcaptcha":
+		if providerURL == "" {
+			return "", errors.New("fcaptcha provider URL is empty")
+		}
+		return strings.TrimRight(providerURL, "/") + "/siteverify", nil
 	default:
 		return "", fmt.Errorf("captcha Provider %q could not be found", captchaProvider)
 	}
