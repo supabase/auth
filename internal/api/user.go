@@ -103,7 +103,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	if user.HasMFAEnabled() && !session.IsAAL2() {
+	if user.HasMFAEnabled() && (session == nil || !session.IsAAL2()) {
 		if (params.Password != nil && *params.Password != "") || (params.Email != "" && user.GetEmail() != params.Email) || (params.Phone != "" && user.GetPhone() != params.Phone) {
 			return apierrors.NewHTTPError(http.StatusUnauthorized, apierrors.ErrorCodeInsufficientAAL, "AAL2 session is required to update email or password when MFA is enabled.")
 		}
@@ -172,7 +172,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				// current password required when updating password
 				if config.Security.UpdatePasswordRequireCurrentPassword {
 					// ensure user is not in a password recovery flow
-					if !session.IsRecovery() {
+					if session == nil || !session.IsRecovery() {
 						if params.CurrentPassword == nil || *params.CurrentPassword == "" {
 							return apierrors.NewBadRequestError(apierrors.ErrorCodeCurrentPasswordRequired, "Current password required when setting new password.")
 						}
