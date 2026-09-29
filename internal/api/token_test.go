@@ -332,6 +332,129 @@ func (ts *TokenTestSuite) TestTokenPasswordGrantFailure() {
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
 }
 
+func (ts *TokenTestSuite) TestTokenPKCECodeParameter() {
+	codeVerifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	codeChallenge := sha256.Sum256([]byte(codeVerifier))
+	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
+
+	authCode := "009e5066-fc11-4eca-8c8c-6fd82aa263f2"
+	cases := []struct {
+		desc          string
+		params        map[string]string
+		expectedError apierrors.ErrorCode
+		expectedCode  int
+	}{
+		{
+			desc:         "code",
+			params:       map[string]string{"code": authCode},
+			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "auth_code",
+			params:       map[string]string{"auth_code": authCode},
+			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "matching fields",
+			params:       map[string]string{"code": authCode, "auth_code": authCode},
+			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "auth_code takes precedence",
+			params:       map[string]string{"code": "invalid", "auth_code": authCode},
+			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "empty auth_code falls back to code",
+			params:       map[string]string{"code": authCode, "auth_code": ""},
+			expectedCode: http.StatusOK,
+		},
+		{
+			desc:          "invalid auth_code does not fall back to code",
+			params:        map[string]string{"code": authCode, "auth_code": "invalid"},
+			expectedError: apierrors.ErrorCodeFlowStateNotFound,
+			expectedCode:  http.StatusNotFound,
+		},
+		{
+			desc:          "invalid code",
+			params:        map[string]string{"code": "invalid"},
+			expectedError: apierrors.ErrorCodeFlowStateNotFound,
+			expectedCode:  http.StatusNotFound,
+		},
+		{
+			desc:          "missing code",
+			params:        map[string]string{},
+			expectedError: apierrors.ErrorCodeValidationFailed,
+			expectedCode:  http.StatusBadRequest,
+		},
+		{
+			desc:          "missing verifier",
+			params:        map[string]string{"code": authCode, "code_verifier": ""},
+			expectedError: apierrors.ErrorCodeValidationFailed,
+			expectedCode:  http.StatusBadRequest,
+		},
+		{
+			desc:          "incorrect verifier",
+			params:        map[string]string{"code": authCode, "code_verifier": "incorrect"},
+			expectedError: apierrors.ErrorCodeBadCodeVerifier,
+			expectedCode:  http.StatusBadRequest,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			flowState, err := models.NewFlowState(models.FlowStateParams{
+				ProviderType:         "github",
+				AuthenticationMethod: models.OAuth,
+				CodeChallenge:        challenge,
+				CodeChallengeMethod:  "s256",
+				UserID:               &ts.User.ID,
+			})
+			require.NoError(ts.T(), err)
+			flowState.AuthCode = &authCode
+			require.NoError(ts.T(), ts.API.db.Create(flowState))
+			ts.T().Cleanup(func() {
+				require.NoError(ts.T(), ts.API.db.Destroy(flowState))
+			})
+
+			params := map[string]string{"code_verifier": codeVerifier}
+			for key, value := range c.params {
+				params[key] = value
+			}
+			body, err := json.Marshal(params)
+			require.NoError(ts.T(), err)
+			req := httptest.NewRequest(http.MethodPost, "/token?grant_type=pkce", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), c.expectedCode, w.Code, w.Body.String())
+
+			if c.expectedError != "" {
+				var response HTTPError
+				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&response))
+				require.Equal(ts.T(), c.expectedError, response.ErrorCode)
+				_, err := models.FindFlowStateByAuthCode(ts.API.db, authCode)
+				require.NoError(ts.T(), err, "failed exchanges must not consume the code")
+				return
+			}
+
+			var response AccessTokenResponse
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&response))
+			require.NotEmpty(ts.T(), response.Token)
+			require.NotEmpty(ts.T(), response.RefreshToken)
+			require.NotNil(ts.T(), response.User)
+			require.Equal(ts.T(), ts.User.ID, response.User.ID)
+
+			// A successful exchange consumes the code, regardless of its field name.
+			req = httptest.NewRequest(http.MethodPost, "/token?grant_type=pkce", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w = httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusNotFound, w.Code, w.Body.String())
+		})
+	}
+}
+
 func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	authCode := "1234563"
 	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
@@ -575,6 +698,14 @@ func (ts *TokenTestSuite) TestTokenRefreshWithUnexpiredSession() {
 }
 
 func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
+	ts.testMagicLinkPKCESignIn("auth_code")
+}
+
+func (ts *TokenTestSuite) TestMagicLinkPKCESignInWithCode() {
+	ts.testMagicLinkPKCESignIn("code")
+}
+
+func (ts *TokenTestSuite) testMagicLinkPKCESignIn(codeParameter string) {
 	var buffer bytes.Buffer
 	// Send OTP
 	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
@@ -620,7 +751,7 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 	// Extract token and sign in
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"code_verifier": codeVerifier,
-		"auth_code":     authCode,
+		codeParameter:   authCode,
 	}))
 	req = httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
 	req.Header.Set("Content-Type", "application/json")

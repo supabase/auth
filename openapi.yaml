@@ -99,7 +99,7 @@ paths:
                   refresh_token: 4nYUCw0wZR_DNOTSDbSGMQ
               grant_type=pkce:
                 value:
-                  auth_code: 009e5066-fc11-4eca-8c8c-6fd82aa263f2
+                  code: 009e5066-fc11-4eca-8c8c-6fd82aa263f2
                   code_verifier: ktPNXpR65N6JtgzQA8_5HHtH6PBSAahMNoLKRzQEa0Tzgl.vdV~b6lPk004XOd.4lR0inCde.NoQx5K63xPfzL8o7tJAjXncnhw5Niv9ycQ.QRV9JG.y3VapqbgLfIrJ
               web3_solana:
                 value:
@@ -115,6 +115,7 @@ paths:
               type: object
               description: |-
                 For the refresh token flow, supply only `refresh_token`.
+                For the PKCE flow, supply `code` and `code_verifier`. The legacy `auth_code` parameter is also accepted and takes precedence when non-empty.
                 For the email/phone with password flow, supply `email`, `phone` and `password` with an optional `gotrue_meta_security`.
                 For the OIDC ID token flow, supply `id_token`, `nonce`, `provider`, `client_id`, `issuer` with an optional `gotrue_meta_security`.
                 For the Web3 flow, supply `message`, `signature`, and `chain`.
@@ -151,9 +152,15 @@ paths:
                   description: If `provider` is `azure` then you can specify any Azure OIDC issuer string here, which will be used for verification.
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueSecurity"
+                code:
+                  type: string
+                  format: uuid
+                  description: Authorization code for the PKCE flow.
                 auth_code:
                   type: string
                   format: uuid
+                  deprecated: true
+                  description: Legacy PKCE authorization code parameter. Prefer `code` for new integrations. Remains supported and takes precedence over `code` when non-empty.
                 code_verifier:
                   type: string
                 message:
