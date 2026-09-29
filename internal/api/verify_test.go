@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/mailer/mockclient"
@@ -1489,6 +1490,69 @@ func (ts *VerifyTestSuite) TestVerifyPhoneChangeSendsNotificationEmailEnabled() 
 	require.Equal(ts.T(), u.ID, mockMailer.PhoneChangedMailCalls[0].User.ID, "Email should be sent to the correct user")
 	require.Equal(ts.T(), "12345678", mockMailer.PhoneChangedMailCalls[0].OldPhone, "Old phone should match")
 	require.Equal(ts.T(), "test@example.com", mockMailer.PhoneChangedMailCalls[0].User.GetEmail(), "Email should be sent to the correct email address")
+}
+
+func (ts *VerifyTestSuite) TestVerifyPhoneChangeWithDuplicatePhoneChange() {
+	// Several users mid-change to the same number: a lookup by phone_change
+	// alone can return the wrong user, whose token never matches
+	// (supabase/supabase#33220). The token has to decide which user verifies.
+	newPhone := "987654321"
+	now := time.Now()
+
+	// Surround the verifying user with decoys also mid-change to the same
+	// number, holding the lowest ID, the highest ID, the earliest created_at,
+	// and the first insertion slots, so that a phone-only lookup cannot land
+	// on the right user through any consistent row ordering.
+	decoyA, err := models.NewUser("", "decoy-a@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	decoyA.ID = uuid.FromStringOrNil("00000000-0000-0000-0000-000000000001")
+	require.NoError(ts.T(), ts.API.db.Create(decoyA))
+
+	target, err := models.NewUser("", "target@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(target))
+
+	decoyB, err := models.NewUser("", "decoy-b@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	decoyB.ID = uuid.FromStringOrNil("ffffffff-ffff-ffff-ffff-fffffffffffe")
+	require.NoError(ts.T(), ts.API.db.Create(decoyB))
+
+	// The target is updated last, so its row version is also the last one in
+	// physical insertion order.
+	for i, u := range []*models.User{decoyA, decoyB, target} {
+		otp := fmt.Sprintf("%06d", 111111*(i+1))
+		u.PhoneChange = newPhone
+		u.PhoneChangeSentAt = &now
+		u.PhoneChangeToken = crypto.GenerateTokenHash(newPhone, otp)
+		require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.PhoneChange, u.PhoneChangeToken, models.PhoneChangeToken, ts.Config.Sms.OtpExpAsDuration(), true))
+		require.NoError(ts.T(), ts.API.db.Update(u))
+	}
+
+	body := map[string]interface{}{
+		"type":  phoneChangeVerification,
+		"token": "333333",
+		"phone": newPhone,
+	}
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(body))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+
+	verified, err := models.FindUserByID(ts.API.db, target.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), newPhone, string(verified.Phone))
+	require.Empty(ts.T(), verified.PhoneChange)
+
+	// The decoys' pending changes are untouched.
+	for _, decoy := range []*models.User{decoyA, decoyB} {
+		u, err := models.FindUserByID(ts.API.db, decoy.ID)
+		require.NoError(ts.T(), err)
+		require.Empty(ts.T(), string(u.Phone))
+		require.Equal(ts.T(), newPhone, u.PhoneChange)
+	}
 }
 
 func (ts *VerifyTestSuite) TestVerifyPhoneChangeSendsNotificationEmailEnabled_NoChange() {
