@@ -29,6 +29,7 @@ type PasswordGrantParams struct {
 
 // PKCEGrantParams are the parameters the PKCEGrant method accepts
 type PKCEGrantParams struct {
+	Code         string `json:"code"`
 	AuthCode     string `json:"auth_code"`
 	CodeVerifier string `json:"code_verifier"`
 }
@@ -225,6 +226,11 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	params := &PKCEGrantParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
+	}
+
+	// Preserve auth_code precedence for existing clients that send both fields.
+	if params.AuthCode == "" {
+		params.AuthCode = params.Code
 	}
 
 	if params.AuthCode == "" || params.CodeVerifier == "" {
