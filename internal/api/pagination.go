@@ -67,6 +67,9 @@ func paginate(r *http.Request) (*models.Pagination, error) {
 		if err != nil {
 			return nil, err
 		}
+		if perPage == 0 {
+			return nil, fmt.Errorf("per_page must be greater than 0")
+		}
 	}
 
 	return &models.Pagination{
