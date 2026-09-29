@@ -336,7 +336,7 @@ func FindUserForPhoneChange(tx *storage.Connection, phone, token, aud string) (*
 		if err != nil {
 			return nil, err
 		}
-		if user.Aud == aud && user.PhoneChange == phone {
+			if user.Aud == aud && user.PhoneChange == phone && !user.IsSSOUser {
 			return user, nil
 		}
 	}
