@@ -594,8 +594,14 @@ func (ts *Web3TestSuite) TestValidationRules_ValidatedBeforeNotBefore() {
 }
 
 func (ts *Web3TestSuite) TestValidationRules_Expired() {
+	solanaEnabled := ts.Config.External.Web3Solana.Enabled
+	ethereumEnabled := ts.Config.External.Web3Ethereum.Enabled
+	ts.Config.External.Web3Solana.Enabled = true
+	ts.Config.External.Web3Ethereum.Enabled = true
 	defer func() {
 		ts.API.overrideTime = nil
+		ts.Config.External.Web3Solana.Enabled = solanaEnabled
+		ts.Config.External.Web3Ethereum.Enabled = ethereumEnabled
 	}()
 
 	ts.API.overrideTime = func() time.Time {
@@ -615,8 +621,8 @@ func (ts *Web3TestSuite) TestValidationRules_Expired() {
 		},
 		{
 			chain:     ChainEthereum,
-			message:   "supabase.com wants you to sign in with your Ethereum account:\n0xDAEaF48CC1736705388Bb0cB2A22559d751FCBaC\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nExpiration Time: 2025-03-29T00:10:00Z\nNot Before: 2025-03-29T00:00:00Z",
-			signature: "0x3c1d21a56fcb057cc43f8a59a1de903022b30a31ff7bcf8e33387ba08d5f450337df6dfdd48dc941caf925e51c2e8d9987683822c9c413d16ef0ce03c6d1e12f1c"},
+			message:   "supabase.com wants you to sign in with your Ethereum account:\n0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:04:00Z\nExpiration Time: 2025-03-29T00:05:00Z",
+			signature: "0x5bddcab7ca868bbb5a93c7fe93e24205d596f594deedecb6c22d72bd9af863d72becc70a15574e07f7f856cd4ee17dc1ed3512a297ebef41b7aa07f3152049e600"},
 	}
 
 	for _, example := range examples {
