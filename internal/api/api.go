@@ -8,12 +8,12 @@ import (
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/apilimiter"
 	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/api/oauthserver"
 	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/api/scim"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
@@ -47,7 +47,7 @@ type API struct {
 	hooksMgr     *v0hooks.Manager
 	hibpClient   *hibp.PwnedClient
 	oauthServer  *oauthserver.Server
-	scim         *scim.Server
+	scim         *server.Server
 	tokenService *tokens.Service
 	mailer       mailer.Mailer
 	oidcCache    *provider.OIDCProviderCache
@@ -138,7 +138,10 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
 	}
 
-	api.scim = scim.NewServer(globalConfig)
+	api.scim = api.newSCIMServer(
+		api.limitSCIMInvalidToken(newSCIMTokenValidator(db), api.limiterOpts.SCIMIP),
+		api.limitSCIMByProvider(api.limiterOpts.SCIM),
+	)
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -404,6 +407,20 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Get("/", api.adminSSOProvidersGet)
 						r.Put("/", api.adminSSOProvidersUpdate)
 						r.Delete("/", api.adminSSOProvidersDelete)
+
+						r.Route("/scim", func(r *router) {
+							r.Use(api.requireScimServerEnabled)
+
+							r.Get("/", api.adminSCIMGet)
+							r.Post("/", api.adminSCIMEnable)
+							r.Delete("/", api.adminSCIMDisable)
+
+							r.Route("/tokens", func(r *router) {
+								r.Get("/", api.adminSCIMTokensList)
+								r.Post("/", api.adminSCIMTokensCreate)
+								r.Delete("/{prefix}", api.adminSCIMTokensRevoke)
+							})
+						})
 					})
 				})
 			})
@@ -461,13 +478,11 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.With(api.requireAuthentication).Post("/authorizations/{authorization_id}/consent", api.oauthServer.OAuthServerConsent)
 		})
 
-		r.Route(scim.BasePath, func(r *router) {
+		r.Route(scimBasePath, func(r *router) {
 			r.Use(api.requireScimServerEnabled)
-			r.NotFound(api.scim.NotFound)
-
-			r.Get("/ServiceProviderConfig", api.scim.ServiceProviderConfig)
-			r.Get("/ResourceTypes", api.scim.ResourceTypes)
-			r.Get("/Schemas", api.scim.Schemas)
+			r.Use(api.withSCIMRequest)
+			r.UseBypass(api.limitSCIMByIP(api.limiterOpts.SCIMIP))
+			r.Handle("/*", api.scim)
 		})
 	})
 

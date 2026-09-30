@@ -37,6 +37,10 @@ func (r *router) Delete(pattern string, fn apiHandler) {
 	r.chi.Delete(pattern, handler(fn))
 }
 
+func (r *router) Handle(pattern string, h http.Handler) {
+	r.chi.Handle(pattern, h)
+}
+
 func (r *router) With(fn middlewareHandler) *router {
 	c := r.chi.With(middleware(fn))
 	return &router{c}

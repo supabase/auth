@@ -887,6 +887,16 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
+		if config.SSO.SCIM.Enabled && user.IsSSOUser {
+			deprovisioned, terr := models.IsSCIMUserDeprovisionedForUpdate(tx, user.ID)
+			if terr != nil {
+				return apierrors.NewInternalServerError("Database error checking SCIM user").WithInternalError(terr)
+			}
+			if deprovisioned {
+				return apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
+			}
+		}
+
 		if config.Security.RefreshTokenAlgorithmVersion == 2 {
 			session, terr := models.NewSession(user.ID, grantParams.FactorID)
 			if terr != nil {

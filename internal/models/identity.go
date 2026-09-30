@@ -81,6 +81,19 @@ func (i *Identity) IsForSSOProvider() bool {
 	return strings.HasPrefix(i.Provider, "sso:")
 }
 
+func (i *Identity) SSOProviderID() (uuid.UUID, bool, error) {
+	return SSOProviderID(i.Provider)
+}
+
+func SSOProviderID(provider string) (uuid.UUID, bool, error) {
+	id, ok := strings.CutPrefix(provider, "sso:")
+	if !ok {
+		return uuid.Nil, false, nil
+	}
+	providerID, err := uuid.FromString(id)
+	return providerID, true, err
+}
+
 // FindIdentityById searches for an identity with the matching id and provider given.
 func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider string) (*Identity, error) {
 	identity := &Identity{}

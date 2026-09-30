@@ -1,9 +1,15 @@
 package models
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/gofrs/uuid"
+)
 
 // sentinel error for all not found errors.
 var errNotFound = errors.New("not found")
+
+var errStale = errors.New("stale")
 
 // sentinel error for unique constraint violations.
 var errUniqueConstraintViolated = errors.New("unique constraint violated")
@@ -11,6 +17,10 @@ var errUniqueConstraintViolated = errors.New("unique constraint violated")
 // IsNotFoundError returns whether an error represents a "not found" error.
 func IsNotFoundError(err error) bool {
 	return errors.Is(err, errNotFound)
+}
+
+func IsStaleError(err error) bool {
+	return errors.Is(err, errStale)
 }
 
 type SessionNotFoundError struct{}
@@ -210,4 +220,102 @@ type RecoveryCodeAlreadyConsumedError struct{}
 
 func (e RecoveryCodeAlreadyConsumedError) Error() string {
 	return "Recovery code already consumed"
+}
+
+type SCIMTokenNotFoundError struct{}
+
+func (e SCIMTokenNotFoundError) Error() string {
+	return "SCIM token not found"
+}
+
+func (e SCIMTokenNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
+
+type SCIMTokenExpiryError struct{}
+
+func (e SCIMTokenExpiryError) Error() string {
+	return "SCIM token must expire after it is created"
+}
+
+type SCIMUserNotFoundError struct{}
+
+func (e SCIMUserNotFoundError) Error() string {
+	return "SCIM user not found"
+}
+
+func (e SCIMUserNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
+
+type SCIMUserStaleError struct{}
+
+func (e SCIMUserStaleError) Error() string {
+	return "SCIM user has changed since it was read"
+}
+
+func (e SCIMUserStaleError) Is(target error) bool {
+	return target == errStale
+}
+
+type SCIMUserConflictError struct{}
+
+func (e SCIMUserConflictError) Error() string {
+	return "SCIM user conflicts with an existing user"
+}
+
+type SCIMUserLinkedError struct{}
+
+func (e SCIMUserLinkedError) Error() string {
+	return "user is already linked to a SCIM user in this provider"
+}
+
+type SCIMUserDeletedError struct{}
+
+func (e SCIMUserDeletedError) Error() string {
+	return "user was deleted by this provider"
+}
+
+type SCIMGroupNotFoundError struct{}
+
+func (e SCIMGroupNotFoundError) Error() string {
+	return "SCIM group not found"
+}
+
+func (e SCIMGroupNotFoundError) Is(target error) bool {
+	return target == errNotFound
+}
+
+type SCIMGroupStaleError struct{}
+
+func (e SCIMGroupStaleError) Error() string {
+	return "SCIM group has changed since it was read"
+}
+
+func (e SCIMGroupStaleError) Is(target error) bool {
+	return target == errStale
+}
+
+type SCIMGroupConflictError struct{}
+
+func (e SCIMGroupConflictError) Error() string {
+	return "SCIM group conflicts with an existing group"
+}
+
+type SCIMGroupMemberNotFoundError struct {
+	IDs []uuid.UUID
+}
+
+func (e SCIMGroupMemberNotFoundError) Error() string {
+	return "SCIM group member is not a user in this provider"
+}
+
+type SCIMIdentityNotFoundError struct{}
+
+func (e SCIMIdentityNotFoundError) Error() string {
+	return "SCIM identity not found"
+}
+
+func (e SCIMIdentityNotFoundError) Is(target error) bool {
+	return target == errNotFound
 }

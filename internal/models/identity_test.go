@@ -115,3 +115,28 @@ func (ts *IdentityTestSuite) createUserWithIdentity(email string) *User {
 
 	return user
 }
+
+func TestSSOProviderID(t *testing.T) {
+	id := uuid.Must(uuid.NewV4())
+
+	providerID, ok, err := SSOProviderID("sso:" + id.String())
+	require.True(t, ok)
+	require.NoError(t, err)
+	require.Equal(t, id, providerID)
+
+	providerID, ok, err = (&Identity{Provider: "sso:" + id.String()}).SSOProviderID()
+	require.True(t, ok)
+	require.NoError(t, err)
+	require.Equal(t, id, providerID)
+
+	_, ok, err = SSOProviderID("sso:not-a-uuid")
+	require.True(t, ok)
+	require.Error(t, err)
+
+	for _, provider := range []string{"email", "google", "", "SSO:" + id.String()} {
+		providerID, ok, err = SSOProviderID(provider)
+		require.False(t, ok, provider)
+		require.NoError(t, err, provider)
+		require.Equal(t, uuid.Nil, providerID, provider)
+	}
+}

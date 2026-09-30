@@ -1,8 +1,10 @@
 package models
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/storage"
@@ -53,6 +55,16 @@ type AccountLinkingResult struct {
 	CandidateEmail provider.Email
 }
 
+func VerifiedEmails(config *conf.GlobalConfiguration, emails []provider.Email) []string {
+	var verified []string
+	for _, email := range emails {
+		if email.Verified || config.Mailer.Autoconfirm {
+			verified = append(verified, strings.ToLower(email.Email))
+		}
+	}
+	return verified
+}
+
 // DetermineAccountLinking uses the provided data and database state to compute a decision on whether:
 // - A new User should be created (CreateAccount)
 // - A new Identity should be created (LinkAccount) with a UserID pointing to an existing user account
@@ -61,12 +73,9 @@ type AccountLinkingResult struct {
 //
 // Errors signal failure in processing only, like database access errors.
 func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfiguration, emails []provider.Email, aud, providerName, sub string) (AccountLinkingResult, error) {
-	var verifiedEmails []string
+	verifiedEmails := VerifiedEmails(config, emails)
 	var candidateEmail provider.Email
 	for _, email := range emails {
-		if email.Verified || config.Mailer.Autoconfirm {
-			verifiedEmails = append(verifiedEmails, strings.ToLower(email.Email))
-		}
 		if email.Primary {
 			candidateEmail = email
 			candidateEmail.Email = strings.ToLower(email.Email)
@@ -211,4 +220,31 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 		LinkingDomain:  candidateLinkingDomain,
 		CandidateEmail: candidateEmail,
 	}, nil
+}
+
+func LockAccountLinkingEmails(tx *storage.Connection, providerType string, emails []string) error {
+	keys := make([]string, 0, len(emails))
+	for _, email := range emails {
+		if email != "" {
+			keys = append(keys, strings.ToLower(email))
+		}
+	}
+	slices.Sort(keys)
+	for _, email := range slices.Compact(keys) {
+		if err := LockAccountLinking(tx, providerType, email); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func LockAccountLinking(tx *storage.Connection, providerType, email string) error {
+	if err := advisoryXactLock(tx, providerType+"|"+strings.ToLower(email)); err != nil {
+		return errors.Wrap(err, "error locking account linking")
+	}
+	return nil
+}
+
+func advisoryXactLock(tx *storage.Connection, key string) error {
+	return tx.RawQuery("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", key).Exec()
 }
