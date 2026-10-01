@@ -1125,6 +1125,17 @@ func (config *GlobalConfiguration) PopulateGlobal() error {
 		config.SAML.PrivateKeyNext = ""
 	} else {
 		config.SAML.PrivateKey = ""
+
+		// envconfig allocates zero-value structs for nil pointer fields on
+		// every load, even when SAML is disabled and nothing was
+		// configured; reset them explicitly so these report as not
+		// configured.
+		config.SAML.RSAPrivateKey = nil
+		config.SAML.RSAPublicKey = nil
+		config.SAML.Certificate = nil
+		config.SAML.RSAPrivateKeyNext = nil
+		config.SAML.RSAPublicKeyNext = nil
+		config.SAML.CertificateNext = nil
 	}
 
 	if config.Sms.Provider != "" {
