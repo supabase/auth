@@ -897,3 +897,45 @@ func (ts *UserTestSuite) TestAuthenticate() {
 		})
 	}
 }
+
+func (ts *UserTestSuite) TestFindUserForPhoneChangeSelectsTokenOwner() {
+	// phone_change has no uniqueness constraint, so two users can hold the same
+	// pending value at once (an abandoned change request plus a live one). The
+	// lookup must return the user the token was actually issued to, not whichever
+	// row the database happens to return first.
+	const pendingPhone = "+15550001111"
+
+	abandoned, err := NewUser("+15550000001", "abandoned@example.com", "secret", ts.config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	abandoned.PhoneChange = pendingPhone
+	require.NoError(ts.T(), ts.db.Create(abandoned))
+
+	requester, err := NewUser("+15550000002", "requester@example.com", "secret", ts.config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	requester.PhoneChange = pendingPhone
+	// Mirrors production: phone.go stores crypto.GenerateTokenHash(phone, otp) both
+	// on the user column and as the one-time token hash, and verify.go recomputes
+	// the same value from the submitted OTP — so the lookup must match on that.
+	requester.PhoneChangeToken = crypto.GenerateTokenHash(pendingPhone, "654321")
+	require.NoError(ts.T(), ts.db.Create(requester))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, requester.ID, pendingPhone, requester.PhoneChangeToken, PhoneChangeToken))
+
+	found, err := FindUserForPhoneChange(ts.db, pendingPhone, requester.PhoneChangeToken, ts.config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), requester.ID, found.ID, "must resolve the user the phone-change token was issued to")
+}
+
+func (ts *UserTestSuite) TestFindUserForPhoneChangeFallsBackWithoutToken() {
+	// Verification paths that never write a one-time token (test OTPs, rows
+	// predating the table) must keep resolving by phone_change alone.
+	const pendingPhone = "+15550002222"
+
+	user, err := NewUser("+15550000003", "legacy@example.com", "secret", ts.config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	user.PhoneChange = pendingPhone
+	require.NoError(ts.T(), ts.db.Create(user))
+
+	found, err := FindUserForPhoneChange(ts.db, pendingPhone, "", ts.config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), user.ID, found.ID)
+}
