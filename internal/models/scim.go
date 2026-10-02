@@ -95,14 +95,10 @@ func createSCIMRow[T any](tx *storage.Connection, table scimTable, providerID uu
 	return row, nil
 }
 
-func findSCIMRow[T any](tx *storage.Connection, table scimTable, target SCIMTarget, forUpdate bool) (*T, error) {
-	lock := ""
-	if forUpdate {
-		lock = " FOR UPDATE"
-	}
+func findSCIMRow[T any](tx *storage.Connection, table scimTable, target SCIMTarget) (*T, error) {
 	row := new(T)
 	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT %s FROM %q WHERE %s%s", table.columns, table.tableName, table.targetClause(), lock),
+		fmt.Sprintf("SELECT %s FROM %q WHERE %s", table.columns, table.tableName, table.targetClause()),
 		target.ID, target.ProviderID,
 	).First(row); err != nil {
 		return nil, table.wrapError(err, "finding")

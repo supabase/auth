@@ -754,13 +754,8 @@ func (s *scimUserRepository) Delete(ctx context.Context, user *core.User) error 
 	if err != nil {
 		return err
 	}
-	db := s.api.db.WithContext(ctx)
-	existing, err := models.FindSCIMUser(db, target.ProviderID, target.ID)
-	if err != nil {
-		return scimError(err)
-	}
-	return scimError(db.Transaction(func(tx *storage.Connection) error {
-		return s.delete(tx, r, target, existing)
+	return scimError(s.api.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
+		return s.delete(tx, r, target)
 	}))
 }
 
@@ -773,11 +768,7 @@ func (s *scimUserRepository) create(tx *storage.Connection, change scimUserChang
 	return row, created, models.SCIMUserCreatedAction, err
 }
 
-func (s *scimUserRepository) replace(tx *storage.Connection, change scimUserChange, existing *models.SCIMUser) (*models.SCIMUser, *models.User, models.AuditAction, error) {
-	old, err := s.lockForReplace(tx, change.target, existing)
-	if err != nil {
-		return nil, nil, "", err
-	}
+func (s *scimUserRepository) replace(tx *storage.Connection, change scimUserChange, old *models.SCIMUser) (*models.SCIMUser, *models.User, models.AuditAction, error) {
 	row, changed, err := s.replaceRow(tx, change.target, old, change.resource)
 	if err != nil || !changed {
 		return row, nil, "", err
@@ -880,13 +871,10 @@ func (s *scimUserRepository) renderOne(tx *storage.Connection, providerID uuid.U
 	}, *row)
 }
 
-func (s *scimUserRepository) delete(tx *storage.Connection, r *http.Request, target models.SCIMTarget, existing *models.SCIMUser) error {
+func (s *scimUserRepository) delete(tx *storage.Connection, r *http.Request, target models.SCIMTarget) error {
 	row, err := models.DeleteSCIMUser(tx, target)
 	if err != nil {
 		return err
-	}
-	if !sameSCIMLink(row.UserID, existing.UserID) {
-		return models.SCIMUserStaleError{}
 	}
 	if row.UserID != nil {
 		if err := models.Logout(tx, *row.UserID); err != nil {
@@ -898,24 +886,6 @@ func (s *scimUserRepository) delete(tx *storage.Connection, r *http.Request, tar
 		return err
 	}
 	return s.api.auditSCIMEvents(tx, r, events)
-}
-
-func (s *scimUserRepository) lockForReplace(tx *storage.Connection, target models.SCIMTarget, existing *models.SCIMUser) (*models.SCIMUser, error) {
-	old, err := models.FindSCIMUserForUpdate(tx, target.ProviderID, target.ID)
-	if err != nil {
-		return nil, err
-	}
-	if !sameSCIMLink(old.UserID, existing.UserID) {
-		return nil, models.SCIMUserStaleError{}
-	}
-	return old, nil
-}
-
-func sameSCIMLink(a, b *uuid.UUID) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
 }
 
 func (s *scimUserRepository) replaceRow(tx *storage.Connection, target models.SCIMTarget, old *models.SCIMUser, resource []byte) (*models.SCIMUser, bool, error) {
