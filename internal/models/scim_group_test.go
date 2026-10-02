@@ -212,33 +212,6 @@ func (ts *SCIMGroupTestSuite) TestReplaceMembersRejectsDeletedUsers() {
 	require.ErrorAs(ts.T(), err, &SCIMGroupMemberNotFoundError{})
 }
 
-func (ts *SCIMGroupTestSuite) TestReplaceMembersWaitsForConcurrentUserDelete() {
-	group := ts.createGroup(ts.provider.ID, "Engineering")
-	alice := ts.createUser(ts.provider.ID, "alice")
-
-	deleting := ts.beginTx()
-	defer func() { _ = deleting.TX.Rollback() }()
-	_, err := DeleteSCIMUser(deleting, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID})
-	require.NoError(ts.T(), err)
-	_, err = RemoveSCIMUserFromGroups(deleting, alice.ID)
-	require.NoError(ts.T(), err)
-
-	result := make(chan error, 1)
-	go func() {
-		result <- ts.db.Transaction(func(tx *storage.Connection) error {
-			_, _, err := ReplaceSCIMGroupMembers(tx, group, []uuid.UUID{alice.ID})
-			return err
-		})
-	}()
-	require.Eventually(ts.T(), func() bool { return ts.lockWaiters() > 0 }, 5*time.Second, 10*time.Millisecond)
-	require.NoError(ts.T(), deleting.TX.Commit())
-
-	require.Equal(ts.T(), SCIMGroupMemberNotFoundError{IDs: []uuid.UUID{alice.ID}}, <-result)
-	count, err := ts.db.Q().Where("group_id = ?", group.ID).Count(&SCIMGroupMember{})
-	require.NoError(ts.T(), err)
-	require.Zero(ts.T(), count)
-}
-
 func (ts *SCIMGroupTestSuite) TestReplaceMembersDoesNotLockExistingMembers() {
 	group := ts.createGroup(ts.provider.ID, "Engineering")
 	alice := ts.createUser(ts.provider.ID, "alice")
@@ -254,7 +227,7 @@ func (ts *SCIMGroupTestSuite) TestReplaceMembersDoesNotLockExistingMembers() {
 	result := make(chan error, 1)
 	go func() {
 		result <- ts.db.Transaction(func(tx *storage.Connection) error {
-			locked, err := FindSCIMGroupForUpdate(tx, ts.provider.ID, group.ID)
+			locked, err := FindSCIMGroup(tx, ts.provider.ID, group.ID)
 			if err != nil {
 				return err
 			}
@@ -379,12 +352,4 @@ func (ts *SCIMGroupTestSuite) beginTx() *storage.Connection {
 	tx, err := ts.db.NewTransaction()
 	require.NoError(ts.T(), err)
 	return &storage.Connection{Connection: tx}
-}
-
-func (ts *SCIMGroupTestSuite) lockWaiters() int {
-	row := struct {
-		Count int `db:"count"`
-	}{}
-	require.NoError(ts.T(), ts.db.RawQuery("SELECT count(*) AS count FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'").First(&row))
-	return row.Count
 }

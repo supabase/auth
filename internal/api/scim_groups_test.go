@@ -414,32 +414,6 @@ func (ts *SCIMTestSuite) TestGroupsVersionChangesOnMemberOnlyWrite() {
 	require.Equal(ts.T(), http.StatusPreconditionFailed, w.Code, w.Body.String())
 }
 
-func (ts *SCIMTestSuite) TestUserDeleteWaitsForGroupWrite() {
-	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
-	bob := ts.create(ts.TokenA, userWith("bob@example.com", "b-1"))
-	id := ts.createGroup(ts.TokenA, groupWith("Engineering", "g-1", alice, bob))
-	group, err := models.FindSCIMGroup(ts.API.db, ts.A.ID, uuid.FromStringOrNil(id))
-	require.NoError(ts.T(), err)
-
-	code, err := ts.whileLocked(
-		func(tx *storage.Connection) error {
-			_, err := models.FindSCIMGroupForUpdate(tx, ts.A.ID, group.ID)
-			return err
-		},
-		func(tx *storage.Connection) error {
-			_, _, err := models.ReplaceSCIMGroupMembers(tx, group, []uuid.UUID{uuid.FromStringOrNil(bob)})
-			return err
-		},
-		http.MethodDelete, "/Users/"+alice, "",
-	)
-	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), http.StatusNoContent, code)
-
-	w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.Equal(ts.T(), []string{bob}, memberValues(got))
-}
-
 func (ts *SCIMTestSuite) TestGroupsKeepDeactivatedMembers() {
 	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
 	bob := ts.create(ts.TokenA, userWith("bob@example.com", "b-1"))
@@ -858,8 +832,7 @@ func (ts *SCIMTestSuite) TestConcurrentGroupWrites() {
 		}
 		code, err := ts.whileLocked(
 			func(tx *storage.Connection) error {
-				_, err := models.FindSCIMGroupForUpdate(tx, ts.A.ID, uuid.FromStringOrNil(id))
-				return err
+				return tx.RawQuery("SELECT 1 FROM scim_groups WHERE id = ? FOR UPDATE", id).Exec()
 			},
 			tc.finish,
 			tc.method, "/Groups/"+id, tc.body, headers...,

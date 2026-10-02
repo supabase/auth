@@ -511,7 +511,7 @@ func (s *scimGroupRepository) mergeable(ctx context.Context, version string) boo
 }
 
 func (s *scimGroupRepository) delete(tx *storage.Connection, r *http.Request, target models.SCIMTarget) error {
-	row, err := models.FindSCIMGroupForUpdate(tx, target.ProviderID, target.ID)
+	row, err := models.FindSCIMGroup(tx, target.ProviderID, target.ID)
 	if err != nil {
 		return err
 	}

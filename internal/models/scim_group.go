@@ -65,10 +65,6 @@ func FindSCIMGroup(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMGroup
 	return findSCIMRow[SCIMGroup](tx, scimGroupsTable, SCIMTarget{ProviderID: providerID, ID: id}, false)
 }
 
-func FindSCIMGroupForUpdate(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMGroup, error) {
-	return findSCIMRow[SCIMGroup](tx, scimGroupsTable, SCIMTarget{ProviderID: providerID, ID: id}, true)
-}
-
 func FindSCIMGroups(tx *storage.Connection, providerID uuid.UUID, query SCIMQuery) ([]SCIMGroup, int, error) {
 	return findSCIMPage[SCIMGroup](tx, scimGroupsTable, providerID, query)
 }
@@ -168,12 +164,6 @@ func ClearSCIMGroupMembers(tx *storage.Connection, groupID uuid.UUID) ([]uuid.UU
 
 func RemoveSCIMUserFromGroups(tx *storage.Connection, scimUserID uuid.UUID) ([]uuid.UUID, error) {
 	groups, members := scimGroupsTable.tableName, SCIMGroupMember{}.TableName()
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT id FROM %q WHERE id IN (SELECT group_id FROM %q WHERE scim_user_id = ?) ORDER BY id FOR UPDATE", groups, members),
-		scimUserID,
-	).Exec(); err != nil {
-		return nil, errors.Wrap(err, "error locking SCIM groups")
-	}
 	removed := []SCIMGroupMember{}
 	if err := tx.RawQuery(
 		fmt.Sprintf("DELETE FROM %q WHERE scim_user_id = ? RETURNING group_id, scim_user_id, created_at", members),
@@ -213,13 +203,13 @@ func applySCIMGroupMemberChange(tx *storage.Connection, group *SCIMGroup, planne
 	return group, change, err
 }
 
-func lockLiveSCIMUserIDs(tx *storage.Connection, providerID uuid.UUID, ids []uuid.UUID) ([]uuid.UUID, error) {
+func findLiveSCIMUserIDs(tx *storage.Connection, providerID uuid.UUID, ids []uuid.UUID) ([]uuid.UUID, error) {
 	found := []uuid.UUID{}
 	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT id FROM %q WHERE id = ANY(?::uuid[]) AND sso_provider_id = ? AND deleted_at IS NULL ORDER BY id FOR SHARE", scimUsersTable.tableName),
+		fmt.Sprintf("SELECT id FROM %q WHERE id = ANY(?::uuid[]) AND sso_provider_id = ? AND deleted_at IS NULL", scimUsersTable.tableName),
 		ids, providerID,
 	).All(&found); err != nil {
-		return nil, errors.Wrap(err, "error locking SCIM group members")
+		return nil, errors.Wrap(err, "error finding SCIM group members")
 	}
 	if missing := differenceUUIDs(ids, found); len(missing) > 0 {
 		return nil, SCIMGroupMemberNotFoundError{IDs: missing}
@@ -280,13 +270,13 @@ func addSCIMGroupMembers(tx *storage.Connection, group *SCIMGroup, ids []uuid.UU
 	if len(ids) == 0 {
 		return added, nil
 	}
-	locked, err := lockLiveSCIMUserIDs(tx, group.SSOProviderID, ids)
+	live, err := findLiveSCIMUserIDs(tx, group.SSOProviderID, ids)
 	if err != nil {
 		return nil, err
 	}
 	if err := tx.RawQuery(
 		fmt.Sprintf("INSERT INTO %q (group_id, scim_user_id) SELECT ?, unnest(?::uuid[]) ON CONFLICT DO NOTHING RETURNING scim_user_id", SCIMGroupMember{}.TableName()),
-		group.ID, uuidArray(locked),
+		group.ID, uuidArray(live),
 	).All(&added); err != nil {
 		return nil, errors.Wrap(err, "error adding SCIM group members")
 	}
