@@ -77,12 +77,13 @@ func (ts *SCIMTestSuite) TestOktaLifecycle() {
 	require.NotContains(ts.T(), string(stored.Resource), "hunter2")
 	require.NotContains(ts.T(), string(stored.Resource), `"id"`)
 
-	for _, filter := range []string{`userName eq "alice@example.com"`, `userName eq "ALICE@EXAMPLE.COM"`, `externalId eq "00u1abcd"`} {
+	for _, filter := range []string{`userName eq "alice@example.com"`, `userName eq "ALICE@EXAMPLE.COM"`, `externalId eq "00u1abcd"`, `userName eq "alice@example.com" and externalId eq "00u1abcd"`} {
 		found := ts.list(ts.TokenA, filter)
 		require.EqualValues(ts.T(), 1, found["totalResults"], filter)
 		require.Equal(ts.T(), id, found["Resources"].([]any)[0].(map[string]any)["id"], filter)
 	}
 	require.EqualValues(ts.T(), 0, ts.list(ts.TokenA, `externalId eq "00U1ABCD"`)["totalResults"])
+	require.EqualValues(ts.T(), 0, ts.list(ts.TokenA, `userName eq "alice@example.com" and externalId eq "00U1ABCD"`)["totalResults"])
 
 	w, got := ts.do(ts.TokenA, http.MethodGet, "/Users/"+id, "")
 	require.Equal(ts.T(), http.StatusOK, w.Code)
@@ -612,16 +613,45 @@ func (ts *SCIMTestSuite) TestSortTieBreaksOnID() {
 	}
 }
 
+func (ts *SCIMTestSuite) TestFilterAnyAttribute() {
+	enterprise := `"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User":{"department":"Tour Operations"}`
+	bjensen := ts.create(ts.TokenA, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen@example.com","name":{"givenName":"Barbara","familyName":"Jensen"},"title":"Tour Guide","emails":[{"value":"bjensen@example.com","type":"work","primary":true},{"value":"barbara@example.com","type":"home"}],`+enterprise+`}`)
+	jsmith := ts.create(ts.TokenA, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"jsmith@example.com","name":{"givenName":"John","familyName":"Smith"},"title":"Tour Guide","emails":[{"value":"jsmith@example.com","type":"work","primary":true}]}`)
+	ts.create(ts.TokenB, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen@example.com","name":{"givenName":"Barbara"},"emails":[{"value":"bjensen@example.com"}]}`)
+
+	for filter, want := range map[string][]string{
+		`name.givenName eq "barbara"`:                                                                {bjensen},
+		`emails eq "BARBARA@example.com"`:                                                            {bjensen},
+		`emails.value eq "jsmith@example.com"`:                                                       {jsmith},
+		`emails[type eq "work" and value eq "bjensen@example.com"]`:                                  {bjensen},
+		`emails[type eq "home" and value eq "bjensen@example.com"]`:                                  {},
+		`emails[type eq "home" or value eq "jsmith@example.com"]`:                                    {bjensen, jsmith},
+		`title eq "tour guide" and name.familyName eq "Smith"`:                                       {jsmith},
+		`userName eq "bjensen@example.com" or name.givenName eq "John"`:                              {bjensen, jsmith},
+		`urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department eq "tour operations"`: {bjensen},
+		`active eq true and title eq "tour guide"`:                                                   {bjensen, jsmith},
+		`active eq false`: {},
+	} {
+		ids := []string{}
+		for _, resource := range ts.list(ts.TokenA, filter)["Resources"].([]any) {
+			ids = append(ids, resource.(map[string]any)["id"].(string))
+		}
+		require.ElementsMatch(ts.T(), want, ids, filter)
+	}
+}
+
 func (ts *SCIMTestSuite) TestUnsupportedFilters() {
 	for _, filter := range []string{
 		`userName co "alice"`,
 		`userName ne "alice"`,
-		`name.givenName eq "Alice"`,
-		`emails[value eq "alice@example.com"]`,
-		`userName eq "a" or userName eq "b"`,
-		`userName eq "a" and externalId eq "b"`,
 		`userName pr`,
 		`not (userName eq "a")`,
+		`userName eq "a" and userName co "b"`,
+		`id eq "00000000-0000-0000-0000-000000000000"`,
+		`meta.created eq "2026-01-01T00:00:00Z"`,
+		`groups.value eq "00000000-0000-0000-0000-000000000000"`,
+		`emails[type eq "work" and type eq "home"]`,
+		`emails[type eq "work" and (value eq "a" or value eq "b")]`,
 	} {
 		w, body := ts.do(ts.TokenA, http.MethodGet, "/Users?"+url.Values{"filter": {filter}}.Encode(), "")
 		require.Equal(ts.T(), http.StatusBadRequest, w.Code, filter)

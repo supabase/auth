@@ -19,6 +19,7 @@ func (ts *SCIMTestSuite) TestTenantIsolation() {
 	require.Equal(ts.T(), idA, listA["Resources"].([]any)[0].(map[string]any)["id"])
 	require.EqualValues(ts.T(), 0, ts.list(ts.TokenA, `userName eq "bob@example.com"`)["totalResults"])
 	require.EqualValues(ts.T(), 0, ts.list(ts.TokenA, `externalId eq "b-1"`)["totalResults"])
+	require.EqualValues(ts.T(), 0, ts.list(ts.TokenA, `userName eq "bob@example.com" and externalId eq "b-1"`)["totalResults"])
 
 	for _, tc := range []struct{ method, body string }{
 		{http.MethodGet, ""},

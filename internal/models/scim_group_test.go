@@ -75,7 +75,7 @@ func (ts *SCIMGroupTestSuite) TestFindGroupsFiltersAndSorts() {
 	ts.createGroup(ts.createProvider().ID, "Alpha")
 
 	displayName := "ALPHA"
-	groups, total, err := FindSCIMGroups(ts.db, ts.provider.ID, SCIMQuery{Filter: SCIMFilter{Name: &displayName}, Limit: 10})
+	groups, total, err := FindSCIMGroups(ts.db, ts.provider.ID, SCIMQuery{Filter: SCIMFilter{Attribute: SCIMAttributeName, Value: displayName}, Limit: 10})
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), 1, total)
 	require.Equal(ts.T(), "alpha", groups[0].DisplayName)

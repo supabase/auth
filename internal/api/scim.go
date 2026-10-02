@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +49,8 @@ var (
 		core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...),
 	}
 	scimGroupSchemas = core.Schemas{core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...)}
+
+	scimUnstored = strings.Fields("id meta password groups members")
 
 	scimCommonSortKeys = map[string]models.SCIMSortKey{
 		"id":                models.SCIMSortByID,
@@ -202,7 +205,7 @@ func scimLogError(r *http.Request, err error) {
 func scimSearch(query *protocol.SearchRequest, schemas core.Schemas, name string) (models.SCIMQuery, error) {
 	search := models.SCIMQuery{Offset: query.Offset(), Limit: query.Count}
 	if query.Filter != "" {
-		criteria, err := protocol.Filter(schemas, query.Filter, scimEqFilter{name: name})
+		criteria, err := protocol.Filter(schemas, query.Filter, scimSQLFilter{schemas: schemas, name: name})
 		if err != nil {
 			return search, err
 		}
@@ -231,12 +234,12 @@ func scimSearch(query *protocol.SearchRequest, schemas core.Schemas, name string
 	return search, nil
 }
 
-func scimEncode(resource core.Resource, drop ...string) ([]byte, error) {
+func scimEncode(resource core.Resource) ([]byte, error) {
 	fields, err := core.NewObject(resource)
 	if err != nil {
 		return nil, err
 	}
-	for _, key := range drop {
+	for _, key := range scimUnstored {
 		fields.Remove(key)
 	}
 	return json.Marshal(fields)
@@ -302,47 +305,122 @@ func scimActor(r *http.Request) *models.User {
 	return &models.User{Email: storage.NullString("scim:" + prefix)}
 }
 
-type scimEqFilter struct {
-	name string
+type scimSQLFilter struct {
+	schemas core.Schemas
+	name    string
 }
 
-func (f scimEqFilter) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (models.SCIMFilter, error) {
-	text, isString := value.(string)
-	supported := op == filter.OpEquals && attribute.Parent == nil && isString
-	if !supported {
+func (f scimSQLFilter) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (models.SCIMFilter, error) {
+	column := attribute.Parent == nil && attribute.Path.SubAttribute == ""
+	switch {
+	case op != filter.OpEquals || value == nil:
+		return f.unsupported()
+	case column && attribute.Definition.Name == f.name:
+		return models.SCIMFilter{Attribute: models.SCIMAttributeName, Value: value}, nil
+	case column && attribute.Definition.Name == "externalId":
+		return models.SCIMFilter{Attribute: models.SCIMAttributeExternalID, Value: value}, nil
+	case column && attribute.Definition.Name == "active":
+		return models.SCIMFilter{Attribute: models.SCIMAttributeActive, Value: value}, nil
+	}
+	return f.match(attribute, value)
+}
+
+func (f scimSQLFilter) Present(*protocol.Attribute) (models.SCIMFilter, error) {
+	return f.unsupported()
+}
+
+func (f scimSQLFilter) And(left, right models.SCIMFilter) (models.SCIMFilter, error) {
+	return models.SCIMFilter{And: append(scimTerms(left, left.And), scimTerms(right, right.And)...)}, nil
+}
+
+func (f scimSQLFilter) Or(left, right models.SCIMFilter) (models.SCIMFilter, error) {
+	return models.SCIMFilter{Or: append(scimTerms(left, left.Or), scimTerms(right, right.Or)...)}, nil
+}
+
+func (f scimSQLFilter) Not(models.SCIMFilter) (models.SCIMFilter, error) {
+	return f.unsupported()
+}
+
+func (f scimSQLFilter) ValuePath(attribute *protocol.Attribute, valueFilter func() (models.SCIMFilter, error)) (models.SCIMFilter, error) {
+	parent := attribute.Definition
+	if slices.Contains(scimUnstored, parent.Name) {
 		return f.unsupported()
 	}
-	switch attribute.Definition.Name {
-	case f.name:
-		return models.SCIMFilter{Name: &text}, nil
-	case "externalId":
-		return models.SCIMFilter{ExternalID: &text}, nil
+	inner, err := valueFilter()
+	if err != nil {
+		return inner, err
 	}
-	return f.unsupported()
+	terms := scimTerms(inner, inner.Or)
+	for i, term := range terms {
+		element := map[string]any{}
+		if !scimMerge(element, term) {
+			return f.unsupported()
+		}
+		terms[i] = models.SCIMFilter{Match: f.wrap(attribute.Path, parent, element)}
+	}
+	if len(terms) == 1 {
+		return terms[0], nil
+	}
+	return models.SCIMFilter{Or: terms}, nil
 }
 
-func (f scimEqFilter) Present(*protocol.Attribute) (models.SCIMFilter, error) {
-	return f.unsupported()
+func (f scimSQLFilter) match(attribute *protocol.Attribute, value any) (models.SCIMFilter, error) {
+	definition, path := attribute.Definition, attribute.Path
+	if definition.CaseExact || definition.Type == core.TypeBinary || definition.Type == core.TypeDateTime {
+		return f.unsupported()
+	}
+	term := map[string]any{definition.Name: value}
+	if attribute.Parent != nil {
+		return models.SCIMFilter{Match: term}, nil
+	}
+	parent, _ := f.schemas.Resolve(core.SchemaURI(path.URI), path.Name, "")
+	if parent == nil || slices.Contains(scimUnstored, parent.Name) {
+		return f.unsupported()
+	}
+	if parent != definition {
+		return models.SCIMFilter{Match: f.wrap(path, parent, term)}, nil
+	}
+	return models.SCIMFilter{Match: f.extension(path, term)}, nil
 }
 
-func (f scimEqFilter) And(models.SCIMFilter, models.SCIMFilter) (models.SCIMFilter, error) {
-	return f.unsupported()
+func (f scimSQLFilter) wrap(path filter.AttrPath, parent *core.Attribute, term map[string]any) map[string]any {
+	var nested any = term
+	if parent.MultiValued {
+		nested = []any{term}
+	}
+	return f.extension(path, map[string]any{parent.Name: nested})
 }
 
-func (f scimEqFilter) Or(models.SCIMFilter, models.SCIMFilter) (models.SCIMFilter, error) {
-	return f.unsupported()
+func (f scimSQLFilter) extension(path filter.AttrPath, term map[string]any) map[string]any {
+	schema := f.schemas.Lookup(core.SchemaURI(path.URI))
+	if !f.schemas.IsExtension(schema) {
+		return term
+	}
+	return map[string]any{string(schema.ID): term}
 }
 
-func (f scimEqFilter) Not(models.SCIMFilter) (models.SCIMFilter, error) {
-	return f.unsupported()
+func (f scimSQLFilter) unsupported() (models.SCIMFilter, error) {
+	return models.SCIMFilter{}, scimerrors.ErrInvalidFilter(`only "eq" filters joined by "and" or "or" are supported`)
 }
 
-func (f scimEqFilter) ValuePath(*protocol.Attribute, func() (models.SCIMFilter, error)) (models.SCIMFilter, error) {
-	return f.unsupported()
+func scimTerms(filter models.SCIMFilter, terms []models.SCIMFilter) []models.SCIMFilter {
+	if len(terms) > 0 {
+		return terms
+	}
+	return []models.SCIMFilter{filter}
 }
 
-func (f scimEqFilter) unsupported() (models.SCIMFilter, error) {
-	return models.SCIMFilter{}, scimerrors.ErrInvalidFilter(fmt.Sprintf(`only "%s eq" and "externalId eq" filters are supported`, f.name))
+func scimMerge(element map[string]any, term models.SCIMFilter) bool {
+	if term.Match == nil {
+		return len(term.And) > 0 && !slices.ContainsFunc(term.And, func(t models.SCIMFilter) bool { return !scimMerge(element, t) })
+	}
+	for key, value := range term.Match {
+		if existing, ok := element[key]; ok && existing != value {
+			return false
+		}
+		element[key] = value
+	}
+	return true
 }
 
 type scimGroupRepository struct {
@@ -427,7 +505,7 @@ func (s *scimGroupRepository) save(ctx context.Context, group *core.Group, write
 	if err != nil {
 		return nil, err
 	}
-	resource, err := scimEncode(group, "id", "meta", "members")
+	resource, err := scimEncode(group)
 	if err != nil {
 		return nil, err
 	}
@@ -857,7 +935,7 @@ func (s *scimUserRepository) changeEmail(tx *storage.Connection, change scimUser
 }
 
 func scimUserResource(user *core.User) ([]byte, error) {
-	resource, err := scimEncode(user, "id", "meta", "password", "groups")
+	resource, err := scimEncode(user)
 	if err != nil {
 		return nil, err
 	}

@@ -71,7 +71,7 @@ func (ts *SCIMTestSuite) TestGroupsLifecycle() {
 	require.NotContains(ts.T(), string(stored.Resource), "members")
 	require.NotContains(ts.T(), string(stored.Resource), `"id"`)
 
-	for _, filter := range []string{`displayName eq "Engineering"`, `displayName eq "engineering"`, `externalId eq "Finance"`} {
+	for _, filter := range []string{`displayName eq "Engineering"`, `displayName eq "engineering"`, `externalId eq "Finance"`, `displayName eq "Engineering" and externalId eq "Finance"`, `displayName eq "Nobody" or externalId eq "Finance"`} {
 		found := ts.listGroups(ts.TokenA, filter)
 		require.EqualValues(ts.T(), 1, found["totalResults"], filter)
 		require.Equal(ts.T(), id, found["Resources"].([]any)[0].(map[string]any)["id"], filter)
@@ -403,8 +403,8 @@ func (ts *SCIMTestSuite) TestGroupsUnsupportedFilters() {
 		`displayName co "eng"`,
 		`members.value eq "00000000-0000-0000-0000-000000000000"`,
 		`members[value eq "00000000-0000-0000-0000-000000000000"]`,
-		`displayName eq "a" or displayName eq "b"`,
 		`displayName pr`,
+		`id eq "00000000-0000-0000-0000-000000000000"`,
 	} {
 		w, body := ts.do(ts.TokenA, http.MethodGet, "/Groups?"+url.Values{"filter": {filter}}.Encode(), "")
 		require.Equal(ts.T(), http.StatusBadRequest, w.Code, filter)

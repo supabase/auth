@@ -3,6 +3,7 @@ package models
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
 	"slices"
@@ -19,9 +20,25 @@ import (
 
 const scimVersionClause = "(?::timestamptz IS NULL OR updated_at = ?)"
 
+type SCIMAttribute int
+
+const (
+	SCIMAttributeName SCIMAttribute = iota + 1
+	SCIMAttributeExternalID
+	SCIMAttributeActive
+)
+
 type SCIMFilter struct {
-	Name       *string
-	ExternalID *string
+	Attribute SCIMAttribute
+	Value     any
+	Match     map[string]any
+	And       []SCIMFilter
+	Or        []SCIMFilter
+}
+
+func (f SCIMFilter) matchesResource() bool {
+	terms := append(slices.Clone(f.And), f.Or...)
+	return f.Match != nil || slices.ContainsFunc(terms, SCIMFilter.matchesResource)
 }
 
 type SCIMSortKey int
@@ -60,21 +77,60 @@ type scimTable struct {
 	conflict   error
 }
 
-func (t scimTable) where(providerID uuid.UUID, filter SCIMFilter) (string, []any) {
+func (t scimTable) where(providerID uuid.UUID, filter SCIMFilter) (string, []any, error) {
 	clauses := []string{"sso_provider_id = ?"}
 	args := []any{providerID}
 	if t.liveClause != "" {
 		clauses = append(clauses, t.liveClause)
 	}
-	if filter.Name != nil {
-		clauses = append(clauses, t.nameColumn+` COLLATE "C" = lower(?)`)
-		args = append(args, *filter.Name)
+	clause, values, err := t.filter(filter)
+	if clause != "" {
+		clauses = append(clauses, clause)
+		args = append(args, values...)
 	}
-	if filter.ExternalID != nil {
-		clauses = append(clauses, "external_id = ?")
-		args = append(args, *filter.ExternalID)
+	return strings.Join(clauses, " AND "), args, err
+}
+
+func (t scimTable) filter(filter SCIMFilter) (string, []any, error) {
+	switch {
+	case filter.Attribute == SCIMAttributeName:
+		return t.nameColumn + ` COLLATE "C" = lower(?)`, []any{filter.Value}, nil
+	case filter.Attribute == SCIMAttributeExternalID:
+		return `external_id COLLATE "C" = ?`, []any{filter.Value}, nil
+	case filter.Attribute == SCIMAttributeActive && filter.Value == true:
+		return "active", nil, nil
+	case filter.Attribute == SCIMAttributeActive:
+		return "NOT active", nil, nil
+	case filter.Match != nil:
+		return scimMatch(filter)
+	case len(filter.Or) > 0:
+		return t.join(filter.Or, " OR ")
 	}
-	return strings.Join(clauses, " AND "), args
+	return t.join(filter.And, " AND ")
+}
+
+func (t scimTable) join(terms []SCIMFilter, operator string) (string, []any, error) {
+	if len(terms) == 0 {
+		return "", nil, nil
+	}
+	clauses, args := make([]string, len(terms)), []any{}
+	for i, term := range terms {
+		clause, values, err := t.filter(term)
+		if err != nil {
+			return "", nil, err
+		}
+		clauses[i] = clause
+		args = append(args, values...)
+	}
+	return "(" + strings.Join(clauses, operator) + ")", args, nil
+}
+
+func scimMatch(filter SCIMFilter) (string, []any, error) {
+	match, err := json.Marshal(filter.Match)
+	if err != nil {
+		return "", nil, err
+	}
+	return "lower(resource::text)::jsonb @> lower(?)::jsonb", []any{string(match)}, nil
 }
 
 func (t scimTable) targetClause() string {
@@ -138,11 +194,18 @@ func (t scimTable) wrapError(err error, verb string) error {
 }
 
 func findSCIMPage[T any](tx *storage.Connection, table scimTable, providerID uuid.UUID, query SCIMQuery) ([]T, int, error) {
-	where, args := table.where(providerID, query.Filter)
+	where, args, err := table.where(providerID, query.Filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	source := fmt.Sprintf("%q WHERE %s", table.tableName, where)
+	if query.Filter.matchesResource() {
+		source = fmt.Sprintf("(SELECT * FROM %s OFFSET 0) AS %q", source, table.tableName)
+	}
 	rows := []T{}
 	if query.Limit > 0 {
 		if err := tx.RawQuery(
-			fmt.Sprintf("SELECT %s FROM %q WHERE %s ORDER BY %s OFFSET ? LIMIT ?", table.columns, table.tableName, where, table.orderBy(query.Order)),
+			fmt.Sprintf("SELECT %s FROM %s ORDER BY %s OFFSET ? LIMIT ?", table.columns, source, table.orderBy(query.Order)),
 			append(slices.Clone(args), query.Offset, query.Limit)...,
 		).All(&rows); err != nil {
 			return nil, 0, errors.Wrapf(err, "error finding %ss", table.label)
