@@ -920,3 +920,19 @@ func (ts *SCIMTestSuite) TestRenameSkippedWhenIdentityMissing() {
 	require.NotEqual(ts.T(), user.ID, signedIn.ID)
 	require.Equal(ts.T(), 2, ts.users("alice@example.com"))
 }
+
+func (ts *SCIMTestSuite) TestBeforeUserCreatedHook() {
+	require.NoError(ts.T(), ts.API.db.RawQuery(`CREATE OR REPLACE FUNCTION auth.scim_reject_signup(input jsonb) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"error":{"http_code":403,"message":"signup blocked"}}'::jsonb $$`).Exec())
+	hook := &ts.API.config.Hook.BeforeUserCreated
+	hook.Enabled, hook.URI = true, "pg-functions://postgres/auth/scim_reject_signup"
+	require.NoError(ts.T(), hook.PopulateExtensibilityPoint())
+	defer func() { hook.Enabled = false }()
+
+	w, body := ts.do(ts.TokenA, http.MethodPost, "/Users", oktaUser)
+	require.Equal(ts.T(), http.StatusForbidden, w.Code, w.Body.String())
+	require.Equal(ts.T(), "signup blocked", body["detail"])
+	require.Zero(ts.T(), ts.countRows(&models.SCIMUser{}, "sso_provider_id = ?", ts.A.ID))
+
+	existing := ts.ssoUser(ts.A, "Alice@Example.com", "alice@example.com")
+	require.Equal(ts.T(), existing.ID, ts.linkedUser(ts.create(ts.TokenA, oktaUser)).ID)
+}
