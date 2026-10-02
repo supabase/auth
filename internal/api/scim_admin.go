@@ -14,8 +14,6 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 )
 
-const scimDeprovisionedBanDuration = 100 * 365 * 24 * time.Hour
-
 type AdminSCIMTokenCreateParams struct {
 	ExpiresAt *time.Time `json:"expires_at"`
 }
@@ -192,13 +190,10 @@ func (a *API) deprovisionSCIM(tx *storage.Connection, r *http.Request, provider 
 	if err != nil {
 		return err
 	}
-	if enabled && a.config.SSO.SCIM.Enabled {
-		if err := a.auditSCIMDisabled(tx, r, provider.ID, tokens); err != nil {
-			return err
-		}
+	if !enabled || !a.config.SSO.SCIM.Enabled {
+		return nil
 	}
-	_, err = models.BanDeprovisionedSCIMUsers(tx, provider.ID, a.Now().Add(scimDeprovisionedBanDuration))
-	return err
+	return a.auditSCIMDisabled(tx, r, provider.ID, tokens)
 }
 
 func (a *API) auditSCIMDisabled(tx *storage.Connection, r *http.Request, providerID uuid.UUID, tokens []models.SCIMToken) error {

@@ -98,24 +98,6 @@ func SoftDeleteSCIMUsersByUserID(tx *storage.Connection, userID uuid.UUID) ([]SC
 	return rows, nil
 }
 
-func BanDeprovisionedSCIMUsers(tx *storage.Connection, providerID uuid.UUID, until time.Time) (int, error) {
-	users, scimUsers := User{}.TableName(), scimUsersTable.tableName
-	count, err := tx.RawQuery(
-		fmt.Sprintf(
-			"UPDATE %[1]q u SET banned_until = ?, updated_at = now() "+
-				"WHERE u.id IN (SELECT user_id FROM %[2]q WHERE sso_provider_id = ? AND (deleted_at IS NOT NULL OR NOT active)) "+
-				"AND NOT EXISTS (SELECT 1 FROM %[2]q l WHERE l.user_id = u.id AND l.deleted_at IS NULL AND l.active) "+
-				"AND (u.banned_until IS NULL OR u.banned_until < ?)",
-			users, scimUsers,
-		),
-		until, providerID, until,
-	).ExecWithCount()
-	if err != nil {
-		return 0, errors.Wrap(err, "error banning deprovisioned SCIM users")
-	}
-	return count, nil
-}
-
 func LinkSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) error {
 	deleted, err := tx.Q().Where("sso_provider_id = ? AND user_id = ? AND deleted_at IS NOT NULL", user.SSOProviderID, userID).Exists(&SCIMUser{})
 	if err != nil {
