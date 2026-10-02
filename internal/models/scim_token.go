@@ -106,17 +106,6 @@ func FindActiveSCIMTokensBySSOProvider(tx *storage.Connection, providerID uuid.U
 	return tokens, nil
 }
 
-func RevokeActiveSCIMTokens(tx *storage.Connection, providerID uuid.UUID) ([]SCIMToken, error) {
-	tokens := []SCIMToken{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET revoked_at = now() WHERE sso_provider_id = ? AND "+activeSCIMTokenClause+" RETURNING *", SCIMToken{}.TableName()),
-		providerID,
-	).All(&tokens); err != nil {
-		return nil, errors.Wrap(err, "error revoking SCIM tokens")
-	}
-	return tokens, nil
-}
-
 func FindSCIMTokenByPrefix(tx *storage.Connection, providerID uuid.UUID, prefix string) (*SCIMToken, error) {
 	tokens := []SCIMToken{}
 	if err := tx.Q().Where("sso_provider_id = ? AND prefix = ?", providerID, prefix).Limit(2).All(&tokens); err != nil {

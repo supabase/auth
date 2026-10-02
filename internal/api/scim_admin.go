@@ -79,9 +79,11 @@ func (a *API) adminSCIMTokensCreate(w http.ResponseWriter, r *http.Request) erro
 	db := a.db.WithContext(ctx)
 	provider := getSSOProvider(ctx)
 
-	params, err := a.scimTokenCreateParams(r)
-	if err != nil {
-		return err
+	params := &AdminSCIMTokenCreateParams{}
+	if body, err := utilities.GetBodyBytes(r); err != nil || len(body) > 0 {
+		if err := retrieveRequestParams(r, params); err != nil {
+			return err
+		}
 	}
 
 	token, plaintext, err := models.CreateSCIMToken(db, provider, params.ExpiresAt)
@@ -127,19 +129,6 @@ func (a *API) adminSCIMTokensRevoke(w http.ResponseWriter, r *http.Request) erro
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func (a *API) scimTokenCreateParams(r *http.Request) (*AdminSCIMTokenCreateParams, error) {
-	params := &AdminSCIMTokenCreateParams{}
-	if body, err := utilities.GetBodyBytes(r); err != nil || len(body) > 0 {
-		if err := retrieveRequestParams(r, params); err != nil {
-			return nil, err
-		}
-	}
-	if params.ExpiresAt != nil && !params.ExpiresAt.After(a.Now()) {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "expires_at must be in the future")
-	}
-	return params, nil
-}
-
 func revokeSCIMToken(tx *storage.Connection, providerID uuid.UUID, prefix string) (*models.SCIMToken, error) {
 	token, err := models.FindSCIMTokenByPrefix(tx, providerID, prefix)
 	if err != nil {
@@ -163,7 +152,7 @@ func (a *API) sendSCIMStatus(w http.ResponseWriter, db *storage.Connection, prov
 		return apierrors.NewInternalServerError("Error finding SCIM tokens").WithInternalError(err)
 	}
 	enabled := false
-	if a.config.SSO.SCIM.Enabled && provider.IsEnabled() {
+	if provider.IsEnabled() {
 		if enabled, err = models.IsSCIMEnabled(db, provider.ID); err != nil {
 			return apierrors.NewInternalServerError("Error finding SCIM settings").WithInternalError(err)
 		}
@@ -177,21 +166,17 @@ func (a *API) sendSCIMStatus(w http.ResponseWriter, db *storage.Connection, prov
 }
 
 func (a *API) deprovisionSCIM(tx *storage.Connection, r *http.Request, provider *models.SSOProvider) error {
-	enabled, err := models.IsSCIMEnabled(tx, provider.ID)
-	if err != nil {
-		return err
-	}
-	tokens, err := models.RevokeActiveSCIMTokens(tx, provider.ID)
-	if err != nil {
-		return err
-	}
-	if !enabled || !a.config.SSO.SCIM.Enabled {
+	if !a.config.SSO.SCIM.Enabled {
 		return nil
 	}
-	return a.auditSCIMDisabled(tx, r, provider.ID, tokens)
-}
-
-func (a *API) auditSCIMDisabled(tx *storage.Connection, r *http.Request, providerID uuid.UUID, tokens []models.SCIMToken) error {
+	enabled, err := models.IsSCIMEnabled(tx, provider.ID)
+	if err != nil || !enabled {
+		return err
+	}
+	tokens, err := models.FindActiveSCIMTokensBySSOProvider(tx, provider.ID)
+	if err != nil {
+		return err
+	}
 	prefixes := make([]string, len(tokens))
 	for i, token := range tokens {
 		prefixes[i] = token.Prefix
@@ -199,7 +184,7 @@ func (a *API) auditSCIMDisabled(tx *storage.Connection, r *http.Request, provide
 	return a.auditSCIM(tx, r, scimAuditEvent{
 		actor:      getAdminUser(r.Context()),
 		action:     models.SCIMDisabledAction,
-		providerID: providerID,
+		providerID: provider.ID,
 		traits:     map[string]any{"token_prefixes": prefixes},
 	})
 }
