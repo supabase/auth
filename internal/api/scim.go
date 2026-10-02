@@ -93,13 +93,27 @@ func (l scimLister[Row, Resource]) list(ctx context.Context, db *storage.Connect
 	return resources, total, nil
 }
 
-func scimRenderOne[Row, Resource any](render func([]Row) ([]Resource, error), row Row) (Resource, error) {
-	var zero Resource
-	resources, err := render([]Row{row})
+func scimFirst[R any](resources []R, err error) (R, error) {
 	if err != nil {
+		var zero R
 		return zero, err
 	}
 	return resources[0], nil
+}
+
+func scimDelete(ctx context.Context, db *storage.Connection, resource core.Resource, remove func(*storage.Connection, *http.Request, models.SCIMTarget) error) error {
+	common := resource.Common()
+	target, err := scimTarget(ctx, common.ID, common.Meta.Version)
+	if err != nil {
+		return err
+	}
+	r, err := scimRequest(ctx)
+	if err != nil {
+		return err
+	}
+	return scimError(db.Transaction(func(tx *storage.Connection) error {
+		return remove(tx, r, target)
+	}))
 }
 
 type scimDocument struct {
@@ -115,7 +129,13 @@ func scimCompose[R core.Resource](r R, resourceType core.ResourceTypeName, locat
 	}
 	common := r.Common()
 	common.ID = doc.id.String()
-	common.Meta = scimMeta(resourceType, location+"/"+common.ID, doc.createdAt, doc.updatedAt)
+	common.Meta = core.Meta{
+		ResourceType: resourceType,
+		Created:      doc.createdAt.UTC(),
+		LastModified: doc.updatedAt.UTC(),
+		Location:     location + "/" + common.ID,
+		Version:      scimVersion(doc.updatedAt),
+	}
 	return nil
 }
 
@@ -276,16 +296,6 @@ func scimRequest(ctx context.Context) (*http.Request, error) {
 	return r.WithContext(ctx), nil
 }
 
-func scimMeta(resourceType core.ResourceTypeName, location string, created, updated time.Time) core.Meta {
-	return core.Meta{
-		ResourceType: resourceType,
-		Created:      created.UTC(),
-		LastModified: updated.UTC(),
-		Location:     location,
-		Version:      scimVersion(updated),
-	}
-}
-
 func scimVersion(updatedAt time.Time) string {
 	return `W/"` + strconv.FormatInt(updatedAt.UnixMicro(), 10) + `"`
 }
@@ -316,9 +326,7 @@ type scimEqFilter struct {
 
 func (f scimEqFilter) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (models.SCIMFilter, error) {
 	text, isString := value.(string)
-	isEquals := op == filter.OpEquals
-	isTopLevel := attribute.Parent == nil
-	if !isEquals || !isTopLevel || !isString {
+	if op != filter.OpEquals || attribute.Parent != nil || !isString {
 		return f.unsupported()
 	}
 	switch attribute.Definition.Name {
@@ -383,7 +391,7 @@ func (s *scimGroupRepository) Read(ctx context.Context, id string) (*core.Group,
 		return nil, scimError(err)
 	}
 	projection := protocol.ProjectionFrom(ctx)
-	group, err := s.renderOne(db, target.ProviderID, row, projection)
+	group, err := scimFirst(s.render(db, target.ProviderID, []models.SCIMGroup{*row}, projection))
 	if err != nil {
 		return nil, err
 	}
@@ -428,17 +436,7 @@ func (s *scimGroupRepository) Update(ctx context.Context, group *core.Group) (*c
 }
 
 func (s *scimGroupRepository) Delete(ctx context.Context, group *core.Group) error {
-	target, err := scimTarget(ctx, group.ID, group.Meta.Version)
-	if err != nil {
-		return err
-	}
-	r, err := scimRequest(ctx)
-	if err != nil {
-		return err
-	}
-	return scimError(s.api.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		return s.delete(tx, r, target)
-	}))
+	return scimDelete(ctx, s.api.db.WithContext(ctx), group, s.delete)
 }
 
 func (s *scimGroupRepository) save(ctx context.Context, group *core.Group, write func(*storage.Connection, []byte) (*models.SCIMGroup, models.AuditAction, error)) (*core.Group, error) {
@@ -446,9 +444,7 @@ func (s *scimGroupRepository) save(ctx context.Context, group *core.Group, write
 	if err != nil {
 		return nil, err
 	}
-	attributes := *group
-	attributes.Members = nil
-	resource, err := scimEncode(&attributes, "id", "meta", "members")
+	resource, err := scimEncode(group, "id", "meta", "members")
 	if err != nil {
 		return nil, err
 	}
@@ -524,12 +520,6 @@ func (s *scimGroupRepository) render(tx *storage.Connection, providerID uuid.UUI
 	return groups, nil
 }
 
-func (s *scimGroupRepository) renderOne(tx *storage.Connection, providerID uuid.UUID, row *models.SCIMGroup, projection protocol.Projection) (*core.Group, error) {
-	return scimRenderOne(func(rows []models.SCIMGroup) ([]*core.Group, error) {
-		return s.render(tx, providerID, rows, projection)
-	}, *row)
-}
-
 func (s *scimGroupRepository) members(tx *storage.Connection, providerID uuid.UUID, rows []models.SCIMGroup, projection protocol.Projection) (map[uuid.UUID][]core.Member, error) {
 	members := map[uuid.UUID][]core.Member{}
 	if !projection.Returns("members") {
@@ -543,15 +533,8 @@ func (s *scimGroupRepository) members(tx *storage.Connection, providerID uuid.UU
 	if err != nil {
 		return nil, err
 	}
-	counts := make(map[uuid.UUID]int, len(rows))
-	for _, m := range memberships {
-		counts[m.GroupID]++
-	}
 	base := scimBaseURL(s.api.config)
 	for _, m := range memberships {
-		if members[m.GroupID] == nil {
-			members[m.GroupID] = make([]core.Member, 0, counts[m.GroupID])
-		}
 		members[m.GroupID] = append(members[m.GroupID], scimMember(base, m.SCIMUserID))
 	}
 	return members, nil
@@ -635,7 +618,7 @@ func (s *scimUserRepository) Read(ctx context.Context, id string) (*core.User, e
 	if err != nil {
 		return nil, scimError(err)
 	}
-	return s.renderOne(db, target.ProviderID, row, protocol.ProjectionFrom(ctx))
+	return scimFirst(s.render(db, target.ProviderID, []models.SCIMUser{*row}, protocol.ProjectionFrom(ctx)))
 }
 
 func (s *scimUserRepository) Create(ctx context.Context, user *core.User) (*core.User, error) {
@@ -693,17 +676,7 @@ func (s *scimUserRepository) Update(ctx context.Context, user *core.User) (*core
 }
 
 func (s *scimUserRepository) Delete(ctx context.Context, user *core.User) error {
-	target, err := scimTarget(ctx, user.ID, user.Meta.Version)
-	if err != nil {
-		return err
-	}
-	r, err := scimRequest(ctx)
-	if err != nil {
-		return err
-	}
-	return scimError(s.api.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		return s.delete(tx, r, target)
-	}))
+	return scimDelete(ctx, s.api.db.WithContext(ctx), user, s.delete)
 }
 
 func (s *scimUserRepository) create(tx *storage.Connection, change scimUserChange) (*models.SCIMUser, *models.User, models.AuditAction, error) {
@@ -721,17 +694,12 @@ func (s *scimUserRepository) replace(tx *storage.Connection, change scimUserChan
 		return row, nil, "", err
 	}
 	created, err := s.syncAuthUser(tx, change, old, row)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	return row, created, models.SCIMUserUpdatedAction, nil
+	return row, created, models.SCIMUserUpdatedAction, err
 }
 
 func (s *scimUserRepository) save(db *storage.Connection, change scimUserChange, projection protocol.Projection, write func(*storage.Connection) (*models.SCIMUser, *models.User, models.AuditAction, error)) (*core.User, error) {
-	var (
-		saved   *core.User
-		created *models.User
-	)
+	var saved *core.User
+	var created *models.User
 	err := db.Transaction(func(tx *storage.Connection) error {
 		row, user, action, terr := write(tx)
 		if terr != nil {
@@ -744,7 +712,7 @@ func (s *scimUserRepository) save(db *storage.Connection, change scimUserChange,
 				return terr
 			}
 		}
-		saved, terr = s.renderOne(tx, change.target.ProviderID, row, projection)
+		saved, terr = scimFirst(s.render(tx, change.target.ProviderID, []models.SCIMUser{*row}, projection))
 		return terr
 	})
 	if err != nil {
@@ -810,12 +778,6 @@ func newSCIMUserCreateProjection() protocol.Projection {
 		panic(err)
 	}
 	return projection
-}
-
-func (s *scimUserRepository) renderOne(tx *storage.Connection, providerID uuid.UUID, row *models.SCIMUser, projection protocol.Projection) (*core.User, error) {
-	return scimRenderOne(func(rows []models.SCIMUser) ([]*core.User, error) {
-		return s.render(tx, providerID, rows, projection)
-	}, *row)
 }
 
 func (s *scimUserRepository) delete(tx *storage.Connection, r *http.Request, target models.SCIMTarget) error {
@@ -921,8 +883,8 @@ func scimUserResource(user *core.User) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := scimValidatePrimaryEmail(user); err != nil {
-		return nil, err
+	if email := scimPrimaryEmail(user.Emails); email != "" && !isEmailAddress(email) {
+		return nil, errSCIMEmailInvalid()
 	}
 	return resource, nil
 }
@@ -935,13 +897,6 @@ func scimUserEmail(user *core.User) string {
 		return user.UserName
 	}
 	return ""
-}
-
-func scimValidatePrimaryEmail(user *core.User) error {
-	if email := scimPrimaryEmail(user.Emails); email != "" && !isEmailAddress(email) {
-		return errSCIMEmailInvalid()
-	}
-	return nil
 }
 
 func isEmailAddress(value string) bool {
