@@ -52,19 +52,12 @@ const (
 	RecoveryCodesDeletedAction      AuditAction = "recovery_codes_deleted"
 	SCIMUserCreatedAction           AuditAction = "scim_user_created"
 	SCIMUserUpdatedAction           AuditAction = "scim_user_updated"
-	SCIMUserDeactivatedAction       AuditAction = "scim_user_deactivated"
-	SCIMUserReactivatedAction       AuditAction = "scim_user_reactivated"
 	SCIMUserDeletedAction           AuditAction = "scim_user_deleted"
 	SCIMGroupCreatedAction          AuditAction = "scim_group_created"
 	SCIMGroupUpdatedAction          AuditAction = "scim_group_updated"
 	SCIMGroupDeletedAction          AuditAction = "scim_group_deleted"
-	SCIMGroupMemberAddedAction      AuditAction = "scim_group_member_added"
-	SCIMGroupMemberRemovedAction    AuditAction = "scim_group_member_removed"
 	SCIMEnabledAction               AuditAction = "scim_enabled"
 	SCIMDisabledAction              AuditAction = "scim_disabled"
-	SCIMTokenCreatedAction          AuditAction = "scim_token_created" // #nosec G101
-	SCIMTokenRevokedAction          AuditAction = "scim_token_revoked" // #nosec G101
-	SCIMUsersBannedAction           AuditAction = "scim_users_banned"
 
 	account auditLogType = "account"
 	team    auditLogType = "team"
@@ -106,19 +99,12 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	PasskeyDeletedAction:            user,
 	SCIMUserCreatedAction:           scim,
 	SCIMUserUpdatedAction:           scim,
-	SCIMUserDeactivatedAction:       scim,
-	SCIMUserReactivatedAction:       scim,
 	SCIMUserDeletedAction:           scim,
 	SCIMGroupCreatedAction:          scim,
 	SCIMGroupUpdatedAction:          scim,
 	SCIMGroupDeletedAction:          scim,
-	SCIMGroupMemberAddedAction:      scim,
-	SCIMGroupMemberRemovedAction:    scim,
 	SCIMEnabledAction:               scim,
 	SCIMDisabledAction:              scim,
-	SCIMTokenCreatedAction:          scim,
-	SCIMTokenRevokedAction:          scim,
-	SCIMUsersBannedAction:           scim,
 }
 
 // AuditLogEntry is the database model for audit log entries.

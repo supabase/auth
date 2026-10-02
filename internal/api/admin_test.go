@@ -909,11 +909,6 @@ func (ts *AdminTestSuite) TestAdminUserDeleteSoftDeletesSCIMUser() {
 			require.NoError(ts.T(), err)
 			require.True(ts.T(), updated.UpdatedAt.After(group.UpdatedAt))
 
-			entry := models.AuditLogEntry{}
-			require.NoError(ts.T(), ts.API.db.Q().Where("payload->>'action' = ? AND payload->'traits'->>'scim_user_id' = ?", models.SCIMGroupMemberRemovedAction, scimUser.ID.String()).First(&entry))
-			require.Equal(ts.T(), group.ID.String(), entry.Payload["traits"].(map[string]any)["scim_group_id"])
-			require.Equal(ts.T(), "supabase_admin", entry.Payload["actor_username"])
-
 			deleted := []models.AuditLogEntry{}
 			require.NoError(ts.T(), ts.API.db.Q().Where("payload->>'action' = ? AND payload->'traits'->>'scim_user_id' = ?", models.SCIMUserDeletedAction, scimUser.ID.String()).All(&deleted))
 			require.Len(ts.T(), deleted, 1)

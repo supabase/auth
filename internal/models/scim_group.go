@@ -47,6 +47,10 @@ type SCIMGroupMemberChange struct {
 	Members []uuid.UUID
 }
 
+func (c SCIMGroupMemberChange) Changed() bool {
+	return len(c.Added)+len(c.Removed) > 0
+}
+
 var scimGroupsTable = scimTable{
 	tableName:  SCIMGroup{}.TableName(),
 	label:      "SCIM group",
@@ -159,30 +163,27 @@ func FindSCIMGroupMemberIDs(tx *storage.Connection, groupID uuid.UUID) ([]uuid.U
 	return members, nil
 }
 
-func RemoveSCIMUserFromGroups(tx *storage.Connection, scimUserID uuid.UUID) ([]uuid.UUID, error) {
+func RemoveSCIMUserFromGroups(tx *storage.Connection, scimUserID uuid.UUID) error {
 	groups, members := scimGroupsTable.tableName, SCIMGroupMember{}.TableName()
 	groupIDs := []uuid.UUID{}
 	if err := tx.RawQuery(
 		fmt.Sprintf("SELECT group_id FROM %q WHERE scim_user_id = ? ORDER BY group_id", members),
 		scimUserID,
 	).All(&groupIDs); err != nil {
-		return nil, errors.Wrap(err, "error finding SCIM user groups")
+		return errors.Wrap(err, "error finding SCIM user groups")
 	}
 	for _, id := range groupIDs {
 		if err := tx.RawQuery(
 			fmt.Sprintf("UPDATE %q SET updated_at = clock_timestamp() WHERE id = ?", groups),
 			id,
 		).Exec(); err != nil {
-			return nil, errors.Wrap(err, "error updating SCIM groups")
+			return errors.Wrap(err, "error updating SCIM groups")
 		}
 	}
-	if err := tx.RawQuery(
+	return errors.Wrap(tx.RawQuery(
 		fmt.Sprintf("DELETE FROM %q WHERE scim_user_id = ?", members),
 		scimUserID,
-	).Exec(); err != nil {
-		return nil, errors.Wrap(err, "error removing SCIM user from groups")
-	}
-	return groupIDs, nil
+	).Exec(), "error removing SCIM user from groups")
 }
 
 func applySCIMGroupMemberChange(tx *storage.Connection, group *SCIMGroup, planned SCIMGroupMemberChange) (*SCIMGroup, SCIMGroupMemberChange, error) {
@@ -195,7 +196,7 @@ func applySCIMGroupMemberChange(tx *storage.Connection, group *SCIMGroup, planne
 	if change.Added, err = addSCIMGroupMembers(tx, group, added); err != nil {
 		return nil, change, err
 	}
-	if len(change.Added) == 0 && len(change.Removed) == 0 {
+	if !change.Changed() {
 		return group, change, nil
 	}
 	group, err = touchSCIMGroup(tx, group)

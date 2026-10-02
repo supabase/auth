@@ -221,7 +221,7 @@ func (ts *SCIMTestSuite) TestOktaUserLifecycleReplay() {
 	require.Equal(ts.T(), []string{
 		string(models.SCIMUserCreatedAction),
 		string(models.SCIMUserUpdatedAction),
-		string(models.SCIMUserDeactivatedAction),
-		string(models.SCIMUserReactivatedAction),
+		string(models.SCIMUserUpdatedAction),
+		string(models.SCIMUserUpdatedAction),
 	}, actions)
 }

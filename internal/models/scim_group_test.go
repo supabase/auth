@@ -242,9 +242,7 @@ func (ts *SCIMGroupTestSuite) TestReplaceMembersDoesNotLockExistingMembers() {
 		ts.T().Fatal("group replace waited on a member that was not added")
 	}
 
-	removed, err := RemoveSCIMUserFromGroups(deleting, alice.ID)
-	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), []uuid.UUID{group.ID}, removed)
+	require.NoError(ts.T(), RemoveSCIMUserFromGroups(deleting, alice.ID))
 	require.NoError(ts.T(), deleting.TX.Commit())
 
 	members, err := FindSCIMMembershipsByGroup(ts.db, ts.provider.ID, []uuid.UUID{group.ID})

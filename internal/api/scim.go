@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -311,17 +310,6 @@ func scimActor(r *http.Request) *models.User {
 	return &models.User{Email: storage.NullString("scim:" + prefix)}
 }
 
-func scimMemberTraits(groupID, scimUserID uuid.UUID, userID *uuid.UUID) map[string]any {
-	traits := map[string]any{
-		"scim_group_id": groupID,
-		"scim_user_id":  scimUserID,
-	}
-	if userID != nil {
-		traits["user_id"] = *userID
-	}
-	return traits
-}
-
 type scimEqFilter struct {
 	name string
 }
@@ -479,11 +467,7 @@ func (s *scimGroupRepository) save(ctx context.Context, group *core.Group, write
 		if row, change, terr = s.memberReplacer(ctx, group.Meta.Version, action)(tx, row, members); terr != nil {
 			return terr
 		}
-		events, terr := s.memberEvents(tx, r, row, change)
-		if terr != nil {
-			return terr
-		}
-		return s.api.auditSCIMEvents(tx, r, append(s.groupEvents(r, action, row, group.DisplayName), events...))
+		return s.api.auditSCIMEvents(tx, r, s.groupEvents(r, scimGroupAction(action, change), row, scimGroupTraits(row, group.DisplayName, change)))
 	})
 	if err != nil {
 		return nil, scimError(err)
@@ -511,10 +495,6 @@ func (s *scimGroupRepository) mergeable(ctx context.Context, version string) boo
 }
 
 func (s *scimGroupRepository) delete(tx *storage.Connection, r *http.Request, target models.SCIMTarget) error {
-	removed, err := models.FindSCIMGroupMemberIDs(tx, target.ID)
-	if err != nil {
-		return err
-	}
 	row, err := models.DeleteSCIMGroup(tx, target)
 	if err != nil {
 		return err
@@ -525,11 +505,7 @@ func (s *scimGroupRepository) delete(tx *storage.Connection, r *http.Request, ta
 	if err := json.Unmarshal(row.Resource, &resource); err != nil {
 		return err
 	}
-	events, err := s.memberEvents(tx, r, row, models.SCIMGroupMemberChange{Removed: removed})
-	if err != nil {
-		return err
-	}
-	return s.api.auditSCIMEvents(tx, r, append(events, s.groupEvents(r, models.SCIMGroupDeletedAction, row, resource.DisplayName)...))
+	return s.api.auditSCIMEvents(tx, r, s.groupEvents(r, models.SCIMGroupDeletedAction, row, scimGroupTraits(row, resource.DisplayName, models.SCIMGroupMemberChange{})))
 }
 
 func (s *scimGroupRepository) render(tx *storage.Connection, providerID uuid.UUID, rows []models.SCIMGroup, projection protocol.Projection) ([]*core.Group, error) {
@@ -592,7 +568,7 @@ func (s *scimGroupRepository) compose(row models.SCIMGroup, members []core.Membe
 	return group, nil
 }
 
-func (s *scimGroupRepository) groupEvents(r *http.Request, action models.AuditAction, row *models.SCIMGroup, displayName string) []scimAuditEvent {
+func (s *scimGroupRepository) groupEvents(r *http.Request, action models.AuditAction, row *models.SCIMGroup, traits map[string]any) []scimAuditEvent {
 	if action == "" {
 		return nil
 	}
@@ -600,37 +576,8 @@ func (s *scimGroupRepository) groupEvents(r *http.Request, action models.AuditAc
 		actor:      scimActor(r),
 		action:     action,
 		providerID: row.SSOProviderID,
-		traits: map[string]any{
-			"scim_group_id": row.ID,
-			"display_name":  displayName,
-		},
+		traits:     traits,
 	}}
-}
-
-func (s *scimGroupRepository) memberEvents(tx *storage.Connection, r *http.Request, row *models.SCIMGroup, change models.SCIMGroupMemberChange) ([]scimAuditEvent, error) {
-	links, err := models.FindSCIMUserLinks(tx, slices.Concat(change.Added, change.Removed))
-	if err != nil {
-		return nil, err
-	}
-	actor := scimActor(r)
-	events := make([]scimAuditEvent, 0, len(change.Added)+len(change.Removed))
-	appendEvents := func(action models.AuditAction, ids []uuid.UUID) {
-		for _, id := range ids {
-			var userID *uuid.UUID
-			if linked, ok := links[id]; ok {
-				userID = &linked
-			}
-			events = append(events, scimAuditEvent{
-				actor:      actor,
-				action:     action,
-				providerID: row.SSOProviderID,
-				traits:     scimMemberTraits(row.ID, id, userID),
-			})
-		}
-	}
-	appendEvents(models.SCIMGroupMemberAddedAction, change.Added)
-	appendEvents(models.SCIMGroupMemberRemovedAction, change.Removed)
-	return events, nil
 }
 
 func scimMembers(base string, scimUserIDs []uuid.UUID) []core.Member {
@@ -777,7 +724,7 @@ func (s *scimUserRepository) replace(tx *storage.Connection, change scimUserChan
 	if err != nil {
 		return nil, nil, "", err
 	}
-	return row, created, scimUserAuditAction(old, row), nil
+	return row, created, models.SCIMUserUpdatedAction, nil
 }
 
 func (s *scimUserRepository) save(db *storage.Connection, change scimUserChange, projection protocol.Projection, write func(*storage.Connection) (*models.SCIMUser, *models.User, models.AuditAction, error)) (*core.User, error) {
@@ -881,11 +828,11 @@ func (s *scimUserRepository) delete(tx *storage.Connection, r *http.Request, tar
 			return err
 		}
 	}
-	events, err := scimUserRemovalEvents(tx, scimActor(r), row)
+	event, err := scimUserRemovalEvent(tx, scimActor(r), row)
 	if err != nil {
 		return err
 	}
-	return s.api.auditSCIMEvents(tx, r, events)
+	return s.api.auditSCIM(tx, r, event)
 }
 
 func (s *scimUserRepository) replaceRow(tx *storage.Connection, target models.SCIMTarget, old *models.SCIMUser, resource []byte) (*models.SCIMUser, bool, error) {
@@ -1031,6 +978,25 @@ func scimUserName(resource []byte) (string, error) {
 	return r.UserName, nil
 }
 
+func scimGroupAction(action models.AuditAction, change models.SCIMGroupMemberChange) models.AuditAction {
+	if action == "" && change.Changed() {
+		return models.SCIMGroupUpdatedAction
+	}
+	return action
+}
+
+func scimGroupTraits(row *models.SCIMGroup, displayName string, change models.SCIMGroupMemberChange) map[string]any {
+	traits := map[string]any{
+		"scim_group_id": row.ID,
+		"display_name":  displayName,
+	}
+	if change.Changed() {
+		traits["members_added"] = len(change.Added)
+		traits["members_removed"] = len(change.Removed)
+	}
+	return traits
+}
+
 func scimUserTraits(row *models.SCIMUser) map[string]any {
 	traits := map[string]any{
 		"scim_user_id": row.ID,
@@ -1041,14 +1007,4 @@ func scimUserTraits(row *models.SCIMUser) map[string]any {
 		traits["user_id"] = *row.UserID
 	}
 	return traits
-}
-
-func scimUserAuditAction(before, after *models.SCIMUser) models.AuditAction {
-	switch {
-	case before.Active && !after.Active:
-		return models.SCIMUserDeactivatedAction
-	case !before.Active && after.Active:
-		return models.SCIMUserReactivatedAction
-	}
-	return models.SCIMUserUpdatedAction
 }

@@ -163,56 +163,11 @@ func (ts *SCIMTestSuite) TestPatchReplaceMembers() {
 		require.ElementsMatch(ts.T(), []string{bob, carol}, memberValues(got))
 	})
 
-	events := map[string][]string{}
-	for _, entry := range entries {
-		scimUserID, _ := entry.Payload["traits"].(map[string]any)["scim_user_id"].(string)
-		events[entry.Payload["action"].(string)] = append(events[entry.Payload["action"].(string)], scimUserID)
-	}
-	require.Equal(ts.T(), map[string][]string{
-		string(models.SCIMGroupMemberAddedAction):   {carol},
-		string(models.SCIMGroupMemberRemovedAction): {alice},
-	}, events)
-}
-
-func (ts *SCIMTestSuite) TestGroupMemberEventsCarryUserID() {
-	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
-	bob := ts.create(ts.TokenA, userWith("bob@example.com", "b-1"))
-	userIDs := map[string]string{}
-	for _, id := range []string{alice, bob} {
-		row, err := models.FindSCIMUser(ts.API.db, ts.A.ID, uuid.FromStringOrNil(id))
-		require.NoError(ts.T(), err)
-		require.NotNil(ts.T(), row.UserID)
-		userIDs[id] = row.UserID.String()
-	}
-	entries := ts.auditDuring(func() {
-		id := ts.createGroup(ts.TokenA, groupWith("Engineering", "", alice, bob))
-		ts.patchMembers(id, `{"op":"remove","path":"members[value eq \"`+alice+`\"]"}`)
-		w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Users/"+bob, "")
-		require.Equal(ts.T(), http.StatusNoContent, w.Code, w.Body.String())
-	})
-
-	type event struct {
-		action, scimUserID, userID string
-	}
-	events := []event{}
-	for _, entry := range entries {
-		traits := entry.Payload["traits"].(map[string]any)
-		if _, ok := traits["scim_group_id"]; !ok {
-			continue
-		}
-		scimUserID, _ := traits["scim_user_id"].(string)
-		if scimUserID == "" {
-			continue
-		}
-		userID, _ := traits["user_id"].(string)
-		events = append(events, event{entry.Payload["action"].(string), scimUserID, userID})
-	}
-	require.ElementsMatch(ts.T(), []event{
-		{string(models.SCIMGroupMemberAddedAction), alice, userIDs[alice]},
-		{string(models.SCIMGroupMemberAddedAction), bob, userIDs[bob]},
-		{string(models.SCIMGroupMemberRemovedAction), alice, userIDs[alice]},
-		{string(models.SCIMGroupMemberRemovedAction), bob, userIDs[bob]},
-	}, events)
+	require.Len(ts.T(), entries, 1)
+	require.Equal(ts.T(), string(models.SCIMGroupUpdatedAction), entries[0].Payload["action"])
+	traits := entries[0].Payload["traits"].(map[string]any)
+	require.EqualValues(ts.T(), 1, traits["members_added"])
+	require.EqualValues(ts.T(), 1, traits["members_removed"])
 }
 
 func (ts *SCIMTestSuite) TestExcludedMembersKeepsWrites() {
@@ -249,11 +204,11 @@ func (ts *SCIMTestSuite) TestPatchRemoveAbsentMember() {
 	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
 	bob := ts.create(ts.TokenA, userWith("bob@example.com", "b-1"))
 	id := ts.createGroup(ts.TokenA, groupWith("Engineering", "", alice))
-	before := len(ts.auditActions(models.SCIMGroupMemberRemovedAction))
-
-	got := ts.patchMembers(id, `{"op":"remove","path":"members[value eq \"`+bob+`\"]"}`)
-	require.Equal(ts.T(), []string{alice}, memberValues(got))
-	require.Len(ts.T(), ts.auditActions(models.SCIMGroupMemberRemovedAction), before)
+	entries := ts.auditDuring(func() {
+		got := ts.patchMembers(id, `{"op":"remove","path":"members[value eq \"`+bob+`\"]"}`)
+		require.Equal(ts.T(), []string{alice}, memberValues(got))
+	})
+	require.Empty(ts.T(), entries)
 }
 
 func (ts *SCIMTestSuite) TestPatchRejectsRemoveWithValue() {
@@ -360,16 +315,8 @@ func (ts *SCIMTestSuite) TestGroupsRemoveDeletedMembers() {
 		require.Zero(ts.T(), ts.countRows(&models.SCIMGroupMember{}, "scim_user_id = ?", alice))
 	})
 
-	removed := []string{}
-	for _, entry := range entries {
-		if entry.Payload["action"] != string(models.SCIMGroupMemberRemovedAction) {
-			continue
-		}
-		traits := entry.Payload["traits"].(map[string]any)
-		require.Equal(ts.T(), alice, traits["scim_user_id"])
-		removed = append(removed, traits["scim_group_id"].(string))
-	}
-	require.ElementsMatch(ts.T(), []string{eng, ops}, removed)
+	require.Len(ts.T(), entries, 1)
+	require.Equal(ts.T(), string(models.SCIMUserDeletedAction), entries[0].Payload["action"])
 }
 
 func (ts *SCIMTestSuite) TestGroupsVersionChangesWhenMemberDeleted() {
@@ -406,7 +353,7 @@ func (ts *SCIMTestSuite) TestGroupsVersionChangesOnMemberOnlyWrite() {
 	for _, entry := range entries {
 		actions = append(actions, entry.Payload["action"].(string))
 	}
-	require.ElementsMatch(ts.T(), []string{string(models.SCIMGroupMemberAddedAction), string(models.SCIMGroupMemberRemovedAction)}, actions)
+	require.Equal(ts.T(), []string{string(models.SCIMGroupUpdatedAction)}, actions)
 
 	w, _ = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
 	require.Equal(ts.T(), current, w.Header().Get("ETag"))
@@ -431,9 +378,10 @@ func (ts *SCIMTestSuite) TestGroupsKeepDeactivatedMembers() {
 		require.Len(ts.T(), user["groups"], 1)
 	})
 
-	for _, entry := range entries {
-		require.NotEqual(ts.T(), string(models.SCIMGroupMemberRemovedAction), entry.Payload["action"])
-	}
+	require.Len(ts.T(), entries, 2)
+	traits := entries[1].Payload["traits"].(map[string]any)
+	require.EqualValues(ts.T(), 1, traits["members_added"])
+	require.EqualValues(ts.T(), 0, traits["members_removed"])
 }
 
 func (ts *SCIMTestSuite) TestGroupsSortAndPaginate() {
@@ -502,7 +450,8 @@ func (ts *SCIMTestSuite) TestGroupsAuditLog() {
 	require.NoError(ts.T(), err)
 
 	type event struct {
-		action, displayName, scimUserID string
+		action, displayName string
+		added, removed      any
 	}
 	events := []event{}
 	for _, entry := range entries {
@@ -512,18 +461,12 @@ func (ts *SCIMTestSuite) TestGroupsAuditLog() {
 		require.Equal(ts.T(), ts.A.ID.String(), traits["sso_provider_id"])
 		require.Equal(ts.T(), id, traits["scim_group_id"])
 		require.Equal(ts.T(), "success", traits["outcome"])
-		displayName, _ := traits["display_name"].(string)
-		scimUserID, _ := traits["scim_user_id"].(string)
-		events = append(events, event{entry.Payload["action"].(string), displayName, scimUserID})
+		events = append(events, event{entry.Payload["action"].(string), traits["display_name"].(string), traits["members_added"], traits["members_removed"]})
 	}
-	require.ElementsMatch(ts.T(), []event{
-		{string(models.SCIMGroupCreatedAction), "Engineering", ""},
-		{string(models.SCIMGroupMemberAddedAction), "", alice},
-		{string(models.SCIMGroupUpdatedAction), "Platform", ""},
-		{string(models.SCIMGroupMemberAddedAction), "", bob},
-		{string(models.SCIMGroupMemberRemovedAction), "", alice},
-		{string(models.SCIMGroupMemberRemovedAction), "", bob},
-		{string(models.SCIMGroupDeletedAction), "Platform", ""},
+	require.Equal(ts.T(), []event{
+		{string(models.SCIMGroupCreatedAction), "Engineering", 1.0, 0.0},
+		{string(models.SCIMGroupUpdatedAction), "Platform", 1.0, 1.0},
+		{string(models.SCIMGroupDeletedAction), "Platform", nil, nil},
 	}, events)
 }
 
@@ -587,14 +530,14 @@ func (ts *SCIMTestSuite) TestGroupsPushReplay() {
 	}
 	require.Equal(ts.T(), []event{
 		{string(models.SCIMGroupCreatedAction), "Tour Guides"},
-		{string(models.SCIMGroupMemberAddedAction), bjensen},
-		{string(models.SCIMGroupMemberAddedAction), jsmith},
-		{string(models.SCIMGroupMemberRemovedAction), bjensen},
-		{string(models.SCIMGroupMemberRemovedAction), jsmith},
+		{string(models.SCIMGroupUpdatedAction), "Tour Guides"},
+		{string(models.SCIMGroupUpdatedAction), "Tour Guides"},
+		{string(models.SCIMGroupUpdatedAction), "Tour Guides"},
+		{string(models.SCIMGroupUpdatedAction), "Tour Guides"},
 		{string(models.SCIMGroupUpdatedAction), "Group A"},
-		{string(models.SCIMGroupMemberAddedAction), bjensen},
-		{string(models.SCIMUserDeactivatedAction), bjensen},
-		{string(models.SCIMUserReactivatedAction), bjensen},
+		{string(models.SCIMGroupUpdatedAction), "Group A"},
+		{string(models.SCIMUserUpdatedAction), bjensen},
+		{string(models.SCIMUserUpdatedAction), bjensen},
 	}, events)
 }
 
@@ -685,7 +628,7 @@ func (ts *SCIMTestSuite) TestPatchMembersDeltaMatchesFullPatch() {
 		})
 		for _, entry := range entries {
 			traits := entry.Payload["traits"].(map[string]any)
-			result.events = append(result.events, entry.Payload["action"].(string)+" "+traits["scim_user_id"].(string))
+			result.events = append(result.events, fmt.Sprint(entry.Payload["action"], traits["members_added"], traits["members_removed"]))
 		}
 		w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
 		result.members = memberValues(got)

@@ -669,7 +669,7 @@ func (ts *SCIMTestSuite) TestPutInactiveRevokesSessions() {
 	require.Equal(ts.T(), false, got["active"])
 	require.Zero(ts.T(), ts.sessions(user))
 	require.Equal(ts.T(), http.StatusBadRequest, ts.refresh(refreshToken))
-	require.Len(ts.T(), ts.auditActions(models.SCIMUserDeactivatedAction), 1)
+	require.Len(ts.T(), ts.auditActions(models.SCIMUserUpdatedAction), 1)
 }
 
 func (ts *SCIMTestSuite) TestReplaceKeepsAdminBanWhenActiveDoesNotChange() {

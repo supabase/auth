@@ -87,27 +87,6 @@ func DeleteSCIMUser(tx *storage.Connection, target SCIMTarget) (*SCIMUser, error
 	return user, nil
 }
 
-func FindSCIMUserLinks(tx *storage.Connection, ids []uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
-	links := map[uuid.UUID]uuid.UUID{}
-	if len(ids) == 0 {
-		return links, nil
-	}
-	rows := []struct {
-		ID     uuid.UUID `db:"id"`
-		UserID uuid.UUID `db:"user_id"`
-	}{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT id, user_id FROM %q WHERE id = ANY(?::uuid[]) AND user_id IS NOT NULL", scimUsersTable.tableName),
-		ids,
-	).All(&rows); err != nil {
-		return nil, errors.Wrap(err, "error finding SCIM user links")
-	}
-	for _, row := range rows {
-		links[row.ID] = row.UserID
-	}
-	return links, nil
-}
-
 func SoftDeleteSCIMUsersByUserID(tx *storage.Connection, userID uuid.UUID) ([]SCIMUser, error) {
 	rows := []SCIMUser{}
 	if err := tx.RawQuery(

@@ -315,7 +315,6 @@ func (ts *SCIMTokensTestSuite) TestReenableRestoresExistingTokens() {
 	require.Equal(ts.T(), http.StatusOK, ts.scimRequest(token.Token).Code)
 
 	require.Equal(ts.T(), []scimTokenEvent{
-		{string(models.SCIMTokenCreatedAction), token.Prefix},
 		{string(models.SCIMDisabledAction), ""},
 		{string(models.SCIMEnabledAction), ""},
 	}, ts.tokenEvents())
@@ -335,9 +334,6 @@ func (ts *SCIMTokensTestSuite) TestMintAndRevokeWhileDisabled() {
 
 	require.Equal(ts.T(), []scimTokenEvent{
 		{string(models.SCIMDisabledAction), ""},
-		{string(models.SCIMTokenCreatedAction), token.Prefix},
-		{string(models.SCIMTokenCreatedAction), revoked.Prefix},
-		{string(models.SCIMTokenRevokedAction), revoked.Prefix},
 		{string(models.SCIMEnabledAction), ""},
 	}, ts.tokenEvents())
 }
@@ -411,13 +407,7 @@ func (ts *SCIMTokensTestSuite) TestStatusForDisabledProvider() {
 	ts.setProviderDisabled(true)
 	ts.revoke(third.Prefix)
 
-	require.Equal(ts.T(), []scimTokenEvent{
-		{string(models.SCIMTokenCreatedAction), first.Prefix},
-		{string(models.SCIMTokenCreatedAction), second.Prefix},
-		{string(models.SCIMTokenCreatedAction), third.Prefix},
-		{string(models.SCIMTokenRevokedAction), first.Prefix},
-		{string(models.SCIMTokenRevokedAction), third.Prefix},
-	}, ts.tokenEvents())
+	require.Empty(ts.T(), ts.tokenEvents())
 }
 
 type scimTokenEvent struct{ action, prefix string }
@@ -441,10 +431,6 @@ func (ts *SCIMTokensTestSuite) TestAuditLog() {
 	ts.API.config.SSO.SCIM.Enabled = true
 
 	require.Equal(ts.T(), []scimTokenEvent{
-		{string(models.SCIMTokenCreatedAction), first.Prefix},
-		{string(models.SCIMTokenCreatedAction), second.Prefix},
-		{string(models.SCIMTokenRevokedAction), first.Prefix},
-		{string(models.SCIMTokenRevokedAction), second.Prefix},
 		{string(models.SCIMDisabledAction), ""},
 		{string(models.SCIMEnabledAction), ""},
 	}, ts.tokenEvents())
@@ -537,7 +523,7 @@ func (ts *SCIMTokensTestSuite) tokenEvents() []scimTokenEvent {
 		traits := entry.Payload["traits"].(map[string]any)
 		require.Equal(ts.T(), ts.Provider.ID.String(), traits["sso_provider_id"])
 		require.Equal(ts.T(), "success", traits["outcome"])
-		prefix, _ := traits["token_prefix"].(string)
+		prefix := ""
 		if prefixes, ok := traits["token_prefixes"].([]any); ok && len(prefixes) > 0 {
 			require.Len(ts.T(), prefixes, 1)
 			prefix = prefixes[0].(string)

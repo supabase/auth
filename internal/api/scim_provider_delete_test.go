@@ -89,7 +89,6 @@ func (ts *SCIMTestSuite) TestProviderDeleteKeepsLongerBan() {
 	ts.deleteProvider(ts.A)
 
 	require.True(ts.T(), until.Equal(*ts.reloadUser(user.ID).BannedUntil))
-	require.Empty(ts.T(), ts.auditActions(models.SCIMUsersBannedAction))
 }
 
 func (ts *SCIMTestSuite) TestProviderDeleteClosesOAuthBypass() {
@@ -131,18 +130,6 @@ func (ts *SCIMTestSuite) TestProviderDeleteAudit() {
 	traits := disabled[0].Payload["traits"].(map[string]any)
 	require.Equal(ts.T(), []any{tokens[0].Prefix}, traits["token_prefixes"])
 	require.Equal(ts.T(), ts.A.ID.String(), traits["sso_provider_id"])
-
-	revoked := ts.auditActions(models.SCIMTokenRevokedAction)
-	require.Len(ts.T(), revoked, 1)
-	traits = revoked[0].Payload["traits"].(map[string]any)
-	require.Equal(ts.T(), tokens[0].Prefix, traits["token_prefix"])
-	require.Equal(ts.T(), ts.A.ID.String(), traits["sso_provider_id"])
-
-	banned := ts.auditActions(models.SCIMUsersBannedAction)
-	require.Len(ts.T(), banned, 1)
-	traits = banned[0].Payload["traits"].(map[string]any)
-	require.EqualValues(ts.T(), 1, traits["banned_user_count"])
-	require.Equal(ts.T(), ts.A.ID.String(), traits["sso_provider_id"])
 }
 
 func (ts *SCIMTestSuite) TestProviderDeleteWritesNoGroupEvents() {
@@ -167,21 +154,16 @@ func (ts *SCIMTestSuite) TestProviderDeleteAuditWithExpiredTokens() {
 	disabled := ts.auditActions(models.SCIMDisabledAction)
 	require.Len(ts.T(), disabled, 1)
 	require.Equal(ts.T(), []any{}, disabled[0].Payload["traits"].(map[string]any)["token_prefixes"])
-	require.Empty(ts.T(), ts.auditActions(models.SCIMTokenRevokedAction))
-	require.Len(ts.T(), ts.auditActions(models.SCIMUsersBannedAction), 1)
 }
 
 func (ts *SCIMTestSuite) TestProviderDeleteWithoutSCIMEnabled() {
 	provider := createSSOProvider(ts.T(), ts.API.db)
-	token, _, err := models.CreateSCIMToken(ts.API.db, provider, nil)
+	_, _, err := models.CreateSCIMToken(ts.API.db, provider, nil)
 	require.NoError(ts.T(), err)
 
 	ts.deleteProvider(provider)
 
 	require.Empty(ts.T(), ts.auditActions(models.SCIMDisabledAction))
-	revoked := ts.auditActions(models.SCIMTokenRevokedAction)
-	require.Len(ts.T(), revoked, 1)
-	require.Equal(ts.T(), token.Prefix, revoked[0].Payload["traits"].(map[string]any)["token_prefix"])
 }
 
 func (ts *SCIMTestSuite) TestProviderDeleteAfterSCIMDisabled() {
@@ -194,7 +176,6 @@ func (ts *SCIMTestSuite) TestProviderDeleteAfterSCIMDisabled() {
 	ts.deleteProvider(ts.A)
 
 	require.Empty(ts.T(), ts.auditActions(models.SCIMDisabledAction))
-	require.Len(ts.T(), ts.auditActions(models.SCIMTokenRevokedAction), 1)
 	require.True(ts.T(), ts.reloadUser(user.ID).IsBanned())
 }
 
@@ -209,7 +190,7 @@ func (ts *SCIMTestSuite) TestProviderDeleteStillBansWhileSCIMFlagOff() {
 	ts.deleteProvider(ts.A)
 
 	require.True(ts.T(), ts.reloadUser(user.ID).IsBanned())
-	require.Greater(ts.T(), len(ts.scimAuditEntries()), before)
+	require.Len(ts.T(), ts.scimAuditEntries(), before)
 	require.Empty(ts.T(), ts.auditActions(models.SCIMDisabledAction))
 	require.Zero(ts.T(), ts.countRows(&models.SCIMUser{}, "sso_provider_id = ?", ts.A.ID))
 }
