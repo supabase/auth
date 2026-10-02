@@ -467,7 +467,7 @@ func (s *scimGroupRepository) save(ctx context.Context, group *core.Group, write
 		if row, change, terr = s.memberReplacer(ctx, group.Meta.Version, action)(tx, row, members); terr != nil {
 			return terr
 		}
-		return s.api.auditSCIMEvents(tx, r, s.groupEvents(r, scimGroupAction(action, change), row, scimGroupTraits(row, group.DisplayName, change)))
+		return s.api.auditSCIMEvents(tx, r, s.groupEvents(r, scimGroupAction(action, change), row, scimGroupTraits(row, group.DisplayName)))
 	})
 	if err != nil {
 		return nil, scimError(err)
@@ -505,7 +505,7 @@ func (s *scimGroupRepository) delete(tx *storage.Connection, r *http.Request, ta
 	if err := json.Unmarshal(row.Resource, &resource); err != nil {
 		return err
 	}
-	return s.api.auditSCIMEvents(tx, r, s.groupEvents(r, models.SCIMGroupDeletedAction, row, scimGroupTraits(row, resource.DisplayName, models.SCIMGroupMemberChange{})))
+	return s.api.auditSCIMEvents(tx, r, s.groupEvents(r, models.SCIMGroupDeletedAction, row, scimGroupTraits(row, resource.DisplayName)))
 }
 
 func (s *scimGroupRepository) render(tx *storage.Connection, providerID uuid.UUID, rows []models.SCIMGroup, projection protocol.Projection) ([]*core.Group, error) {
@@ -985,16 +985,11 @@ func scimGroupAction(action models.AuditAction, change models.SCIMGroupMemberCha
 	return action
 }
 
-func scimGroupTraits(row *models.SCIMGroup, displayName string, change models.SCIMGroupMemberChange) map[string]any {
-	traits := map[string]any{
+func scimGroupTraits(row *models.SCIMGroup, displayName string) map[string]any {
+	return map[string]any{
 		"scim_group_id": row.ID,
 		"display_name":  displayName,
 	}
-	if change.Changed() {
-		traits["members_added"] = len(change.Added)
-		traits["members_removed"] = len(change.Removed)
-	}
-	return traits
 }
 
 func scimUserTraits(row *models.SCIMUser) map[string]any {

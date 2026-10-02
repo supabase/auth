@@ -165,9 +165,6 @@ func (ts *SCIMTestSuite) TestPatchReplaceMembers() {
 
 	require.Len(ts.T(), entries, 1)
 	require.Equal(ts.T(), string(models.SCIMGroupUpdatedAction), entries[0].Payload["action"])
-	traits := entries[0].Payload["traits"].(map[string]any)
-	require.EqualValues(ts.T(), 1, traits["members_added"])
-	require.EqualValues(ts.T(), 1, traits["members_removed"])
 }
 
 func (ts *SCIMTestSuite) TestExcludedMembersKeepsWrites() {
@@ -379,9 +376,7 @@ func (ts *SCIMTestSuite) TestGroupsKeepDeactivatedMembers() {
 	})
 
 	require.Len(ts.T(), entries, 2)
-	traits := entries[1].Payload["traits"].(map[string]any)
-	require.EqualValues(ts.T(), 1, traits["members_added"])
-	require.EqualValues(ts.T(), 0, traits["members_removed"])
+	require.Equal(ts.T(), string(models.SCIMGroupUpdatedAction), entries[1].Payload["action"])
 }
 
 func (ts *SCIMTestSuite) TestGroupsSortAndPaginate() {
@@ -451,7 +446,6 @@ func (ts *SCIMTestSuite) TestGroupsAuditLog() {
 
 	type event struct {
 		action, displayName string
-		added, removed      any
 	}
 	events := []event{}
 	for _, entry := range entries {
@@ -461,12 +455,12 @@ func (ts *SCIMTestSuite) TestGroupsAuditLog() {
 		require.Equal(ts.T(), ts.A.ID.String(), traits["sso_provider_id"])
 		require.Equal(ts.T(), id, traits["scim_group_id"])
 		require.Equal(ts.T(), "success", traits["outcome"])
-		events = append(events, event{entry.Payload["action"].(string), traits["display_name"].(string), traits["members_added"], traits["members_removed"]})
+		events = append(events, event{entry.Payload["action"].(string), traits["display_name"].(string)})
 	}
 	require.Equal(ts.T(), []event{
-		{string(models.SCIMGroupCreatedAction), "Engineering", 1.0, 0.0},
-		{string(models.SCIMGroupUpdatedAction), "Platform", 1.0, 1.0},
-		{string(models.SCIMGroupDeletedAction), "Platform", nil, nil},
+		{string(models.SCIMGroupCreatedAction), "Engineering"},
+		{string(models.SCIMGroupUpdatedAction), "Platform"},
+		{string(models.SCIMGroupDeletedAction), "Platform"},
 	}, events)
 }
 
@@ -627,8 +621,7 @@ func (ts *SCIMTestSuite) TestPatchMembersDeltaMatchesFullPatch() {
 			result.code, result.scimType = w.Code, got["scimType"]
 		})
 		for _, entry := range entries {
-			traits := entry.Payload["traits"].(map[string]any)
-			result.events = append(result.events, fmt.Sprint(entry.Payload["action"], traits["members_added"], traits["members_removed"]))
+			result.events = append(result.events, entry.Payload["action"].(string))
 		}
 		w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
 		result.members = memberValues(got)
