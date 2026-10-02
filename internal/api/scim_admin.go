@@ -45,46 +45,35 @@ func (a *API) adminSCIMGet(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) adminSCIMEnable(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	db := a.db.WithContext(ctx)
-	provider := getSSOProvider(ctx)
-
-	if err := db.Transaction(func(tx *storage.Connection) error {
-		changed, err := models.EnableSCIM(tx, provider.ID)
-		if err != nil || !changed {
-			return err
-		}
-		return a.auditSCIM(tx, r, scimAuditEvent{
-			actor:      getAdminUser(ctx),
-			action:     models.SCIMEnabledAction,
-			providerID: provider.ID,
-			traits:     map[string]any{},
-		})
-	}); err != nil {
-		return apierrors.NewInternalServerError("Error enabling SCIM").WithInternalError(err)
-	}
-
-	return a.sendSCIMStatus(w, db, provider)
+	return a.setSCIM(w, r, true)
 }
 
 func (a *API) adminSCIMDisable(w http.ResponseWriter, r *http.Request) error {
+	return a.setSCIM(w, r, false)
+}
+
+func (a *API) setSCIM(w http.ResponseWriter, r *http.Request, enabled bool) error {
+	set, action, verb := models.DisableSCIM, models.SCIMDisabledAction, "disabling"
+	if enabled {
+		set, action, verb = models.EnableSCIM, models.SCIMEnabledAction, "enabling"
+	}
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	provider := getSSOProvider(ctx)
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		changed, err := models.DisableSCIM(tx, provider.ID)
+		changed, err := set(tx, provider.ID)
 		if err != nil || !changed {
 			return err
 		}
 		return a.auditSCIM(tx, r, scimAuditEvent{
 			actor:      getAdminUser(ctx),
-			action:     models.SCIMDisabledAction,
+			action:     action,
 			providerID: provider.ID,
 			traits:     map[string]any{},
 		})
 	}); err != nil {
-		return apierrors.NewInternalServerError("Error disabling SCIM").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error %s SCIM", verb).WithInternalError(err)
 	}
 
 	return a.sendSCIMStatus(w, db, provider)
