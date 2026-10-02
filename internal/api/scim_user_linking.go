@@ -82,23 +82,19 @@ func (s *scimUserRepository) beforeProvision(r *http.Request, db *storage.Connec
 	if scimUserEmail(user) == "" {
 		return errSCIMEmailRequired()
 	}
-	return scimError(s.runBeforeUserCreatedHook(r, db, providerID, user))
-}
-
-func (s *scimUserRepository) runBeforeUserCreatedHook(r *http.Request, db *storage.Connection, providerID uuid.UUID, user *core.User) error {
 	if !s.api.hooksMgr.Enabled(v0hooks.BeforeUserCreated) {
 		return nil
 	}
 	providerType := scimProviderType(providerID)
 	decision, err := s.decideAccountLinking(db, providerType, user)
 	if err != nil || decision.Decision != models.CreateAccount {
-		return err
+		return scimError(err)
 	}
 	candidate, err := s.newUser(providerType, decision, user)
 	if err != nil {
-		return err
+		return scimError(err)
 	}
-	return scimHookError(s.api.triggerBeforeUserCreated(r, db, candidate))
+	return scimError(scimHookError(s.api.triggerBeforeUserCreated(r, db, candidate)))
 }
 
 func (s *scimUserRepository) runAfterUserCreatedHook(r *http.Request, db *storage.Connection, user *models.User) {
