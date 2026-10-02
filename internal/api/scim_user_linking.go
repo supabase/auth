@@ -16,13 +16,10 @@ import (
 
 func (s *scimUserRepository) provisionAuthUser(tx *storage.Connection, row *models.SCIMUser, user *core.User) (*models.User, error) {
 	linked, created, err := s.linkAuthUser(tx, row, user)
-	if err != nil {
-		return nil, err
+	if err == nil && !row.Active {
+		err = models.Logout(tx, linked.ID)
 	}
-	if !row.Active {
-		return created, models.Logout(tx, linked.ID)
-	}
-	return created, nil
+	return created, err
 }
 
 func (s *scimUserRepository) linkAuthUser(tx *storage.Connection, row *models.SCIMUser, user *core.User) (linked, created *models.User, err error) {
@@ -49,26 +46,21 @@ func (s *scimUserRepository) linkAuthUser(tx *storage.Connection, row *models.SC
 func (s *scimUserRepository) existingAuthUser(tx *storage.Connection, providerType string, decision models.AccountLinkingResult, user *core.User) (*models.User, error) {
 	switch decision.Decision {
 	case models.AccountExists, models.LinkAccount:
-		if !decision.User.IsSSOUser {
-			return nil, scimerrors.ErrUniqueness("user is not an SSO user")
-		}
-		if decision.Decision == models.LinkAccount {
-			if err := s.linkIdentity(tx, decision.User, providerType, user); err != nil {
-				return nil, err
-			}
-		}
-		return decision.User, nil
 	case models.MultipleAccounts:
 		return nil, scimerrors.ErrUniqueness("multiple users share this email in the SSO provider")
+	default:
+		return nil, apierrors.NewInternalServerError("Unknown automatic linking decision: %v", decision.Decision)
 	}
-	return nil, apierrors.NewInternalServerError("Unknown automatic linking decision: %v", decision.Decision)
-}
-
-func (s *scimUserRepository) linkIdentity(tx *storage.Connection, linked *models.User, providerType string, user *core.User) error {
-	if _, err := s.api.createNewIdentity(tx, linked, providerType, scimIdentityData(user)); err != nil {
-		return err
+	if !decision.User.IsSSOUser {
+		return nil, scimerrors.ErrUniqueness("user is not an SSO user")
 	}
-	return linked.UpdateAppMetaDataProviders(tx)
+	if decision.Decision == models.AccountExists {
+		return decision.User, nil
+	}
+	if _, err := s.api.createNewIdentity(tx, decision.User, providerType, scimIdentityData(user)); err != nil {
+		return nil, err
+	}
+	return decision.User, decision.User.UpdateAppMetaDataProviders(tx)
 }
 
 func (s *scimUserRepository) createAuthUser(tx *storage.Connection, providerType string, decision models.AccountLinkingResult, user *core.User) (*models.User, error) {
