@@ -888,7 +888,7 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 		var terr error
 
 		if config.SSO.SCIM.Enabled && user.IsSSOUser {
-			deprovisioned, terr := models.IsSCIMUserDeprovisionedForUpdate(tx, user.ID)
+			deprovisioned, terr := models.IsSCIMUserDeprovisioned(tx, user.ID)
 			if terr != nil {
 				return apierrors.NewInternalServerError("Database error checking SCIM user").WithInternalError(terr)
 			}

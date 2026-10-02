@@ -24,7 +24,7 @@ func (s *scimUserRepository) provisionAuthUser(tx *storage.Connection, row *mode
 		created = linked
 	}
 	if !row.Active {
-		return created, models.LogoutUserForSCIM(tx, linked.ID)
+		return created, models.Logout(tx, linked.ID)
 	}
 	return created, nil
 }

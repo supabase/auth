@@ -648,9 +648,6 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 				return apierrors.NewInternalServerError("Error deleting user's sessions").WithInternalError(terr)
 			}
 		} else {
-			if terr := models.LockUserForSCIM(tx, user.ID); terr != nil {
-				return apierrors.NewInternalServerError("Error locking user").WithInternalError(terr)
-			}
 			if terr := a.deleteSCIMUsers(tx, r, adminUser, user.ID); terr != nil {
 				return apierrors.NewInternalServerError("Error deleting user's SCIM users").WithInternalError(terr)
 			}

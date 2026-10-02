@@ -112,23 +112,6 @@ func FindSCIMUserLinks(tx *storage.Connection, ids []uuid.UUID) (map[uuid.UUID]u
 	return links, nil
 }
 
-func LockUserForSCIM(tx *storage.Connection, userID uuid.UUID) error {
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT id FROM %q WHERE id = ? FOR UPDATE", User{}.TableName()),
-		userID,
-	).Exec(); err != nil {
-		return errors.Wrap(err, "error locking user")
-	}
-	return nil
-}
-
-func LogoutUserForSCIM(tx *storage.Connection, userID uuid.UUID) error {
-	if err := LockUserForSCIM(tx, userID); err != nil {
-		return err
-	}
-	return Logout(tx, userID)
-}
-
 func SoftDeleteSCIMUsersByUserID(tx *storage.Connection, userID uuid.UUID) ([]SCIMUser, error) {
 	rows := []SCIMUser{}
 	if err := tx.RawQuery(
@@ -159,28 +142,11 @@ func BanDeprovisionedSCIMUsers(tx *storage.Connection, providerID uuid.UUID, unt
 }
 
 func LinkSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) error {
-	if err := LockUserForSCIM(tx, userID); err != nil {
-		return err
+	deleted, err := tx.Q().Where("sso_provider_id = ? AND user_id = ? AND deleted_at IS NOT NULL", user.SSOProviderID, userID).Exists(&SCIMUser{})
+	if err != nil {
+		return errors.Wrap(err, "error finding deleted SCIM user")
 	}
-
-	existing := struct {
-		Live    bool `db:"live"`
-		Deleted bool `db:"deleted"`
-	}{}
-	if err := tx.RawQuery(
-		fmt.Sprintf(
-			"SELECT EXISTS(SELECT 1 FROM %[1]q WHERE sso_provider_id = ? AND user_id = ? AND deleted_at IS NULL) AS live, "+
-				"EXISTS(SELECT 1 FROM %[1]q WHERE sso_provider_id = ? AND user_id = ? AND deleted_at IS NOT NULL) AS deleted",
-			scimUsersTable.tableName,
-		),
-		user.SSOProviderID, userID, user.SSOProviderID, userID,
-	).First(&existing); err != nil {
-		return errors.Wrap(err, "error finding linked SCIM user")
-	}
-	if existing.Live {
-		return SCIMUserLinkedError{}
-	}
-	if existing.Deleted {
+	if deleted {
 		return SCIMUserDeletedError{}
 	}
 	return LinkNewSCIMUser(tx, user, userID)
@@ -194,6 +160,9 @@ func LinkNewSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) e
 		fmt.Sprintf("UPDATE %q SET user_id = ?, updated_at = clock_timestamp() WHERE id = ? RETURNING updated_at", scimUsersTable.tableName),
 		userID, user.ID,
 	).First(&updated); err != nil {
+		if isUniqueViolation(err) {
+			return SCIMUserLinkedError{}
+		}
 		return errors.Wrap(err, "error linking SCIM user")
 	}
 	user.UserID = &userID
@@ -227,13 +196,7 @@ func IsSCIMUserDeprovisionedByProvider(tx *storage.Connection, providerID, userI
 	return result.AnyRow && !result.Live, nil
 }
 
-func IsSCIMUserDeprovisionedForUpdate(tx *storage.Connection, userID uuid.UUID) (bool, error) {
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT id FROM %q WHERE id = ? FOR NO KEY UPDATE", User{}.TableName()),
-		userID,
-	).Exec(); err != nil {
-		return false, errors.Wrap(err, "error locking user")
-	}
+func IsSCIMUserDeprovisioned(tx *storage.Connection, userID uuid.UUID) (bool, error) {
 	rows := []struct {
 		Active    bool       `db:"active"`
 		DeletedAt *time.Time `db:"deleted_at"`

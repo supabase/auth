@@ -14,6 +14,7 @@ func setupSCIMTestDB(t *testing.T) *storage.Connection {
 	require.NoError(t, err)
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
+	require.NoError(t, TruncateAll(conn))
 	return conn
 }
 

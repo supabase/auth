@@ -887,9 +887,6 @@ func (s *scimUserRepository) renderOne(tx *storage.Connection, providerID uuid.U
 }
 
 func (s *scimUserRepository) delete(tx *storage.Connection, r *http.Request, target models.SCIMTarget, existing *models.SCIMUser) error {
-	if err := lockSCIMLinkedUser(tx, existing.UserID); err != nil {
-		return err
-	}
 	row, err := models.DeleteSCIMUser(tx, target)
 	if err != nil {
 		return err
@@ -898,7 +895,7 @@ func (s *scimUserRepository) delete(tx *storage.Connection, r *http.Request, tar
 		return models.SCIMUserStaleError{}
 	}
 	if row.UserID != nil {
-		if err := models.LogoutUserForSCIM(tx, *row.UserID); err != nil {
+		if err := models.Logout(tx, *row.UserID); err != nil {
 			return err
 		}
 	}
@@ -911,9 +908,6 @@ func (s *scimUserRepository) delete(tx *storage.Connection, r *http.Request, tar
 
 func (s *scimUserRepository) lockForReplace(tx *storage.Connection, target models.SCIMTarget, email string, existing *models.SCIMUser) (*models.SCIMUser, error) {
 	if err := models.LockAccountLinking(tx, scimProviderType(target.ProviderID), email); err != nil {
-		return nil, err
-	}
-	if err := lockSCIMLinkedUser(tx, existing.UserID); err != nil {
 		return nil, err
 	}
 	old, err := models.FindSCIMUserForUpdate(tx, target.ProviderID, target.ID)
@@ -960,7 +954,7 @@ func (s *scimUserRepository) syncAuthUser(tx *storage.Connection, change scimUse
 		return nil, err
 	}
 	if old.Active && !row.Active {
-		return nil, models.LogoutUserForSCIM(tx, linked.ID)
+		return nil, models.Logout(tx, linked.ID)
 	}
 	return nil, nil
 }
@@ -1023,13 +1017,6 @@ func scimUserResource(user *core.User) ([]byte, error) {
 		return nil, err
 	}
 	return resource, nil
-}
-
-func lockSCIMLinkedUser(tx *storage.Connection, userID *uuid.UUID) error {
-	if userID == nil {
-		return nil
-	}
-	return models.LockUserForSCIM(tx, *userID)
 }
 
 func scimUserEmail(user *core.User) string {

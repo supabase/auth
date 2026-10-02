@@ -651,58 +651,6 @@ func (ts *SCIMTestSuite) TestSessionRefusedForLinkedOAuthIdentityWhileDeprovisio
 	require.Zero(ts.T(), ts.sessions(user))
 }
 
-func (ts *SCIMTestSuite) TestSessionWaitsForConcurrentDeactivation() {
-	id := ts.create(ts.TokenA, oktaUser)
-	user := ts.linkedUser(id)
-	locked, release := make(chan struct{}), make(chan struct{})
-	deactivated := make(chan error, 1)
-	go func() {
-		deactivated <- ts.API.db.Transaction(func(tx *storage.Connection) error {
-			if err := models.LockUserForSCIM(tx, user.ID); err != nil {
-				return err
-			}
-			close(locked)
-			<-release
-			if err := tx.RawQuery("UPDATE "+(&models.SCIMUser{}).TableName()+" SET deleted_at = now() WHERE id = ?", id).Exec(); err != nil {
-				return err
-			}
-			return models.Logout(tx, user.ID)
-		})
-	}()
-	<-locked
-
-	issued := make(chan error, 1)
-	go func() { issued <- ts.issueSession(ts.API.db, user) }()
-	select {
-	case err := <-issued:
-		ts.T().Fatalf("session issued while deactivation held the user lock: %v", err)
-	case <-time.After(200 * time.Millisecond):
-	}
-	close(release)
-
-	require.NoError(ts.T(), <-deactivated)
-	ts.requireBanned(<-issued)
-	require.Zero(ts.T(), ts.sessions(user))
-}
-
-func (ts *SCIMTestSuite) TestWritesWaitForAdminUserDelete() {
-	for _, method := range []string{http.MethodDelete, http.MethodPut} {
-		body := userWith(strings.ToLower(method)+"@example.com", method)
-		id := ts.create(ts.TokenA, body)
-		user := ts.linkedUser(id)
-		code, err := ts.whileLocked(
-			func(tx *storage.Connection) error { return models.LockUserForSCIM(tx, user.ID) },
-			func(tx *storage.Connection) error {
-				_, err := models.SoftDeleteSCIMUsersByUserID(tx, user.ID)
-				return err
-			},
-			method, "/Users/"+id, body,
-		)
-		require.NoError(ts.T(), err, method)
-		require.Equal(ts.T(), http.StatusNotFound, code, method)
-	}
-}
-
 func (ts *SCIMTestSuite) TestSessionAllowedForSSOUserWithoutSCIMRow() {
 	user := ts.ssoUser(ts.A, "saml-sub", "carol@example.com")
 	require.NoError(ts.T(), ts.issueSession(ts.API.db, user))
