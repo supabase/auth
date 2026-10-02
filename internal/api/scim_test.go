@@ -338,23 +338,6 @@ func TestSCIMServer(t *testing.T) {
 		}
 	})
 
-	t.Run("Group schema members reference only Users", func(t *testing.T) {
-		w := scimServe(t, srv, http.MethodGet, scimBasePath+"/Schemas/"+string(core.SchemaGroup), "")
-
-		require.Equal(t, http.StatusOK, w.Code)
-		sub := map[string]map[string]any{}
-		for _, attribute := range scimDecode(t, w)["attributes"].([]any) {
-			if attribute.(map[string]any)["name"] != "members" {
-				continue
-			}
-			for _, s := range attribute.(map[string]any)["subAttributes"].([]any) {
-				sub[s.(map[string]any)["name"].(string)] = s.(map[string]any)
-			}
-		}
-		require.Equal(t, []any{"User"}, sub["type"]["canonicalValues"])
-		require.Equal(t, []any{"User"}, sub["$ref"]["referenceTypes"])
-	})
-
 	t.Run("Schemas/{id} location uses the external URL prefix", func(t *testing.T) {
 		w := scimServe(t, newSCIMServerFor("https://project.supabase.co/auth/v1"), http.MethodGet, scimBasePath+"/Schemas/"+string(core.SchemaUser), "")
 

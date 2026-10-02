@@ -56,8 +56,6 @@ var scimGroupsTable = scimTable{
 	label:      "SCIM group",
 	columns:    scimGroupColumns,
 	nameColumn: "display_name",
-	notFound:   SCIMGroupNotFoundError{},
-	stale:      SCIMStaleError{},
 	conflict:   SCIMGroupConflictError{},
 }
 

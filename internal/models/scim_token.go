@@ -125,7 +125,7 @@ func FindSCIMTokenByPrefix(tx *storage.Connection, providerID uuid.UUID, prefix 
 
 	switch len(tokens) {
 	case 0:
-		return nil, SCIMTokenNotFoundError{}
+		return nil, SCIMNotFoundError{}
 	case 1:
 		return &tokens[0], nil
 	default:
@@ -157,7 +157,7 @@ SELECT * FROM authenticated WHERE NOT EXISTS (SELECT 1 FROM touched)`, token.Tab
 		hashSCIMToken(plaintext),
 	).First(token); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, SCIMTokenNotFoundError{}
+			return nil, SCIMNotFoundError{}
 		}
 		return nil, errors.Wrap(err, "error authenticating SCIM token")
 	}

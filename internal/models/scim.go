@@ -57,9 +57,84 @@ type scimTable struct {
 	columns    string
 	nameColumn string
 	liveClause string
-	notFound   error
-	stale      error
 	conflict   error
+}
+
+func (t scimTable) where(providerID uuid.UUID, filter SCIMFilter) (string, []any) {
+	clauses := []string{"sso_provider_id = ?"}
+	args := []any{providerID}
+	if t.liveClause != "" {
+		clauses = append(clauses, t.liveClause)
+	}
+	if filter.Name != nil {
+		clauses = append(clauses, t.nameColumn+` COLLATE "C" = lower(?)`)
+		args = append(args, *filter.Name)
+	}
+	if filter.ExternalID != nil {
+		clauses = append(clauses, "external_id = ?")
+		args = append(args, *filter.ExternalID)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func (t scimTable) targetClause() string {
+	if t.liveClause == "" {
+		return "id = ? AND sso_provider_id = ?"
+	}
+	return "id = ? AND sso_provider_id = ? AND " + t.liveClause
+}
+
+func (t scimTable) exists(tx *storage.Connection, target SCIMTarget) (bool, error) {
+	var result struct {
+		Exists bool `db:"exists"`
+	}
+	if err := tx.RawQuery(
+		fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %q WHERE %s) AS exists", t.tableName, t.targetClause()),
+		target.ID, target.ProviderID,
+	).First(&result); err != nil {
+		return false, errors.Wrapf(err, "error finding %s", t.label)
+	}
+	return result.Exists, nil
+}
+
+func (t scimTable) writeError(tx *storage.Connection, target SCIMTarget, err error, verb string) error {
+	if !errors.Is(err, sql.ErrNoRows) || target.UpdatedAt == nil {
+		return t.wrapError(err, verb)
+	}
+	exists, findErr := t.exists(tx, target)
+	if findErr != nil {
+		return findErr
+	}
+	if !exists {
+		return SCIMNotFoundError{}
+	}
+	return SCIMStaleError{}
+}
+
+func (t scimTable) orderBy(order SCIMOrder) string {
+	direction := "ASC"
+	if order.Descending {
+		direction = "DESC"
+	}
+	switch order.By {
+	case SCIMSortByID:
+		return "id " + direction
+	case SCIMSortByName:
+		return t.nameColumn + ` COLLATE "C" ` + direction + ", id " + direction
+	case SCIMSortByUpdatedAt:
+		return "updated_at " + direction + ", id " + direction
+	}
+	return "created_at " + direction + ", id " + direction
+}
+
+func (t scimTable) wrapError(err error, verb string) error {
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return SCIMNotFoundError{}
+	case isUniqueViolation(err):
+		return t.conflict
+	}
+	return errors.Wrapf(err, "error %s %s", verb, t.label)
 }
 
 func findSCIMPage[T any](tx *storage.Connection, table scimTable, providerID uuid.UUID, query SCIMQuery) ([]T, int, error) {
@@ -138,83 +213,6 @@ func replaceSCIMRow[T any](tx *storage.Connection, table scimTable, target SCIMT
 		return nil, table.writeError(tx, target, err, "replacing")
 	}
 	return row, nil
-}
-
-func (t scimTable) where(providerID uuid.UUID, filter SCIMFilter) (string, []any) {
-	clauses := []string{"sso_provider_id = ?"}
-	args := []any{providerID}
-	if t.liveClause != "" {
-		clauses = append(clauses, t.liveClause)
-	}
-	if filter.Name != nil {
-		clauses = append(clauses, t.nameColumn+` COLLATE "C" = lower(?)`)
-		args = append(args, *filter.Name)
-	}
-	if filter.ExternalID != nil {
-		clauses = append(clauses, "external_id = ?")
-		args = append(args, *filter.ExternalID)
-	}
-	return strings.Join(clauses, " AND "), args
-}
-
-func (t scimTable) targetClause() string {
-	if t.liveClause == "" {
-		return "id = ? AND sso_provider_id = ?"
-	}
-	return "id = ? AND sso_provider_id = ? AND " + t.liveClause
-}
-
-func (t scimTable) exists(tx *storage.Connection, target SCIMTarget) (bool, error) {
-	var result struct {
-		Exists bool `db:"exists"`
-	}
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %q WHERE %s) AS exists", t.tableName, t.targetClause()),
-		target.ID, target.ProviderID,
-	).First(&result); err != nil {
-		return false, errors.Wrapf(err, "error finding %s", t.label)
-	}
-	return result.Exists, nil
-}
-
-func (t scimTable) writeError(tx *storage.Connection, target SCIMTarget, err error, verb string) error {
-	if !errors.Is(err, sql.ErrNoRows) || target.UpdatedAt == nil {
-		return t.wrapError(err, verb)
-	}
-	exists, findErr := t.exists(tx, target)
-	if findErr != nil {
-		return findErr
-	}
-	if !exists {
-		return t.notFound
-	}
-	return t.stale
-}
-
-func (t scimTable) orderBy(order SCIMOrder) string {
-	direction := "ASC"
-	if order.Descending {
-		direction = "DESC"
-	}
-	switch order.By {
-	case SCIMSortByID:
-		return "id " + direction
-	case SCIMSortByName:
-		return t.nameColumn + ` COLLATE "C" ` + direction + ", id " + direction
-	case SCIMSortByUpdatedAt:
-		return "updated_at " + direction + ", id " + direction
-	}
-	return "created_at " + direction + ", id " + direction
-}
-
-func (t scimTable) wrapError(err error, verb string) error {
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return t.notFound
-	case isUniqueViolation(err):
-		return t.conflict
-	}
-	return errors.Wrapf(err, "error %s %s", verb, t.label)
 }
 
 func isUniqueViolation(err error) bool {

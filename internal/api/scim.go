@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -48,9 +47,7 @@ var (
 		core.NewSchema(core.SchemaUser).With(core.UserAttributes()...),
 		core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...),
 	}
-	scimGroupSchemas = newSCIMGroupSchemas()
-
-	scimUserCreateProjection = newSCIMUserCreateProjection()
+	scimGroupSchemas = core.Schemas{core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...)}
 
 	scimCommonSortKeys = map[string]models.SCIMSortKey{
 		"id":                models.SCIMSortByID,
@@ -158,21 +155,6 @@ func (a *API) newSCIMServer(validate server.TokenValidator, limit func(http.Hand
 			WithRepository(&scimGroupRepository{api: a})),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate),
 	)
-}
-
-func newSCIMGroupSchemas() core.Schemas {
-	attributes := core.GroupAttributes()
-	for _, attribute := range attributes {
-		for _, sub := range attribute.SubAttributes {
-			switch sub.Name {
-			case "type":
-				sub.Suggesting(scimResourceTypeUser)
-			case "$ref":
-				sub.Referencing(scimResourceTypeUser)
-			}
-		}
-	}
-	return core.Schemas{core.NewSchema(core.SchemaGroup).With(attributes...)}
 }
 
 func newSCIMTokenValidator(db *storage.Connection) server.TokenValidator {
@@ -644,7 +626,7 @@ func (s *scimUserRepository) Create(ctx context.Context, user *core.User) (*core
 	}
 
 	change := scimUserChange{r: r, target: models.SCIMTarget{ProviderID: providerID}, resource: resource, user: user}
-	return s.save(db, change, scimUserCreateProjection, func(tx *storage.Connection) (*models.SCIMUser, *models.User, models.AuditAction, error) {
+	return s.save(db, change, func(tx *storage.Connection) (*models.SCIMUser, *models.User, models.AuditAction, error) {
 		return s.create(tx, change)
 	})
 }
@@ -674,7 +656,7 @@ func (s *scimUserRepository) Update(ctx context.Context, user *core.User) (*core
 	}
 
 	change := scimUserChange{r: r, target: target, resource: resource, user: user}
-	return s.save(db, change, protocol.Projection{}, func(tx *storage.Connection) (*models.SCIMUser, *models.User, models.AuditAction, error) {
+	return s.save(db, change, func(tx *storage.Connection) (*models.SCIMUser, *models.User, models.AuditAction, error) {
 		return s.replace(tx, change, existing)
 	})
 }
@@ -701,7 +683,7 @@ func (s *scimUserRepository) replace(tx *storage.Connection, change scimUserChan
 	return row, created, models.SCIMUserUpdatedAction, err
 }
 
-func (s *scimUserRepository) save(db *storage.Connection, change scimUserChange, projection protocol.Projection, write func(*storage.Connection) (*models.SCIMUser, *models.User, models.AuditAction, error)) (*core.User, error) {
+func (s *scimUserRepository) save(db *storage.Connection, change scimUserChange, write func(*storage.Connection) (*models.SCIMUser, *models.User, models.AuditAction, error)) (*core.User, error) {
 	var saved *core.User
 	var created *models.User
 	err := db.Transaction(func(tx *storage.Connection) error {
@@ -716,7 +698,7 @@ func (s *scimUserRepository) save(db *storage.Connection, change scimUserChange,
 				return terr
 			}
 		}
-		saved, terr = scimFirst(s.render(tx, change.target.ProviderID, []models.SCIMUser{*row}, projection))
+		saved, terr = scimFirst(s.render(tx, change.target.ProviderID, []models.SCIMUser{*row}, protocol.Projection{}))
 		return terr
 	})
 	if err != nil {
@@ -774,14 +756,6 @@ func (s *scimUserRepository) groupMemberships(tx *storage.Connection, providerID
 		})
 	}
 	return groups, nil
-}
-
-func newSCIMUserCreateProjection() protocol.Projection {
-	projection, err := protocol.ParseProjection(url.Values{"excludedAttributes": {"groups"}}, scimUserSchemas)
-	if err != nil {
-		panic(err)
-	}
-	return projection
 }
 
 func (s *scimUserRepository) delete(tx *storage.Connection, r *http.Request, target models.SCIMTarget) error {
@@ -852,7 +826,7 @@ func (s *scimUserRepository) renameIdentity(tx *storage.Connection, change scimU
 		To:       user.UserName,
 		Data:     data,
 	})
-	if errors.Is(err, models.SCIMIdentityNotFoundError{}) {
+	if models.IsNotFoundError(err) {
 		observability.GetLogEntry(change.r).Entry.WithField("user_id", userID).WithField("sso_provider_id", providerID).Warn("scim: identity not found, rename skipped")
 		return nil
 	}

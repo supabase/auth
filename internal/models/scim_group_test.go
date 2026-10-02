@@ -65,7 +65,7 @@ func (ts *SCIMGroupTestSuite) TestFindIsScopedToProvider() {
 
 	other := ts.createProvider()
 	_, err = FindSCIMGroup(ts.db, other.ID, group.ID)
-	require.ErrorIs(ts.T(), err, SCIMGroupNotFoundError{})
+	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
 	require.True(ts.T(), IsNotFoundError(err))
 }
 
@@ -104,7 +104,7 @@ func (ts *SCIMGroupTestSuite) TestReplaceChecksVersion() {
 	require.ErrorIs(ts.T(), err, SCIMStaleError{})
 
 	_, _, err = ReplaceSCIMGroupIfChanged(ts.db, SCIMTarget{ProviderID: ts.createProvider().ID, ID: group.ID}, []byte(`{"displayName":"Other"}`))
-	require.ErrorIs(ts.T(), err, SCIMGroupNotFoundError{})
+	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
 }
 
 func (ts *SCIMGroupTestSuite) TestEachWriteInATransactionGetsANewVersion() {
@@ -132,13 +132,13 @@ func (ts *SCIMGroupTestSuite) TestDeleteRemovesMembers() {
 	require.NoError(ts.T(), err)
 
 	_, err = FindSCIMGroup(ts.db, ts.provider.ID, group.ID)
-	require.ErrorIs(ts.T(), err, SCIMGroupNotFoundError{})
+	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
 	count, err := ts.db.Q().Where("group_id = ?", group.ID).Count(&SCIMGroupMember{})
 	require.NoError(ts.T(), err)
 	require.Zero(ts.T(), count)
 
 	_, err = DeleteSCIMGroup(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID})
-	require.ErrorIs(ts.T(), err, SCIMGroupNotFoundError{})
+	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
 }
 
 func (ts *SCIMGroupTestSuite) TestVersionedWriteToMissingRowIsNotFound() {
@@ -146,17 +146,17 @@ func (ts *SCIMGroupTestSuite) TestVersionedWriteToMissingRowIsNotFound() {
 	alice := ts.createUser(ts.provider.ID, "alice")
 
 	_, _, err := ReplaceSCIMGroupIfChanged(ts.db, SCIMTarget{ProviderID: ts.createProvider().ID, ID: group.ID, UpdatedAt: &group.UpdatedAt}, []byte(`{"displayName":"Other"}`))
-	require.ErrorIs(ts.T(), err, SCIMGroupNotFoundError{})
+	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
 
 	_, err = DeleteSCIMGroup(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID})
 	require.NoError(ts.T(), err)
 	_, err = DeleteSCIMGroup(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID, UpdatedAt: &group.UpdatedAt})
-	require.ErrorIs(ts.T(), err, SCIMGroupNotFoundError{})
+	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
 
 	_, err = DeleteSCIMUser(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID})
 	require.NoError(ts.T(), err)
 	_, err = DeleteSCIMUser(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID, UpdatedAt: &alice.UpdatedAt})
-	require.ErrorIs(ts.T(), err, SCIMUserNotFoundError{})
+	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
 }
 
 func (ts *SCIMGroupTestSuite) TestReplaceMembersDiffs() {

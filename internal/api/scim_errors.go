@@ -13,7 +13,7 @@ func scimError(err error) error {
 	switch {
 	case models.IsNotFoundError(err):
 		return errSCIMNotFound()
-	case models.IsStaleError(err):
+	case errors.Is(err, models.SCIMStaleError{}):
 		return errSCIMStale()
 	case errors.Is(err, models.SCIMGroupConflictError{}):
 		return scimerrors.ErrUniqueness(`"externalId" must be unique`)

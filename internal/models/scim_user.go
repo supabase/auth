@@ -51,8 +51,6 @@ var scimUsersTable = scimTable{
 	columns:    scimUserColumns,
 	nameColumn: "user_name",
 	liveClause: "deleted_at IS NULL",
-	notFound:   SCIMUserNotFoundError{},
-	stale:      SCIMStaleError{},
 	conflict:   SCIMUserConflictError{},
 }
 
@@ -166,7 +164,7 @@ func RenameSCIMIdentity(tx *storage.Connection, rename SCIMIdentityRename) error
 		return errors.Wrap(err, "error renaming SCIM identity")
 	}
 	if count == 0 {
-		return SCIMIdentityNotFoundError{}
+		return SCIMNotFoundError{}
 	}
 	return nil
 }
