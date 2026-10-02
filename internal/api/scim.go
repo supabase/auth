@@ -529,7 +529,7 @@ func (s *scimGroupRepository) memberReplacer(ctx context.Context, version string
 func (s *scimGroupRepository) mergeable(ctx context.Context, version string) bool {
 	r := scimRequestKey.Value(ctx)
 	snapshot := scimGroupSnapshotKey.Value(ctx)
-	blindPatch := r != nil && r.Method == http.MethodPatch && r.Header.Get("If-Match") == ""
+	blindPatch := r != nil && r.Method == http.MethodPatch && (r.Header.Get("If-Match") == "" || r.Header.Get("If-Match") == "*")
 	sameVersion := snapshot != nil && version != "" && snapshot.version == version
 	return blindPatch && sameVersion
 }

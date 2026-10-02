@@ -749,22 +749,26 @@ func (ts *SCIMTestSuite) TestConcurrentGroupWrites() {
 
 	for _, tc := range []struct {
 		name, method, body string
-		ifMatch            bool
+		ifMatch            string
 		finish             func(tx *storage.Connection) error
 		code               int
 		displayName        string
 		members            []string
 	}{
 		{name: "patch merges a concurrent member add", method: http.MethodPatch, body: addCarol, finish: addBob, code: http.StatusNoContent, displayName: "Engineering", members: []string{alice, bob, carol}},
-		{name: "patch with If-Match rejects a concurrent member add", method: http.MethodPatch, body: addCarol, ifMatch: true, finish: addBob, code: http.StatusPreconditionFailed, displayName: "Engineering", members: []string{alice, bob}},
+		{name: "patch with If-Match * merges a concurrent member add", method: http.MethodPatch, body: addCarol, ifMatch: "*", finish: addBob, code: http.StatusNoContent, displayName: "Engineering", members: []string{alice, bob, carol}},
+		{name: "patch with If-Match rejects a concurrent member add", method: http.MethodPatch, body: addCarol, ifMatch: "etag", finish: addBob, code: http.StatusPreconditionFailed, displayName: "Engineering", members: []string{alice, bob}},
 		{name: "patch rejects a concurrent rename", method: http.MethodPatch, body: addCarol, finish: rename, code: http.StatusConflict, displayName: "Platform", members: []string{alice}},
 		{name: "put rejects a concurrent member add", method: http.MethodPut, body: groupWith("Engineering", "g-1", alice, carol), finish: addBob, code: http.StatusConflict, displayName: "Engineering", members: []string{alice, bob}},
 	} {
 		id := ts.createGroup(ts.TokenA, groupWith("Engineering", "g-1", alice))
 		var headers []string
-		if tc.ifMatch {
+		if tc.ifMatch != "" {
+			headers = []string{"If-Match", tc.ifMatch}
+		}
+		if tc.ifMatch == "etag" {
 			w, _ := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-			headers = []string{"If-Match", w.Header().Get("ETag")}
+			headers[1] = w.Header().Get("ETag")
 		}
 		code, err := ts.whileLocked(
 			func(tx *storage.Connection) error {
