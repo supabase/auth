@@ -55,7 +55,9 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	provider := identityToBeDeleted.Provider
 	recipientEmail := user.GetEmail()
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if providerID, ok, perr := models.SSOProviderID(provider); ok && perr == nil && a.config.SSO.SCIM.Enabled {
+		providerID, isSSO, perr := models.SSOProviderID(provider)
+		isSCIMProvider := isSSO && perr == nil && a.config.SSO.SCIM.Enabled
+		if isSCIMProvider {
 			managed, terr := models.IsSCIMManaged(tx, providerID, user.ID)
 			if terr != nil {
 				return apierrors.NewInternalServerError("Database error finding SCIM user").WithInternalError(terr)

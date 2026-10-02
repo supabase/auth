@@ -135,7 +135,7 @@ func FindSCIMTokenByPrefix(tx *storage.Connection, providerID uuid.UUID, prefix 
 
 func AuthenticateSCIMToken(tx *storage.Connection, plaintext string) (*SCIMToken, error) {
 	token := &SCIMToken{}
-	err := tx.RawQuery(
+	if err := tx.RawQuery(
 		fmt.Sprintf(`WITH authenticated AS (
   SELECT t.* FROM %[1]q AS t
   JOIN %[2]q AS p ON p.id = t.sso_provider_id
@@ -155,8 +155,7 @@ SELECT * FROM touched
 UNION ALL
 SELECT * FROM authenticated WHERE NOT EXISTS (SELECT 1 FROM touched)`, token.TableName(), SSOProvider{}.TableName(), SCIMSettings{}.TableName()),
 		hashSCIMToken(plaintext),
-	).First(token)
-	if err != nil {
+	).First(token); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, SCIMTokenNotFoundError{}
 		}

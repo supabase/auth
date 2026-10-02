@@ -326,7 +326,8 @@ type scimEqFilter struct {
 
 func (f scimEqFilter) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (models.SCIMFilter, error) {
 	text, isString := value.(string)
-	if op != filter.OpEquals || attribute.Parent != nil || !isString {
+	supported := op == filter.OpEquals && attribute.Parent == nil && isString
+	if !supported {
 		return f.unsupported()
 	}
 	switch attribute.Definition.Name {
@@ -428,10 +429,10 @@ func (s *scimGroupRepository) Update(ctx context.Context, group *core.Group) (*c
 			}
 		}
 		row, changed, err := models.ReplaceSCIMGroupIfChanged(tx, target, resource)
-		if !changed {
+		if err != nil || !changed {
 			return row, "", err
 		}
-		return row, models.SCIMGroupUpdatedAction, err
+		return row, models.SCIMGroupUpdatedAction, nil
 	})
 }
 
@@ -477,7 +478,8 @@ func (s *scimGroupRepository) memberReplacer(ctx context.Context, version string
 		return models.ReplaceSCIMGroupMembers
 	}
 	return func(tx *storage.Connection, row *models.SCIMGroup, members []uuid.UUID) (*models.SCIMGroup, models.SCIMGroupMemberChange, error) {
-		if action == "" && scimVersion(row.UpdatedAt) != snapshot.version && s.mergeable(ctx, version) {
+		concurrent := scimVersion(row.UpdatedAt) != snapshot.version
+		if action == "" && concurrent && s.mergeable(ctx, version) {
 			return models.MergeSCIMGroupMembers(tx, row, snapshot.members, members)
 		}
 		return models.ReplaceSCIMGroupMembersFrom(tx, row, snapshot.members, members)
@@ -487,7 +489,9 @@ func (s *scimGroupRepository) memberReplacer(ctx context.Context, version string
 func (s *scimGroupRepository) mergeable(ctx context.Context, version string) bool {
 	r := scimRequestKey.Value(ctx)
 	snapshot := scimGroupSnapshotKey.Value(ctx)
-	return r != nil && r.Method == http.MethodPatch && r.Header.Get("If-Match") == "" && snapshot != nil && version != "" && snapshot.version == version
+	blindPatch := r != nil && r.Method == http.MethodPatch && r.Header.Get("If-Match") == ""
+	sameVersion := snapshot != nil && version != "" && snapshot.version == version
+	return blindPatch && sameVersion
 }
 
 func (s *scimGroupRepository) delete(tx *storage.Connection, r *http.Request, target models.SCIMTarget) error {

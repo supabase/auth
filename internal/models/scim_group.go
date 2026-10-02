@@ -83,11 +83,10 @@ func LockUnchangedSCIMGroup(tx *storage.Connection, providerID, id uuid.UUID, re
 
 func DeleteSCIMGroup(tx *storage.Connection, target SCIMTarget) (*SCIMGroup, error) {
 	group := &SCIMGroup{}
-	err := tx.RawQuery(
+	if err := tx.RawQuery(
 		fmt.Sprintf("DELETE FROM %q WHERE %s AND "+scimVersionClause+" RETURNING %s", scimGroupsTable.tableName, scimGroupsTable.targetClause(), scimGroupsTable.columns),
 		target.ID, target.ProviderID, target.UpdatedAt, target.UpdatedAt,
-	).First(group)
-	if err != nil {
+	).First(group); err != nil {
 		return nil, scimGroupsTable.writeError(tx, target, err, "deleting")
 	}
 	return group, nil
@@ -98,11 +97,10 @@ func FindSCIMMembershipsByGroup(tx *storage.Connection, providerID uuid.UUID, gr
 	if len(groupIDs) == 0 {
 		return members, nil
 	}
-	err := tx.RawQuery(
+	if err := tx.RawQuery(
 		fmt.Sprintf("SELECT m.group_id, m.scim_user_id FROM %q m JOIN %q u ON u.id = m.scim_user_id WHERE m.group_id = ANY(?::uuid[]) AND u.sso_provider_id = ? AND u.deleted_at IS NULL ORDER BY m.group_id, m.scim_user_id", SCIMGroupMember{}.TableName(), scimUsersTable.tableName),
 		groupIDs, providerID,
-	).All(&members)
-	if err != nil {
+	).All(&members); err != nil {
 		return nil, errors.Wrap(err, "error finding SCIM group members")
 	}
 	return members, nil
@@ -113,11 +111,10 @@ func FindSCIMMembershipsByUser(tx *storage.Connection, providerID uuid.UUID, sci
 	if len(scimUserIDs) == 0 {
 		return memberships, nil
 	}
-	err := tx.RawQuery(
+	if err := tx.RawQuery(
 		fmt.Sprintf("SELECT m.group_id, m.scim_user_id, g.resource->>'displayName' AS display FROM %q m JOIN %q g ON g.id = m.group_id WHERE m.scim_user_id = ANY(?::uuid[]) AND g.sso_provider_id = ? ORDER BY m.scim_user_id, g.display_name COLLATE \"C\", g.id", SCIMGroupMember{}.TableName(), scimGroupsTable.tableName),
 		scimUserIDs, providerID,
-	).All(&memberships)
-	if err != nil {
+	).All(&memberships); err != nil {
 		return nil, errors.Wrap(err, "error finding SCIM groups for users")
 	}
 	return memberships, nil

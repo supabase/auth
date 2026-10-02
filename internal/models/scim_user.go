@@ -78,11 +78,10 @@ func ReplaceSCIMUser(tx *storage.Connection, target SCIMTarget, resource []byte)
 
 func DeleteSCIMUser(tx *storage.Connection, target SCIMTarget) (*SCIMUser, error) {
 	user := &SCIMUser{}
-	err := tx.RawQuery(
+	if err := tx.RawQuery(
 		fmt.Sprintf("UPDATE %q SET deleted_at = now(), updated_at = clock_timestamp() WHERE %s AND "+scimVersionClause+" RETURNING %s", scimUsersTable.tableName, scimUsersTable.targetClause(), scimUsersTable.columns),
 		target.ID, target.ProviderID, target.UpdatedAt, target.UpdatedAt,
-	).First(user)
-	if err != nil {
+	).First(user); err != nil {
 		return nil, scimUsersTable.writeError(tx, target, err, "deleting")
 	}
 	return user, nil

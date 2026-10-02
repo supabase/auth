@@ -193,8 +193,8 @@ func (a *API) deprovisionSCIM(tx *storage.Connection, r *http.Request, provider 
 
 func (a *API) auditSCIMDisabled(tx *storage.Connection, r *http.Request, providerID uuid.UUID, tokens []models.SCIMToken) error {
 	prefixes := make([]string, len(tokens))
-	for i := range tokens {
-		prefixes[i] = tokens[i].Prefix
+	for i, token := range tokens {
+		prefixes[i] = token.Prefix
 	}
 	return a.auditSCIM(tx, r, scimAuditEvent{
 		actor:      getAdminUser(r.Context()),

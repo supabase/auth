@@ -87,7 +87,7 @@ func findSCIMPage[T any](tx *storage.Connection, table scimTable, providerID uui
 func createSCIMRow[T any](tx *storage.Connection, table scimTable, providerID uuid.UUID, resource []byte) (*T, error) {
 	row := new(T)
 	if err := tx.RawQuery(
-		fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, resource) VALUES (?, ?, ?::jsonb) RETURNING "+table.columns, table.tableName),
+		fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, resource) VALUES (?, ?, ?::jsonb) RETURNING %s", table.tableName, table.columns),
 		uuid.Must(uuid.NewV4()), providerID, string(resource),
 	).First(row); err != nil {
 		return nil, table.wrapError(err, "creating")
@@ -165,9 +165,9 @@ func (t scimTable) targetClause() string {
 }
 
 func (t scimTable) exists(tx *storage.Connection, target SCIMTarget) (bool, error) {
-	result := struct {
+	var result struct {
 		Exists bool `db:"exists"`
-	}{}
+	}
 	if err := tx.RawQuery(
 		fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %q WHERE %s) AS exists", t.tableName, t.targetClause()),
 		target.ID, target.ProviderID,
