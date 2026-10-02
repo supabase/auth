@@ -511,15 +511,12 @@ func (s *scimGroupRepository) mergeable(ctx context.Context, version string) boo
 }
 
 func (s *scimGroupRepository) delete(tx *storage.Connection, r *http.Request, target models.SCIMTarget) error {
-	row, err := models.FindSCIMGroup(tx, target.ProviderID, target.ID)
+	removed, err := models.FindSCIMGroupMemberIDs(tx, target.ID)
 	if err != nil {
 		return err
 	}
-	removed, err := models.ClearSCIMGroupMembers(tx, row.ID)
+	row, err := models.DeleteSCIMGroup(tx, target)
 	if err != nil {
-		return err
-	}
-	if row, err = models.DeleteSCIMGroup(tx, target); err != nil {
 		return err
 	}
 	var resource struct {

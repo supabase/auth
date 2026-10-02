@@ -140,48 +140,47 @@ func MergeSCIMGroupMembers(tx *storage.Connection, group *SCIMGroup, base, scimU
 	if err != nil {
 		return nil, change, err
 	}
-	members := []uuid.UUID{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT scim_user_id FROM %q WHERE group_id = ?", SCIMGroupMember{}.TableName()),
-		group.ID,
-	).All(&members); err != nil {
-		return nil, change, errors.Wrap(err, "error finding SCIM group members")
+	members, err := FindSCIMGroupMemberIDs(tx, group.ID)
+	if err != nil {
+		return nil, change, err
 	}
 	change.Members = sortedUniqueUUIDs(members)
 	return group, change, nil
 }
 
-func ClearSCIMGroupMembers(tx *storage.Connection, groupID uuid.UUID) ([]uuid.UUID, error) {
-	removed := []uuid.UUID{}
+func FindSCIMGroupMemberIDs(tx *storage.Connection, groupID uuid.UUID) ([]uuid.UUID, error) {
+	members := []uuid.UUID{}
 	if err := tx.RawQuery(
-		fmt.Sprintf("DELETE FROM %q WHERE group_id = ? RETURNING scim_user_id", SCIMGroupMember{}.TableName()),
+		fmt.Sprintf("SELECT scim_user_id FROM %q WHERE group_id = ?", SCIMGroupMember{}.TableName()),
 		groupID,
-	).All(&removed); err != nil {
-		return nil, errors.Wrap(err, "error removing SCIM group members")
+	).All(&members); err != nil {
+		return nil, errors.Wrap(err, "error finding SCIM group members")
 	}
-	return removed, nil
+	return members, nil
 }
 
 func RemoveSCIMUserFromGroups(tx *storage.Connection, scimUserID uuid.UUID) ([]uuid.UUID, error) {
 	groups, members := scimGroupsTable.tableName, SCIMGroupMember{}.TableName()
-	removed := []SCIMGroupMember{}
+	groupIDs := []uuid.UUID{}
 	if err := tx.RawQuery(
-		fmt.Sprintf("DELETE FROM %q WHERE scim_user_id = ? RETURNING group_id, scim_user_id, created_at", members),
+		fmt.Sprintf("SELECT group_id FROM %q WHERE scim_user_id = ? ORDER BY group_id", members),
 		scimUserID,
-	).All(&removed); err != nil {
-		return nil, errors.Wrap(err, "error removing SCIM user from groups")
+	).All(&groupIDs); err != nil {
+		return nil, errors.Wrap(err, "error finding SCIM user groups")
 	}
-	groupIDs := make([]uuid.UUID, len(removed))
-	for i := range removed {
-		groupIDs[i] = removed[i].GroupID
-	}
-	if len(groupIDs) > 0 {
+	for _, id := range groupIDs {
 		if err := tx.RawQuery(
-			fmt.Sprintf("UPDATE %q SET updated_at = clock_timestamp() WHERE id = ANY(?::uuid[])", groups),
-			groupIDs,
+			fmt.Sprintf("UPDATE %q SET updated_at = clock_timestamp() WHERE id = ?", groups),
+			id,
 		).Exec(); err != nil {
 			return nil, errors.Wrap(err, "error updating SCIM groups")
 		}
+	}
+	if err := tx.RawQuery(
+		fmt.Sprintf("DELETE FROM %q WHERE scim_user_id = ?", members),
+		scimUserID,
+	).Exec(); err != nil {
+		return nil, errors.Wrap(err, "error removing SCIM user from groups")
 	}
 	return groupIDs, nil
 }
