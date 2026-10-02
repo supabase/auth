@@ -57,7 +57,7 @@ func (t *SCIMToken) Revoke(tx *storage.Connection) error {
 		return nil
 	}
 	if err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET revoked_at = now() WHERE id = ? RETURNING *", t.TableName()),
+		fmt.Sprintf("UPDATE %q SET revoked_at = now() WHERE id = ? AND revoked_at IS NULL RETURNING *", t.TableName()),
 		t.ID,
 	).First(t); err != nil {
 		return errors.Wrap(err, "error revoking SCIM token")
@@ -106,11 +106,15 @@ func FindActiveSCIMTokensBySSOProvider(tx *storage.Connection, providerID uuid.U
 	return tokens, nil
 }
 
-func LockSCIMTokens(tx *storage.Connection, providerID uuid.UUID) error {
-	if err := tx.RawQuery("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "scim_tokens|"+providerID.String()).Exec(); err != nil {
-		return errors.Wrap(err, "error locking SCIM tokens")
+func RevokeActiveSCIMTokens(tx *storage.Connection, providerID uuid.UUID) ([]SCIMToken, error) {
+	tokens := []SCIMToken{}
+	if err := tx.RawQuery(
+		fmt.Sprintf("UPDATE %q SET revoked_at = now() WHERE sso_provider_id = ? AND "+activeSCIMTokenClause+" RETURNING *", SCIMToken{}.TableName()),
+		providerID,
+	).All(&tokens); err != nil {
+		return nil, errors.Wrap(err, "error revoking SCIM tokens")
 	}
-	return nil
+	return tokens, nil
 }
 
 func FindSCIMTokenByPrefix(tx *storage.Connection, providerID uuid.UUID, prefix string) (*SCIMToken, error) {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 	"time"
@@ -104,9 +105,6 @@ func (a *API) adminSCIMTokensCreate(w http.ResponseWriter, r *http.Request) erro
 		plaintext string
 	)
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		if err := models.LockSCIMTokens(tx, provider.ID); err != nil {
-			return err
-		}
 		var err error
 		if token, plaintext, err = models.CreateSCIMToken(tx, provider, params.ExpiresAt); err != nil {
 			return err
@@ -172,9 +170,6 @@ func (a *API) scimTokenCreateParams(r *http.Request) (*AdminSCIMTokenCreateParam
 }
 
 func (a *API) revokeSCIMToken(tx *storage.Connection, r *http.Request, providerID uuid.UUID, prefix string) (*models.SCIMToken, error) {
-	if err := models.LockSCIMTokens(tx, providerID); err != nil {
-		return nil, err
-	}
 	token, err := models.FindSCIMTokenByPrefix(tx, providerID, prefix)
 	if err != nil {
 		return nil, err
@@ -183,6 +178,9 @@ func (a *API) revokeSCIMToken(tx *storage.Connection, r *http.Request, providerI
 		return token, nil
 	}
 	if err := token.Revoke(tx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return models.FindSCIMTokenByPrefix(tx, providerID, prefix)
+		}
 		return nil, err
 	}
 	return token, a.auditSCIM(tx, r, scimTokenAudit(getAdminUser(r.Context()), models.SCIMTokenRevokedAction, token))
@@ -240,10 +238,7 @@ func (a *API) deprovisionSCIM(tx *storage.Connection, r *http.Request, provider 
 }
 
 func (a *API) revokeActiveSCIMTokens(tx *storage.Connection, r *http.Request, actor *models.User, providerID uuid.UUID) ([]string, error) {
-	if err := models.LockSCIMTokens(tx, providerID); err != nil {
-		return nil, err
-	}
-	tokens, err := models.FindActiveSCIMTokensBySSOProvider(tx, providerID)
+	tokens, err := models.RevokeActiveSCIMTokens(tx, providerID)
 	if err != nil {
 		return nil, err
 	}
@@ -251,9 +246,6 @@ func (a *API) revokeActiveSCIMTokens(tx *storage.Connection, r *http.Request, ac
 	events := make([]scimAuditEvent, len(tokens))
 	for i := range tokens {
 		prefixes[i] = tokens[i].Prefix
-		if err := tokens[i].Revoke(tx); err != nil {
-			return nil, err
-		}
 		events[i] = scimTokenAudit(actor, models.SCIMTokenRevokedAction, &tokens[i])
 	}
 	return prefixes, a.auditSCIMEvents(tx, r, events)
