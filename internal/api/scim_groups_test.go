@@ -698,8 +698,8 @@ func (ts *SCIMTestSuite) TestConcurrentMemberAddsWithoutIfMatchLoseNoUpdates() {
 			ts.A.ID, prefix, n,
 		).All(&rows))
 		ids := make([]uuid.UUID, len(rows))
-		for i := range rows {
-			ids[i] = rows[i].ID
+		for i, row := range rows {
+			ids[i] = row.ID
 		}
 		return ids
 	}
@@ -755,10 +755,10 @@ func (ts *SCIMTestSuite) TestConcurrentGroupWrites() {
 		displayName        string
 		members            []string
 	}{
-		{"patch merges a concurrent member add", http.MethodPatch, addCarol, false, addBob, http.StatusNoContent, "Engineering", []string{alice, bob, carol}},
-		{"patch with If-Match rejects a concurrent member add", http.MethodPatch, addCarol, true, addBob, http.StatusPreconditionFailed, "Engineering", []string{alice, bob}},
-		{"patch rejects a concurrent rename", http.MethodPatch, addCarol, false, rename, http.StatusConflict, "Platform", []string{alice}},
-		{"put rejects a concurrent member add", http.MethodPut, groupWith("Engineering", "g-1", alice, carol), false, addBob, http.StatusConflict, "Engineering", []string{alice, bob}},
+		{name: "patch merges a concurrent member add", method: http.MethodPatch, body: addCarol, finish: addBob, code: http.StatusNoContent, displayName: "Engineering", members: []string{alice, bob, carol}},
+		{name: "patch with If-Match rejects a concurrent member add", method: http.MethodPatch, body: addCarol, ifMatch: true, finish: addBob, code: http.StatusPreconditionFailed, displayName: "Engineering", members: []string{alice, bob}},
+		{name: "patch rejects a concurrent rename", method: http.MethodPatch, body: addCarol, finish: rename, code: http.StatusConflict, displayName: "Platform", members: []string{alice}},
+		{name: "put rejects a concurrent member add", method: http.MethodPut, body: groupWith("Engineering", "g-1", alice, carol), finish: addBob, code: http.StatusConflict, displayName: "Engineering", members: []string{alice, bob}},
 	} {
 		id := ts.createGroup(ts.TokenA, groupWith("Engineering", "g-1", alice))
 		var headers []string

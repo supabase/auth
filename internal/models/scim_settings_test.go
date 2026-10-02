@@ -39,12 +39,12 @@ func (ts *SCIMSettingsTestSuite) TestTransitions() {
 		changed bool
 		enabled bool
 	}{
-		{"disable never enabled", DisableSCIM, false, false},
-		{"enable", EnableSCIM, true, true},
-		{"enable again", EnableSCIM, false, true},
-		{"disable", DisableSCIM, true, false},
-		{"disable again", DisableSCIM, false, false},
-		{"re-enable", EnableSCIM, true, true},
+		{name: "disable never enabled", apply: DisableSCIM, changed: false, enabled: false},
+		{name: "enable", apply: EnableSCIM, changed: true, enabled: true},
+		{name: "enable again", apply: EnableSCIM, changed: false, enabled: true},
+		{name: "disable", apply: DisableSCIM, changed: true, enabled: false},
+		{name: "disable again", apply: DisableSCIM, changed: false, enabled: false},
+		{name: "re-enable", apply: EnableSCIM, changed: true, enabled: true},
 	} {
 		changed, err := step.apply(ts.db, ts.provider.ID)
 		require.NoError(ts.T(), err, step.name)
@@ -69,7 +69,7 @@ func (ts *SCIMSettingsTestSuite) TestConcurrentEnableChangesOnce() {
 	wg.Wait()
 	close(results)
 
-	changes := 0
+	var changes int
 	for r := range results {
 		require.NoError(ts.T(), r.err)
 		if r.changed {

@@ -125,16 +125,16 @@ func (s *scimGroupBench) seedUsers(b *testing.B, prefix string, n int) []uuid.UU
 		s.provider, prefix, n,
 	).All(&rows))
 	ids := make([]uuid.UUID, len(rows))
-	for i := range rows {
-		ids[i] = rows[i].ID
+	for i, row := range rows {
+		ids[i] = row.ID
 	}
 	return ids
 }
 
 func (s *scimGroupBench) seedGroup(b *testing.B, members []uuid.UUID) string {
-	row := struct {
+	var row struct {
 		ID uuid.UUID `db:"id"`
-	}{}
+	}
 	require.NoError(b, s.api.db.RawQuery(
 		`INSERT INTO scim_groups (id, sso_provider_id, resource) VALUES (gen_random_uuid(), ?, '{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"Engineering"}'::jsonb) RETURNING id`,
 		s.provider,

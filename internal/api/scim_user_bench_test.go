@@ -69,7 +69,7 @@ func BenchmarkSCIMUser(b *testing.B) {
 }
 
 func userBody(id, title string) string {
-	idField := ""
+	var idField string
 	if id != "" {
 		idField = `"id":"` + id + `",`
 	}

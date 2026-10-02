@@ -76,9 +76,7 @@ func TestSCIM(t *testing.T) {
 
 		require.True(t, api.config.SSO.SCIM.Enabled)
 
-		provider := createSCIMEnabledProvider(t, api.db)
-		_, token, err := models.CreateSCIMToken(api.db, provider, nil)
-		require.NoError(t, err)
+		provider, token := createSSOProviderWithSCIMToken(t, api.db)
 
 		t.Run(scimServiceProviderConfigPath, func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, scimServiceProviderConfigPath, nil)

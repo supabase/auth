@@ -909,8 +909,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteSoftDeletesSCIMUser() {
 			require.NoError(ts.T(), err)
 			require.True(ts.T(), updated.UpdatedAt.After(group.UpdatedAt))
 
-			deleted := []models.AuditLogEntry{}
-			require.NoError(ts.T(), ts.API.db.Q().Where("payload->>'action' = ? AND payload->'traits'->>'scim_user_id' = ?", models.SCIMUserDeletedAction, scimUser.ID.String()).All(&deleted))
+			deleted := queryAuditEntries(ts.T(), ts.API.db, "payload->>'action' = ? AND payload->'traits'->>'scim_user_id' = ?", models.SCIMUserDeletedAction, scimUser.ID.String())
 			require.Len(ts.T(), deleted, 1)
 			traits := deleted[0].Payload["traits"].(map[string]any)
 			require.Equal(ts.T(), "supabase_admin", deleted[0].Payload["actor_username"])
@@ -1243,8 +1242,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 }
 
 func (ts *AdminTestSuite) createLinkedSCIMUser(email string) (*models.SCIMUser, *models.User) {
-	provider := &models.SSOProvider{}
-	require.NoError(ts.T(), ts.API.db.Create(provider))
+	provider := createSSOProvider(ts.T(), ts.API.db)
 
 	u, err := models.NewUser("", email, "", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err)

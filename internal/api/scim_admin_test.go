@@ -122,7 +122,7 @@ func (ts *SCIMTokensTestSuite) TestList() {
 	first := ts.create(ts.Provider, map[string]any{})
 	second := ts.create(ts.Provider, map[string]any{})
 	ts.create(ts.createProvider(), map[string]any{})
-	require.Equal(ts.T(), http.StatusOK, ts.request(http.MethodDelete, ts.tokensPath(ts.Provider)+"/"+second.Prefix, nil).Code)
+	ts.revoke(second.Prefix)
 
 	w := ts.request(http.MethodGet, ts.tokensPath(ts.Provider), nil)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
@@ -179,9 +179,9 @@ func (ts *SCIMTokensTestSuite) TestRevokeUnknownPrefix() {
 func (ts *SCIMTokensTestSuite) TestRequiresAdmin() {
 	created := ts.create(ts.Provider, nil)
 	for _, route := range []struct{ method, path string }{
-		{http.MethodGet, "/admin/sso/providers/" + ts.Provider.ID.String() + "/scim"},
-		{http.MethodPost, "/admin/sso/providers/" + ts.Provider.ID.String() + "/scim"},
-		{http.MethodDelete, "/admin/sso/providers/" + ts.Provider.ID.String() + "/scim"},
+		{http.MethodGet, ts.scimPath(ts.Provider)},
+		{http.MethodPost, ts.scimPath(ts.Provider)},
+		{http.MethodDelete, ts.scimPath(ts.Provider)},
 		{http.MethodGet, ts.tokensPath(ts.Provider)},
 		{http.MethodPost, ts.tokensPath(ts.Provider)},
 		{http.MethodDelete, ts.tokensPath(ts.Provider) + "/" + created.Prefix},
@@ -201,10 +201,7 @@ func (ts *SCIMTokensTestSuite) TestSCIMRejectsAdminCredentials() {
 		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, &AccessTokenClaims{Role: role}).SignedString([]byte(ts.Config.JWT.Secret))
 		require.NoError(ts.T(), err)
 
-		r := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
-		r.Header.Set("Authorization", "Bearer "+token)
-		w := httptest.NewRecorder()
-		ts.API.handler.ServeHTTP(w, r)
+		w := ts.scimRequest(token)
 
 		require.Equal(ts.T(), http.StatusUnauthorized, w.Code, role)
 	}
@@ -523,7 +520,7 @@ func (ts *SCIMTokensTestSuite) tokenEvents() []scimTokenEvent {
 		traits := entry.Payload["traits"].(map[string]any)
 		require.Equal(ts.T(), ts.Provider.ID.String(), traits["sso_provider_id"])
 		require.Equal(ts.T(), "success", traits["outcome"])
-		prefix := ""
+		var prefix string
 		if prefixes, ok := traits["token_prefixes"].([]any); ok && len(prefixes) > 0 {
 			require.Len(ts.T(), prefixes, 1)
 			prefix = prefixes[0].(string)

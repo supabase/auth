@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -124,8 +125,7 @@ func (ts *SCIMTestSuite) TestPasswordUserWithSameEmailIsNeverLinked() {
 	require.NotEqual(ts.T(), password.ID, user.ID)
 	require.True(ts.T(), user.IsSSOUser)
 	require.Equal(ts.T(), http.StatusUnprocessableEntity, ts.passkeyRegistrationOptions(user))
-	reloaded, err := models.FindUserByID(ts.API.db, password.ID)
-	require.NoError(ts.T(), err)
+	reloaded := ts.reloadUser(password.ID)
 	require.False(ts.T(), reloaded.IsSSOUser)
 	require.Empty(ts.T(), ts.identities(reloaded))
 }
@@ -700,8 +700,7 @@ func (ts *SCIMTestSuite) TestDeleteLogsOutWithoutBanning() {
 	w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Users/"+id, "")
 	require.Equal(ts.T(), http.StatusNoContent, w.Code)
 
-	user, err := models.FindUserByID(ts.API.db, user.ID)
-	require.NoError(ts.T(), err)
+	user = ts.reloadUser(user.ID)
 	require.False(ts.T(), user.IsBanned())
 	require.Zero(ts.T(), ts.sessions(user))
 	require.Equal(ts.T(), http.StatusBadRequest, ts.refresh(refreshToken))
@@ -911,10 +910,9 @@ func (ts *SCIMTestSuite) TestRenameSkippedWhenIdentityMissing() {
 	require.Empty(ts.T(), ts.identities(user))
 	require.Len(ts.T(), entries, 1)
 	require.Equal(ts.T(), string(models.SCIMUserUpdatedAction), entries[0].Payload["action"])
-	warned := false
-	for _, entry := range hook.AllEntries() {
-		warned = warned || entry.Level == logrus.WarnLevel && strings.Contains(entry.Message, "identity not found")
-	}
+	warned := slices.ContainsFunc(hook.AllEntries(), func(entry *logrus.Entry) bool {
+		return entry.Level == logrus.WarnLevel && strings.Contains(entry.Message, "identity not found")
+	})
 	require.True(ts.T(), warned)
 
 	signedIn, err := ts.samlLogin(ts.A, "alice2@example.com", "alice@example.com")

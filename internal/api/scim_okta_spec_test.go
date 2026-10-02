@@ -207,8 +207,7 @@ func (ts *SCIMTestSuite) TestOktaUserLifecycleReplay() {
 	var stored models.SCIMUser
 	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&stored))
 	require.NotContains(ts.T(), string(stored.Resource), "password")
-	user, err := models.FindUserByID(ts.API.db, *stored.UserID)
-	require.NoError(ts.T(), err)
+	user := ts.reloadUser(*stored.UserID)
 	require.False(ts.T(), user.HasPassword())
 
 	actions := []string{}
