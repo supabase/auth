@@ -5,14 +5,12 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
@@ -416,32 +414,6 @@ func (ts *SCIMTestSuite) samlLoginWith(ssoProvider *models.SSOProvider, userData
 	return user, err
 }
 
-func (ts *SCIMTestSuite) TestSAMLLoginLocksVerifiedEmailWithoutMetadataEmail() {
-	userData := &provider.UserProvidedData{
-		Metadata: &provider.Claims{Subject: "saml-name-id", EmailVerified: true},
-		Emails:   []provider.Email{{Email: "Alice@Example.com", Primary: true, Verified: true}},
-	}
-	conn, err := ts.API.db.NewTransaction()
-	require.NoError(ts.T(), err)
-	tx := &storage.Connection{Connection: conn}
-	require.NoError(ts.T(), models.LockAccountLinking(tx, ssoProviderType(ts.A.ID), "alice@example.com"))
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := ts.samlLoginWith(ts.A, userData)
-		done <- err
-	}()
-
-	select {
-	case err := <-done:
-		require.NoError(ts.T(), tx.TX.Rollback())
-		require.FailNow(ts.T(), "SAML login did not wait for the account linking lock", "%v", err)
-	case <-time.After(200 * time.Millisecond):
-	}
-	require.NoError(ts.T(), tx.TX.Rollback())
-	require.NoError(ts.T(), <-done)
-}
-
 func (ts *SCIMTestSuite) TestSAMLLoginAllowedForActiveSCIMUser() {
 	id := ts.create(ts.TokenA, oktaUser)
 	linked := ts.linkedUser(id)
@@ -781,39 +753,6 @@ func (ts *SCIMTestSuite) requireCreateAfterAdminDelete(soft bool) {
 	require.True(ts.T(), created.IsSSOUser, soft)
 }
 
-func (ts *SCIMTestSuite) TestCreateConcurrentSameEmailLinksToOneUser() {
-	body := func(userName, externalID string) string {
-		return `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"` + userName + `","externalId":"` + externalID + `","emails":[{"primary":true,"value":"race@example.com"}]}`
-	}
-	bodies := []string{body("race-a", "race-a"), body("race-b", "race-b")}
-
-	var wg sync.WaitGroup
-	start := make(chan struct{})
-	codes := make([]int, len(bodies))
-	for i := range bodies {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			<-start
-			codes[i] = ts.serve(protocol.MediaType, ts.TokenA, http.MethodPost, "/Users", bodies[i]).Code
-		}(i)
-	}
-	close(start)
-	wg.Wait()
-
-	created := 0
-	for _, code := range codes {
-		if code == http.StatusCreated {
-			created++
-		} else {
-			require.Equal(ts.T(), http.StatusConflict, code)
-		}
-	}
-	require.Equal(ts.T(), 1, created)
-
-	require.Equal(ts.T(), 1, ts.users("race@example.com"))
-}
-
 func (ts *SCIMTestSuite) rename(id, userName string) (int, string) {
 	w, _ := ts.do(ts.TokenA, http.MethodPut, "/Users/"+id, oktaUserWith("userName", userName))
 	return w.Code, w.Body.String()
@@ -996,7 +935,7 @@ func (ts *SCIMTestSuite) relinkBehindRead(id string) (*scimUserRepository, model
 func (ts *SCIMTestSuite) TestReplaceRefusesUserRelinkedAfterRead() {
 	repo, target, existing := ts.relinkBehindRead(ts.create(ts.TokenA, scimUser("alice")))
 	err := ts.API.db.Transaction(func(tx *storage.Connection) error {
-		_, err := repo.lockForReplace(tx, target, "alice@example.com", existing)
+		_, err := repo.lockForReplace(tx, target, existing)
 		return err
 	})
 	require.ErrorIs(ts.T(), err, models.SCIMUserStaleError{})

@@ -107,7 +107,7 @@ func FindActiveSCIMTokensBySSOProvider(tx *storage.Connection, providerID uuid.U
 }
 
 func LockSCIMTokens(tx *storage.Connection, providerID uuid.UUID) error {
-	if err := advisoryXactLock(tx, "scim_tokens|"+providerID.String()); err != nil {
+	if err := tx.RawQuery("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "scim_tokens|"+providerID.String()).Exec(); err != nil {
 		return errors.Wrap(err, "error locking SCIM tokens")
 	}
 	return nil

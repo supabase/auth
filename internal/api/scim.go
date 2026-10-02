@@ -768,9 +768,6 @@ func (s *scimUserRepository) Delete(ctx context.Context, user *core.User) error 
 }
 
 func (s *scimUserRepository) create(tx *storage.Connection, change scimUserChange) (*models.SCIMUser, *models.User, models.AuditAction, error) {
-	if err := models.LockAccountLinking(tx, scimProviderType(change.target.ProviderID), scimUserEmail(change.user)); err != nil {
-		return nil, nil, "", err
-	}
 	row, err := models.CreateSCIMUser(tx, change.target.ProviderID, change.resource)
 	if err != nil {
 		return nil, nil, "", err
@@ -780,7 +777,7 @@ func (s *scimUserRepository) create(tx *storage.Connection, change scimUserChang
 }
 
 func (s *scimUserRepository) replace(tx *storage.Connection, change scimUserChange, existing *models.SCIMUser) (*models.SCIMUser, *models.User, models.AuditAction, error) {
-	old, err := s.lockForReplace(tx, change.target, scimUserEmail(change.user), existing)
+	old, err := s.lockForReplace(tx, change.target, existing)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -906,10 +903,7 @@ func (s *scimUserRepository) delete(tx *storage.Connection, r *http.Request, tar
 	return s.api.auditSCIMEvents(tx, r, events)
 }
 
-func (s *scimUserRepository) lockForReplace(tx *storage.Connection, target models.SCIMTarget, email string, existing *models.SCIMUser) (*models.SCIMUser, error) {
-	if err := models.LockAccountLinking(tx, scimProviderType(target.ProviderID), email); err != nil {
-		return nil, err
-	}
+func (s *scimUserRepository) lockForReplace(tx *storage.Connection, target models.SCIMTarget, existing *models.SCIMUser) (*models.SCIMUser, error) {
 	old, err := models.FindSCIMUserForUpdate(tx, target.ProviderID, target.ID)
 	if err != nil {
 		return nil, err

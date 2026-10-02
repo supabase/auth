@@ -317,12 +317,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return 0, nil, apierrors.NewInternalServerError("Invalid SSO provider id in provider type").WithInternalError(perr)
 	}
 
-	if isSCIMProvider {
-		if terr := models.LockAccountLinkingEmails(tx, providerType, models.VerifiedEmails(config, userData.Emails)); terr != nil {
-			return 0, nil, terr
-		}
-	}
-
 	decision, terr := models.DetermineAccountLinking(tx, config, userData.Emails, aud, providerType, userData.Metadata.Subject)
 	if terr != nil {
 		return 0, nil, terr
