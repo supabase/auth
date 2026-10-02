@@ -81,10 +81,6 @@ func (i *Identity) IsForSSOProvider() bool {
 	return strings.HasPrefix(i.Provider, "sso:")
 }
 
-func (i *Identity) SSOProviderID() (uuid.UUID, bool, error) {
-	return SSOProviderID(i.Provider)
-}
-
 func SSOProviderID(provider string) (uuid.UUID, bool, error) {
 	id, ok := strings.CutPrefix(provider, "sso:")
 	if !ok {

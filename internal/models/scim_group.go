@@ -57,7 +57,7 @@ var scimGroupsTable = scimTable{
 	columns:    scimGroupColumns,
 	nameColumn: "display_name",
 	notFound:   SCIMGroupNotFoundError{},
-	stale:      SCIMGroupStaleError{},
+	stale:      SCIMStaleError{},
 	conflict:   SCIMGroupConflictError{},
 }
 
@@ -124,13 +124,12 @@ func FindSCIMMembershipsByUser(tx *storage.Connection, providerID uuid.UUID, sci
 }
 
 func ReplaceSCIMGroupMembers(tx *storage.Connection, group *SCIMGroup, scimUserIDs []uuid.UUID) (*SCIMGroup, SCIMGroupMemberChange, error) {
-	change := SCIMGroupMemberChange{Members: sortedUniqueUUIDs(scimUserIDs)}
-	added, removed, err := diffSCIMGroupMembers(tx, group.ID, change.Members)
+	members := sortedUniqueUUIDs(scimUserIDs)
+	added, removed, err := diffSCIMGroupMembers(tx, group.ID, members)
 	if err != nil {
-		return nil, change, err
+		return nil, SCIMGroupMemberChange{Members: members}, err
 	}
-	change.Added, change.Removed = added, removed
-	return applySCIMGroupMemberChange(tx, group, change)
+	return applySCIMGroupMemberChange(tx, group, SCIMGroupMemberChange{Members: members, Added: added, Removed: removed})
 }
 
 func ReplaceSCIMGroupMembersFrom(tx *storage.Connection, group *SCIMGroup, current, scimUserIDs []uuid.UUID) (*SCIMGroup, SCIMGroupMemberChange, error) {
@@ -186,14 +185,12 @@ func RemoveSCIMUserFromGroups(tx *storage.Connection, scimUserID uuid.UUID) erro
 	).Exec(), "error removing SCIM user from groups")
 }
 
-func applySCIMGroupMemberChange(tx *storage.Connection, group *SCIMGroup, planned SCIMGroupMemberChange) (*SCIMGroup, SCIMGroupMemberChange, error) {
-	change := SCIMGroupMemberChange{Members: planned.Members}
-	added, removed := planned.Added, planned.Removed
+func applySCIMGroupMemberChange(tx *storage.Connection, group *SCIMGroup, change SCIMGroupMemberChange) (*SCIMGroup, SCIMGroupMemberChange, error) {
 	var err error
-	if change.Removed, err = removeSCIMGroupMembers(tx, group.ID, removed); err != nil {
+	if change.Removed, err = removeSCIMGroupMembers(tx, group.ID, change.Removed); err != nil {
 		return nil, change, err
 	}
-	if change.Added, err = addSCIMGroupMembers(tx, group, added); err != nil {
+	if change.Added, err = addSCIMGroupMembers(tx, group, change.Added); err != nil {
 		return nil, change, err
 	}
 	if !change.Changed() {
@@ -203,18 +200,18 @@ func applySCIMGroupMemberChange(tx *storage.Connection, group *SCIMGroup, planne
 	return group, change, err
 }
 
-func findLiveSCIMUserIDs(tx *storage.Connection, providerID uuid.UUID, ids []uuid.UUID) ([]uuid.UUID, error) {
+func requireLiveSCIMUsers(tx *storage.Connection, providerID uuid.UUID, ids []uuid.UUID) error {
 	found := []uuid.UUID{}
 	if err := tx.RawQuery(
 		fmt.Sprintf("SELECT id FROM %q WHERE id = ANY(?::uuid[]) AND sso_provider_id = ? AND deleted_at IS NULL", scimUsersTable.tableName),
 		ids, providerID,
 	).All(&found); err != nil {
-		return nil, errors.Wrap(err, "error finding SCIM group members")
+		return errors.Wrap(err, "error finding SCIM group members")
 	}
 	if missing := differenceUUIDs(ids, found); len(missing) > 0 {
-		return nil, SCIMGroupMemberNotFoundError{IDs: missing}
+		return SCIMGroupMemberNotFoundError{IDs: missing}
 	}
-	return found, nil
+	return nil
 }
 
 func touchSCIMGroup(tx *storage.Connection, group *SCIMGroup) (*SCIMGroup, error) {
@@ -270,13 +267,12 @@ func addSCIMGroupMembers(tx *storage.Connection, group *SCIMGroup, ids []uuid.UU
 	if len(ids) == 0 {
 		return added, nil
 	}
-	live, err := findLiveSCIMUserIDs(tx, group.SSOProviderID, ids)
-	if err != nil {
+	if err := requireLiveSCIMUsers(tx, group.SSOProviderID, ids); err != nil {
 		return nil, err
 	}
 	if err := tx.RawQuery(
 		fmt.Sprintf("INSERT INTO %q (group_id, scim_user_id) SELECT ?, unnest(?::uuid[]) ON CONFLICT DO NOTHING RETURNING scim_user_id", SCIMGroupMember{}.TableName()),
-		group.ID, uuidArray(live),
+		group.ID, uuidArray(ids),
 	).All(&added); err != nil {
 		return nil, errors.Wrap(err, "error adding SCIM group members")
 	}

@@ -51,10 +51,11 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	if identityToBeDeleted == nil {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityNotFound, "Identity doesn't exist")
 	}
+
 	provider := identityToBeDeleted.Provider
 	recipientEmail := user.GetEmail()
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if providerID, ok, perr := identityToBeDeleted.SSOProviderID(); ok && perr == nil && a.config.SSO.SCIM.Enabled {
+		if providerID, ok, perr := models.SSOProviderID(provider); ok && perr == nil && a.config.SSO.SCIM.Enabled {
 			managed, terr := models.IsSCIMManaged(tx, providerID, user.ID)
 			if terr != nil {
 				return apierrors.NewInternalServerError("Database error finding SCIM user").WithInternalError(terr)

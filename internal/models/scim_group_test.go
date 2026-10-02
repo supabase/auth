@@ -101,7 +101,7 @@ func (ts *SCIMGroupTestSuite) TestReplaceChecksVersion() {
 	require.Equal(ts.T(), "platform", replaced.DisplayName)
 
 	_, _, err = ReplaceSCIMGroupIfChanged(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID, UpdatedAt: &group.UpdatedAt}, []byte(`{"displayName":"Stale"}`))
-	require.ErrorIs(ts.T(), err, SCIMGroupStaleError{})
+	require.ErrorIs(ts.T(), err, SCIMStaleError{})
 
 	_, _, err = ReplaceSCIMGroupIfChanged(ts.db, SCIMTarget{ProviderID: ts.createProvider().ID, ID: group.ID}, []byte(`{"displayName":"Other"}`))
 	require.ErrorIs(ts.T(), err, SCIMGroupNotFoundError{})

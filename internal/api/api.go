@@ -482,7 +482,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Use(api.requireScimServerEnabled)
 			r.Use(api.withSCIMRequest)
 			r.UseBypass(api.limitSCIMByIP(api.limiterOpts.SCIMIP))
-			r.Handle("/*", api.scim)
+			r.chi.Handle("/*", api.scim)
 		})
 	})
 

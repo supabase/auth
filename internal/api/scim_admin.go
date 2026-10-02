@@ -162,9 +162,11 @@ func (a *API) sendSCIMStatus(w http.ResponseWriter, db *storage.Connection, prov
 	if err != nil {
 		return apierrors.NewInternalServerError("Error finding SCIM tokens").WithInternalError(err)
 	}
-	enabled, err := a.isSCIMEnabled(db, provider)
-	if err != nil {
-		return apierrors.NewInternalServerError("Error finding SCIM settings").WithInternalError(err)
+	enabled := false
+	if a.config.SSO.SCIM.Enabled && provider.IsEnabled() {
+		if enabled, err = models.IsSCIMEnabled(db, provider.ID); err != nil {
+			return apierrors.NewInternalServerError("Error finding SCIM settings").WithInternalError(err)
+		}
 	}
 
 	return sendJSON(w, http.StatusOK, &AdminSCIMStatusResponse{
@@ -172,13 +174,6 @@ func (a *API) sendSCIMStatus(w http.ResponseWriter, db *storage.Connection, prov
 		BaseURL: scimBaseURL(a.config),
 		Tokens:  tokens,
 	})
-}
-
-func (a *API) isSCIMEnabled(db *storage.Connection, provider *models.SSOProvider) (bool, error) {
-	if !a.config.SSO.SCIM.Enabled || !provider.IsEnabled() {
-		return false, nil
-	}
-	return models.IsSCIMEnabled(db, provider.ID)
 }
 
 func (a *API) deprovisionSCIM(tx *storage.Connection, r *http.Request, provider *models.SSOProvider) error {

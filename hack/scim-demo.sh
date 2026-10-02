@@ -53,12 +53,12 @@ section() {
 }
 
 user() {
-  jq -n --arg u "$1" --arg g "$2" --arg f "$3" --argjson active "${4:-true}" '{
+  jq -n --arg u "$1" --arg g "$2" --arg f "$3" '{
     schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"],
     userName: $u,
     name: {givenName: $g, familyName: $f},
     emails: [{value: $u, primary: true}],
-    active: $active
+    active: true
   }'
 }
 

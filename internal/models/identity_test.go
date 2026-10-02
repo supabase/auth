@@ -124,11 +124,6 @@ func TestSSOProviderID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, id, providerID)
 
-	providerID, ok, err = (&Identity{Provider: "sso:" + id.String()}).SSOProviderID()
-	require.True(t, ok)
-	require.NoError(t, err)
-	require.Equal(t, id, providerID)
-
 	_, ok, err = SSOProviderID("sso:not-a-uuid")
 	require.True(t, ok)
 	require.Error(t, err)

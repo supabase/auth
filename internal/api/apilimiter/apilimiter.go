@@ -178,10 +178,7 @@ type Limiter struct {
 
 	// GOTRUE_RATE_LIMIT_SCIM
 	//   -> RateLimitScim
-	SCIM *limiter.Limiter
-
-	// GOTRUE_RATE_LIMIT_SCIM
-	//   -> RateLimitScim
+	SCIM   *limiter.Limiter
 	SCIMIP *limiter.Limiter
 
 	// GOTRUE_RATE_LIMIT_TOKEN_REFRESH

@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -51,7 +52,7 @@ var scimUsersTable = scimTable{
 	nameColumn: "user_name",
 	liveClause: "deleted_at IS NULL",
 	notFound:   SCIMUserNotFoundError{},
-	stale:      SCIMUserStaleError{},
+	stale:      SCIMStaleError{},
 	conflict:   SCIMUserConflictError{},
 }
 
@@ -136,40 +137,11 @@ func IsSCIMManaged(tx *storage.Connection, providerID, userID uuid.UUID) (bool, 
 }
 
 func IsSCIMUserDeprovisionedByProvider(tx *storage.Connection, providerID, userID uuid.UUID) (bool, error) {
-	result := struct {
-		AnyRow bool `db:"any_row"`
-		Live   bool `db:"live"`
-	}{}
-	if err := tx.RawQuery(
-		fmt.Sprintf(
-			"SELECT EXISTS(SELECT 1 FROM %[1]q WHERE sso_provider_id = ? AND user_id = ?) AS any_row, "+
-				"EXISTS(SELECT 1 FROM %[1]q WHERE sso_provider_id = ? AND user_id = ? AND deleted_at IS NULL AND active) AS live",
-			scimUsersTable.tableName,
-		),
-		providerID, userID, providerID, userID,
-	).First(&result); err != nil {
-		return false, errors.Wrap(err, "error finding SCIM user")
-	}
-	return result.AnyRow && !result.Live, nil
+	return isSCIMUserDeprovisioned(tx, "sso_provider_id = ? AND user_id = ?", providerID, userID)
 }
 
 func IsSCIMUserDeprovisioned(tx *storage.Connection, userID uuid.UUID) (bool, error) {
-	rows := []struct {
-		Active    bool       `db:"active"`
-		DeletedAt *time.Time `db:"deleted_at"`
-	}{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT active, deleted_at FROM %q WHERE user_id = ?", scimUsersTable.tableName),
-		userID,
-	).All(&rows); err != nil {
-		return false, errors.Wrap(err, "error finding SCIM users")
-	}
-	for _, row := range rows {
-		if row.DeletedAt == nil && row.Active {
-			return false, nil
-		}
-	}
-	return len(rows) > 0, nil
+	return isSCIMUserDeprovisioned(tx, "user_id = ?", userID)
 }
 
 func RenameSCIMIdentity(tx *storage.Connection, rename SCIMIdentityRename) error {
@@ -225,4 +197,22 @@ func ChangeSCIMIdentityEmail(tx *storage.Connection, change SCIMIdentityEmailCha
 		return errors.Wrap(err, "error changing SCIM identity email")
 	}
 	return nil
+}
+
+func isSCIMUserDeprovisioned(tx *storage.Connection, where string, args ...any) (bool, error) {
+	result := struct {
+		AnyRow bool `db:"any_row"`
+		Live   bool `db:"live"`
+	}{}
+	if err := tx.RawQuery(
+		fmt.Sprintf(
+			"SELECT EXISTS(SELECT 1 FROM %[1]q WHERE %[2]s) AS any_row, "+
+				"EXISTS(SELECT 1 FROM %[1]q WHERE %[2]s AND deleted_at IS NULL AND active) AS live",
+			scimUsersTable.tableName, where,
+		),
+		append(slices.Clone(args), args...)...,
+	).First(&result); err != nil {
+		return false, errors.Wrap(err, "error finding SCIM user")
+	}
+	return result.AnyRow && !result.Live, nil
 }

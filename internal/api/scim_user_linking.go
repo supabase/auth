@@ -15,13 +15,9 @@ import (
 )
 
 func (s *scimUserRepository) provisionAuthUser(tx *storage.Connection, row *models.SCIMUser, user *core.User) (*models.User, error) {
-	linked, isNew, err := s.linkAuthUser(tx, row, user)
+	linked, created, err := s.linkAuthUser(tx, row, user)
 	if err != nil {
 		return nil, err
-	}
-	var created *models.User
-	if isNew {
-		created = linked
 	}
 	if !row.Active {
 		return created, models.Logout(tx, linked.ID)
@@ -29,32 +25,32 @@ func (s *scimUserRepository) provisionAuthUser(tx *storage.Connection, row *mode
 	return created, nil
 }
 
-func (s *scimUserRepository) linkAuthUser(tx *storage.Connection, row *models.SCIMUser, user *core.User) (*models.User, bool, error) {
+func (s *scimUserRepository) linkAuthUser(tx *storage.Connection, row *models.SCIMUser, user *core.User) (linked, created *models.User, err error) {
 	providerType := scimProviderType(row.SSOProviderID)
 	decision, err := s.decideAccountLinking(tx, providerType, user)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 
 	if decision.Decision == models.CreateAccount {
 		linked, err := s.createAuthUser(tx, providerType, decision, user)
 		if err != nil {
-			return nil, false, err
+			return nil, nil, err
 		}
-		return linked, true, models.LinkNewSCIMUser(tx, row, linked.ID)
+		return linked, linked, models.LinkNewSCIMUser(tx, row, linked.ID)
 	}
-	linked, err := s.existingAuthUser(tx, providerType, decision, user)
+	linked, err = s.existingAuthUser(tx, providerType, decision, user)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
-	return linked, false, models.LinkSCIMUser(tx, row, linked.ID)
+	return linked, nil, models.LinkSCIMUser(tx, row, linked.ID)
 }
 
 func (s *scimUserRepository) existingAuthUser(tx *storage.Connection, providerType string, decision models.AccountLinkingResult, user *core.User) (*models.User, error) {
 	switch decision.Decision {
 	case models.AccountExists, models.LinkAccount:
-		if err := scimRequireSSOUser(decision.User); err != nil {
-			return nil, err
+		if !decision.User.IsSSOUser {
+			return nil, scimerrors.ErrUniqueness("user is not an SSO user")
 		}
 		if decision.Decision == models.LinkAccount {
 			if err := s.linkIdentity(tx, decision.User, providerType, user); err != nil {
@@ -73,13 +69,6 @@ func (s *scimUserRepository) linkIdentity(tx *storage.Connection, linked *models
 		return err
 	}
 	return linked.UpdateAppMetaDataProviders(tx)
-}
-
-func scimRequireSSOUser(linked *models.User) error {
-	if !linked.IsSSOUser {
-		return scimerrors.ErrUniqueness("user is not an SSO user")
-	}
-	return nil
 }
 
 func (s *scimUserRepository) createAuthUser(tx *storage.Connection, providerType string, decision models.AccountLinkingResult, user *core.User) (*models.User, error) {
