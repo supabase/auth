@@ -428,15 +428,16 @@ func (s *scimGroupRepository) Read(ctx context.Context, id string) (*core.Group,
 		return nil, scimError(err)
 	}
 	projection := protocol.ProjectionFrom(ctx)
-	group, err := scimFirst(s.render(db, target.ProviderID, []models.SCIMGroup{*row}, projection))
+	members, err := s.members(db, target.ProviderID, []models.SCIMGroup{*row}, projection)
+	if err != nil {
+		return nil, err
+	}
+	group, err := s.compose(*row, members[row.ID])
 	if err != nil {
 		return nil, err
 	}
 	if snapshot := scimGroupSnapshotKey.Value(ctx); snapshot != nil && projection.Returns("members") {
-		if snapshot.members, err = scimMemberIDs(group.Members); err != nil {
-			return nil, err
-		}
-		snapshot.version = group.Meta.Version
+		snapshot.members, snapshot.version = members[row.ID], group.Meta.Version
 	}
 	return group, nil
 }
@@ -481,7 +482,7 @@ func (s *scimGroupRepository) save(ctx context.Context, group *core.Group, write
 	if err != nil {
 		return nil, err
 	}
-	resource, err := scimEncode(group)
+	resource, err := scimEncode(&core.Group{Base: group.Base, DisplayName: group.DisplayName})
 	if err != nil {
 		return nil, err
 	}
@@ -508,7 +509,7 @@ func (s *scimGroupRepository) save(ctx context.Context, group *core.Group, write
 	if err != nil {
 		return nil, scimError(err)
 	}
-	return s.compose(*row, scimMembers(scimBaseURL(s.api.config), change.Members))
+	return s.compose(*row, change.Members)
 }
 
 func (s *scimGroupRepository) memberReplacer(ctx context.Context, version string, action models.AuditAction) func(*storage.Connection, *models.SCIMGroup, []uuid.UUID) (*models.SCIMGroup, models.SCIMGroupMemberChange, error) {
@@ -563,8 +564,8 @@ func (s *scimGroupRepository) render(tx *storage.Connection, providerID uuid.UUI
 	return groups, nil
 }
 
-func (s *scimGroupRepository) members(tx *storage.Connection, providerID uuid.UUID, rows []models.SCIMGroup, projection protocol.Projection) (map[uuid.UUID][]core.Member, error) {
-	members := map[uuid.UUID][]core.Member{}
+func (s *scimGroupRepository) members(tx *storage.Connection, providerID uuid.UUID, rows []models.SCIMGroup, projection protocol.Projection) (map[uuid.UUID][]uuid.UUID, error) {
+	members := map[uuid.UUID][]uuid.UUID{}
 	if !projection.Returns("members") {
 		return members, nil
 	}
@@ -576,21 +577,25 @@ func (s *scimGroupRepository) members(tx *storage.Connection, providerID uuid.UU
 	if err != nil {
 		return nil, err
 	}
-	base := scimBaseURL(s.api.config)
 	for _, m := range memberships {
-		members[m.GroupID] = append(members[m.GroupID], scimMember(base, m.SCIMUserID))
+		members[m.GroupID] = append(members[m.GroupID], m.SCIMUserID)
 	}
 	return members, nil
 }
 
-func (s *scimGroupRepository) compose(row models.SCIMGroup, members []core.Member) (*core.Group, error) {
+func (s *scimGroupRepository) compose(row models.SCIMGroup, scimUserIDs []uuid.UUID) (*core.Group, error) {
+	base := scimBaseURL(s.api.config)
 	group := &core.Group{}
 	doc := scimDocument{id: row.ID, resource: row.Resource, createdAt: row.CreatedAt, updatedAt: row.UpdatedAt}
-	if err := scimCompose(group, scimResourceTypeGroup, scimBaseURL(s.api.config)+"/Groups", doc); err != nil {
+	if err := scimCompose(group, scimResourceTypeGroup, base+"/Groups", doc); err != nil {
 		return nil, err
 	}
 	group.Schemas = []core.SchemaURI{core.SchemaGroup}
-	group.Members = members
+	group.Members = make([]core.Member, len(scimUserIDs))
+	for i, scimUserID := range scimUserIDs {
+		id := scimUserID.String()
+		group.Members[i] = core.Member{Value: id, Ref: base + "/Users/" + id, Type: scimResourceTypeUser}
+	}
 	return group, nil
 }
 
@@ -604,19 +609,6 @@ func scimGroupAction(action models.AuditAction, change models.SCIMGroupMemberCha
 func scimGroupEvent(r *http.Request, action models.AuditAction, row *models.SCIMGroup, displayName string) scimAuditEvent {
 	traits := map[string]any{"scim_group_id": row.ID, "display_name": displayName}
 	return scimAuditEvent{actor: scimActor(r), action: action, providerID: row.SSOProviderID, traits: traits}
-}
-
-func scimMembers(base string, scimUserIDs []uuid.UUID) []core.Member {
-	members := make([]core.Member, len(scimUserIDs))
-	for i, scimUserID := range scimUserIDs {
-		members[i] = scimMember(base, scimUserID)
-	}
-	return members
-}
-
-func scimMember(base string, scimUserID uuid.UUID) core.Member {
-	id := scimUserID.String()
-	return core.Member{Value: id, Ref: base + "/Users/" + id, Type: scimResourceTypeUser}
 }
 
 func scimMemberIDs(members []core.Member) ([]uuid.UUID, error) {
