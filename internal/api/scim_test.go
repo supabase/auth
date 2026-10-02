@@ -517,7 +517,7 @@ func newSCIMServerFor(externalURL string) *server.Server {
 		}
 		return ctx, nil
 	}
-	return (&API{config: &conf.GlobalConfiguration{API: conf.APIConfiguration{ExternalURL: externalURL}}}).newSCIMServer(validate, nil)
+	return (&API{config: &conf.GlobalConfiguration{API: conf.APIConfiguration{ExternalURL: externalURL}}}).newSCIMServer(validate, func(next http.Handler) http.Handler { return next })
 }
 
 func scimServe(t *testing.T, srv *server.Server, method, path, body string, headers ...string) *httptest.ResponseRecorder {

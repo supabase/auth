@@ -13,13 +13,16 @@ func (a *API) deleteSCIMUsers(tx *storage.Connection, r *http.Request, actor *mo
 	if err != nil {
 		return err
 	}
-	events := make([]scimAuditEvent, len(rows))
 	for i := range rows {
-		if events[i], err = scimUserRemovalEvent(tx, actor, &rows[i]); err != nil {
+		event, err := scimUserRemovalEvent(tx, actor, &rows[i])
+		if err != nil {
+			return err
+		}
+		if err := a.auditSCIM(tx, r, event); err != nil {
 			return err
 		}
 	}
-	return a.auditSCIMEvents(tx, r, events)
+	return nil
 }
 
 func scimUserRemovalEvent(tx *storage.Connection, actor *models.User, row *models.SCIMUser) (scimAuditEvent, error) {
