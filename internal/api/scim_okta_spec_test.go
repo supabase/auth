@@ -75,9 +75,7 @@ func (ts *SCIMTestSuite) TestOktaSpec() {
 		givenName  = "Okta"
 		familyName = "Spec"
 	)
-	create := func(email string) string {
-		return `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"` + userName + `","name":{"givenName":"` + givenName + `","familyName":"` + familyName + `"},"emails":[{"primary":true,"value":"` + email + `","type":"work"}],"displayName":"` + givenName + " " + familyName + `","active":true}`
-	}
+	const body = `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"` + userName + `","name":{"givenName":"` + givenName + `","familyName":"` + familyName + `"},"emails":[{"primary":true,"value":"` + userName + `","type":"work"}],"displayName":"` + givenName + " " + familyName + `","active":true}`
 	requireError := func(got map[string]any, status string) {
 		require.NotEmpty(ts.T(), got["detail"])
 		require.Equal(ts.T(), status, got["status"])
@@ -94,21 +92,18 @@ func (ts *SCIMTestSuite) TestOktaSpec() {
 	require.NotEmpty(ts.T(), got["Resources"])
 	first := got["Resources"].([]any)[0].(map[string]any)
 	require.NotEmpty(ts.T(), first["id"])
-	require.NotEmpty(ts.T(), first["name"].(map[string]any)["familyName"])
-	require.NotEmpty(ts.T(), first["name"].(map[string]any)["givenName"])
-	require.NotEmpty(ts.T(), first["userName"])
-	require.NotNil(ts.T(), first["active"])
-	require.NotEmpty(ts.T(), first["emails"].([]any)[0].(map[string]any)["value"])
 	id := first["id"].(string)
 
 	status, got = ts.okta(http.MethodGet, "/Users/"+id, "")
 	require.Equal(ts.T(), http.StatusOK, status)
 	require.Equal(ts.T(), id, got["id"])
-	require.NotEmpty(ts.T(), got["name"].(map[string]any)["familyName"])
-	require.NotEmpty(ts.T(), got["name"].(map[string]any)["givenName"])
-	require.NotEmpty(ts.T(), got["userName"])
-	require.NotNil(ts.T(), got["active"])
-	require.NotEmpty(ts.T(), got["emails"].([]any)[0].(map[string]any)["value"])
+	for _, user := range []map[string]any{first, got} {
+		require.NotEmpty(ts.T(), user["name"].(map[string]any)["familyName"])
+		require.NotEmpty(ts.T(), user["name"].(map[string]any)["givenName"])
+		require.NotEmpty(ts.T(), user["userName"])
+		require.NotNil(ts.T(), user["active"])
+		require.NotEmpty(ts.T(), user["emails"].([]any)[0].(map[string]any)["value"])
+	}
 
 	for _, missing := range []string{"invalid.user@example.com", userName} {
 		status, got = ts.okta(http.MethodGet, oktaFilter(missing), "")
@@ -121,7 +116,7 @@ func (ts *SCIMTestSuite) TestOktaSpec() {
 	require.Equal(ts.T(), http.StatusNotFound, status)
 	requireError(got, "404")
 
-	status, got = ts.okta(http.MethodPost, "/Users", create(userName))
+	status, got = ts.okta(http.MethodPost, "/Users", body)
 	require.Equal(ts.T(), http.StatusCreated, status)
 	require.Equal(ts.T(), true, got["active"])
 	require.NotEmpty(ts.T(), got["id"])
@@ -137,7 +132,7 @@ func (ts *SCIMTestSuite) TestOktaSpec() {
 	require.Equal(ts.T(), familyName, got["name"].(map[string]any)["familyName"])
 	require.Equal(ts.T(), givenName, got["name"].(map[string]any)["givenName"])
 
-	status, _ = ts.okta(http.MethodPost, "/Users", create(userName))
+	status, _ = ts.okta(http.MethodPost, "/Users", body)
 	require.Equal(ts.T(), http.StatusConflict, status)
 
 	status, got = ts.okta(http.MethodGet, oktaFilter(strings.ToUpper(userName)), "")
@@ -207,8 +202,7 @@ func (ts *SCIMTestSuite) TestOktaUserLifecycleReplay() {
 	var stored models.SCIMUser
 	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&stored))
 	require.NotContains(ts.T(), string(stored.Resource), "password")
-	user := ts.reloadUser(*stored.UserID)
-	require.False(ts.T(), user.HasPassword())
+	require.False(ts.T(), ts.reloadUser(*stored.UserID).HasPassword())
 
 	actions := []string{}
 	for _, entry := range entries {
@@ -217,10 +211,6 @@ func (ts *SCIMTestSuite) TestOktaUserLifecycleReplay() {
 		require.NotContains(ts.T(), string(payload), password)
 		actions = append(actions, entry.Payload["action"].(string))
 	}
-	require.Equal(ts.T(), []string{
-		string(models.SCIMUserCreatedAction),
-		string(models.SCIMUserUpdatedAction),
-		string(models.SCIMUserUpdatedAction),
-		string(models.SCIMUserUpdatedAction),
-	}, actions)
+	updated := string(models.SCIMUserUpdatedAction)
+	require.Equal(ts.T(), []string{string(models.SCIMUserCreatedAction), updated, updated, updated}, actions)
 }

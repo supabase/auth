@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -38,79 +39,58 @@ var scimPaths = []string{
 }
 
 func TestSCIM(t *testing.T) {
+	send := func(api *API, method, path, authorization string, body io.Reader) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, body)
+		if authorization != "" {
+			r.Header.Set("Authorization", authorization)
+		}
+		w := httptest.NewRecorder()
+		api.handler.ServeHTTP(w, r)
+		return w
+	}
+
 	t.Run("Disabled by default", func(t *testing.T) {
 		api, _, err := setupAPIForTest()
 		require.NoError(t, err)
-
 		require.False(t, api.config.SSO.SCIM.Enabled)
 
 		for _, path := range scimPaths {
-			r := httptest.NewRequest(http.MethodGet, path, nil)
-			w := httptest.NewRecorder()
-
-			api.handler.ServeHTTP(w, r)
-
+			w := send(api, http.MethodGet, path, "", nil)
 			require.Equal(t, http.StatusNotFound, w.Code)
 			require.Equal(t, "application/json", w.Header().Get("Content-Type"))
 			require.JSONEq(t, `{"code":404,"error_code":"feature_disabled","msg":"SCIM server is disabled"}`, w.Body.String())
 		}
 
 		t.Run("Unknown endpoints stay hidden while disabled", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Unknown", nil)
-			w := httptest.NewRecorder()
-
-			api.handler.ServeHTTP(w, r)
-
+			w := send(api, http.MethodGet, "/scim/v2/Unknown", "", nil)
 			require.Equal(t, http.StatusNotFound, w.Code)
 			require.NotContains(t, w.Body.String(), protocol.SchemaError)
 		})
 	})
 
 	t.Run("Can be enabled", func(t *testing.T) {
-		api, _, err := setupAPIForTestWithCallback(func(config *conf.GlobalConfiguration, conn *storage.Connection) {
-			if config != nil {
-				config.SSO.SCIM.Enabled = true
-			}
-		})
-		require.NoError(t, err)
-
+		api, _ := setupSCIMAPI(t, nil)
 		require.True(t, api.config.SSO.SCIM.Enabled)
 
 		provider, token := createSSOProviderWithSCIMToken(t, api.db)
+		bearer := "Bearer " + token
 
-		t.Run(scimServiceProviderConfigPath, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, scimServiceProviderConfigPath, nil)
-			w := httptest.NewRecorder()
-
-			r.Header.Set("Authorization", "Bearer "+token)
-			api.handler.ServeHTTP(w, r)
-
-			require.Equal(t, http.StatusOK, w.Code)
-			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-			require.Contains(t, w.Body.String(), core.SchemaServiceProviderConfig)
-		})
-
-		for _, path := range []string{scimResourceTypesPath, scimSchemasPath} {
-			t.Run(path, func(t *testing.T) {
-				r := httptest.NewRequest(http.MethodGet, path, nil)
-				w := httptest.NewRecorder()
-
-				r.Header.Set("Authorization", "Bearer "+token)
-				api.handler.ServeHTTP(w, r)
-
+		for _, tc := range []struct{ path, schema string }{
+			{scimServiceProviderConfigPath, string(core.SchemaServiceProviderConfig)},
+			{scimResourceTypesPath, string(protocol.SchemaListResponse)},
+			{scimSchemasPath, string(protocol.SchemaListResponse)},
+		} {
+			t.Run(tc.path, func(t *testing.T) {
+				w := send(api, http.MethodGet, tc.path, bearer, nil)
 				require.Equal(t, http.StatusOK, w.Code)
 				require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-				require.Contains(t, w.Body.String(), protocol.SchemaListResponse)
+				require.Contains(t, w.Body.String(), tc.schema)
 			})
+		}
 
+		for _, path := range []string{scimResourceTypesPath, scimSchemasPath} {
 			t.Run(path+" rejects filter query parameter", func(t *testing.T) {
-				filter := url.Values{"filter": {`name eq "User"`}}.Encode()
-				r := httptest.NewRequest(http.MethodGet, path+"?"+filter, nil)
-				w := httptest.NewRecorder()
-
-				r.Header.Set("Authorization", "Bearer "+token)
-				api.handler.ServeHTTP(w, r)
-
+				w := send(api, http.MethodGet, path+"?"+url.Values{"filter": {`name eq "User"`}}.Encode(), bearer, nil)
 				require.Equal(t, http.StatusForbidden, w.Code)
 				require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 				require.Contains(t, w.Body.String(), protocol.SchemaError)
@@ -132,12 +112,7 @@ func TestSCIM(t *testing.T) {
 				{http.MethodDelete, scimUsersPath + "/missing"},
 			} {
 				t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-					r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
-					w := httptest.NewRecorder()
-
-					r.Header.Set("Authorization", "Bearer "+token)
-					api.handler.ServeHTTP(w, r)
-
+					w := send(api, tc.method, tc.path, bearer, strings.NewReader(`{}`))
 					require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"), w.Body.String())
 				})
 			}
@@ -163,44 +138,23 @@ func TestSCIM(t *testing.T) {
 				{"revoked", "Bearer " + revokedToken},
 				{"expired", "Bearer " + expiredToken},
 			} {
-				for _, path := range []string{scimResourceTypesPath, scimSchemasPath, scimUsersPath} {
+				for _, path := range []string{scimResourceTypesPath, scimSchemasPath, scimUsersPath, scimServiceProviderConfigPath} {
 					t.Run(tc.name+" "+path, func(t *testing.T) {
-						r := httptest.NewRequest(http.MethodGet, path, nil)
-						if tc.authorization != "" {
-							r.Header.Set("Authorization", tc.authorization)
-						}
-						w := httptest.NewRecorder()
-
-						api.handler.ServeHTTP(w, r)
-
-						require.Equal(t, http.StatusUnauthorized, w.Code)
+						w := send(api, http.MethodGet, path, tc.authorization, nil)
 						require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
+						if path == scimServiceProviderConfigPath {
+							require.Equal(t, http.StatusOK, w.Code)
+							return
+						}
+						require.Equal(t, http.StatusUnauthorized, w.Code)
 						require.True(t, strings.HasPrefix(w.Header().Get("WWW-Authenticate"), "Bearer"))
 					})
 				}
-
-				t.Run(tc.name+" "+scimServiceProviderConfigPath, func(t *testing.T) {
-					r := httptest.NewRequest(http.MethodGet, scimServiceProviderConfigPath, nil)
-					if tc.authorization != "" {
-						r.Header.Set("Authorization", tc.authorization)
-					}
-					w := httptest.NewRecorder()
-
-					api.handler.ServeHTTP(w, r)
-
-					require.Equal(t, http.StatusOK, w.Code)
-					require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-				})
 			}
 		})
 
 		t.Run("Records when a token is used", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, scimUsersPath, nil)
-			r.Header.Set("Authorization", "Bearer "+token)
-			w := httptest.NewRecorder()
-
-			api.handler.ServeHTTP(w, r)
-			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, http.StatusOK, send(api, http.MethodGet, scimUsersPath, bearer, nil).Code)
 
 			found, err := models.FindSCIMTokenByPrefix(api.db, provider.ID, token[:12])
 			require.NoError(t, err)
@@ -208,48 +162,26 @@ func TestSCIM(t *testing.T) {
 		})
 
 		t.Run("Returns a SCIM 404 for an unknown endpoint", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/scim/v2/Unknown", nil)
-			w := httptest.NewRecorder()
-
-			r.Header.Set("Authorization", "Bearer "+token)
-			api.handler.ServeHTTP(w, r)
-
+			w := send(api, http.MethodGet, "/scim/v2/Unknown", bearer, nil)
 			require.Equal(t, http.StatusNotFound, w.Code)
 			require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 			require.Contains(t, w.Body.String(), protocol.SchemaError)
 		})
 
 		t.Run("Returns a SCIM 405 for an unsupported method", func(t *testing.T) {
-			for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
-				for _, path := range scimPaths {
-					t.Run(method+" "+path, func(t *testing.T) {
-						r := httptest.NewRequest(method, path, nil)
-						w := httptest.NewRecorder()
-
-						r.Header.Set("Authorization", "Bearer "+token)
-						api.handler.ServeHTTP(w, r)
-
-						require.Equal(t, http.StatusMethodNotAllowed, w.Code)
-						require.Equal(t, "GET, HEAD", w.Header().Get("Allow"))
-						require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
-					})
-				}
-			}
-
-			for _, tc := range []struct {
-				method, path string
-				allow        string
-			}{
+			type disallowed struct{ method, path, allow string }
+			cases := []disallowed{
 				{http.MethodPut, scimUsersPath, "GET, HEAD, POST"},
 				{http.MethodPost, scimUsersPath + "/missing", "DELETE, GET, HEAD, PATCH, PUT"},
-			} {
+			}
+			for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+				for _, path := range scimPaths {
+					cases = append(cases, disallowed{method, path, "GET, HEAD"})
+				}
+			}
+			for _, tc := range cases {
 				t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-					r := httptest.NewRequest(tc.method, tc.path, nil)
-					w := httptest.NewRecorder()
-
-					r.Header.Set("Authorization", "Bearer "+token)
-					api.handler.ServeHTTP(w, r)
-
+					w := send(api, tc.method, tc.path, bearer, nil)
 					require.Equal(t, http.StatusMethodNotAllowed, w.Code)
 					require.Equal(t, tc.allow, w.Header().Get("Allow"))
 					require.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
@@ -412,12 +344,8 @@ func TestSCIMSuite(t *testing.T) {
 
 func (ts *SCIMTestSuite) SetupTest() {
 	require.NoError(ts.T(), models.TruncateAll(ts.API.db))
-	ts.A, ts.TokenA = ts.provider()
-	ts.B, ts.TokenB = ts.provider()
-}
-
-func (ts *SCIMTestSuite) provider() (*models.SSOProvider, string) {
-	return createSSOProviderWithSCIMToken(ts.T(), ts.API.db)
+	ts.A, ts.TokenA = createSSOProviderWithSCIMToken(ts.T(), ts.API.db)
+	ts.B, ts.TokenB = createSSOProviderWithSCIMToken(ts.T(), ts.API.db)
 }
 
 func (ts *SCIMTestSuite) do(token, method, path, body string) (*httptest.ResponseRecorder, map[string]any) {
