@@ -453,6 +453,9 @@ func (a *API) adminSSOProvidersDelete(w http.ResponseWriter, r *http.Request) er
 	provider := getSSOProvider(ctx)
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
+		if err := a.deprovisionSCIM(tx, r, provider); err != nil {
+			return err
+		}
 		return tx.Eager().Destroy(provider)
 	}); err != nil {
 		return err

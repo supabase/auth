@@ -55,6 +55,17 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	provider := identityToBeDeleted.Provider
 	recipientEmail := user.GetEmail()
 	err = db.Transaction(func(tx *storage.Connection) error {
+		providerID, isSSO, perr := models.SSOProviderID(provider)
+		isSCIMProvider := isSSO && perr == nil && a.config.SSO.SCIM.Enabled
+		if isSCIMProvider {
+			managed, terr := models.IsSCIMManaged(tx, providerID, user.ID)
+			if terr != nil {
+				return apierrors.NewInternalServerError("Database error finding SCIM user").WithInternalError(terr)
+			}
+			if managed {
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeUserSSOManaged, "Identity is managed by SCIM provisioning")
+			}
+		}
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, utilities.GetIPAddress(r), map[string]any{
 			"identity_id": identityToBeDeleted.ID,
 			"provider":    identityToBeDeleted.Provider,

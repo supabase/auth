@@ -64,6 +64,12 @@ const (
 	envRateLimitSso = "GOTRUE_RATE_LIMIT_SSO"
 	fieldSSO        = "SSO"
 
+	// GOTRUE_RATE_LIMIT_SCIM
+	//   -> RateLimitScim
+	envRateLimitScim = "GOTRUE_RATE_LIMIT_SCIM"
+	fieldSCIM        = "SCIM"
+	fieldSCIMIP      = "SCIMIP"
+
 	// GOTRUE_RATE_LIMIT_TOKEN_REFRESH
 	//   -> RateLimitTokenRefresh
 	envRateLimitTokenRefresh = "GOTRUE_RATE_LIMIT_TOKEN_REFRESH" // #nosec G101
@@ -99,6 +105,8 @@ var tollboothFieldsToEnv = map[string]string{
 	fieldPasskeyAuthentication: envRateLimitPasskey,
 	fieldSAMLAssertion:         envSAMLRateLimitAssertion,
 	fieldSSO:                   envRateLimitSso,
+	fieldSCIM:                  envRateLimitScim,
+	fieldSCIMIP:                envRateLimitScim,
 	fieldToken:                 envRateLimitTokenRefresh,
 	fieldVerify:                envRateLimitVerify,
 	fieldWeb3:                  envRateLimitWeb3,
@@ -167,6 +175,11 @@ type Limiter struct {
 	// GOTRUE_RATE_LIMIT_SSO
 	//   -> RateLimitSso
 	SSO *limiter.Limiter
+
+	// GOTRUE_RATE_LIMIT_SCIM
+	//   -> RateLimitScim
+	SCIM   *limiter.Limiter
+	SCIMIP *limiter.Limiter
 
 	// GOTRUE_RATE_LIMIT_TOKEN_REFRESH
 	//   -> RateLimitTokenRefresh
@@ -238,6 +251,8 @@ func New(gc *conf.GlobalConfiguration) *Limiter {
 	o.Signups = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.OAuthClientRegister = newLimiterPer5mOver1h(gc.RateLimitOAuthDynamicClientRegister)
 	o.PasskeyAuthentication = newLimiterPer5mOver1h(gc.RateLimitPasskey)
+	o.SCIM = newLimiterPer5mOver1h(gc.RateLimitScim)
+	o.SCIMIP = newLimiterPer5mOver1h(gc.RateLimitScim)
 	return o
 }
 
@@ -258,6 +273,8 @@ func (o *Limiter) Copy() *Limiter {
 		Recover:               o.Recover,
 		Resend:                o.Resend,
 		SAMLAssertion:         o.SAMLAssertion,
+		SCIM:                  o.SCIM,
+		SCIMIP:                o.SCIMIP,
 		Signups:               o.Signups,
 		SSO:                   o.SSO,
 		Token:                 o.Token,
@@ -330,6 +347,12 @@ func (o *Limiter) Update(
 	if a, b := prevCfg.RateLimitSso, nextCfg.RateLimitSso; a != b {
 		v.SSO = newLimiterPer5mOver1h(b)
 		logEnvUpdates(le, envRateLimitSso, a, b)
+	}
+
+	if a, b := prevCfg.RateLimitScim, nextCfg.RateLimitScim; a != b {
+		v.SCIM = newLimiterPer5mOver1h(b)
+		v.SCIMIP = newLimiterPer5mOver1h(b)
+		logEnvUpdates(le, envRateLimitScim, a, b)
 	}
 
 	if a, b := prevCfg.RateLimitTokenRefresh, nextCfg.RateLimitTokenRefresh; a != b {

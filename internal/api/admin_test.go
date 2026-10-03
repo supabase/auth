@@ -864,6 +864,47 @@ func (ts *AdminTestSuite) TestAdminUserDelete() {
 	}
 }
 
+func (ts *AdminTestSuite) TestAdminUserDeleteSoftDeletesSCIMUser() {
+	for _, soft := range []bool{false, true} {
+		ts.Run(fmt.Sprintf("soft=%t", soft), func() {
+			email := fmt.Sprintf("bjensen-%t@example.com", soft)
+			u, err := models.NewUser("", email, "", ts.Config.JWT.Aud, nil)
+			require.NoError(ts.T(), err)
+			u.IsSSOUser = true
+			require.NoError(ts.T(), ts.API.db.Create(u))
+			scimUser, err := models.CreateSCIMUser(ts.API.db, createSSOProvider(ts.T(), ts.API.db).ID, []byte(`{"userName":"`+email+`"}`))
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), models.LinkSCIMUser(ts.API.db, scimUser, u.ID))
+			group, err := models.CreateSCIMGroup(ts.API.db, scimUser.SSOProviderID, []byte(`{"displayName":"Engineering"}`))
+			require.NoError(ts.T(), err)
+			_, _, err = models.ReplaceSCIMGroupMembers(ts.API.db, group, []uuid.UUID{scimUser.ID})
+			require.NoError(ts.T(), err)
+
+			w := serveAdmin(ts.T(), ts.API, http.MethodDelete, "/admin/users/"+u.ID.String(), map[string]any{"should_soft_delete": soft})
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+
+			var row models.SCIMUser
+			require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", scimUser.ID).First(&row))
+			require.NotNil(ts.T(), row.DeletedAt)
+
+			members, err := ts.API.db.Q().Where("scim_user_id = ?", scimUser.ID).Count(&models.SCIMGroupMember{})
+			require.NoError(ts.T(), err)
+			require.Zero(ts.T(), members)
+			updated, err := models.FindSCIMGroup(ts.API.db, scimUser.SSOProviderID, group.ID)
+			require.NoError(ts.T(), err)
+			require.True(ts.T(), updated.UpdatedAt.After(group.UpdatedAt))
+
+			deleted := queryAuditEntries(ts.T(), ts.API.db, "payload->>'action' = ? AND payload->'traits'->>'scim_user_id' = ?", models.SCIMUserDeletedAction, scimUser.ID.String())
+			require.Len(ts.T(), deleted, 1)
+			traits := deleted[0].Payload["traits"].(map[string]any)
+			require.Equal(ts.T(), "supabase_admin", deleted[0].Payload["actor_username"])
+			require.Equal(ts.T(), scimUser.SSOProviderID.String(), traits["sso_provider_id"])
+			require.Equal(ts.T(), u.ID.String(), traits["user_id"])
+			require.Equal(ts.T(), "success", traits["outcome"])
+		})
+	}
+}
+
 func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
 	// create user
 	u, err := models.NewUser("123456789", "test@example.com", "secret", ts.Config.JWT.Aud, map[string]interface{}{"name": "test"})
