@@ -42,5 +42,5 @@ func TestLinkSCIMUserRefusesSecondLiveLink(t *testing.T) {
 
 	second, err := CreateSCIMUser(db, provider.ID, []byte(`{"userName":"babs"}`))
 	require.NoError(t, err)
-	require.ErrorIs(t, LinkSCIMUser(db, second, user.ID), SCIMUserLinkedError{})
+	require.ErrorIs(t, LinkSCIMUser(db, second, user.ID), ErrSCIMUserLinked)
 }

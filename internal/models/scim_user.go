@@ -3,7 +3,6 @@ package models
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -23,8 +22,6 @@ type SCIMUser struct {
 	UpdatedAt     time.Time  `db:"updated_at"`
 	DeletedAt     *time.Time `db:"deleted_at"`
 }
-
-const scimUserColumns = "id, sso_provider_id, user_id, resource, user_name, external_id, active, created_at, updated_at, deleted_at"
 
 func (SCIMUser) TableName() string {
 	return "scim_users"
@@ -48,10 +45,10 @@ type SCIMIdentityEmailChange struct {
 var scimUsersTable = scimTable{
 	tableName:  SCIMUser{}.TableName(),
 	label:      "SCIM user",
-	columns:    scimUserColumns,
+	columns:    "id, sso_provider_id, user_id, resource, user_name, external_id, active, created_at, updated_at, deleted_at",
 	nameColumn: "user_name",
-	liveClause: "deleted_at IS NULL",
-	conflict:   SCIMUserConflictError{},
+	scope:      "sso_provider_id = ? AND deleted_at IS NULL",
+	conflict:   ErrSCIMUserConflict,
 }
 
 func CreateSCIMUser(tx *storage.Connection, providerID uuid.UUID, resource []byte) (*SCIMUser, error) {
@@ -75,20 +72,13 @@ func ReplaceSCIMUser(tx *storage.Connection, target SCIMTarget, resource []byte)
 }
 
 func DeleteSCIMUser(tx *storage.Connection, target SCIMTarget) (*SCIMUser, error) {
-	user := &SCIMUser{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET deleted_at = now(), updated_at = clock_timestamp() WHERE %s AND "+scimVersionClause+" RETURNING %s", scimUsersTable.tableName, scimUsersTable.targetClause(), scimUsersTable.columns),
-		target.ID, target.ProviderID, target.UpdatedAt, target.UpdatedAt,
-	).First(user); err != nil {
-		return nil, scimUsersTable.writeError(tx, target, err, "deleting")
-	}
-	return user, nil
+	return writeSCIMRow[SCIMUser](tx, scimUsersTable, target, scimWrite{verb: "deleting", sql: "UPDATE %q SET deleted_at = now(), updated_at = clock_timestamp()"})
 }
 
 func SoftDeleteSCIMUsersByUserID(tx *storage.Connection, userID uuid.UUID) ([]SCIMUser, error) {
 	rows := []SCIMUser{}
 	if err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET deleted_at = now(), updated_at = clock_timestamp() WHERE user_id = ? AND deleted_at IS NULL RETURNING "+scimUserColumns, scimUsersTable.tableName),
+		fmt.Sprintf("UPDATE %q SET deleted_at = now(), updated_at = clock_timestamp() WHERE user_id = ? AND deleted_at IS NULL RETURNING %s", scimUsersTable.tableName, scimUsersTable.columns),
 		userID,
 	).All(&rows); err != nil {
 		return nil, errors.Wrap(err, "error deleting SCIM users by user id")
@@ -102,27 +92,20 @@ func LinkSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) erro
 		return errors.Wrap(err, "error finding deleted SCIM user")
 	}
 	if deleted {
-		return SCIMUserDeletedError{}
+		return ErrSCIMUserDeleted
 	}
 	return LinkNewSCIMUser(tx, user, userID)
 }
 
 func LinkNewSCIMUser(tx *storage.Connection, user *SCIMUser, userID uuid.UUID) error {
-	updated := struct {
-		UpdatedAt time.Time `db:"updated_at"`
-	}{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET user_id = ?, updated_at = clock_timestamp() WHERE id = ? RETURNING updated_at", scimUsersTable.tableName),
+	err := tx.RawQuery(
+		fmt.Sprintf("UPDATE %q SET user_id = ?, updated_at = clock_timestamp() WHERE id = ? RETURNING %s", scimUsersTable.tableName, scimUsersTable.columns),
 		userID, user.ID,
-	).First(&updated); err != nil {
-		if isUniqueViolation(err) {
-			return SCIMUserLinkedError{}
-		}
-		return errors.Wrap(err, "error linking SCIM user")
+	).First(user)
+	if isUniqueViolation(err) {
+		return ErrSCIMUserLinked
 	}
-	user.UserID = &userID
-	user.UpdatedAt = updated.UpdatedAt
-	return nil
+	return errors.Wrap(err, "error linking SCIM user")
 }
 
 func IsSCIMManaged(tx *storage.Connection, providerID, userID uuid.UUID) (bool, error) {
@@ -159,7 +142,7 @@ func RenameSCIMIdentity(tx *storage.Connection, rename SCIMIdentityRename) error
 	).ExecWithCount()
 	if err != nil {
 		if isUniqueViolation(err) {
-			return SCIMUserConflictError{}
+			return ErrSCIMUserConflict
 		}
 		return errors.Wrap(err, "error renaming SCIM identity")
 	}
@@ -170,46 +153,28 @@ func RenameSCIMIdentity(tx *storage.Connection, rename SCIMIdentityRename) error
 }
 
 func ChangeSCIMIdentityEmail(tx *storage.Connection, change SCIMIdentityEmailChange) error {
-	table := Identity{}.TableName()
-	taken := struct {
-		Exists bool `db:"exists"`
-	}{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %q WHERE provider = ? AND email = lower(?) AND user_id <> ?) AS exists", table),
-		change.Provider, change.Email, change.UserID,
-	).First(&taken); err != nil {
+	taken, err := tx.Q().Where("provider = ? AND email = lower(?) AND user_id <> ?", change.Provider, change.Email, change.UserID).Exists(&Identity{})
+	if err != nil {
 		return errors.Wrap(err, "error finding SCIM identity email")
 	}
-	if taken.Exists {
-		return SCIMUserConflictError{}
+	if taken {
+		return ErrSCIMUserConflict
 	}
-	encoded, err := json.Marshal(map[string]any{"email": change.Email})
-	if err != nil {
-		return errors.Wrap(err, "error encoding identity data")
-	}
-	if err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET identity_data = identity_data || ?::jsonb, updated_at = now() WHERE user_id = ? AND provider = ? AND provider_id = ?", table),
-		string(encoded), change.UserID, change.Provider, change.Subject,
-	).Exec(); err != nil {
-		return errors.Wrap(err, "error changing SCIM identity email")
-	}
-	return nil
+	return errors.Wrap(tx.RawQuery(
+		fmt.Sprintf("UPDATE %q SET identity_data = identity_data || jsonb_build_object('email', ?::text), updated_at = now() WHERE user_id = ? AND provider = ? AND provider_id = ?", Identity{}.TableName()),
+		change.Email, change.UserID, change.Provider, change.Subject,
+	).Exec(), "error changing SCIM identity email")
 }
 
 func isSCIMUserDeprovisioned(tx *storage.Connection, where string, args ...any) (bool, error) {
 	result := struct {
-		AnyRow bool `db:"any_row"`
-		Live   bool `db:"live"`
+		Deprovisioned bool `db:"deprovisioned"`
 	}{}
 	if err := tx.RawQuery(
-		fmt.Sprintf(
-			"SELECT EXISTS(SELECT 1 FROM %[1]q WHERE %[2]s) AS any_row, "+
-				"EXISTS(SELECT 1 FROM %[1]q WHERE %[2]s AND deleted_at IS NULL AND active) AS live",
-			scimUsersTable.tableName, where,
-		),
-		append(slices.Clone(args), args...)...,
+		fmt.Sprintf("SELECT coalesce(bool_and(deleted_at IS NOT NULL OR NOT active), false) AS deprovisioned FROM %q WHERE %s", scimUsersTable.tableName, where),
+		args...,
 	).First(&result); err != nil {
 		return false, errors.Wrap(err, "error finding SCIM user")
 	}
-	return result.AnyRow && !result.Live, nil
+	return result.Deprovisioned, nil
 }

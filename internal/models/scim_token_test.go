@@ -53,7 +53,7 @@ func (ts *SCIMTokenTestSuite) TestCreateWithPastExpiry() {
 	expiresAt := time.Now().Add(-time.Minute)
 	_, _, err := CreateSCIMToken(ts.db, ts.createProvider(), &expiresAt)
 
-	require.ErrorIs(ts.T(), err, SCIMTokenExpiryError{})
+	require.ErrorIs(ts.T(), err, ErrSCIMTokenExpiry)
 }
 
 func (ts *SCIMTokenTestSuite) TestTimestampsAreUTC() {

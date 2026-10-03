@@ -19,8 +19,6 @@ type SCIMGroup struct {
 	UpdatedAt     time.Time `db:"updated_at"`
 }
 
-const scimGroupColumns = "id, sso_provider_id, resource, display_name, external_id, created_at, updated_at"
-
 func (SCIMGroup) TableName() string {
 	return "scim_groups"
 }
@@ -28,7 +26,6 @@ func (SCIMGroup) TableName() string {
 type SCIMGroupMember struct {
 	GroupID    uuid.UUID `db:"group_id"`
 	SCIMUserID uuid.UUID `db:"scim_user_id"`
-	CreatedAt  time.Time `db:"created_at"`
 }
 
 func (SCIMGroupMember) TableName() string {
@@ -54,9 +51,10 @@ func (c SCIMGroupMemberChange) Changed() bool {
 var scimGroupsTable = scimTable{
 	tableName:  SCIMGroup{}.TableName(),
 	label:      "SCIM group",
-	columns:    scimGroupColumns,
+	columns:    "id, sso_provider_id, resource, display_name, external_id, created_at, updated_at",
 	nameColumn: "display_name",
-	conflict:   SCIMGroupConflictError{},
+	scope:      "sso_provider_id = ?",
+	conflict:   ErrSCIMGroupConflict,
 }
 
 func CreateSCIMGroup(tx *storage.Connection, providerID uuid.UUID, resource []byte) (*SCIMGroup, error) {
@@ -80,14 +78,7 @@ func LockUnchangedSCIMGroup(tx *storage.Connection, providerID, id uuid.UUID, re
 }
 
 func DeleteSCIMGroup(tx *storage.Connection, target SCIMTarget) (*SCIMGroup, error) {
-	group := &SCIMGroup{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("DELETE FROM %q WHERE %s AND "+scimVersionClause+" RETURNING %s", scimGroupsTable.tableName, scimGroupsTable.targetClause(), scimGroupsTable.columns),
-		target.ID, target.ProviderID, target.UpdatedAt, target.UpdatedAt,
-	).First(group); err != nil {
-		return nil, scimGroupsTable.writeError(tx, target, err, "deleting")
-	}
-	return group, nil
+	return writeSCIMRow[SCIMGroup](tx, scimGroupsTable, target, scimWrite{verb: "deleting", sql: "DELETE FROM %q"})
 }
 
 func FindSCIMMembershipsByGroup(tx *storage.Connection, providerID uuid.UUID, groupIDs []uuid.UUID) ([]SCIMGroupMembership, error) {
@@ -119,12 +110,11 @@ func FindSCIMMembershipsByUser(tx *storage.Connection, providerID uuid.UUID, sci
 }
 
 func ReplaceSCIMGroupMembers(tx *storage.Connection, group *SCIMGroup, scimUserIDs []uuid.UUID) (*SCIMGroup, SCIMGroupMemberChange, error) {
-	members := sortedUniqueUUIDs(scimUserIDs)
-	added, removed, err := diffSCIMGroupMembers(tx, group.ID, members)
+	current, err := FindSCIMGroupMemberIDs(tx, group.ID)
 	if err != nil {
-		return nil, SCIMGroupMemberChange{Members: members}, err
+		return nil, SCIMGroupMemberChange{}, err
 	}
-	return applySCIMGroupMemberChange(tx, group, SCIMGroupMemberChange{Members: members, Added: added, Removed: removed})
+	return ReplaceSCIMGroupMembersFrom(tx, group, current, scimUserIDs)
 }
 
 func ReplaceSCIMGroupMembersFrom(tx *storage.Connection, group *SCIMGroup, current, scimUserIDs []uuid.UUID) (*SCIMGroup, SCIMGroupMemberChange, error) {
@@ -196,15 +186,12 @@ func applySCIMGroupMemberChange(tx *storage.Connection, group *SCIMGroup, change
 }
 
 func requireLiveSCIMUsers(tx *storage.Connection, providerID uuid.UUID, ids []uuid.UUID) error {
-	found := []uuid.UUID{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT id FROM %q WHERE id = ANY(?::uuid[]) AND sso_provider_id = ? AND deleted_at IS NULL", scimUsersTable.tableName),
-		ids, providerID,
-	).All(&found); err != nil {
+	live, err := tx.Q().Where("id = ANY(?::uuid[]) AND sso_provider_id = ? AND deleted_at IS NULL", ids, providerID).Count(&SCIMUser{})
+	if err != nil {
 		return errors.Wrap(err, "error finding SCIM group members")
 	}
-	if missing := differenceUUIDs(ids, found); len(missing) > 0 {
-		return SCIMGroupMemberNotFoundError{IDs: missing}
+	if live != len(ids) {
+		return ErrSCIMGroupMemberNotFound
 	}
 	return nil
 }
@@ -212,35 +199,12 @@ func requireLiveSCIMUsers(tx *storage.Connection, providerID uuid.UUID, ids []uu
 func touchSCIMGroup(tx *storage.Connection, group *SCIMGroup) (*SCIMGroup, error) {
 	touched := &SCIMGroup{}
 	if err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET updated_at = clock_timestamp() WHERE id = ? RETURNING "+scimGroupColumns, scimGroupsTable.tableName),
+		fmt.Sprintf("UPDATE %q SET updated_at = clock_timestamp() WHERE id = ? RETURNING %s", scimGroupsTable.tableName, scimGroupsTable.columns),
 		group.ID,
 	).First(touched); err != nil {
 		return nil, errors.Wrap(err, "error updating SCIM group")
 	}
 	return touched, nil
-}
-
-func diffSCIMGroupMembers(tx *storage.Connection, groupID uuid.UUID, members []uuid.UUID) ([]uuid.UUID, []uuid.UUID, error) {
-	rows := []struct {
-		Added   uuid.NullUUID `db:"added"`
-		Removed uuid.NullUUID `db:"removed"`
-	}{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT k.id AS added, m.scim_user_id AS removed FROM unnest(?::uuid[]) AS k(id) FULL JOIN (SELECT scim_user_id FROM %q WHERE group_id = ?) m ON m.scim_user_id = k.id WHERE k.id IS NULL OR m.scim_user_id IS NULL", SCIMGroupMember{}.TableName()),
-		uuidArray(members), groupID,
-	).All(&rows); err != nil {
-		return nil, nil, errors.Wrap(err, "error finding SCIM group member changes")
-	}
-	added, removed := []uuid.UUID{}, []uuid.UUID{}
-	for _, row := range rows {
-		if row.Added.Valid {
-			added = append(added, row.Added.UUID)
-		}
-		if row.Removed.Valid {
-			removed = append(removed, row.Removed.UUID)
-		}
-	}
-	return added, removed, nil
 }
 
 func removeSCIMGroupMembers(tx *storage.Connection, groupID uuid.UUID, ids []uuid.UUID) ([]uuid.UUID, error) {
@@ -250,7 +214,7 @@ func removeSCIMGroupMembers(tx *storage.Connection, groupID uuid.UUID, ids []uui
 	}
 	if err := tx.RawQuery(
 		fmt.Sprintf("DELETE FROM %q WHERE group_id = ? AND scim_user_id = ANY(?::uuid[]) RETURNING scim_user_id", SCIMGroupMember{}.TableName()),
-		groupID, uuidArray(ids),
+		groupID, ids,
 	).All(&removed); err != nil {
 		return nil, errors.Wrap(err, "error removing SCIM group members")
 	}
@@ -267,7 +231,7 @@ func addSCIMGroupMembers(tx *storage.Connection, group *SCIMGroup, ids []uuid.UU
 	}
 	if err := tx.RawQuery(
 		fmt.Sprintf("INSERT INTO %q (group_id, scim_user_id) SELECT ?, unnest(?::uuid[]) ON CONFLICT DO NOTHING RETURNING scim_user_id", SCIMGroupMember{}.TableName()),
-		group.ID, uuidArray(ids),
+		group.ID, ids,
 	).All(&added); err != nil {
 		return nil, errors.Wrap(err, "error adding SCIM group members")
 	}

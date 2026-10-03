@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgtype"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -73,16 +71,12 @@ type scimTable struct {
 	label      string
 	columns    string
 	nameColumn string
-	liveClause string
+	scope      string
 	conflict   error
 }
 
 func (t scimTable) where(providerID uuid.UUID, filter SCIMFilter) (string, []any, error) {
-	clauses := []string{"sso_provider_id = ?"}
-	args := []any{providerID}
-	if t.liveClause != "" {
-		clauses = append(clauses, t.liveClause)
-	}
+	clauses, args := []string{t.scope}, []any{providerID}
 	clause, values, err := t.filter(filter)
 	if clause != "" {
 		clauses = append(clauses, clause)
@@ -127,44 +121,11 @@ func (t scimTable) join(terms []SCIMFilter, operator string) (string, []any, err
 
 func scimMatch(filter SCIMFilter) (string, []any, error) {
 	match, err := json.Marshal(filter.Match)
-	if err != nil {
-		return "", nil, err
-	}
-	return "lower(resource::text)::jsonb @> lower(?)::jsonb", []any{string(match)}, nil
+	return "lower(resource::text)::jsonb @> lower(?)::jsonb", []any{string(match)}, err
 }
 
 func (t scimTable) targetClause() string {
-	if t.liveClause == "" {
-		return "id = ? AND sso_provider_id = ?"
-	}
-	return "id = ? AND sso_provider_id = ? AND " + t.liveClause
-}
-
-func (t scimTable) exists(tx *storage.Connection, target SCIMTarget) (bool, error) {
-	var result struct {
-		Exists bool `db:"exists"`
-	}
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %q WHERE %s) AS exists", t.tableName, t.targetClause()),
-		target.ID, target.ProviderID,
-	).First(&result); err != nil {
-		return false, errors.Wrapf(err, "error finding %s", t.label)
-	}
-	return result.Exists, nil
-}
-
-func (t scimTable) writeError(tx *storage.Connection, target SCIMTarget, err error, verb string) error {
-	if !errors.Is(err, sql.ErrNoRows) || target.UpdatedAt == nil {
-		return t.wrapError(err, verb)
-	}
-	exists, findErr := t.exists(tx, target)
-	if findErr != nil {
-		return findErr
-	}
-	if !exists {
-		return SCIMNotFoundError{}
-	}
-	return SCIMStaleError{}
+	return "id = ? AND " + t.scope
 }
 
 func (t scimTable) orderBy(order SCIMOrder) string {
@@ -268,14 +229,34 @@ func replaceSCIMRowIfChanged[T any](tx *storage.Connection, table scimTable, tar
 }
 
 func replaceSCIMRow[T any](tx *storage.Connection, table scimTable, target SCIMTarget, resource []byte) (*T, error) {
+	return writeSCIMRow[T](tx, table, target, scimWrite{verb: "replacing", sql: "UPDATE %q SET resource = ?::jsonb, updated_at = clock_timestamp()", args: []any{string(resource)}})
+}
+
+type scimWrite struct {
+	verb, sql string
+	args      []any
+}
+
+func writeSCIMRow[T any](tx *storage.Connection, table scimTable, target SCIMTarget, write scimWrite) (*T, error) {
 	row := new(T)
-	if err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET resource = ?::jsonb, updated_at = clock_timestamp() WHERE %s AND "+scimVersionClause+" RETURNING %s", table.tableName, table.targetClause(), table.columns),
-		string(resource), target.ID, target.ProviderID, target.UpdatedAt, target.UpdatedAt,
-	).First(row); err != nil {
-		return nil, table.writeError(tx, target, err, "replacing")
+	err := tx.RawQuery(
+		fmt.Sprintf(write.sql+" WHERE %s AND "+scimVersionClause+" RETURNING %s", table.tableName, table.targetClause(), table.columns),
+		append(write.args, target.ID, target.ProviderID, target.UpdatedAt, target.UpdatedAt)...,
+	).First(row)
+	if err == nil {
+		return row, nil
 	}
-	return row, nil
+	if !errors.Is(err, sql.ErrNoRows) || target.UpdatedAt == nil {
+		return nil, table.wrapError(err, write.verb)
+	}
+	exists, err := tx.Q().Where(table.targetClause(), target.ID, target.ProviderID).Exists(new(T))
+	if err != nil {
+		return nil, errors.Wrapf(err, "error finding %s", table.label)
+	}
+	if !exists {
+		return nil, SCIMNotFoundError{}
+	}
+	return nil, ErrSCIMStale
 }
 
 func isUniqueViolation(err error) bool {
@@ -306,17 +287,4 @@ func sortedUniqueUUIDs(ids []uuid.UUID) []uuid.UUID {
 	sorted := slices.Clone(ids)
 	slices.SortFunc(sorted, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
 	return slices.Compact(sorted)
-}
-
-func uuidArray(ids []uuid.UUID) *pgtype.UUIDArray {
-	array := &pgtype.UUIDArray{Elements: make([]pgtype.UUID, len(ids)), Status: pgtype.Present}
-	for i, id := range ids {
-		array.Elements[i] = pgtype.UUID{Bytes: id, Status: pgtype.Present}
-	}
-	length := len(ids)
-	if length == 0 || length > math.MaxInt32 {
-		return array
-	}
-	array.Dimensions = []pgtype.ArrayDimension{{Length: int32(length), LowerBound: 1}}
-	return array
 }

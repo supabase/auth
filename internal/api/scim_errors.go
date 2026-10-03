@@ -13,17 +13,17 @@ func scimError(err error) error {
 	switch {
 	case models.IsNotFoundError(err):
 		return errSCIMNotFound()
-	case errors.Is(err, models.SCIMStaleError{}):
+	case errors.Is(err, models.ErrSCIMStale):
 		return errSCIMStale()
-	case errors.Is(err, models.SCIMGroupConflictError{}):
+	case errors.Is(err, models.ErrSCIMGroupConflict):
 		return scimerrors.ErrUniqueness(`"externalId" must be unique`)
-	case errors.As(err, &models.SCIMGroupMemberNotFoundError{}):
+	case errors.Is(err, models.ErrSCIMGroupMemberNotFound):
 		return errSCIMMemberNotFound()
-	case errors.Is(err, models.SCIMUserConflictError{}):
+	case errors.Is(err, models.ErrSCIMUserConflict):
 		return scimerrors.ErrUniqueness(`"userName" and "externalId" must be unique`)
-	case errors.Is(err, models.SCIMUserLinkedError{}):
+	case errors.Is(err, models.ErrSCIMUserLinked):
 		return scimerrors.ErrUniqueness("user is already provisioned by this provider")
-	case errors.Is(err, models.SCIMUserDeletedError{}):
+	case errors.Is(err, models.ErrSCIMUserDeleted):
 		return scimerrors.ErrUniqueness("user was deleted by this provider")
 	}
 	return err

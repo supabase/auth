@@ -88,7 +88,7 @@ func (a *API) adminSCIMTokensCreate(w http.ResponseWriter, r *http.Request) erro
 
 	token, plaintext, err := models.CreateSCIMToken(db, provider, params.ExpiresAt)
 	if err != nil {
-		if errors.Is(err, models.SCIMTokenExpiryError{}) {
+		if errors.Is(err, models.ErrSCIMTokenExpiry) {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "expires_at must be in the future")
 		}
 		return apierrors.NewInternalServerError("Error creating SCIM token").WithInternalError(err)
