@@ -316,21 +316,6 @@ func (ts *SCIMTestSuite) TestGroupsRemoveDeletedMembers() {
 	require.Equal(ts.T(), string(models.SCIMUserDeletedAction), entries[0].Payload["action"])
 }
 
-func (ts *SCIMTestSuite) TestGroupsVersionChangesWhenMemberDeleted() {
-	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
-	id := ts.createGroup(ts.TokenA, groupWith("Engineering", "g-1", alice))
-	w, _ := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	stale := w.Header().Get("ETag")
-
-	w, _ = ts.do(ts.TokenA, http.MethodDelete, "/Users/"+alice, "")
-	require.Equal(ts.T(), http.StatusNoContent, w.Code)
-
-	w, _ = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	require.NotEqual(ts.T(), stale, w.Header().Get("ETag"))
-	w, _ = ts.doAs(protocol.MediaType, ts.TokenA, http.MethodPut, "/Groups/"+id, groupWith("Engineering", "g-1"), "If-Match", stale)
-	require.Equal(ts.T(), http.StatusPreconditionFailed, w.Code, w.Body.String())
-}
-
 func (ts *SCIMTestSuite) TestGroupsVersionChangesOnMemberOnlyWrite() {
 	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
 	bob := ts.create(ts.TokenA, userWith("bob@example.com", "b-1"))

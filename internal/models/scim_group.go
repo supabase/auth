@@ -148,24 +148,8 @@ func FindSCIMGroupMemberIDs(tx *storage.Connection, groupID uuid.UUID) ([]uuid.U
 }
 
 func RemoveSCIMUserFromGroups(tx *storage.Connection, scimUserID uuid.UUID) error {
-	groups, members := scimGroupsTable.tableName, SCIMGroupMember{}.TableName()
-	groupIDs := []uuid.UUID{}
-	if err := tx.RawQuery(
-		fmt.Sprintf("SELECT group_id FROM %q WHERE scim_user_id = ? ORDER BY group_id", members),
-		scimUserID,
-	).All(&groupIDs); err != nil {
-		return errors.Wrap(err, "error finding SCIM user groups")
-	}
-	for _, id := range groupIDs {
-		if err := tx.RawQuery(
-			fmt.Sprintf("UPDATE %q SET updated_at = clock_timestamp() WHERE id = ?", groups),
-			id,
-		).Exec(); err != nil {
-			return errors.Wrap(err, "error updating SCIM groups")
-		}
-	}
 	return errors.Wrap(tx.RawQuery(
-		fmt.Sprintf("DELETE FROM %q WHERE scim_user_id = ?", members),
+		fmt.Sprintf("DELETE FROM %q WHERE scim_user_id = ?", SCIMGroupMember{}.TableName()),
 		scimUserID,
 	).Exec(), "error removing SCIM user from groups")
 }
