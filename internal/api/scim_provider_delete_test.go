@@ -34,15 +34,18 @@ func (ts *SCIMTestSuite) auditActions(action models.AuditAction) []models.AuditL
 }
 
 func (ts *SCIMTestSuite) TestProviderDeleteCascadesSCIMRows() {
-	active := ts.linkedUser(ts.create(ts.TokenA, scimUser("active")))
+	activeID := ts.create(ts.TokenA, scimUser("active"))
+	active := ts.linkedUser(activeID)
 	deactivatedID := ts.create(ts.TokenA, scimUser("deactivated"))
 	deactivated := ts.linkedUser(deactivatedID)
 	ts.setActive(deactivatedID, false)
-	ts.createGroup(ts.TokenA, groupWith("A", "", deactivatedID))
+	ts.createGroup(ts.TokenA, groupWith("A", "", activeID, deactivatedID))
 	ts.create(ts.TokenB, scimUser("other"))
+	groupEvents := ts.countRows(&models.AuditLogEntry{}, "payload->>'action' LIKE 'scim_group_%'")
 
 	ts.deleteProvider(ts.A)
 
+	require.Equal(ts.T(), groupEvents, ts.countRows(&models.AuditLogEntry{}, "payload->>'action' LIKE 'scim_group_%'"))
 	require.False(ts.T(), ts.reloadUser(active.ID).IsBanned())
 	require.False(ts.T(), ts.reloadUser(deactivated.ID).IsBanned())
 	require.Zero(ts.T(), ts.countRows(&models.SCIMUser{}, "sso_provider_id = ?", ts.A.ID))
@@ -69,17 +72,6 @@ func (ts *SCIMTestSuite) TestProviderDeleteAudit() {
 	require.Equal(ts.T(), ts.A.ID.String(), traits["sso_provider_id"])
 }
 
-func (ts *SCIMTestSuite) TestProviderDeleteWritesNoGroupEvents() {
-	alice := ts.create(ts.TokenA, scimUser("alice"))
-	ts.createGroup(ts.TokenA, groupWith("Engineering", "g-1", alice))
-	before := ts.countRows(&models.AuditLogEntry{}, "payload->>'action' LIKE 'scim_group_%'")
-
-	ts.deleteProvider(ts.A)
-
-	require.Equal(ts.T(), before, ts.countRows(&models.AuditLogEntry{}, "payload->>'action' LIKE 'scim_group_%'"))
-	require.Zero(ts.T(), ts.countRows(&models.SCIMGroup{}, "sso_provider_id = ?", ts.A.ID))
-}
-
 func (ts *SCIMTestSuite) TestProviderDeleteAuditWithExpiredTokens() {
 	ts.setActive(ts.create(ts.TokenA, scimUser("expired")), false)
 	require.NoError(ts.T(), ts.API.db.RawQuery(
@@ -93,21 +85,15 @@ func (ts *SCIMTestSuite) TestProviderDeleteAuditWithExpiredTokens() {
 	require.Equal(ts.T(), []any{}, disabled[0].Payload["traits"].(map[string]any)["token_prefixes"])
 }
 
-func (ts *SCIMTestSuite) TestProviderDeleteWithoutSCIMEnabled() {
+func (ts *SCIMTestSuite) TestProviderDeleteWithoutActiveSCIM() {
 	provider := createSSOProvider(ts.T(), ts.API.db)
 	_, _, err := models.CreateSCIMToken(ts.API.db, provider, nil)
 	require.NoError(ts.T(), err)
-
-	ts.deleteProvider(provider)
-
-	require.Empty(ts.T(), ts.auditActions(models.SCIMDisabledAction))
-}
-
-func (ts *SCIMTestSuite) TestProviderDeleteAfterSCIMDisabled() {
 	ts.setActive(ts.create(ts.TokenA, scimUser("disabled")), false)
-	_, err := models.DisableSCIM(ts.API.db, ts.A.ID)
+	_, err = models.DisableSCIM(ts.API.db, ts.A.ID)
 	require.NoError(ts.T(), err)
 
+	ts.deleteProvider(provider)
 	ts.deleteProvider(ts.A)
 
 	require.Empty(ts.T(), ts.auditActions(models.SCIMDisabledAction))

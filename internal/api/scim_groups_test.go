@@ -44,6 +44,38 @@ func memberValues(group map[string]any) []string {
 	return values
 }
 
+func addMembers(ids ...string) string {
+	values := make([]string, len(ids))
+	for i, id := range ids {
+		values[i] = `{"value":"` + id + `"}`
+	}
+	return `{"op":"add","path":"members","value":[` + strings.Join(values, ",") + `]}`
+}
+
+func removeMember(id string) string {
+	return `{"op":"remove","path":"members[value eq \"` + id + `\"]"}`
+}
+
+func actionsOf(entries []models.AuditLogEntry) []string {
+	actions := []string{}
+	for _, entry := range entries {
+		actions = append(actions, entry.Payload["action"].(string))
+	}
+	return actions
+}
+
+func (ts *SCIMTestSuite) get(path string) map[string]any {
+	w, got := ts.do(ts.TokenA, http.MethodGet, path, "")
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	return got
+}
+
+func (ts *SCIMTestSuite) etag(path string) string {
+	w, _ := ts.do(ts.TokenA, http.MethodGet, path, "")
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	return w.Header().Get("ETag")
+}
+
 func (ts *SCIMTestSuite) TestGroupsLifecycle() {
 	alice := ts.create(ts.TokenA, userWith("Alice@Example.com", "a-1"))
 	bob := ts.create(ts.TokenA, userWith("bob@example.com", "b-1"))
@@ -82,26 +114,22 @@ func (ts *SCIMTestSuite) TestGroupsLifecycle() {
 	require.Equal(ts.T(), []string{bob}, memberValues(replaced))
 	require.Equal(ts.T(), meta["created"], replaced["meta"].(map[string]any)["created"])
 
-	w, patched := ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id, patchOp(`{"op":"add","path":"members","value":[{"value":"`+alice+`"}]}`, `{"op":"replace","path":"displayName","value":"Platform"}`))
+	w, patched := ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id, patchOp(addMembers(alice), `{"op":"replace","path":"displayName","value":"Platform"}`))
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 	require.ElementsMatch(ts.T(), []string{alice, bob}, memberValues(patched))
 	require.Equal(ts.T(), "Platform", patched["displayName"])
 
-	patched = ts.patchMembers(id, `{"op":"remove","path":"members[value eq \"`+bob+`\"]"}`)
+	patched = ts.patchMembers(id, removeMember(bob))
 	require.Equal(ts.T(), []string{alice}, memberValues(patched))
-
-	w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.Equal(ts.T(), "Platform", got["displayName"])
-	require.Equal(ts.T(), []string{alice}, memberValues(got))
+	require.Equal(ts.T(), "Platform", patched["displayName"])
 
 	w, _ = ts.do(ts.TokenA, http.MethodDelete, "/Groups/"+id, "")
 	require.Equal(ts.T(), http.StatusNoContent, w.Code, w.Body.String())
-	w, _ = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	require.Equal(ts.T(), http.StatusNotFound, w.Code)
-
-	w, _ = ts.do(ts.TokenA, http.MethodGet, "/Users/"+alice, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+	for _, missing := range []string{id, "not-a-uuid", "00000000-0000-0000-0000-000000000000"} {
+		w, _ = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+missing, "")
+		require.Equal(ts.T(), http.StatusNotFound, w.Code, missing)
+	}
+	ts.get("/Users/" + alice)
 }
 
 func (ts *SCIMTestSuite) TestGroupsWithoutMembers() {
@@ -162,9 +190,7 @@ func (ts *SCIMTestSuite) TestPatchReplaceMembers() {
 		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 		require.ElementsMatch(ts.T(), []string{bob, carol}, memberValues(got))
 	})
-
-	require.Len(ts.T(), entries, 1)
-	require.Equal(ts.T(), string(models.SCIMGroupUpdatedAction), entries[0].Payload["action"])
+	require.Equal(ts.T(), []string{string(models.SCIMGroupUpdatedAction)}, actionsOf(entries))
 }
 
 func (ts *SCIMTestSuite) TestExcludedMembersKeepsWrites() {
@@ -173,26 +199,18 @@ func (ts *SCIMTestSuite) TestExcludedMembersKeepsWrites() {
 	carol := ts.create(ts.TokenA, userWith("carol@example.com", "c-1"))
 	id := ts.createGroup(ts.TokenA, groupWith("Engineering", "", alice, bob))
 
-	w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id+"?excludedAttributes=members", "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	got := ts.get("/Groups/" + id + "?excludedAttributes=members")
 	require.NotContains(ts.T(), got, "members")
 	require.Equal(ts.T(), "Engineering", got["displayName"])
+	require.NotContains(ts.T(), ts.get("/Groups?excludedAttributes=members")["Resources"].([]any)[0], "members")
+	require.NotContains(ts.T(), ts.get("/Users/"+alice+"?excludedAttributes=groups"), "groups")
 
-	w, got = ts.do(ts.TokenA, http.MethodGet, "/Groups?excludedAttributes=members", "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	require.NotContains(ts.T(), got["Resources"].([]any)[0], "members")
-
-	w, got = ts.do(ts.TokenA, http.MethodGet, "/Users/"+alice+"?excludedAttributes=groups", "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	require.NotContains(ts.T(), got, "groups")
-
-	w, _ = ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id+"?excludedAttributes=members", patchOp(`{"op":"add","path":"members","value":[{"value":"`+carol+`"}]}`))
+	w, _ := ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id+"?excludedAttributes=members", patchOp(addMembers(carol)))
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 	w, _ = ts.do(ts.TokenA, http.MethodPut, "/Groups/"+id+"?excludedAttributes=members", groupWith("Platform", "", alice, bob, carol))
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 
-	w, got = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	got = ts.get("/Groups/" + id)
 	require.ElementsMatch(ts.T(), []string{alice, bob, carol}, memberValues(got))
 	require.Equal(ts.T(), "Platform", got["displayName"])
 }
@@ -201,11 +219,9 @@ func (ts *SCIMTestSuite) TestPatchRemoveAbsentMember() {
 	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
 	bob := ts.create(ts.TokenA, userWith("bob@example.com", "b-1"))
 	id := ts.createGroup(ts.TokenA, groupWith("Engineering", "", alice))
-	entries := ts.auditDuring(func() {
-		got := ts.patchMembers(id, `{"op":"remove","path":"members[value eq \"`+bob+`\"]"}`)
-		require.Equal(ts.T(), []string{alice}, memberValues(got))
-	})
-	require.Empty(ts.T(), entries)
+	require.Empty(ts.T(), ts.auditDuring(func() {
+		require.Equal(ts.T(), []string{alice}, memberValues(ts.patchMembers(id, removeMember(bob))))
+	}))
 }
 
 func (ts *SCIMTestSuite) TestPatchRejectsRemoveWithValue() {
@@ -222,14 +238,9 @@ func (ts *SCIMTestSuite) TestPatchRejectsRemoveWithValue() {
 		require.Equal(ts.T(), "invalidSyntax", got["scimType"], path)
 	}
 
-	w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.ElementsMatch(ts.T(), []string{alice, bob}, memberValues(got))
-	w, got = ts.do(ts.TokenA, http.MethodGet, "/Users/"+alice, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.NotEmpty(ts.T(), got["emails"])
-
-	got = ts.patchMembers(id, `{"op":"remove","path":"members[value eq \"`+bob+`\"]","value":null}`)
+	require.ElementsMatch(ts.T(), []string{alice, bob}, memberValues(ts.get("/Groups/"+id)))
+	require.NotEmpty(ts.T(), ts.get("/Users/" + alice)["emails"])
+	got := ts.patchMembers(id, `{"op":"remove","path":"members[value eq \"`+bob+`\"]","value":null}`)
 	require.Equal(ts.T(), []string{alice}, memberValues(got))
 }
 
@@ -274,10 +285,8 @@ func (ts *SCIMTestSuite) TestIdenticalPutChecksIfMatch() {
 		"/Users/" + alice: userWith("alice@example.com", "a-2"),
 		"/Groups/" + ts.createGroup(ts.TokenA, groupWith("Engineering", "g-1", alice)): groupWith("Engineering", "g-2", alice),
 	} {
-		w, _ := ts.do(ts.TokenA, http.MethodGet, path, "")
-		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-		stale := w.Header().Get("ETag")
-		w, _ = ts.do(ts.TokenA, http.MethodPut, path, body)
+		stale := ts.etag(path)
+		w, _ := ts.do(ts.TokenA, http.MethodPut, path, body)
 		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 		current := w.Header().Get("ETag")
 		require.NotEqual(ts.T(), stale, current, path)
@@ -302,44 +311,30 @@ func (ts *SCIMTestSuite) TestGroupsRemoveDeletedMembers() {
 		w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Users/"+alice, "")
 		require.Equal(ts.T(), http.StatusNoContent, w.Code)
 
-		w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+eng, "")
-		require.Equal(ts.T(), http.StatusOK, w.Code)
-		require.Equal(ts.T(), []string{bob}, memberValues(got))
-		w, got = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+ops, "")
-		require.Equal(ts.T(), http.StatusOK, w.Code)
-		require.Empty(ts.T(), memberValues(got))
-
+		require.Equal(ts.T(), []string{bob}, memberValues(ts.get("/Groups/"+eng)))
+		require.Empty(ts.T(), memberValues(ts.get("/Groups/"+ops)))
 		require.Zero(ts.T(), ts.countRows(&models.SCIMGroupMember{}, "scim_user_id = ?", alice))
 	})
-
-	require.Len(ts.T(), entries, 1)
-	require.Equal(ts.T(), string(models.SCIMUserDeletedAction), entries[0].Payload["action"])
+	require.Equal(ts.T(), []string{string(models.SCIMUserDeletedAction)}, actionsOf(entries))
 }
 
 func (ts *SCIMTestSuite) TestGroupsVersionChangesOnMemberOnlyWrite() {
 	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
 	bob := ts.create(ts.TokenA, userWith("bob@example.com", "b-1"))
 	id := ts.createGroup(ts.TokenA, groupWith("Engineering", "g-1", alice))
-	w, _ := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	stale := w.Header().Get("ETag")
+	stale := ts.etag("/Groups/" + id)
 
-	var got map[string]any
+	var current string
 	entries := ts.auditDuring(func() {
-		w, got = ts.doAs(protocol.MediaType, ts.TokenA, http.MethodPut, "/Groups/"+id, groupWith("Engineering", "g-1", bob), "If-Match", stale)
+		w, got := ts.doAs(protocol.MediaType, ts.TokenA, http.MethodPut, "/Groups/"+id, groupWith("Engineering", "g-1", bob), "If-Match", stale)
 		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+		require.Equal(ts.T(), []string{bob}, memberValues(got))
+		current = w.Header().Get("ETag")
 	})
-	current := w.Header().Get("ETag")
 	require.NotEqual(ts.T(), stale, current)
-	require.Equal(ts.T(), []string{bob}, memberValues(got))
-	actions := []string{}
-	for _, entry := range entries {
-		actions = append(actions, entry.Payload["action"].(string))
-	}
-	require.Equal(ts.T(), []string{string(models.SCIMGroupUpdatedAction)}, actions)
-
-	w, _ = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	require.Equal(ts.T(), current, w.Header().Get("ETag"))
-	w, _ = ts.doAs(protocol.MediaType, ts.TokenA, http.MethodPut, "/Groups/"+id, groupWith("Engineering", "g-1", alice), "If-Match", stale)
+	require.Equal(ts.T(), []string{string(models.SCIMGroupUpdatedAction)}, actionsOf(entries))
+	require.Equal(ts.T(), current, ts.etag("/Groups/"+id))
+	w, _ := ts.doAs(protocol.MediaType, ts.TokenA, http.MethodPut, "/Groups/"+id, groupWith("Engineering", "g-1", alice), "If-Match", stale)
 	require.Equal(ts.T(), http.StatusPreconditionFailed, w.Code, w.Body.String())
 }
 
@@ -351,11 +346,8 @@ func (ts *SCIMTestSuite) TestGroupsKeepDeactivatedMembers() {
 		w, _ := ts.do(ts.TokenA, http.MethodPatch, "/Users/"+alice, patchOp(`{"op":"replace","path":"active","value":false}`))
 		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 
-		got := ts.patchMembers(id, `{"op":"add","path":"members","value":[{"value":"`+bob+`"}]}`)
-		require.ElementsMatch(ts.T(), []string{alice, bob}, memberValues(got))
-
-		w, user := ts.do(ts.TokenA, http.MethodGet, "/Users/"+alice, "")
-		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+		require.ElementsMatch(ts.T(), []string{alice, bob}, memberValues(ts.patchMembers(id, addMembers(bob))))
+		user := ts.get("/Users/" + alice)
 		require.Equal(ts.T(), false, user["active"])
 		require.Len(ts.T(), user["groups"], 1)
 	})
@@ -369,13 +361,10 @@ func (ts *SCIMTestSuite) TestGroupsSortAndPaginate() {
 	ts.createGroup(ts.TokenA, groupWith("Alpha", "g-1"))
 	ts.createGroup(ts.TokenA, groupWith("gamma", "g-3"))
 
-	w, page := ts.do(ts.TokenA, http.MethodGet, "/Groups?sortBy=displayName&startIndex=2&count=1", "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	page := ts.get("/Groups?sortBy=displayName&startIndex=2&count=1")
 	require.EqualValues(ts.T(), 3, page["totalResults"])
 	require.Equal(ts.T(), "beta", page["Resources"].([]any)[0].(map[string]any)["displayName"])
-
-	w, page = ts.do(ts.TokenA, http.MethodGet, "/Groups?sortBy=displayName&sortOrder=descending", "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	page = ts.get("/Groups?sortBy=displayName&sortOrder=descending")
 	require.Equal(ts.T(), "gamma", page["Resources"].([]any)[0].(map[string]any)["displayName"])
 
 	w, body := ts.do(ts.TokenA, http.MethodGet, "/Groups?sortBy=members.value", "")
@@ -397,13 +386,6 @@ func (ts *SCIMTestSuite) TestGroupsUnsupportedFilters() {
 	}
 }
 
-func (ts *SCIMTestSuite) TestGroupsUnknownID() {
-	for _, id := range []string{"not-a-uuid", "00000000-0000-0000-0000-000000000000"} {
-		w, _ := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-		require.Equal(ts.T(), http.StatusNotFound, w.Code, id)
-	}
-}
-
 func (ts *SCIMTestSuite) TestGroupsAuditLog() {
 	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
 	bob := ts.create(ts.TokenA, userWith("bob@example.com", "b-1"))
@@ -416,10 +398,10 @@ func (ts *SCIMTestSuite) TestGroupsAuditLog() {
 		w, _ = ts.do(ts.TokenA, http.MethodPost, "/Groups", groupWith("Invalid", "g-2", uuid.Must(uuid.NewV4()).String()))
 		require.Equal(ts.T(), http.StatusBadRequest, w.Code, w.Body.String())
 
-		w, _ = ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id, patchOp(`{"op":"add","path":"members","value":[{"value":"`+bob+`"}]}`, `{"op":"remove","path":"members[value eq \"`+alice+`\"]"}`, `{"op":"replace","path":"displayName","value":"Platform"}`))
+		w, _ = ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id, patchOp(addMembers(bob), removeMember(alice), `{"op":"replace","path":"displayName","value":"Platform"}`))
 		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 
-		w, _ = ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id, patchOp(`{"op":"replace","path":"displayName","value":"Rejected"}`, `{"op":"add","path":"members","value":[{"value":"`+uuid.Must(uuid.NewV4()).String()+`"}]}`))
+		w, _ = ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id, patchOp(`{"op":"replace","path":"displayName","value":"Rejected"}`, addMembers(uuid.Must(uuid.NewV4()).String())))
 		require.Equal(ts.T(), http.StatusBadRequest, w.Code, w.Body.String())
 
 		w, _ = ts.do(ts.TokenA, http.MethodDelete, "/Groups/"+id, "")
@@ -469,28 +451,24 @@ func (ts *SCIMTestSuite) TestGroupsPushReplay() {
 		"deactivate bjensen":                  {"Group A", []string{bjensen}, false},
 		"reactivate bjensen and reassign app": {"Group A", []string{bjensen}, true},
 	}
-	last := map[string]struct {
+	type sent struct {
 		body    string
 		version any
-	}{}
+	}
+	last := map[string]sent{}
 	onRequest := func(step string, request replayRequest, got map[string]any, _ string) {
 		version := got["meta"].(map[string]any)["version"]
 		if prev, ok := last[request.Path]; ok && request.Method == http.MethodPut && prev.body == string(request.Body) {
 			require.Equal(ts.T(), prev.version, version, step)
 		}
-		last[request.Path] = struct {
-			body    string
-			version any
-		}{string(request.Body), version}
+		last[request.Path] = sent{string(request.Body), version}
 	}
 	entries := ts.auditDuring(func() {
 		played := ts.replay("okta_group_push.json", rfcGroup, []string{rfcBjensen, bjensen, rfcJsmith, jsmith}, onRequest, func(step, group string) {
 			want, ok := expected[step]
 			require.True(ts.T(), ok, step)
 			ts.requireGroup(step, group, want.displayName, want.members)
-			w, user := ts.do(ts.TokenA, http.MethodGet, "/Users/"+bjensen, "")
-			require.Equal(ts.T(), http.StatusOK, w.Code, step)
-			require.Equal(ts.T(), want.bjensenActive, user["active"], step)
+			require.Equal(ts.T(), want.bjensenActive, ts.get("/Users/" + bjensen)["active"], step)
 		})
 		require.Equal(ts.T(), len(expected), played)
 	})
@@ -544,8 +522,7 @@ func (ts *SCIMTestSuite) TestGroupsPatchReplay() {
 }
 
 func (ts *SCIMTestSuite) requireGroup(step, group, displayName string, members []string) {
-	w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+group, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, step)
+	got := ts.get("/Groups/" + group)
 	require.Equal(ts.T(), displayName, got["displayName"], step)
 	require.ElementsMatch(ts.T(), members, memberValues(got), step)
 }
@@ -559,12 +536,10 @@ func (ts *SCIMTestSuite) TestWriteResponseMembersMatchGet() {
 	requireMatchesGet := func(method, body string) {
 		w, written := ts.do(ts.TokenA, method, "/Groups/"+id, body)
 		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-		w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-		require.Equal(ts.T(), got["members"], written["members"])
+		require.Equal(ts.T(), ts.get("/Groups/" + id)["members"], written["members"])
 	}
-	requireMatchesGet(http.MethodPatch, patchOp(`{"op":"add","path":"members","value":[{"value":"`+ids[3]+`"},{"value":"`+ids[1]+`"}]}`, `{"op":"replace","path":"displayName","value":"Platform"}`))
-	requireMatchesGet(http.MethodPatch, patchOp(`{"op":"remove","path":"members[value eq \"`+ids[2]+`\"]"}`, `{"op":"replace","path":"displayName","value":"Engineering"}`))
+	requireMatchesGet(http.MethodPatch, patchOp(addMembers(ids[3], ids[1]), `{"op":"replace","path":"displayName","value":"Platform"}`))
+	requireMatchesGet(http.MethodPatch, patchOp(removeMember(ids[2]), `{"op":"replace","path":"displayName","value":"Engineering"}`))
 	requireMatchesGet(http.MethodPut, groupWith("Engineering", "", ids[1], ids[2], ids[3]))
 	requireMatchesGet(http.MethodPatch, patchOp(`{"op":"replace","path":"displayName","value":"Platform"}`))
 }
@@ -577,16 +552,6 @@ func (ts *SCIMTestSuite) TestPatchMembersDeltaMatchesFullPatch() {
 	w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Users/"+deleted, "")
 	require.Equal(ts.T(), http.StatusNoContent, w.Code, w.Body.String())
 	other := ts.create(ts.TokenB, userWith("erin@example.com", "e-1"))
-	add := func(ids ...string) string {
-		values := make([]string, len(ids))
-		for i, id := range ids {
-			values[i] = `{"value":"` + id + `"}`
-		}
-		return `{"op":"add","path":"members","value":[` + strings.Join(values, ",") + `]}`
-	}
-	remove := func(id string) string {
-		return `{"op":"remove","path":"members[value eq \"` + id + `\"]"}`
-	}
 
 	type outcome struct {
 		code      int
@@ -597,35 +562,29 @@ func (ts *SCIMTestSuite) TestPatchMembersDeltaMatchesFullPatch() {
 	}
 	apply := func(query string, ops []string) outcome {
 		id := ts.createGroup(ts.TokenA, groupWith("Engineering", "", alice, bob))
-		w, _ := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-		before := w.Header().Get("ETag")
+		before := ts.etag("/Groups/" + id)
 		var result outcome
-		entries := ts.auditDuring(func() {
-			var got map[string]any
-			w, got = ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id+query, patchOp(ops...))
+		result.events = actionsOf(ts.auditDuring(func() {
+			w, got := ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id+query, patchOp(ops...))
 			result.code, result.scimType = w.Code, got["scimType"]
-		})
-		for _, entry := range entries {
-			result.events = append(result.events, entry.Payload["action"].(string))
-		}
-		w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-		result.members = memberValues(got)
-		result.versioned = w.Header().Get("ETag") != before
+		}))
+		result.members = memberValues(ts.get("/Groups/" + id))
+		result.versioned = ts.etag("/Groups/"+id) != before
 		return result
 	}
 
 	for name, ops := range map[string][]string{
-		"add new":            {add(carol)},
-		"add present":        {add(alice)},
-		"add duplicate":      {add(carol, carol)},
-		"remove present":     {remove(alice)},
-		"remove absent":      {remove(carol)},
-		"add and remove":     {add(carol), remove(bob)},
-		"uppercase":          {add(strings.ToUpper(carol)), remove(strings.ToUpper(alice))},
-		"remove non uuid":    {remove("nope")},
-		"add non uuid":       {add("nope")},
-		"add deleted user":   {add(deleted)},
-		"add other provider": {add(other)},
+		"add new":            {addMembers(carol)},
+		"add present":        {addMembers(alice)},
+		"add duplicate":      {addMembers(carol, carol)},
+		"remove present":     {removeMember(alice)},
+		"remove absent":      {removeMember(carol)},
+		"add and remove":     {addMembers(carol), removeMember(bob)},
+		"uppercase":          {addMembers(strings.ToUpper(carol)), removeMember(strings.ToUpper(alice))},
+		"remove non uuid":    {removeMember("nope")},
+		"add non uuid":       {addMembers("nope")},
+		"add deleted user":   {addMembers(deleted)},
+		"add other provider": {addMembers(other)},
 	} {
 		delta, full := apply("", ops), apply("?attributes=members", ops)
 		if full.code == http.StatusOK {
@@ -643,16 +602,14 @@ func (ts *SCIMTestSuite) TestPatchMembersDeltaMatchesFullPatch() {
 func (ts *SCIMTestSuite) TestPatchMembersDeltaChecksIfMatch() {
 	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
 	id := ts.createGroup(ts.TokenA, groupWith("Engineering", ""))
-	w, _ := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	current := w.Header().Get("ETag")
-	body := patchOp(`{"op":"add","path":"members","value":[{"value":"` + alice + `"}]}`)
+	current := ts.etag("/Groups/" + id)
+	body := patchOp(addMembers(alice))
 
-	w, _ = ts.doAs(protocol.MediaType, ts.TokenA, http.MethodPatch, "/Groups/"+id, body, "If-Match", current)
+	w, _ := ts.doAs(protocol.MediaType, ts.TokenA, http.MethodPatch, "/Groups/"+id, body, "If-Match", current)
 	require.Equal(ts.T(), http.StatusNoContent, w.Code, w.Body.String())
 	next := w.Header().Get("ETag")
 	require.NotEqual(ts.T(), current, next)
-	w, _ = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	require.Equal(ts.T(), next, w.Header().Get("ETag"))
+	require.Equal(ts.T(), next, ts.etag("/Groups/"+id))
 
 	w, _ = ts.doAs(protocol.MediaType, ts.TokenA, http.MethodPatch, "/Groups/"+id, body, "If-Match", current)
 	require.Equal(ts.T(), http.StatusPreconditionFailed, w.Code, w.Body.String())
@@ -667,9 +624,7 @@ func (ts *SCIMTestSuite) patchMembers(id string, ops ...string) map[string]any {
 	w, _ := ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id, patchOp(ops...))
 	require.Equal(ts.T(), http.StatusNoContent, w.Code, w.Body.String())
 	require.Empty(ts.T(), w.Body.String())
-	w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	return got
+	return ts.get("/Groups/" + id)
 }
 
 func (ts *SCIMTestSuite) TestConcurrentMemberAddsWithoutIfMatchLoseNoUpdates() {
@@ -702,8 +657,7 @@ func (ts *SCIMTestSuite) TestConcurrentMemberAddsWithoutIfMatchLoseNoUpdates() {
 	for _, member := range added {
 		wg.Go(func() {
 			<-start
-			body := patchOp(`{"op":"add","path":"members","value":[{"value":"` + member.String() + `"}]}`)
-			codes <- ts.serve(protocol.MediaType, ts.TokenA, http.MethodPatch, "/Groups/"+id, body).Code
+			codes <- ts.serve(protocol.MediaType, ts.TokenA, http.MethodPatch, "/Groups/"+id, patchOp(addMembers(member.String()))).Code
 		})
 	}
 	close(start)
@@ -715,16 +669,14 @@ func (ts *SCIMTestSuite) TestConcurrentMemberAddsWithoutIfMatchLoseNoUpdates() {
 		counts[code]++
 	}
 	require.Equal(ts.T(), map[int]int{http.StatusNoContent: attempts}, counts)
-	w, group := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	require.Len(ts.T(), memberValues(group), existing+attempts)
+	require.Len(ts.T(), memberValues(ts.get("/Groups/"+id)), existing+attempts)
 }
 
 func (ts *SCIMTestSuite) TestConcurrentGroupWrites() {
 	alice := ts.create(ts.TokenA, userWith("alice@example.com", "a-1"))
 	bob := ts.create(ts.TokenA, userWith("bob@example.com", "b-1"))
 	carol := ts.create(ts.TokenA, userWith("carol@example.com", "c-1"))
-	addCarol := patchOp(`{"op":"add","path":"members","value":[{"value":"` + carol + `"}]}`)
+	addCarol := patchOp(addMembers(carol))
 	addBob := func(tx *storage.Connection) error {
 		return tx.RawQuery(`WITH added AS (INSERT INTO scim_group_members (group_id, scim_user_id) SELECT id, ? FROM scim_groups WHERE external_id = 'g-1') UPDATE scim_groups SET updated_at = clock_timestamp() WHERE external_id = 'g-1'`, bob).Exec()
 	}
@@ -752,8 +704,7 @@ func (ts *SCIMTestSuite) TestConcurrentGroupWrites() {
 			headers = []string{"If-Match", tc.ifMatch}
 		}
 		if tc.ifMatch == "etag" {
-			w, _ := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-			headers[1] = w.Header().Get("ETag")
+			headers[1] = ts.etag("/Groups/" + id)
 		}
 		code, err := ts.whileLocked(
 			func(tx *storage.Connection) error {
@@ -765,12 +716,10 @@ func (ts *SCIMTestSuite) TestConcurrentGroupWrites() {
 		require.NoError(ts.T(), err, tc.name)
 		require.Equal(ts.T(), tc.code, code, tc.name)
 
-		w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+id, "")
-		require.Equal(ts.T(), http.StatusOK, w.Code, tc.name)
+		got := ts.get("/Groups/" + id)
 		require.Equal(ts.T(), tc.displayName, got["displayName"], tc.name)
 		require.ElementsMatch(ts.T(), tc.members, memberValues(got), tc.name)
-
-		w, _ = ts.do(ts.TokenA, http.MethodDelete, "/Groups/"+id, "")
+		w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Groups/"+id, "")
 		require.Equal(ts.T(), http.StatusNoContent, w.Code, tc.name)
 	}
 }
