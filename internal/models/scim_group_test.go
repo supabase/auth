@@ -37,22 +37,11 @@ func (ts *SCIMGroupTestSuite) TestCreate() {
 	require.Equal(ts.T(), "ext-1", *group.ExternalID)
 	require.JSONEq(ts.T(), `{"displayName":"Engineering","externalId":"ext-1"}`, string(group.Resource))
 	require.False(ts.T(), group.CreatedAt.IsZero())
-}
 
-func (ts *SCIMGroupTestSuite) TestCreateAllowsDuplicateDisplayName() {
-	ts.createGroup(ts.provider.ID, "Engineering")
 	ts.createGroup(ts.provider.ID, "engineering")
-}
-
-func (ts *SCIMGroupTestSuite) TestCreateRejectsDuplicateExternalID() {
-	_, err := CreateSCIMGroup(ts.db, ts.provider.ID, []byte(`{"displayName":"A","externalId":"ext-1"}`))
-	require.NoError(ts.T(), err)
-
 	_, err = CreateSCIMGroup(ts.db, ts.provider.ID, []byte(`{"displayName":"B","externalId":"ext-1"}`))
 	require.ErrorIs(ts.T(), err, ErrSCIMGroupConflict)
-
-	other := ts.createProvider()
-	_, err = CreateSCIMGroup(ts.db, other.ID, []byte(`{"displayName":"C","externalId":"ext-1"}`))
+	_, err = CreateSCIMGroup(ts.db, ts.createProvider().ID, []byte(`{"displayName":"C","externalId":"ext-1"}`))
 	require.NoError(ts.T(), err)
 }
 
@@ -63,8 +52,7 @@ func (ts *SCIMGroupTestSuite) TestFindIsScopedToProvider() {
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), group.ID, found.ID)
 
-	other := ts.createProvider()
-	_, err = FindSCIMGroup(ts.db, other.ID, group.ID)
+	_, err = FindSCIMGroup(ts.db, ts.createProvider().ID, group.ID)
 	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
 	require.True(ts.T(), IsNotFoundError(err))
 }
@@ -74,8 +62,7 @@ func (ts *SCIMGroupTestSuite) TestFindGroupsFiltersAndSorts() {
 	ts.createGroup(ts.provider.ID, "alpha")
 	ts.createGroup(ts.createProvider().ID, "Alpha")
 
-	displayName := "ALPHA"
-	groups, total, err := FindSCIMGroups(ts.db, ts.provider.ID, SCIMQuery{Filter: SCIMFilter{Attribute: SCIMAttributeName, Value: displayName}, Limit: 10})
+	groups, total, err := FindSCIMGroups(ts.db, ts.provider.ID, SCIMQuery{Filter: SCIMFilter{Attribute: SCIMAttributeName, Value: "ALPHA"}, Limit: 10})
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), 1, total)
 	require.Equal(ts.T(), "alpha", groups[0].DisplayName)
@@ -103,8 +90,11 @@ func (ts *SCIMGroupTestSuite) TestReplaceChecksVersion() {
 	_, _, err = ReplaceSCIMGroupIfChanged(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID, UpdatedAt: &group.UpdatedAt}, []byte(`{"displayName":"Stale"}`))
 	require.ErrorIs(ts.T(), err, ErrSCIMStale)
 
-	_, _, err = ReplaceSCIMGroupIfChanged(ts.db, SCIMTarget{ProviderID: ts.createProvider().ID, ID: group.ID}, []byte(`{"displayName":"Other"}`))
-	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
+	other := ts.createProvider().ID
+	for _, version := range []*time.Time{nil, &replaced.UpdatedAt} {
+		_, _, err = ReplaceSCIMGroupIfChanged(ts.db, SCIMTarget{ProviderID: other, ID: group.ID, UpdatedAt: version}, []byte(`{"displayName":"Other"}`))
+		require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
+	}
 }
 
 func (ts *SCIMGroupTestSuite) TestEachWriteInATransactionGetsANewVersion() {
@@ -124,11 +114,9 @@ func (ts *SCIMGroupTestSuite) TestEachWriteInATransactionGetsANewVersion() {
 
 func (ts *SCIMGroupTestSuite) TestDeleteRemovesMembers() {
 	group := ts.createGroup(ts.provider.ID, "Engineering")
-	user := ts.createUser(ts.provider.ID, "alice")
-	_, _, err := ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{user.ID})
-	require.NoError(ts.T(), err)
+	ts.addMembers(group, ts.createUser(ts.provider.ID, "alice").ID)
 
-	_, err = DeleteSCIMGroup(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID})
+	_, err := DeleteSCIMGroup(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID})
 	require.NoError(ts.T(), err)
 
 	_, err = FindSCIMGroup(ts.db, ts.provider.ID, group.ID)
@@ -137,26 +125,10 @@ func (ts *SCIMGroupTestSuite) TestDeleteRemovesMembers() {
 	require.NoError(ts.T(), err)
 	require.Zero(ts.T(), count)
 
-	_, err = DeleteSCIMGroup(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID})
-	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
-}
-
-func (ts *SCIMGroupTestSuite) TestVersionedWriteToMissingRowIsNotFound() {
-	group := ts.createGroup(ts.provider.ID, "Engineering")
-	alice := ts.createUser(ts.provider.ID, "alice")
-
-	_, _, err := ReplaceSCIMGroupIfChanged(ts.db, SCIMTarget{ProviderID: ts.createProvider().ID, ID: group.ID, UpdatedAt: &group.UpdatedAt}, []byte(`{"displayName":"Other"}`))
-	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
-
-	_, err = DeleteSCIMGroup(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID})
-	require.NoError(ts.T(), err)
-	_, err = DeleteSCIMGroup(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID, UpdatedAt: &group.UpdatedAt})
-	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
-
-	_, err = DeleteSCIMUser(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID})
-	require.NoError(ts.T(), err)
-	_, err = DeleteSCIMUser(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID, UpdatedAt: &alice.UpdatedAt})
-	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
+	for _, version := range []*time.Time{nil, &group.UpdatedAt} {
+		_, err = DeleteSCIMGroup(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: group.ID, UpdatedAt: version})
+		require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
+	}
 }
 
 func (ts *SCIMGroupTestSuite) TestReplaceMembersDiffs() {
@@ -174,11 +146,7 @@ func (ts *SCIMGroupTestSuite) TestReplaceMembersDiffs() {
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), []uuid.UUID{carol.ID}, change.Added)
 	require.Equal(ts.T(), []uuid.UUID{alice.ID}, change.Removed)
-
-	members, err := FindSCIMMembershipsByGroup(ts.db, ts.provider.ID, []uuid.UUID{group.ID})
-	require.NoError(ts.T(), err)
-	require.Len(ts.T(), members, 2)
-	require.ElementsMatch(ts.T(), []uuid.UUID{bob.ID, carol.ID}, []uuid.UUID{members[0].SCIMUserID, members[1].SCIMUserID})
+	require.ElementsMatch(ts.T(), []uuid.UUID{bob.ID, carol.ID}, ts.members(group))
 
 	_, change, err = ReplaceSCIMGroupMembers(ts.db, group, nil)
 	require.NoError(ts.T(), err)
@@ -186,40 +154,30 @@ func (ts *SCIMGroupTestSuite) TestReplaceMembersDiffs() {
 	require.ElementsMatch(ts.T(), []uuid.UUID{bob.ID, carol.ID}, change.Removed)
 }
 
-func (ts *SCIMGroupTestSuite) TestReplaceMembersRejectsOtherProviderUsers() {
+func (ts *SCIMGroupTestSuite) TestReplaceMembersRejectsUnknownUsers() {
 	group := ts.createGroup(ts.provider.ID, "Engineering")
 	alice := ts.createUser(ts.provider.ID, "alice")
-	outsider := ts.createUser(ts.createProvider().ID, "mallory")
-
-	_, _, err := ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{alice.ID, outsider.ID})
-	require.ErrorIs(ts.T(), err, ErrSCIMGroupMemberNotFound)
-
-	members, err := FindSCIMMembershipsByGroup(ts.db, ts.provider.ID, []uuid.UUID{group.ID})
+	bob := ts.createUser(ts.provider.ID, "bob")
+	_, err := DeleteSCIMUser(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: bob.ID})
 	require.NoError(ts.T(), err)
-	require.Empty(ts.T(), members)
-}
+	mallory := ts.createUser(ts.createProvider().ID, "mallory")
 
-func (ts *SCIMGroupTestSuite) TestReplaceMembersRejectsDeletedUsers() {
-	group := ts.createGroup(ts.provider.ID, "Engineering")
-	alice := ts.createUser(ts.provider.ID, "alice")
-	_, err := DeleteSCIMUser(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID})
-	require.NoError(ts.T(), err)
-
-	_, _, err = ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{alice.ID})
-	require.ErrorIs(ts.T(), err, ErrSCIMGroupMemberNotFound)
-
-	_, _, err = ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{uuid.Must(uuid.NewV4())})
-	require.ErrorIs(ts.T(), err, ErrSCIMGroupMemberNotFound)
+	for _, id := range []uuid.UUID{mallory.ID, bob.ID, uuid.Must(uuid.NewV4())} {
+		_, _, err = ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{alice.ID, id})
+		require.ErrorIs(ts.T(), err, ErrSCIMGroupMemberNotFound)
+		require.Empty(ts.T(), ts.members(group))
+	}
 }
 
 func (ts *SCIMGroupTestSuite) TestReplaceMembersDoesNotLockExistingMembers() {
 	group := ts.createGroup(ts.provider.ID, "Engineering")
 	alice := ts.createUser(ts.provider.ID, "alice")
 	bob := ts.createUser(ts.provider.ID, "bob")
-	_, _, err := ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{alice.ID})
-	require.NoError(ts.T(), err)
+	ts.addMembers(group, alice.ID)
 
-	deleting := ts.beginTx()
+	pending, err := ts.db.NewTransaction()
+	require.NoError(ts.T(), err)
+	deleting := &storage.Connection{Connection: pending}
 	defer func() { _ = deleting.TX.Rollback() }()
 	_, err = DeleteSCIMUser(deleting, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID})
 	require.NoError(ts.T(), err)
@@ -244,35 +202,20 @@ func (ts *SCIMGroupTestSuite) TestReplaceMembersDoesNotLockExistingMembers() {
 
 	require.NoError(ts.T(), RemoveSCIMUserFromGroups(deleting, alice.ID))
 	require.NoError(ts.T(), deleting.TX.Commit())
-
-	members, err := FindSCIMMembershipsByGroup(ts.db, ts.provider.ID, []uuid.UUID{group.ID})
-	require.NoError(ts.T(), err)
-	require.Len(ts.T(), members, 1)
-	require.Equal(ts.T(), bob.ID, members[0].SCIMUserID)
+	require.Equal(ts.T(), []uuid.UUID{bob.ID}, ts.members(group))
 }
 
-func (ts *SCIMGroupTestSuite) TestFindMembersHidesDeletedUsers() {
-	group := ts.createGroup(ts.provider.ID, "Engineering")
-	alice := ts.createUser(ts.provider.ID, "alice")
-	_, _, err := ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{alice.ID})
-	require.NoError(ts.T(), err)
-
-	_, err = DeleteSCIMUser(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID})
-	require.NoError(ts.T(), err)
-
-	members, err := FindSCIMMembershipsByGroup(ts.db, ts.provider.ID, []uuid.UUID{group.ID})
-	require.NoError(ts.T(), err)
-	require.Empty(ts.T(), members)
-}
-
-func (ts *SCIMGroupTestSuite) TestReplaceMembersValidatesOnlyAddedMembers() {
+func (ts *SCIMGroupTestSuite) TestReplaceMembersSkipsDeletedMembers() {
 	group := ts.createGroup(ts.provider.ID, "Engineering")
 	alice := ts.createUser(ts.provider.ID, "alice")
 	bob := ts.createUser(ts.provider.ID, "bob")
-	_, _, err := ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{alice.ID})
+	ts.addMembers(group, alice.ID)
+	_, err := DeleteSCIMUser(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID})
 	require.NoError(ts.T(), err)
-	_, err = DeleteSCIMUser(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID})
-	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), ts.members(group))
+
+	_, err = DeleteSCIMUser(ts.db, SCIMTarget{ProviderID: ts.provider.ID, ID: alice.ID, UpdatedAt: &alice.UpdatedAt})
+	require.ErrorIs(ts.T(), err, SCIMNotFoundError{})
 
 	_, change, err := ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{alice.ID, bob.ID})
 	require.NoError(ts.T(), err)
@@ -288,10 +231,8 @@ func (ts *SCIMGroupTestSuite) TestFindMembershipsByUser() {
 	admins := ts.createGroup(ts.provider.ID, "Admins")
 	alice := ts.createUser(ts.provider.ID, "alice")
 	bob := ts.createUser(ts.provider.ID, "bob")
-	_, _, err := ReplaceSCIMGroupMembers(ts.db, engineering, []uuid.UUID{alice.ID, bob.ID})
-	require.NoError(ts.T(), err)
-	_, _, err = ReplaceSCIMGroupMembers(ts.db, admins, []uuid.UUID{alice.ID})
-	require.NoError(ts.T(), err)
+	ts.addMembers(engineering, alice.ID, bob.ID)
+	ts.addMembers(admins, alice.ID)
 
 	groups, err := FindSCIMMembershipsByUser(ts.db, ts.provider.ID, []uuid.UUID{alice.ID, bob.ID})
 	require.NoError(ts.T(), err)
@@ -314,20 +255,12 @@ func (ts *SCIMGroupTestSuite) TestReplaceMembersReturnsMembersInRenderOrder() {
 	alice := ts.createUser(ts.provider.ID, "alice")
 	bob := ts.createUser(ts.provider.ID, "bob")
 	carol := ts.createUser(ts.provider.ID, "carol")
-	_, _, err := ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{carol.ID, alice.ID})
-	require.NoError(ts.T(), err)
+	ts.addMembers(group, carol.ID, alice.ID)
 
 	_, change, err := ReplaceSCIMGroupMembers(ts.db, group, []uuid.UUID{bob.ID, carol.ID, alice.ID, bob.ID})
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), change.Members, 3)
-
-	rendered, err := FindSCIMMembershipsByGroup(ts.db, ts.provider.ID, []uuid.UUID{group.ID})
-	require.NoError(ts.T(), err)
-	ids := make([]uuid.UUID, len(rendered))
-	for i, m := range rendered {
-		ids[i] = m.SCIMUserID
-	}
-	require.Equal(ts.T(), ids, change.Members)
+	require.Equal(ts.T(), ts.members(group), change.Members)
 }
 
 func (ts *SCIMGroupTestSuite) createProvider() *SSOProvider {
@@ -346,8 +279,17 @@ func (ts *SCIMGroupTestSuite) createUser(providerID uuid.UUID, userName string) 
 	return user
 }
 
-func (ts *SCIMGroupTestSuite) beginTx() *storage.Connection {
-	tx, err := ts.db.NewTransaction()
+func (ts *SCIMGroupTestSuite) addMembers(group *SCIMGroup, ids ...uuid.UUID) {
+	_, _, err := ReplaceSCIMGroupMembers(ts.db, group, ids)
 	require.NoError(ts.T(), err)
-	return &storage.Connection{Connection: tx}
+}
+
+func (ts *SCIMGroupTestSuite) members(group *SCIMGroup) []uuid.UUID {
+	members, err := FindSCIMMembershipsByGroup(ts.db, ts.provider.ID, []uuid.UUID{group.ID})
+	require.NoError(ts.T(), err)
+	ids := make([]uuid.UUID, len(members))
+	for i, m := range members {
+		ids[i] = m.SCIMUserID
+	}
+	return ids
 }

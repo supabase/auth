@@ -28,11 +28,8 @@ func (ts *SCIMSettingsTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.db.Create(ts.provider))
 }
 
-func (ts *SCIMSettingsTestSuite) TestDisabledByDefault() {
-	require.False(ts.T(), ts.enabled())
-}
-
 func (ts *SCIMSettingsTestSuite) TestTransitions() {
+	require.False(ts.T(), ts.enabled())
 	for _, step := range []struct {
 		name    string
 		apply   func(*storage.Connection, uuid.UUID) (bool, error)

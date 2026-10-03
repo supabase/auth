@@ -49,11 +49,13 @@ func (ts *SCIMTokenTestSuite) TestCreateWithExpiry() {
 	require.True(ts.T(), expiresAt.Equal(*token.ExpiresAt))
 }
 
-func (ts *SCIMTokenTestSuite) TestCreateWithPastExpiry() {
+func (ts *SCIMTokenTestSuite) TestCreateRejects() {
 	expiresAt := time.Now().Add(-time.Minute)
-	_, _, err := CreateSCIMToken(ts.db, ts.createProvider(), &expiresAt)
-
+	_, _, err := CreateSCIMToken(ts.db, ts.provider, &expiresAt)
 	require.ErrorIs(ts.T(), err, ErrSCIMTokenExpiry)
+
+	_, _, err = CreateSCIMToken(ts.db, &SSOProvider{ID: uuid.Must(uuid.NewV4())}, nil)
+	require.Error(ts.T(), err)
 }
 
 func (ts *SCIMTokenTestSuite) TestTimestampsAreUTC() {
@@ -80,25 +82,28 @@ func (ts *SCIMTokenTestSuite) TestTimestampsAreUTC() {
 	}
 }
 
-func (ts *SCIMTokenTestSuite) TestCreateForMissingProvider() {
-	_, _, err := CreateSCIMToken(ts.db, &SSOProvider{ID: uuid.Must(uuid.NewV4())}, nil)
-
-	require.Error(ts.T(), err)
-}
-
 func (ts *SCIMTokenTestSuite) TestFindBySSOProvider() {
-	first, _ := ts.createToken(nil)
-	second, _ := ts.createToken(nil)
-	require.NoError(ts.T(), second.Revoke(ts.db))
-
-	other := ts.createProvider()
-	_, _, err := CreateSCIMToken(ts.db, other, nil)
+	active, _ := ts.createToken(nil)
+	revoked, _ := ts.createToken(nil)
+	require.NoError(ts.T(), revoked.Revoke(ts.db))
+	expired, _ := ts.createToken(nil)
+	ts.expire(expired)
+	_, _, err := CreateSCIMToken(ts.db, ts.createProvider(), nil)
 	require.NoError(ts.T(), err)
 
 	tokens, err := FindSCIMTokensBySSOProvider(ts.db, ts.provider.ID)
 	require.NoError(ts.T(), err)
-	require.Len(ts.T(), tokens, 2)
-	require.ElementsMatch(ts.T(), []uuid.UUID{first.ID, second.ID}, []uuid.UUID{tokens[0].ID, tokens[1].ID})
+	require.Len(ts.T(), tokens, 3)
+	require.ElementsMatch(ts.T(), []uuid.UUID{active.ID, revoked.ID, expired.ID}, []uuid.UUID{tokens[0].ID, tokens[1].ID, tokens[2].ID})
+
+	tokens, err = FindActiveSCIMTokensBySSOProvider(ts.db, ts.provider.ID)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), tokens, 1)
+	require.Equal(ts.T(), active.ID, tokens[0].ID)
+
+	tokens, err = FindActiveSCIMTokensBySSOProvider(ts.db, uuid.Must(uuid.NewV4()))
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), tokens)
 }
 
 func (ts *SCIMTokenTestSuite) TestFindByPrefix() {
@@ -113,22 +118,12 @@ func (ts *SCIMTokenTestSuite) TestFindByPrefix() {
 
 	_, err = FindSCIMTokenByPrefix(ts.db, ts.provider.ID, "scim_0000000")
 	require.True(ts.T(), IsNotFoundError(err))
-}
 
-func (ts *SCIMTokenTestSuite) TestFindByPrefixAmbiguous() {
-	token, _ := ts.createToken(nil)
-	duplicate := &SCIMToken{
-		ID:            uuid.Must(uuid.NewV4()),
-		SSOProviderID: ts.provider.ID,
-		TokenHash:     strings.Repeat("ab", 32),
-		Prefix:        token.Prefix,
-	}
 	require.NoError(ts.T(), ts.db.RawQuery(
 		"INSERT INTO scim_tokens (id, sso_provider_id, token_hash, prefix) VALUES (?, ?, ?, ?)",
-		duplicate.ID, duplicate.SSOProviderID, duplicate.TokenHash, duplicate.Prefix,
+		uuid.Must(uuid.NewV4()), ts.provider.ID, strings.Repeat("ab", 32), token.Prefix,
 	).Exec())
-
-	_, err := FindSCIMTokenByPrefix(ts.db, ts.provider.ID, token.Prefix)
+	_, err = FindSCIMTokenByPrefix(ts.db, ts.provider.ID, token.Prefix)
 	require.Error(ts.T(), err)
 	require.False(ts.T(), IsNotFoundError(err))
 }
@@ -169,8 +164,6 @@ func (ts *SCIMTokenTestSuite) TestAuthenticate() {
 }
 
 func (ts *SCIMTokenTestSuite) TestAuthenticateRejects() {
-	disabled := true
-
 	for _, tc := range []struct {
 		name  string
 		setup func() string
@@ -183,14 +176,12 @@ func (ts *SCIMTokenTestSuite) TestAuthenticateRejects() {
 		}},
 		{"expired token", func() string {
 			token, plaintext := ts.createToken(nil)
-			require.NoError(ts.T(), ts.db.RawQuery(
-				"UPDATE scim_tokens SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour' WHERE id = ?", token.ID,
-			).Exec())
+			ts.expire(token)
 			return plaintext
 		}},
 		{"disabled provider", func() string {
 			_, plaintext := ts.createToken(nil)
-			ts.provider.Disabled = &disabled
+			ts.provider.Disabled = new(true)
 			require.NoError(ts.T(), ts.db.UpdateOnly(ts.provider, "disabled"))
 			return plaintext
 		}},
@@ -215,25 +206,6 @@ func (ts *SCIMTokenTestSuite) TestAuthenticateRejects() {
 			require.True(ts.T(), IsNotFoundError(err), "%v", err)
 		})
 	}
-}
-
-func (ts *SCIMTokenTestSuite) TestFindActiveBySSOProvider() {
-	active, _ := ts.createToken(nil)
-	revoked, _ := ts.createToken(nil)
-	require.NoError(ts.T(), revoked.Revoke(ts.db))
-	expired, _ := ts.createToken(nil)
-	ts.expire(expired)
-	_, _, err := CreateSCIMToken(ts.db, ts.createProvider(), nil)
-	require.NoError(ts.T(), err)
-
-	tokens, err := FindActiveSCIMTokensBySSOProvider(ts.db, ts.provider.ID)
-	require.NoError(ts.T(), err)
-	require.Len(ts.T(), tokens, 1)
-	require.Equal(ts.T(), active.ID, tokens[0].ID)
-
-	tokens, err = FindActiveSCIMTokensBySSOProvider(ts.db, uuid.Must(uuid.NewV4()))
-	require.NoError(ts.T(), err)
-	require.Empty(ts.T(), tokens)
 }
 
 func (ts *SCIMTokenTestSuite) createProvider() *SSOProvider {
