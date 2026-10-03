@@ -31,8 +31,7 @@ func (ts *SCIMTestSuite) TestTenantIsolation() {
 		require.Equal(ts.T(), http.StatusNotFound, w.Code, tc.method)
 	}
 
-	w, got := ts.do(ts.TokenB, http.MethodGet, "/Users/"+idB, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+	got := ts.get(ts.TokenB, "/Users/"+idB)
 	require.Equal(ts.T(), "bob@example.com", got["userName"])
 	require.Equal(ts.T(), true, got["active"])
 }
@@ -55,9 +54,7 @@ func (ts *SCIMTestSuite) TestTenantIsolationWithSameEmail() {
 
 	w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Users/"+ids[ts.TokenA], "")
 	require.Equal(ts.T(), http.StatusNoContent, w.Code)
-	w, got := ts.do(ts.TokenB, http.MethodGet, "/Users/"+ids[ts.TokenB], "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.Equal(ts.T(), true, got["active"])
+	require.Equal(ts.T(), true, ts.get(ts.TokenB, "/Users/"+ids[ts.TokenB])["active"])
 }
 
 func (ts *SCIMTestSuite) TestTombstonedUsersInvisibleToBothProviders() {
@@ -74,9 +71,7 @@ func (ts *SCIMTestSuite) TestTombstonedUsersInvisibleToBothProviders() {
 		}
 	}
 
-	w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+group, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.Empty(ts.T(), memberValues(got))
+	require.Empty(ts.T(), memberValues(ts.get(ts.TokenA, "/Groups/"+group)))
 }
 
 func (ts *SCIMTestSuite) TestRevokedAndExpiredTokensRefusedEverywhere() {
@@ -125,8 +120,7 @@ func (ts *SCIMTestSuite) TestRevokedAndExpiredTokensRefusedEverywhere() {
 		}
 	}
 
-	var row models.SCIMUser
-	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", user).First(&row))
+	row := ts.storedUser(user)
 	require.True(ts.T(), row.Active)
 	require.Nil(ts.T(), row.DeletedAt)
 	require.Contains(ts.T(), string(row.Resource), `"a-1"`)
@@ -159,8 +153,7 @@ func (ts *SCIMTestSuite) TestGroupsTenantIsolation() {
 		require.Equal(ts.T(), http.StatusNotFound, w.Code, tc.method)
 	}
 
-	w, got := ts.do(ts.TokenA, http.MethodGet, "/Groups/"+groupA, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+	got := ts.get(ts.TokenA, "/Groups/"+groupA)
 	require.Equal(ts.T(), "Engineering", got["displayName"])
 	require.Equal(ts.T(), []string{aliceA}, memberValues(got))
 
@@ -181,14 +174,8 @@ func (ts *SCIMTestSuite) TestGroupsTenantIsolation() {
 		require.Equal(ts.T(), "invalidValue", body["scimType"], tc.method)
 	}
 
-	w, _ = ts.do(ts.TokenB, http.MethodDelete, "/Users/"+bobB, "")
+	w, _ := ts.do(ts.TokenB, http.MethodDelete, "/Users/"+bobB, "")
 	require.Equal(ts.T(), http.StatusNoContent, w.Code)
-
-	w, got = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+groupA, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.Equal(ts.T(), []string{aliceA}, memberValues(got))
-	w, user := ts.do(ts.TokenA, http.MethodGet, "/Users/"+aliceA, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.Len(ts.T(), user["groups"], 1)
-	require.Equal(ts.T(), groupA, user["groups"].([]any)[0].(map[string]any)["value"])
+	require.Equal(ts.T(), []string{aliceA}, memberValues(ts.get(ts.TokenA, "/Groups/"+groupA)))
+	require.Equal(ts.T(), []string{groupA}, pluck(ts.get(ts.TokenA, "/Users/"+aliceA)["groups"], "value"))
 }

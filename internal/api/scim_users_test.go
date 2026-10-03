@@ -44,7 +44,11 @@ func (ts *SCIMTestSuite) create(token, body string) string {
 }
 
 func (ts *SCIMTestSuite) list(token, filter string) map[string]any {
-	w, body := ts.do(token, http.MethodGet, "/Users?"+url.Values{"filter": {filter}, "startIndex": {"1"}, "count": {"100"}}.Encode(), "")
+	return ts.get(token, "/Users?"+url.Values{"filter": {filter}, "startIndex": {"1"}, "count": {"100"}}.Encode())
+}
+
+func (ts *SCIMTestSuite) get(token, path string) map[string]any {
+	w, body := ts.do(token, http.MethodGet, path, "")
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 	return body
 }
@@ -54,6 +58,32 @@ func (ts *SCIMTestSuite) repository() (context.Context, server.Repository[*core.
 	require.NoError(ts.T(), err)
 	ctx = scimRequestKey.WithValue(ctx, httptest.NewRequest(http.MethodPost, "/scim/v2/Users", nil))
 	return ctx, &scimUserRepository{api: ts.API}
+}
+
+func (ts *SCIMTestSuite) storedUser(id string) models.SCIMUser {
+	var stored models.SCIMUser
+	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&stored))
+	return stored
+}
+
+func (ts *SCIMTestSuite) requireSCIMStatus(err error, code int, msg ...any) {
+	var scimErr *scimerrors.Error
+	require.ErrorAs(ts.T(), err, &scimErr, msg...)
+	require.Equal(ts.T(), code, scimErr.StatusCode(), msg...)
+}
+
+func withVersion(user *core.User, id, version string) *core.User {
+	user.ID = id
+	user.Meta = core.Meta{Version: version}
+	return user
+}
+
+func pluck(items any, field string) []string {
+	values := []string{}
+	for _, item := range items.([]any) {
+		values = append(values, item.(map[string]any)[field].(string))
+	}
+	return values
 }
 
 func (ts *SCIMTestSuite) TestOktaLifecycle() {
@@ -70,8 +100,7 @@ func (ts *SCIMTestSuite) TestOktaLifecycle() {
 	require.Equal(ts.T(), "Alice Smith", created["displayName"])
 	require.NotContains(ts.T(), w.Body.String(), "hunter2")
 
-	var stored models.SCIMUser
-	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&stored))
+	stored := ts.storedUser(id)
 	require.Equal(ts.T(), ts.A.ID, stored.SSOProviderID)
 	require.Equal(ts.T(), "alice@example.com", stored.UserName)
 	require.NotContains(ts.T(), string(stored.Resource), "hunter2")
@@ -85,9 +114,7 @@ func (ts *SCIMTestSuite) TestOktaLifecycle() {
 	require.EqualValues(ts.T(), 0, ts.list(ts.TokenA, `externalId eq "00U1ABCD"`)["totalResults"])
 	require.EqualValues(ts.T(), 0, ts.list(ts.TokenA, `userName eq "alice@example.com" and externalId eq "00U1ABCD"`)["totalResults"])
 
-	w, got := ts.do(ts.TokenA, http.MethodGet, "/Users/"+id, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.Equal(ts.T(), "Alice", got["name"].(map[string]any)["givenName"])
+	require.Equal(ts.T(), "Alice", ts.get(ts.TokenA, "/Users/"+id)["name"].(map[string]any)["givenName"])
 
 	w, replaced := ts.do(ts.TokenA, http.MethodPut, "/Users/"+id, oktaUserWith("givenName", "Alicia"))
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
@@ -97,8 +124,7 @@ func (ts *SCIMTestSuite) TestOktaLifecycle() {
 	w, patched := ts.do(ts.TokenA, http.MethodPatch, "/Users/"+id, patchOp(`{"op": "replace", "value": {"active": false}}`))
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 	require.Equal(ts.T(), false, patched["active"])
-	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&stored))
-	require.False(ts.T(), stored.Active)
+	require.False(ts.T(), ts.storedUser(id).Active)
 
 	w, _ = ts.do(ts.TokenA, http.MethodDelete, "/Users/"+id, "")
 	require.Equal(ts.T(), http.StatusNoContent, w.Code, w.Body.String())
@@ -119,8 +145,7 @@ func (ts *SCIMTestSuite) TestOktaLifecycle() {
 	w, body := ts.do(ts.TokenA, http.MethodPost, "/Users", oktaUser)
 	require.Equal(ts.T(), http.StatusConflict, w.Code, w.Body.String())
 	require.Equal(ts.T(), "uniqueness", body["scimType"])
-	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&stored))
-	require.NotNil(ts.T(), stored.DeletedAt)
+	require.NotNil(ts.T(), ts.storedUser(id).DeletedAt)
 }
 
 func (ts *SCIMTestSuite) TestOktaContentTypesAndReactivate() {
@@ -172,9 +197,7 @@ func (ts *SCIMTestSuite) TestUniqueIndexIsTheBackstop() {
 	require.NoError(ts.T(), err)
 
 	_, err = users.Create(ctx, &core.User{UserName: "Alice@Example.com", Emails: emails("alice@example.com")})
-	var scimErr *scimerrors.Error
-	require.ErrorAs(ts.T(), err, &scimErr)
-	require.Equal(ts.T(), http.StatusConflict, scimErr.StatusCode())
+	ts.requireSCIMStatus(err, http.StatusConflict)
 }
 
 func (ts *SCIMTestSuite) TestReplaceRejectsStaleVersion() {
@@ -186,74 +209,36 @@ func (ts *SCIMTestSuite) TestReplaceRejectsStaleVersion() {
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), created.Meta.Version, read.Meta.Version)
 
-	winner := &core.User{UserName: "alice@example.com", Title: "winner"}
-	winner.ID = read.ID
-	winner.Meta = core.Meta{Version: read.Meta.Version}
-	replaced, err := users.Update(ctx, winner)
+	replaced, err := users.Update(ctx, withVersion(&core.User{UserName: "alice@example.com", Title: "winner"}, read.ID, read.Meta.Version))
 	require.NoError(ts.T(), err)
 	require.NotEqual(ts.T(), read.Meta.Version, replaced.Meta.Version)
 
 	for _, version := range []string{read.Meta.Version, `W/"garbage"`} {
-		loser := &core.User{UserName: "alice@example.com", Title: "loser"}
-		loser.ID = read.ID
-		loser.Meta = core.Meta{Version: version}
-		_, err = users.Update(ctx, loser)
-		var scimErr *scimerrors.Error
-		require.ErrorAs(ts.T(), err, &scimErr, version)
-		require.Equal(ts.T(), http.StatusPreconditionFailed, scimErr.StatusCode(), version)
+		_, err = users.Update(ctx, withVersion(&core.User{UserName: "alice@example.com", Title: "loser"}, read.ID, version))
+		ts.requireSCIMStatus(err, http.StatusPreconditionFailed, version)
 	}
 
-	missing := &core.User{UserName: "bob@example.com"}
-	missing.ID = uuid.Must(uuid.NewV4()).String()
-	missing.Meta = core.Meta{Version: read.Meta.Version}
-	_, err = users.Update(ctx, missing)
-	var scimErr *scimerrors.Error
-	require.ErrorAs(ts.T(), err, &scimErr)
-	require.Equal(ts.T(), http.StatusNotFound, scimErr.StatusCode())
-
-	var stored models.SCIMUser
-	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", read.ID).First(&stored))
-	require.Contains(ts.T(), string(stored.Resource), "winner")
+	_, err = users.Update(ctx, withVersion(&core.User{UserName: "bob@example.com"}, uuid.Must(uuid.NewV4()).String(), read.Meta.Version))
+	ts.requireSCIMStatus(err, http.StatusNotFound)
+	require.Contains(ts.T(), string(ts.storedUser(read.ID).Resource), "winner")
 }
 
 func (ts *SCIMTestSuite) TestDeleteRejectsStaleVersion() {
 	ctx, users := ts.repository()
-	target := func(id, version string) *core.User {
-		user := &core.User{}
-		user.ID = id
-		user.Meta = core.Meta{Version: version}
-		return user
-	}
 
 	created, err := users.Create(ctx, &core.User{UserName: "alice@example.com", Emails: emails("alice@example.com")})
 	require.NoError(ts.T(), err)
-
-	updated := &core.User{UserName: "alice@example.com", Title: "renamed"}
-	updated.ID = created.ID
-	updated.Meta = core.Meta{Version: created.Meta.Version}
-	replaced, err := users.Update(ctx, updated)
+	replaced, err := users.Update(ctx, withVersion(&core.User{UserName: "alice@example.com", Title: "renamed"}, created.ID, created.Meta.Version))
 	require.NoError(ts.T(), err)
 
 	for _, version := range []string{created.Meta.Version, `W/"garbage"`} {
-		err := users.Delete(ctx, target(created.ID, version))
-		var scimErr *scimerrors.Error
-		require.ErrorAs(ts.T(), err, &scimErr, version)
-		require.Equal(ts.T(), http.StatusPreconditionFailed, scimErr.StatusCode(), version)
+		ts.requireSCIMStatus(users.Delete(ctx, withVersion(&core.User{}, created.ID, version)), http.StatusPreconditionFailed, version)
 	}
+	require.Nil(ts.T(), ts.storedUser(created.ID).DeletedAt)
 
-	var stored models.SCIMUser
-	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", created.ID).First(&stored))
-	require.Nil(ts.T(), stored.DeletedAt)
-
-	missing := uuid.Must(uuid.NewV4()).String()
-	var scimErr *scimerrors.Error
-	err = users.Delete(ctx, target(missing, ""))
-	require.ErrorAs(ts.T(), err, &scimErr)
-	require.Equal(ts.T(), http.StatusNotFound, scimErr.StatusCode())
-
-	require.NoError(ts.T(), users.Delete(ctx, target(created.ID, replaced.Meta.Version)))
-	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", created.ID).First(&stored))
-	require.NotNil(ts.T(), stored.DeletedAt)
+	ts.requireSCIMStatus(users.Delete(ctx, withVersion(&core.User{}, uuid.Must(uuid.NewV4()).String(), "")), http.StatusNotFound)
+	require.NoError(ts.T(), users.Delete(ctx, withVersion(&core.User{}, created.ID, replaced.Meta.Version)))
+	require.NotNil(ts.T(), ts.storedUser(created.ID).DeletedAt)
 }
 
 func (ts *SCIMTestSuite) whileLocked(lock, finish func(tx *storage.Connection) error, method, path, body string, headers ...string) (int, error) {
@@ -315,8 +300,7 @@ func (ts *SCIMTestSuite) TestAuditLog() {
 
 	tokens, err := models.FindSCIMTokensBySSOProvider(ts.API.db, ts.A.ID)
 	require.NoError(ts.T(), err)
-	var row models.SCIMUser
-	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&row))
+	userID := ts.storedUser(id).UserID.String()
 
 	actions := []string{}
 	for _, entry := range ts.scimAuditEntries() {
@@ -326,29 +310,17 @@ func (ts *SCIMTestSuite) TestAuditLog() {
 		traits := entry.Payload["traits"].(map[string]any)
 		require.Equal(ts.T(), ts.A.ID.String(), traits["sso_provider_id"])
 		require.Equal(ts.T(), id, traits["scim_user_id"])
-		require.Equal(ts.T(), row.UserID.String(), traits["user_id"])
+		require.Equal(ts.T(), userID, traits["user_id"])
 		require.Equal(ts.T(), "success", traits["outcome"])
 	}
-	require.Equal(ts.T(), []string{
-		string(models.SCIMUserCreatedAction),
-		string(models.SCIMUserUpdatedAction),
-		string(models.SCIMUserUpdatedAction),
-		string(models.SCIMUserUpdatedAction),
-		string(models.SCIMUserDeletedAction),
-	}, actions)
+	created, updated, deleted := string(models.SCIMUserCreatedAction), string(models.SCIMUserUpdatedAction), string(models.SCIMUserDeletedAction)
+	require.Equal(ts.T(), []string{created, updated, updated, updated, deleted}, actions)
 }
 
 func (ts *SCIMTestSuite) TestRolesRoundTrip() {
-	body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"alice@example.com","emails":[{"primary":true,"value":"alice@example.com"}],"roles":[{"value":"admin","primary":true},{"value":"billing"}]}`
-	id := ts.create(ts.TokenA, body)
+	id := ts.create(ts.TokenA, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"alice@example.com","emails":[{"primary":true,"value":"alice@example.com"}],"roles":[{"value":"admin","primary":true},{"value":"billing"}]}`)
 
-	w, read := ts.do(ts.TokenA, http.MethodGet, "/Users/"+id, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	roles := []string{}
-	for _, role := range read["roles"].([]any) {
-		roles = append(roles, role.(map[string]any)["value"].(string))
-	}
-	require.Equal(ts.T(), []string{"admin", "billing"}, roles)
+	require.Equal(ts.T(), []string{"admin", "billing"}, pluck(ts.get(ts.TokenA, "/Users/"+id)["roles"], "value"))
 }
 
 func (ts *SCIMTestSuite) TestConcurrentCreateWithinProvider() {
@@ -382,13 +354,7 @@ func (ts *SCIMTestSuite) TestSort() {
 	ts.create(ts.TokenB, userWith("aaron@example.com", "b"))
 
 	sorted := func(params url.Values) []string {
-		w, body := ts.do(ts.TokenA, http.MethodGet, "/Users?"+params.Encode(), "")
-		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-		names := []string{}
-		for _, resource := range body["Resources"].([]any) {
-			names = append(names, resource.(map[string]any)["userName"].(string))
-		}
-		return names
+		return pluck(ts.get(ts.TokenA, "/Users?"+params.Encode())["Resources"], "userName")
 	}
 
 	require.Equal(ts.T(), []string{"Alice@example.com", "bob@example.com", "carol@example.com"}, sorted(url.Values{"sortBy": {"userName"}}))
@@ -402,15 +368,7 @@ func (ts *SCIMTestSuite) TestSort() {
 	require.Equal(ts.T(), "Lead", body["title"])
 	require.Equal(ts.T(), "carol@example.com", sorted(url.Values{"sortBy": {"meta.lastModified"}, "sortOrder": {"descending"}})[0])
 
-	byID := sorted(url.Values{"sortBy": {"id"}})
-	require.Len(ts.T(), byID, 3)
-	expected := []string{ids["carol@example.com"], ids["Alice@example.com"], ids["bob@example.com"]}
-	slices.Sort(expected)
-	names := map[string]string{}
-	for name, id := range ids {
-		names[id] = name
-	}
-	require.Equal(ts.T(), []string{names[expected[0]], names[expected[1]], names[expected[2]]}, byID)
+	require.Equal(ts.T(), slices.Sorted(maps.Values(ids)), pluck(ts.get(ts.TokenA, "/Users?sortBy=id")["Resources"], "id"))
 
 	for _, sortBy := range []string{"displayName", "emails.value", "password"} {
 		w, body := ts.do(ts.TokenA, http.MethodGet, "/Users?"+url.Values{"sortBy": {sortBy}}.Encode(), "")
@@ -423,31 +381,26 @@ func (ts *SCIMTestSuite) TestAttributeProjection() {
 	id := ts.create(ts.TokenA, oktaUser)
 
 	for _, path := range []string{"/Users/" + id, "/Users"} {
-		w, body := ts.do(ts.TokenA, http.MethodGet, path+"?attributes=userName", "")
-		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-		user := body
-		if path == "/Users" {
-			user = body["Resources"].([]any)[0].(map[string]any)
+		project := func(query string) map[string]any {
+			body := ts.get(ts.TokenA, path+"?"+query)
+			if path == "/Users" {
+				return body["Resources"].([]any)[0].(map[string]any)
+			}
+			return body
 		}
-		require.Equal(ts.T(), "Alice@Example.com", user["userName"])
+		user := project("attributes=userName")
 		require.Equal(ts.T(), id, user["id"])
 		require.NotNil(ts.T(), user["schemas"])
 		require.NotContains(ts.T(), user, "meta")
-		require.NotContains(ts.T(), user, "displayName")
-		require.NotContains(ts.T(), user, "emails")
-
-		w, body = ts.do(ts.TokenA, http.MethodGet, path+"?excludedAttributes=displayName,emails", "")
-		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-		user = body
-		if path == "/Users" {
-			user = body["Resources"].([]any)[0].(map[string]any)
+		excluded := project("excludedAttributes=displayName,emails")
+		require.Contains(ts.T(), excluded, "name")
+		for _, user := range []map[string]any{user, excluded} {
+			require.Equal(ts.T(), "Alice@Example.com", user["userName"])
+			require.NotContains(ts.T(), user, "displayName")
+			require.NotContains(ts.T(), user, "emails")
 		}
-		require.Equal(ts.T(), "Alice@Example.com", user["userName"])
-		require.NotContains(ts.T(), user, "displayName")
-		require.NotContains(ts.T(), user, "emails")
-		require.Contains(ts.T(), user, "name")
 
-		w, body = ts.do(ts.TokenA, http.MethodGet, path+"?attributes=userName&excludedAttributes=emails", "")
+		w, body := ts.do(ts.TokenA, http.MethodGet, path+"?attributes=userName&excludedAttributes=emails", "")
 		require.Equal(ts.T(), http.StatusBadRequest, w.Code, w.Body.String())
 		require.Equal(ts.T(), string(scimerrors.InvalidValue), body["scimType"])
 	}
@@ -474,9 +427,7 @@ func (ts *SCIMTestSuite) TestWriteResponseProjection() {
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 	require.ElementsMatch(ts.T(), []string{"id", "schemas", "displayName"}, slices.Collect(maps.Keys(got)))
 
-	w, got = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+group, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	require.Equal(ts.T(), []string{id}, memberValues(got))
+	require.Equal(ts.T(), []string{id}, memberValues(ts.get(ts.TokenA, "/Groups/"+group)))
 }
 
 func (ts *SCIMTestSuite) TestETagAndIfMatch() {
@@ -523,8 +474,7 @@ func (ts *SCIMTestSuite) TestPatchAttributesOutsideTheMinimalSchema() {
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 	require.Equal(ts.T(), "Engineer", patched["title"])
 
-	w, read := ts.do(ts.TokenA, http.MethodGet, "/Users/"+id, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	read := ts.get(ts.TokenA, "/Users/"+id)
 	require.Equal(ts.T(), "Engineer", read["title"])
 	require.Equal(ts.T(), "555-0100", read["phoneNumbers"].([]any)[0].(map[string]any)["value"])
 	require.Equal(ts.T(), "Auth", read[string(core.SchemaEnterpriseUser)].(map[string]any)["department"])
@@ -546,27 +496,15 @@ func (ts *SCIMTestSuite) TestPagination() {
 		ts.create(ts.TokenA, userWith(name+"@example.com", name))
 	}
 
-	w, page := ts.do(ts.TokenA, http.MethodGet, "/Users?startIndex=2&count=1", "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.EqualValues(ts.T(), 3, page["totalResults"])
-	require.EqualValues(ts.T(), 2, page["startIndex"])
-	require.Len(ts.T(), page["Resources"], 1)
-	require.Equal(ts.T(), "b@example.com", page["Resources"].([]any)[0].(map[string]any)["userName"])
-
-	w, page = ts.do(ts.TokenA, http.MethodGet, "/Users?count=0", "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.EqualValues(ts.T(), 3, page["totalResults"])
-	require.Empty(ts.T(), page["Resources"])
-
-	w, page = ts.do(ts.TokenA, http.MethodGet, "/Users?startIndex=10&count=5", "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.EqualValues(ts.T(), 3, page["totalResults"])
-	require.Empty(ts.T(), page["Resources"])
-
-	w, page = ts.do(ts.TokenA, http.MethodGet, "/Users?startIndex=2&count=5", "")
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.EqualValues(ts.T(), 3, page["totalResults"])
-	require.Len(ts.T(), page["Resources"], 2)
+	for query, size := range map[string]int{"startIndex=2&count=1": 1, "count=0": 0, "startIndex=10&count=5": 0, "startIndex=2&count=5": 2} {
+		page := ts.get(ts.TokenA, "/Users?"+query)
+		require.EqualValues(ts.T(), 3, page["totalResults"], query)
+		require.Len(ts.T(), page["Resources"], size, query)
+		if size == 1 {
+			require.EqualValues(ts.T(), 2, page["startIndex"])
+			require.Equal(ts.T(), []string{"b@example.com"}, pluck(page["Resources"], "userName"))
+		}
+	}
 }
 
 func (ts *SCIMTestSuite) TestPageSizeCap() {
@@ -576,8 +514,7 @@ func (ts *SCIMTestSuite) TestPageSizeCap() {
 	}
 
 	for _, query := range []string{"", "?count=200"} {
-		w, page := ts.do(ts.TokenA, http.MethodGet, "/Users"+query, "")
-		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+		page := ts.get(ts.TokenA, "/Users"+query)
 		require.Equal(ts.T(), []any{string(protocol.SchemaListResponse)}, page["schemas"], query)
 		require.EqualValues(ts.T(), 101, page["totalResults"], query)
 		require.EqualValues(ts.T(), 1, page["startIndex"], query)
@@ -604,9 +541,7 @@ func (ts *SCIMTestSuite) TestSortTieBreaksOnID() {
 			got := []string{}
 			for startIndex := 1; startIndex <= len(ids); startIndex++ {
 				params := url.Values{"sortBy": {sortBy}, "sortOrder": {order}, "startIndex": {strconv.Itoa(startIndex)}, "count": {"1"}}
-				w, body := ts.do(ts.TokenA, http.MethodGet, "/Users?"+params.Encode(), "")
-				require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-				got = append(got, body["Resources"].([]any)[0].(map[string]any)["id"].(string))
+				got = append(got, pluck(ts.get(ts.TokenA, "/Users?"+params.Encode())["Resources"], "id")...)
 			}
 			require.Equal(ts.T(), want, got, sortBy+" "+order)
 		}
@@ -632,11 +567,7 @@ func (ts *SCIMTestSuite) TestFilterAnyAttribute() {
 		`active eq true and title eq "tour guide"`:                                                   {bjensen, jsmith},
 		`active eq false`: {},
 	} {
-		ids := []string{}
-		for _, resource := range ts.list(ts.TokenA, filter)["Resources"].([]any) {
-			ids = append(ids, resource.(map[string]any)["id"].(string))
-		}
-		require.ElementsMatch(ts.T(), want, ids, filter)
+		require.ElementsMatch(ts.T(), want, pluck(ts.list(ts.TokenA, filter)["Resources"], "id"), filter)
 	}
 }
 
@@ -697,56 +628,34 @@ func (ts *SCIMTestSuite) TestUsersGroupsAttribute() {
 	ops := ts.createGroup(ts.TokenA, groupWith("Ops", "g-2", alice))
 	eng := ts.createGroup(ts.TokenA, groupWith("Engineering", "g-1", alice))
 
-	groupsOf := func(user map[string]any) []map[string]any {
-		found := []map[string]any{}
-		groups, _ := user["groups"].([]any)
-		for _, group := range groups {
-			found = append(found, group.(map[string]any))
-		}
-		return found
-	}
-	storedResource := func(id string) string {
-		var stored models.SCIMUser
-		require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&stored))
-		return string(stored.Resource)
-	}
+	got := ts.get(ts.TokenA, "/Users/"+alice)
+	require.Equal(ts.T(), []any{
+		map[string]any{"value": eng, "$ref": "http://localhost:9999/scim/v2/Groups/" + eng, "display": "Engineering", "type": "direct"},
+		map[string]any{"value": ops, "$ref": "http://localhost:9999/scim/v2/Groups/" + ops, "display": "Ops", "type": "direct"},
+	}, got["groups"])
 
-	w, got := ts.do(ts.TokenA, http.MethodGet, "/Users/"+alice, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	require.Equal(ts.T(), []map[string]any{
-		{"value": eng, "$ref": "http://localhost:9999/scim/v2/Groups/" + eng, "display": "Engineering", "type": "direct"},
-		{"value": ops, "$ref": "http://localhost:9999/scim/v2/Groups/" + ops, "display": "Ops", "type": "direct"},
-	}, groupsOf(got))
-
-	w, got = ts.do(ts.TokenA, http.MethodGet, "/Users/"+bob, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	require.NotContains(ts.T(), got, "groups")
-
-	listed := ts.list(ts.TokenA, `userName eq "alice@example.com"`)
-	require.Len(ts.T(), groupsOf(listed["Resources"].([]any)[0].(map[string]any)), 2)
+	require.NotContains(ts.T(), ts.get(ts.TokenA, "/Users/"+bob), "groups")
+	require.Len(ts.T(), ts.list(ts.TokenA, `userName eq "alice@example.com"`)["Resources"].([]any)[0].(map[string]any)["groups"], 2)
 
 	claimed := `[{"value":"` + ops + `","display":"Forged"}]`
 	w, created := ts.do(ts.TokenA, http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"carol@example.com","emails":[{"primary":true,"value":"carol@example.com"}],"groups":`+claimed+`}`)
 	require.Equal(ts.T(), http.StatusCreated, w.Code, w.Body.String())
 	require.NotContains(ts.T(), created, "groups")
-	require.NotContains(ts.T(), storedResource(created["id"].(string)), "groups")
+	require.NotContains(ts.T(), string(ts.storedUser(created["id"].(string)).Resource), "groups")
 
 	w, replaced := ts.do(ts.TokenA, http.MethodPut, "/Users/"+bob, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bob@example.com","groups":`+claimed+`}`)
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 	require.NotContains(ts.T(), replaced, "groups")
-	require.NotContains(ts.T(), storedResource(bob), "groups")
+	require.NotContains(ts.T(), string(ts.storedUser(bob).Resource), "groups")
 
 	w, patched := ts.do(ts.TokenA, http.MethodPatch, "/Users/"+alice, patchOp(`{"op":"replace","path":"displayName","value":"Alice"}`))
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	require.Len(ts.T(), groupsOf(patched), 2)
-	require.NotContains(ts.T(), storedResource(alice), "groups")
+	require.Len(ts.T(), patched["groups"], 2)
+	require.NotContains(ts.T(), string(ts.storedUser(alice).Resource), "groups")
 
 	w, _ = ts.do(ts.TokenA, http.MethodDelete, "/Groups/"+ops, "")
 	require.Equal(ts.T(), http.StatusNoContent, w.Code, w.Body.String())
-	w, got = ts.do(ts.TokenA, http.MethodGet, "/Users/"+alice, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	require.Len(ts.T(), groupsOf(got), 1)
-	require.Equal(ts.T(), eng, groupsOf(got)[0]["value"])
+	require.Equal(ts.T(), []string{eng}, pluck(ts.get(ts.TokenA, "/Users/"+alice)["groups"], "value"))
 }
 
 func userWith(userName, externalID string) string {

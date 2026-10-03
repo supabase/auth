@@ -64,12 +64,6 @@ func actionsOf(entries []models.AuditLogEntry) []string {
 	return actions
 }
 
-func (ts *SCIMTestSuite) get(path string) map[string]any {
-	w, got := ts.do(ts.TokenA, http.MethodGet, path, "")
-	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-	return got
-}
-
 func (ts *SCIMTestSuite) etag(path string) string {
 	w, _ := ts.do(ts.TokenA, http.MethodGet, path, "")
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
@@ -129,7 +123,7 @@ func (ts *SCIMTestSuite) TestGroupsLifecycle() {
 		w, _ = ts.do(ts.TokenA, http.MethodGet, "/Groups/"+missing, "")
 		require.Equal(ts.T(), http.StatusNotFound, w.Code, missing)
 	}
-	ts.get("/Users/" + alice)
+	ts.get(ts.TokenA, "/Users/"+alice)
 }
 
 func (ts *SCIMTestSuite) TestGroupsWithoutMembers() {
@@ -199,18 +193,18 @@ func (ts *SCIMTestSuite) TestExcludedMembersKeepsWrites() {
 	carol := ts.create(ts.TokenA, userWith("carol@example.com", "c-1"))
 	id := ts.createGroup(ts.TokenA, groupWith("Engineering", "", alice, bob))
 
-	got := ts.get("/Groups/" + id + "?excludedAttributes=members")
+	got := ts.get(ts.TokenA, "/Groups/"+id+"?excludedAttributes=members")
 	require.NotContains(ts.T(), got, "members")
 	require.Equal(ts.T(), "Engineering", got["displayName"])
-	require.NotContains(ts.T(), ts.get("/Groups?excludedAttributes=members")["Resources"].([]any)[0], "members")
-	require.NotContains(ts.T(), ts.get("/Users/"+alice+"?excludedAttributes=groups"), "groups")
+	require.NotContains(ts.T(), ts.get(ts.TokenA, "/Groups?excludedAttributes=members")["Resources"].([]any)[0], "members")
+	require.NotContains(ts.T(), ts.get(ts.TokenA, "/Users/"+alice+"?excludedAttributes=groups"), "groups")
 
 	w, _ := ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id+"?excludedAttributes=members", patchOp(addMembers(carol)))
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 	w, _ = ts.do(ts.TokenA, http.MethodPut, "/Groups/"+id+"?excludedAttributes=members", groupWith("Platform", "", alice, bob, carol))
 	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 
-	got = ts.get("/Groups/" + id)
+	got = ts.get(ts.TokenA, "/Groups/"+id)
 	require.ElementsMatch(ts.T(), []string{alice, bob, carol}, memberValues(got))
 	require.Equal(ts.T(), "Platform", got["displayName"])
 }
@@ -238,8 +232,8 @@ func (ts *SCIMTestSuite) TestPatchRejectsRemoveWithValue() {
 		require.Equal(ts.T(), "invalidSyntax", got["scimType"], path)
 	}
 
-	require.ElementsMatch(ts.T(), []string{alice, bob}, memberValues(ts.get("/Groups/"+id)))
-	require.NotEmpty(ts.T(), ts.get("/Users/" + alice)["emails"])
+	require.ElementsMatch(ts.T(), []string{alice, bob}, memberValues(ts.get(ts.TokenA, "/Groups/"+id)))
+	require.NotEmpty(ts.T(), ts.get(ts.TokenA, "/Users/"+alice)["emails"])
 	got := ts.patchMembers(id, `{"op":"remove","path":"members[value eq \"`+bob+`\"]","value":null}`)
 	require.Equal(ts.T(), []string{alice}, memberValues(got))
 }
@@ -311,8 +305,8 @@ func (ts *SCIMTestSuite) TestGroupsRemoveDeletedMembers() {
 		w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Users/"+alice, "")
 		require.Equal(ts.T(), http.StatusNoContent, w.Code)
 
-		require.Equal(ts.T(), []string{bob}, memberValues(ts.get("/Groups/"+eng)))
-		require.Empty(ts.T(), memberValues(ts.get("/Groups/"+ops)))
+		require.Equal(ts.T(), []string{bob}, memberValues(ts.get(ts.TokenA, "/Groups/"+eng)))
+		require.Empty(ts.T(), memberValues(ts.get(ts.TokenA, "/Groups/"+ops)))
 		require.Zero(ts.T(), ts.countRows(&models.SCIMGroupMember{}, "scim_user_id = ?", alice))
 	})
 	require.Equal(ts.T(), []string{string(models.SCIMUserDeletedAction)}, actionsOf(entries))
@@ -347,7 +341,7 @@ func (ts *SCIMTestSuite) TestGroupsKeepDeactivatedMembers() {
 		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
 
 		require.ElementsMatch(ts.T(), []string{alice, bob}, memberValues(ts.patchMembers(id, addMembers(bob))))
-		user := ts.get("/Users/" + alice)
+		user := ts.get(ts.TokenA, "/Users/"+alice)
 		require.Equal(ts.T(), false, user["active"])
 		require.Len(ts.T(), user["groups"], 1)
 	})
@@ -361,10 +355,10 @@ func (ts *SCIMTestSuite) TestGroupsSortAndPaginate() {
 	ts.createGroup(ts.TokenA, groupWith("Alpha", "g-1"))
 	ts.createGroup(ts.TokenA, groupWith("gamma", "g-3"))
 
-	page := ts.get("/Groups?sortBy=displayName&startIndex=2&count=1")
+	page := ts.get(ts.TokenA, "/Groups?sortBy=displayName&startIndex=2&count=1")
 	require.EqualValues(ts.T(), 3, page["totalResults"])
 	require.Equal(ts.T(), "beta", page["Resources"].([]any)[0].(map[string]any)["displayName"])
-	page = ts.get("/Groups?sortBy=displayName&sortOrder=descending")
+	page = ts.get(ts.TokenA, "/Groups?sortBy=displayName&sortOrder=descending")
 	require.Equal(ts.T(), "gamma", page["Resources"].([]any)[0].(map[string]any)["displayName"])
 
 	w, body := ts.do(ts.TokenA, http.MethodGet, "/Groups?sortBy=members.value", "")
@@ -468,7 +462,7 @@ func (ts *SCIMTestSuite) TestGroupsPushReplay() {
 			want, ok := expected[step]
 			require.True(ts.T(), ok, step)
 			ts.requireGroup(step, group, want.displayName, want.members)
-			require.Equal(ts.T(), want.bjensenActive, ts.get("/Users/" + bjensen)["active"], step)
+			require.Equal(ts.T(), want.bjensenActive, ts.get(ts.TokenA, "/Users/"+bjensen)["active"], step)
 		})
 		require.Equal(ts.T(), len(expected), played)
 	})
@@ -522,7 +516,7 @@ func (ts *SCIMTestSuite) TestGroupsPatchReplay() {
 }
 
 func (ts *SCIMTestSuite) requireGroup(step, group, displayName string, members []string) {
-	got := ts.get("/Groups/" + group)
+	got := ts.get(ts.TokenA, "/Groups/"+group)
 	require.Equal(ts.T(), displayName, got["displayName"], step)
 	require.ElementsMatch(ts.T(), members, memberValues(got), step)
 }
@@ -536,7 +530,7 @@ func (ts *SCIMTestSuite) TestWriteResponseMembersMatchGet() {
 	requireMatchesGet := func(method, body string) {
 		w, written := ts.do(ts.TokenA, method, "/Groups/"+id, body)
 		require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
-		require.Equal(ts.T(), ts.get("/Groups/" + id)["members"], written["members"])
+		require.Equal(ts.T(), ts.get(ts.TokenA, "/Groups/"+id)["members"], written["members"])
 	}
 	requireMatchesGet(http.MethodPatch, patchOp(addMembers(ids[3], ids[1]), `{"op":"replace","path":"displayName","value":"Platform"}`))
 	requireMatchesGet(http.MethodPatch, patchOp(removeMember(ids[2]), `{"op":"replace","path":"displayName","value":"Engineering"}`))
@@ -568,7 +562,7 @@ func (ts *SCIMTestSuite) TestPatchMembersDeltaMatchesFullPatch() {
 			w, got := ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id+query, patchOp(ops...))
 			result.code, result.scimType = w.Code, got["scimType"]
 		}))
-		result.members = memberValues(ts.get("/Groups/" + id))
+		result.members = memberValues(ts.get(ts.TokenA, "/Groups/"+id))
 		result.versioned = ts.etag("/Groups/"+id) != before
 		return result
 	}
@@ -624,7 +618,7 @@ func (ts *SCIMTestSuite) patchMembers(id string, ops ...string) map[string]any {
 	w, _ := ts.do(ts.TokenA, http.MethodPatch, "/Groups/"+id, patchOp(ops...))
 	require.Equal(ts.T(), http.StatusNoContent, w.Code, w.Body.String())
 	require.Empty(ts.T(), w.Body.String())
-	return ts.get("/Groups/" + id)
+	return ts.get(ts.TokenA, "/Groups/"+id)
 }
 
 func (ts *SCIMTestSuite) TestConcurrentMemberAddsWithoutIfMatchLoseNoUpdates() {
@@ -669,7 +663,7 @@ func (ts *SCIMTestSuite) TestConcurrentMemberAddsWithoutIfMatchLoseNoUpdates() {
 		counts[code]++
 	}
 	require.Equal(ts.T(), map[int]int{http.StatusNoContent: attempts}, counts)
-	require.Len(ts.T(), memberValues(ts.get("/Groups/"+id)), existing+attempts)
+	require.Len(ts.T(), memberValues(ts.get(ts.TokenA, "/Groups/"+id)), existing+attempts)
 }
 
 func (ts *SCIMTestSuite) TestConcurrentGroupWrites() {
@@ -716,7 +710,7 @@ func (ts *SCIMTestSuite) TestConcurrentGroupWrites() {
 		require.NoError(ts.T(), err, tc.name)
 		require.Equal(ts.T(), tc.code, code, tc.name)
 
-		got := ts.get("/Groups/" + id)
+		got := ts.get(ts.TokenA, "/Groups/"+id)
 		require.Equal(ts.T(), tc.displayName, got["displayName"], tc.name)
 		require.ElementsMatch(ts.T(), tc.members, memberValues(got), tc.name)
 		w, _ := ts.do(ts.TokenA, http.MethodDelete, "/Groups/"+id, "")
