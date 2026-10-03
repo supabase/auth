@@ -865,41 +865,26 @@ func (ts *AdminTestSuite) TestAdminUserDelete() {
 }
 
 func (ts *AdminTestSuite) TestAdminUserDeleteSoftDeletesSCIMUser() {
-	cases := []struct {
-		desc      string
-		body      map[string]any
-		wantEmail string
-	}{
-		{
-			desc:      "hard delete",
-			body:      map[string]any{"should_soft_delete": false},
-			wantEmail: "scim-hard-delete@example.com",
-		},
-		{
-			desc:      "soft delete",
-			body:      map[string]any{"should_soft_delete": true},
-			wantEmail: "scim-soft-delete@example.com",
-		},
-	}
-
-	for _, c := range cases {
-		ts.Run(c.desc, func() {
-			scimUser, u := ts.createLinkedSCIMUser(c.wantEmail)
+	for _, soft := range []bool{false, true} {
+		ts.Run(fmt.Sprintf("soft=%t", soft), func() {
+			email := fmt.Sprintf("bjensen-%t@example.com", soft)
+			u, err := models.NewUser("", email, "", ts.Config.JWT.Aud, nil)
+			require.NoError(ts.T(), err)
+			u.IsSSOUser = true
+			require.NoError(ts.T(), ts.API.db.Create(u))
+			scimUser, err := models.CreateSCIMUser(ts.API.db, createSSOProvider(ts.T(), ts.API.db).ID, []byte(`{"userName":"`+email+`"}`))
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), models.LinkSCIMUser(ts.API.db, scimUser, u.ID))
 			group, err := models.CreateSCIMGroup(ts.API.db, scimUser.SSOProviderID, []byte(`{"displayName":"Engineering"}`))
 			require.NoError(ts.T(), err)
 			_, _, err = models.ReplaceSCIMGroupMembers(ts.API.db, group, []uuid.UUID{scimUser.ID})
 			require.NoError(ts.T(), err)
 
-			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
-
-			ts.API.handler.ServeHTTP(w, req)
+			w := serveAdmin(ts.T(), ts.API, http.MethodDelete, "/admin/users/"+u.ID.String(), map[string]any{"should_soft_delete": soft})
 			require.Equal(ts.T(), http.StatusOK, w.Code)
 
-			row := ts.findSCIMUserByID(scimUser.ID)
+			var row models.SCIMUser
+			require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", scimUser.ID).First(&row))
 			require.NotNil(ts.T(), row.DeletedAt)
 
 			members, err := ts.API.db.Q().Where("scim_user_id = ?", scimUser.ID).Count(&models.SCIMGroupMember{})
@@ -1239,25 +1224,4 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 		})
 
 	}
-}
-
-func (ts *AdminTestSuite) createLinkedSCIMUser(email string) (*models.SCIMUser, *models.User) {
-	provider := createSSOProvider(ts.T(), ts.API.db)
-
-	u, err := models.NewUser("", email, "", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err)
-	u.IsSSOUser = true
-	require.NoError(ts.T(), ts.API.db.Create(u))
-
-	scimUser, err := models.CreateSCIMUser(ts.API.db, provider.ID, []byte(`{"userName":"`+email+`"}`))
-	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), models.LinkSCIMUser(ts.API.db, scimUser, u.ID))
-
-	return scimUser, u
-}
-
-func (ts *AdminTestSuite) findSCIMUserByID(id uuid.UUID) *models.SCIMUser {
-	var row models.SCIMUser
-	require.NoError(ts.T(), ts.API.db.Q().Where("id = ?", id).First(&row))
-	return &row
 }
