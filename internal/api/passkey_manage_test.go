@@ -150,6 +150,23 @@ func (ts *PasskeyTestSuite) TestPasskeyUpdateFriendlyNameAtMaxLength() {
 	ts.Equal(longName, item.FriendlyName)
 }
 
+func (ts *PasskeyTestSuite) TestPasskeyUpdateFriendlyNameAtMaxLengthMultibyte() {
+	cred := ts.createTestPasskey(ts.TestUser.ID, "Name")
+
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	// 120 multi-byte characters
+	longName := strings.Repeat("笑", 120)
+	w := ts.makeRequest(http.MethodPatch, fmt.Sprintf("http://localhost/passkeys/%s", cred.ID), map[string]any{
+		"friendly_name": longName,
+	}, withBearerToken(token))
+
+	ts.Equal(http.StatusOK, w.Code)
+
+	var item PasskeyListItem
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&item))
+	ts.Equal(longName, item.FriendlyName)
+}
+
 func (ts *PasskeyTestSuite) TestPasskeyUpdateOtherUsersPasskey() {
 	otherUser, err := models.NewUser("", "other@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err)

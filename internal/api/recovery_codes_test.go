@@ -48,6 +48,38 @@ func TestRecoveryCodes(t *testing.T) {
 	suite.Run(t, ts)
 }
 
+func TestUniqueRecoveryCodes(t *testing.T) {
+	t.Run("regenerates a replacement for each duplicate", func(t *testing.T) {
+		scripted := []string{"a", "b", "a", "c", "b", "d"}
+		calls := 0
+		generate := func(length int) string {
+			require.Equal(t, 16, length)
+			require.Less(t, calls, len(scripted), "generator called more times than scripted")
+			code := scripted[calls]
+			calls++
+			return code
+		}
+
+		codes := uniqueRecoveryCodes(4, 16, generate)
+
+		require.Equal(t, []string{"a", "b", "c", "d"}, codes)
+		require.Equal(t, 6, calls, "4 for the batch plus one replacement per duplicate")
+	})
+
+	t.Run("no duplicates calls the generator exactly count times", func(t *testing.T) {
+		calls := 0
+		generate := func(int) string {
+			calls++
+			return fmt.Sprintf("code-%d", calls)
+		}
+
+		codes := uniqueRecoveryCodes(10, 16, generate)
+
+		require.Len(t, codes, 10)
+		require.Equal(t, 10, calls)
+	})
+}
+
 func (ts *RecoveryCodesTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
@@ -283,6 +315,18 @@ func (ts *RecoveryCodesTestSuite) TestRecoveryCodesGenerateSoleFactor() {
 	token := ts.aal2Token()
 	// With the TOTP factor unverified, recovery codes would be the sole verified factor.
 	require.NoError(ts.T(), ts.TestFactor.UpdateStatus(ts.API.db, models.FactorStateUnverified))
+
+	w := ts.serveRequest(http.MethodPost, "http://localhost/factors/recovery-codes", token, nil)
+	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFARecoveryCodesSoleFactor)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesGenerateVerifyDisabledFactorNotCounted() {
+	token := ts.aal2Token()
+	// The verified TOTP factor cannot be used at sign-in once TOTP verification
+	// is disabled, so recovery codes would become the only usable factor.
+	prev := ts.Config.MFA.TOTP.VerifyEnabled
+	defer func() { ts.Config.MFA.TOTP.VerifyEnabled = prev }()
+	ts.Config.MFA.TOTP.VerifyEnabled = false
 
 	w := ts.serveRequest(http.MethodPost, "http://localhost/factors/recovery-codes", token, nil)
 	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFARecoveryCodesSoleFactor)
@@ -967,4 +1011,303 @@ func (ts *RecoveryCodesTestSuite) TestRecoveryCodesDeleteUnenrolledNotificationD
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
 	require.Empty(ts.T(), mockMailer.MFAFactorUnenrolledMailCalls, "Expected no MFA factor unenrolled notification email to be sent")
+}
+
+// adminToken mints a supabase_admin JWT for the admin factor endpoints.
+func (ts *RecoveryCodesTestSuite) adminToken() string {
+	claims := &AccessTokenClaims{Role: "supabase_admin"}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+	require.NoError(ts.T(), err, "Error generating admin jwt")
+	return token
+}
+
+func (ts *RecoveryCodesTestSuite) createTOTPFactor(friendlyName string, state models.FactorState) *models.Factor {
+	f := models.NewTOTPFactor(ts.TestUser, friendlyName)
+	require.NoError(ts.T(), f.SetSecret("secretkey", ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey))
+	require.NoError(ts.T(), ts.API.db.Create(f))
+	if state == models.FactorStateVerified {
+		require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStateVerified))
+	}
+	return f
+}
+
+func (ts *RecoveryCodesTestSuite) createPhoneFactor(friendlyName string, state models.FactorState) *models.Factor {
+	f := models.NewPhoneFactor(ts.TestUser, "+15555555555", friendlyName)
+	require.NoError(ts.T(), ts.API.db.Create(f))
+	if state == models.FactorStateVerified {
+		require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStateVerified))
+	}
+	return f
+}
+
+// performUnenroll hits the generic DELETE /factors/{factor_id} endpoint.
+func (ts *RecoveryCodesTestSuite) performUnenroll(token string, factorID uuid.UUID) *httptest.ResponseRecorder {
+	return ts.serveRequest(http.MethodDelete, fmt.Sprintf("http://localhost/factors/%s", factorID), token, nil)
+}
+
+// performEnrollTOTP hits the generic POST /factors endpoint with a TOTP factor.
+func (ts *RecoveryCodesTestSuite) performEnrollTOTP(token, friendlyName string) *httptest.ResponseRecorder {
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(EnrollFactorParams{
+		FriendlyName: friendlyName,
+		FactorType:   models.TOTP,
+		Issuer:       "supabase.com",
+	}))
+	return ts.serveRequest(http.MethodPost, "http://localhost/factors/", token, &buffer)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesUnenrollLastSecondFactorBlocked() {
+	token := ts.aal2Token()
+	generateResp := ts.performGenerate(token, nil)
+
+	// The TOTP factor is the only second factor; unenrolling it would strand the codes.
+	w := ts.performUnenroll(token, ts.TestFactor.ID)
+	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFARecoveryCodesSoleFactor)
+
+	_, err := models.FindFactorByFactorID(ts.API.db, ts.TestFactor.ID)
+	require.NoError(ts.T(), err)
+	_, err = models.FindFactorByFactorID(ts.API.db, generateResp.ID)
+	require.NoError(ts.T(), err)
+	ts.recoveryCodeSetState()
+
+	logs, err := models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.UnenrollFactorAction), nil)
+	require.NoError(ts.T(), err)
+	require.Empty(ts.T(), logs, "a blocked unenroll must not be audited")
+
+	// Deleting the recovery codes first lifts the guard.
+	w = ts.performDelete(token)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	w = ts.performUnenroll(token, ts.TestFactor.ID)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	resp := UnenrollFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&resp))
+	require.Equal(ts.T(), ts.TestFactor.ID, resp.ID)
+	_, err = models.FindFactorByFactorID(ts.API.db, ts.TestFactor.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+
+	logs, err = models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.UnenrollFactorAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesUnenrollOtherSecondFactorAllowed() {
+	token := ts.aal2Token()
+	ts.performGenerate(token, nil)
+	second := ts.createTOTPFactor("second_factor", models.FactorStateVerified)
+
+	// Another verified second factor remains, so this unenroll is unaffected.
+	w := ts.performUnenroll(token, second.ID)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	resp := UnenrollFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&resp))
+	require.Equal(ts.T(), second.ID, resp.ID)
+	_, err := models.FindFactorByFactorID(ts.API.db, second.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+
+	ts.recoveryCodeSetState()
+	w = ts.serveRequest(http.MethodGet, "http://localhost/factors/recovery-codes", token, nil)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// The remaining TOTP factor is now the last second factor.
+	w = ts.performUnenroll(token, ts.TestFactor.ID)
+	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFARecoveryCodesSoleFactor)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesUnenrollVerifyDisabledFactorNotCounted() {
+	token := ts.aal2Token()
+	ts.performGenerate(token, nil)
+	phone := ts.createPhoneFactor("phone_factor", models.FactorStateVerified)
+	prev := ts.Config.MFA.Phone.VerifyEnabled
+	defer func() { ts.Config.MFA.Phone.VerifyEnabled = prev }()
+
+	// A verified phone factor does not count while phone verification is disabled,
+	// so the TOTP factor is still the last usable second factor.
+	ts.Config.MFA.Phone.VerifyEnabled = false
+	w := ts.performUnenroll(token, ts.TestFactor.ID)
+	ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeMFARecoveryCodesSoleFactor)
+	_, err := models.FindFactorByFactorID(ts.API.db, ts.TestFactor.ID)
+	require.NoError(ts.T(), err)
+
+	// Enabling phone verification makes it a usable second factor and lifts the guard.
+	ts.Config.MFA.Phone.VerifyEnabled = true
+	w = ts.performUnenroll(token, ts.TestFactor.ID)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	_, err = models.FindFactorByFactorID(ts.API.db, ts.TestFactor.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+	_, err = models.FindFactorByFactorID(ts.API.db, phone.ID)
+	require.NoError(ts.T(), err)
+	ts.recoveryCodeSetState()
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesUnenrollUnverifiedFactorAllowed() {
+	token := ts.aal2Token()
+	ts.performGenerate(token, nil)
+	unverified := ts.createTOTPFactor("pending_factor", models.FactorStateUnverified)
+
+	// An unverified factor is not a usable second factor, so the guard does not apply
+	w := ts.performUnenroll(token, unverified.ID)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	_, err := models.FindFactorByFactorID(ts.API.db, unverified.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+	ts.recoveryCodeSetState()
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesGenericUnenrollRejected() {
+	generateResp, _, _ := ts.enrollForVerify()
+	aal2Token := ts.token(ts.TestUser, &ts.TestSession.ID)
+
+	ts.Run("AAL2", func() {
+		w := ts.performUnenroll(aal2Token, generateResp.ID)
+		ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeValidationFailed)
+	})
+
+	_, err := models.FindFactorByFactorID(ts.API.db, generateResp.ID)
+	require.NoError(ts.T(), err)
+	ts.recoveryCodeSetState()
+
+	for _, action := range []models.AuditAction{models.RecoveryCodesDeletedAction, models.UnenrollFactorAction} {
+		logs, err := models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(action), nil)
+		require.NoError(ts.T(), err)
+		require.Empty(ts.T(), logs)
+	}
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesGenericEndpointsRejectRecoveryFactor() {
+	token := ts.aal2Token()
+	generateResp := ts.performGenerate(token, nil)
+
+	ts.Run("Enroll", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(EnrollFactorParams{FriendlyName: "codes", FactorType: models.RecoveryCode}))
+		w := ts.serveRequest(http.MethodPost, "http://localhost/factors/", token, &buffer)
+		ts.requireErrorCode(w, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
+	})
+
+	ts.Run("Challenge", func() {
+		w := ts.serveRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", generateResp.ID), token, nil)
+		ts.requireErrorCode(w, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
+	})
+
+	ts.Run("Verify", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]any{"code": generateResp.Codes[0]}))
+		w := ts.serveRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/verify", generateResp.ID), token, &buffer)
+		ts.requireErrorCode(w, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
+	})
+
+	// The rejected generic verify did not consume the real code it was given.
+	require.Equal(ts.T(), generateResp.Total, ts.unusedCodeCount())
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesOccupyFactorSlot() {
+	token := ts.aal2Token()
+	ts.performGenerate(token, nil)
+	// The user now holds two verified factors: TOTP and recovery codes.
+
+	ts.Run("MaxEnrolledFactors", func() {
+		ts.Config.MFA.MaxEnrolledFactors = 2
+		defer func() { ts.Config.MFA.MaxEnrolledFactors = 10 }()
+
+		w := ts.performEnrollTOTP(token, "another_factor")
+		ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeTooManyEnrolledMFAFactors)
+	})
+
+	ts.Run("MaxVerifiedFactors", func() {
+		ts.Config.MFA.MaxVerifiedFactors = 2
+		defer func() { ts.Config.MFA.MaxVerifiedFactors = 10 }()
+
+		w := ts.performEnrollTOTP(token, "another_factor")
+		ts.requireErrorCode(w, http.StatusUnprocessableEntity, apierrors.ErrorCodeTooManyEnrolledMFAFactors)
+	})
+
+	ts.Run("WithinLimits", func() {
+		w := ts.performEnrollTOTP(token, "another_factor")
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+	})
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesAdminDelete() {
+	generateResp, verifySession, verifyToken := ts.enrollForVerify()
+	setID := ts.recoveryCodeSetState().ID
+
+	// Upgrade the AAL1 session with a recovery code so deletion has a session to downgrade.
+	w := ts.performVerify(verifyToken, generateResp.Codes[0])
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	upgraded, err := models.FindSessionByID(ts.API.db, verifySession.ID, false)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), upgraded.IsAAL2())
+	require.True(ts.T(), hasRecoveryCodeAMRClaim(upgraded))
+
+	w = ts.serveRequest(http.MethodDelete, fmt.Sprintf("http://localhost/admin/users/%s/factors/%s/", ts.TestUser.ID, generateResp.ID), ts.adminToken(), nil)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// The factor is gone and the FK cascade removed the set and every code.
+	_, err = models.FindFactorByFactorID(ts.API.db, generateResp.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+	_, err = models.FindRecoveryCodeSetByUser(ts.API.db, ts.TestUser.ID)
+	require.True(ts.T(), models.IsNotFoundError(err))
+	total, remaining, err := models.CountRecoveryCodes(ts.API.db, setID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), 0, total)
+	require.Equal(ts.T(), 0, remaining)
+
+	// The session upgraded by a recovery code is downgraded and loses its AMR claim.
+	downgraded, err := models.FindSessionByID(ts.API.db, verifySession.ID, false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.AAL1.String(), downgraded.GetAAL())
+	require.Nil(ts.T(), downgraded.FactorID)
+	require.False(ts.T(), hasRecoveryCodeAMRClaim(downgraded))
+
+	// The TOTP-backed session is untouched.
+	totpSession, err := models.FindSessionByID(ts.API.db, ts.TestSession.ID, false)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), totpSession.IsAAL2())
+	require.NotNil(ts.T(), totpSession.FactorID)
+	require.Equal(ts.T(), ts.TestFactor.ID, *totpSession.FactorID)
+}
+
+func (ts *RecoveryCodesTestSuite) TestRecoveryCodesFactorListings() {
+	token := ts.aal2Token()
+	generateResp := ts.performGenerate(token, nil)
+
+	// Sensitive fields are not serialized
+	forbiddenKeys := []string{"secret", "code_hash", "codes", "failed_verification_count", "verification_locked_until"}
+
+	assertRecoveryFactorListed := func(factors []map[string]any) {
+		var recovery map[string]any
+		for _, f := range factors {
+			if f["factor_type"] == models.RecoveryCode {
+				require.Nil(ts.T(), recovery, "only one recovery-code factor expected")
+				recovery = f
+			}
+		}
+		require.NotNil(ts.T(), recovery, "recovery-code factor missing from listing")
+		require.Equal(ts.T(), generateResp.ID.String(), recovery["id"])
+		require.Equal(ts.T(), models.FactorStateVerified.String(), recovery["status"])
+		require.Equal(ts.T(), models.DefaultRecoveryCodeFriendlyName, recovery["friendly_name"])
+		for _, key := range forbiddenKeys {
+			require.NotContains(ts.T(), recovery, key)
+		}
+	}
+
+	ts.Run("AdminGetFactors", func() {
+		w := ts.serveRequest(http.MethodGet, fmt.Sprintf("http://localhost/admin/users/%s/factors/", ts.TestUser.ID), ts.adminToken(), nil)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+		var factors []map[string]any
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&factors))
+		require.Len(ts.T(), factors, 2)
+		assertRecoveryFactorListed(factors)
+	})
+
+	ts.Run("UserGet", func() {
+		w := ts.serveRequest(http.MethodGet, "http://localhost/user", token, nil)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+		var user struct {
+			Factors []map[string]any `json:"factors"`
+		}
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&user))
+		require.Len(ts.T(), user.Factors, 2)
+		assertRecoveryFactorListed(user.Factors)
+	})
 }
