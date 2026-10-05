@@ -321,13 +321,12 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 
 	config := a.config
 	maxFrequency := config.SMTP.MaxFrequency
-	otpLength := config.Mailer.OtpLength
 
 	if err = validateSentWithinFrequencyLimit(u.ConfirmationSentAt, maxFrequency); err != nil {
 		return err
 	}
 	oldToken := u.ConfirmationToken
-	otp := crypto.GenerateOtp(otpLength)
+	otp, isTestOTP := a.generateEmailOtp(u.GetEmail())
 
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
@@ -336,6 +335,7 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 		emailActionType:     mail.SignupVerification,
 		otp:                 otp,
 		tokenHashWithPrefix: u.ConfirmationToken,
+		isTestOTP:           isTestOTP,
 	}); err != nil {
 		u.ConfirmationToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
@@ -480,7 +480,6 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.User, flowType models.FlowType) error {
 	var err error
 	config := a.config
-	otpLength := config.Mailer.OtpLength
 
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
@@ -489,7 +488,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	}
 
 	oldToken := u.RecoveryToken
-	otp := crypto.GenerateOtp(otpLength)
+	otp, isTestOTP := a.generateEmailOtp(u.GetEmail())
 
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
@@ -499,6 +498,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 		emailActionType:     mail.MagicLinkVerification,
 		otp:                 otp,
 		tokenHashWithPrefix: u.RecoveryToken,
+		isTestOTP:           isTestOTP,
 	}); err != nil {
 		u.RecoveryToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
@@ -728,6 +728,16 @@ func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration
 	return nil
 }
 
+// generateEmailOtp returns the OTP to use for the given email address and
+// whether it is a configured test OTP. Test OTPs are stored and verified
+// like regular OTPs, but no email is sent for them.
+func (a *API) generateEmailOtp(email string) (otp string, isTestOTP bool) {
+	if testOTP, ok := a.config.Mailer.GetTestOTP(email, time.Now()); ok {
+		return testOTP, true
+	}
+	return crypto.GenerateOtp(a.config.Mailer.OtpLength), false
+}
+
 var emailLabelPattern = regexp.MustCompile("[+][^@]+@")
 
 func (a *API) checkEmailAddressAuthorization(email string) bool {
@@ -757,6 +767,8 @@ type sendEmailParams struct {
 	provider            string
 	factorType          string
 	recipientEmail      string
+	// isTestOTP is set when otp came from Mailer.TestOTP; the email is not sent.
+	isTestOTP bool
 }
 
 func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, params sendEmailParams) error {
@@ -788,6 +800,13 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" && !a.checkEmailAddressAuthorization(u.GetEmail()) {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.GetEmail())
 		}
+	}
+
+	// test OTPs are never delivered, so skip rate limiting, hooks and the
+	// mailer. The caller still persists the token and sent_at fields, which
+	// keeps verification identical to a regular OTP.
+	if params.isTestOTP {
+		return nil
 	}
 
 	// if the number of events is set to zero, we immediately apply rate limits.
