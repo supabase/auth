@@ -13,19 +13,20 @@ Bug fix, feature, docs update, ...
 
 Please link any relevant issues here.
 
-Closes #
-
 ## What is the new behavior?
 
 Feel free to include screenshots if it includes visual changes.
 
+## How this change was tested
+
+How did you test the change? How can a reviewer confirm it?
+
 ## Additional context
+Add any other context or screenshots if needed, and disclose AI usage.
 
-Add any other context or screenshots.
+## Linked issue
 
-## How to verify
-
-<!-- How did you test the change? How can a reviewer confirm it? -->
+Closes #123
 
 ## Checklist
 

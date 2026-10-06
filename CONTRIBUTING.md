@@ -25,6 +25,10 @@ Some changes need work outside this repository. A new setting needs dashboard, c
 
 For these reasons, we ask you to discuss and agree on the change with the team before you write code. We want to make sure that everyone's time goes to changes that we can merge.
 
+## Changes we do not accept
+
+- New OAuth or SMS providers. We plan to support these through a generic provider and hooks instead.
+
 ## Pull requests
 
 - Fork the repository and create your branch from `master`.
