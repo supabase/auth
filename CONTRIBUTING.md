@@ -1,52 +1,66 @@
-# CONTRIBUTING
+# Contributing to Auth
 
-We would love to have contributions from each and every one of you in the community be it big or small and you are the ones who motivate us to do better than what we do today.
+We would love to have contributions from each and every one of you in the community be it big or small and you are the ones who motivate us to do better than what we do today. Follow the [Supabase Code of Conduct](https://github.com/supabase/.github/blob/main/CODE_OF_CONDUCT.md).
 
-## Code Of Conduct
+Read this guide before you write code. It covers which changes we accept, how to propose a change, and criteria for a pull request to be merged.
 
-Please help us keep all our projects open and inclusive. Kindly follow our [Code of Conduct](CODE_OF_CONDUCT.md) to keep the ecosystem healthy and friendly for all.
+## Contribution workflow
+
+Before you open a pull request:
+
+1. **Search first.** Search open issues, discussions, and pull requests. If one exists, add to that work instead of opening a duplicate.
+2. **Start a [Discussion](https://github.com/supabase/auth/discussions).** Do this for all changes, including bug fixes.
+3. **Wait for maintainer triage.** The team must agree on the approach in the Discussion. Then a maintainer opens an issue with the `open-for-contribution` label.
+4. **Open a pull request only after the issue has the `open-for-contribution` label.** Link the issue with a closing keyword, for example `Closes #123`.
+
+Until a maintainer opens an issue with the `open-for-contribution` label, the change is still in triage, so work should not start and a pull request should not be opened.
+
+Pull requests from external contributors that do not follow this workflow are commented on and closed. Supabase maintainers are exempt, because they can work from Linear tickets that are not public on GitHub.
+
+## Why we require a discussion first
+
+Auth runs in many different places. A change that is safe for a small project can be a risk for a large one.
+
+Some changes need work outside this repository. A new setting needs dashboard, configuration, and documentation changes before a customer can use it. A bug fix is much easier for us to accept. A product decision is not, and this includes changes that require API changes and schema migrations.
+
+For these reasons, we ask you to discuss and agree on the change with the team before you write code. We want to make sure that everyone's time goes to changes that we can merge.
+
+## Changes we do not accept
+
+- New OAuth or SMS providers. We plan to support these through a generic provider and hooks instead.
+
+## Pull requests
+
+- Fork the repository and create your branch from `master`.
+- If you've added code that should be tested, add tests.
+- If you've changed APIs, update the documentation.
+- Link the issue with a closing keyword, for example `Closes #123`.
+- Write the description yourself. Explain why, not just what, and what was tested.
+- Tell us how you tested the change and how a reviewer can confirm it.
+- If you used AI tools, follow the [AI policy](AI_POLICY.md).
+- CI must pass.
+
+### Commit messages
+
+Pull request titles and commits must follow [Conventional Commits](https://www.conventionalcommits.org). We have CI that checks the title. Examples:
+
+- `feat: add support for OIDC sign-in`
+- `fix: resolve race condition in token refresh`
+- `docs: update OAuth configuration guide`
+- `chore: upgrade dependencies`
+
+## Review
+
+The Auth team reviews and merges pull requests. We try to respond quickly, but we do not guarantee a response time for community contributions. Address blocking review feedback before we can merge the change. We may close a pull request that has no activity for 60 days. You can reopen it when you are ready to continue.
+
+## Security issues
+
+Do not open a public issue or pull request for a security vulnerability. Report it through [GitHub Security Advisories](https://github.com/supabase/auth/security/advisories/new).
 
 ## Development
 
 To build, run, and test Auth locally, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
-## Submitting Pull Requests
-
-We actively welcome your pull requests.
-
-- Fork the repo and create your branch from `master`.
-- If you've added code that should be tested, add tests.
-- If you've changed APIs, update the documentation.
-- Ensure the test suite passes.
-- Make sure your code lints.
-
-### Checklist for Submitting Pull Requests
-
-- Is there a corresponding issue created for it? If so, please include it in the PR description so we can track / refer to it.
-- Does your PR follow the [semantic-release commit guidelines](https://github.com/angular/angular.js/blob/master/DEVELOPERS.md#-git-commit-guidelines)?
-- If the PR is a `feat`, an [RFC](https://github.com/supabase/rfcs) or a detailed description of the design implementation is required. The former (RFC) is preferred before starting on the PR.
-- Are the existing tests passing?
-- Have you written some tests for your PR?
-
-## Guidelines for Implementing Additional OAuth Providers
-
-> ⚠️ We won't be accepting any additional oauth / sms provider contributions for now because we intend to support these through webhooks or a generic provider in the future.
-
-Please ensure that an end-to-end test is done for the OAuth provider implemented.
-
-An end-to-end test includes:
-
-- Creating an application on the oauth provider site
-- Generating your own client_id and secret
-- Testing that `http://localhost:9999/authorize?provider=MY_COOL_NEW_PROVIDER` redirects you to the provider sign-in page
-- The callback is handled properly
-- Gotrue redirects to the `SITE_URL` or one of the URI's specified in the `URI_ALLOW_LIST` with the access_token, provider_token, expiry and refresh_token as query fragments
-
-### Writing tests for the new OAuth provider implemented
-
-Since implementing an additional OAuth provider consists of making api calls to an external api, we set up a mock server to attempt to mock the responses expected from the OAuth provider.
-
 ## License
 
-By contributing to Auth, you agree that your contributions will be licensed
-under its [MIT license](LICENSE).
+By contributing to Auth, you agree that your contributions will be licensed under its [MIT license](LICENSE).
