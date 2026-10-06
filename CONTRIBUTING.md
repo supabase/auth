@@ -42,14 +42,12 @@ For these reasons, we ask you to discuss and agree on the change with the team b
 
 ### Commit messages
 
-Pull request titles and commits must follow [Conventional Commits](https://www.conventionalcommits.org). CI checks the title. Examples:
+Pull request titles and commits must follow [Conventional Commits](https://www.conventionalcommits.org). We have CI that checks the title. Examples:
 
 - `feat: add support for OIDC sign-in`
 - `fix: resolve race condition in token refresh`
 - `docs: update OAuth configuration guide`
 - `chore: upgrade dependencies`
-
-Add `!` after the type for a breaking change, for example `feat!: change the token format`.
 
 ## Review
 
