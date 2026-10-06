@@ -1,0 +1,31 @@
+package api
+
+import (
+	"math"
+	"net/http"
+	"strconv"
+
+	"github.com/didip/tollbooth/v5/limiter"
+	"github.com/supabase/auth/internal/api/scim"
+)
+
+func (a *API) limitSCIMByIP(lmt *limiter.Limiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if a.performRateLimiting(lmt, r) != nil {
+				handler(scimTooManyRequests(lmt))(w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func scimTooManyRequests(lmt *limiter.Limiter) apiHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		if perSecond := lmt.GetMax(); perSecond > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(1/perSecond))))
+		}
+		return scim.SendTooManyRequests(w)
+	}
+}
