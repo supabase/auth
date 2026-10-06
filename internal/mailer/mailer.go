@@ -62,6 +62,8 @@ type Client interface {
 }
 
 type EmailData struct {
+	// RecipientEmail preserves the pre-unlink destination when user.email changes.
+	RecipientEmail  string `json:"recipient_email,omitempty"`
 	Token           string `json:"token"`
 	TokenHash       string `json:"token_hash"`
 	RedirectTo      string `json:"redirect_to"`
