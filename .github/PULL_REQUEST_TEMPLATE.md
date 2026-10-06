@@ -1,17 +1,27 @@
 <!--
 Read CONTRIBUTING.md before you open this pull request.
-Bug fixes need a linked issue that carries the `open-for-contribution` label.
-Features and behavior changes also need an agreed Discussion.
+All changes start as a Discussion. A maintainer opens an issue with the
+`open-for-contribution` label when the change is accepted. Link that issue below.
 Supabase maintainers working from Linear tickets are exempt.
 -->
 
-## Summary
+## What kind of change does this PR introduce?
 
-<!-- What does this change, and why? Write this yourself. -->
+Bug fix, feature, docs update, ...
 
-## Linked issue
+## What is the current behavior?
+
+Please link any relevant issues here.
 
 Closes #
+
+## What is the new behavior?
+
+Feel free to include screenshots if it includes visual changes.
+
+## Additional context
+
+Add any other context or screenshots.
 
 ## How to verify
 
