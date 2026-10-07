@@ -28,11 +28,6 @@ create index if not exists scim_resources_display_name_idx
     where resource_type = 'Group' and deleted_at is null;
 
 /* auth_migration: 20261005000000 */
-create index if not exists scim_resources_id_idx
-    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, id)
-    where deleted_at is null;
-
-/* auth_migration: 20261005000000 */
 create index if not exists scim_resources_created_at_idx
     on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, created_at, id)
     where deleted_at is null;
@@ -41,11 +36,6 @@ create index if not exists scim_resources_created_at_idx
 create index if not exists scim_resources_updated_at_idx
     on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, updated_at, id)
     where deleted_at is null;
-
-/* auth_migration: 20261005000000 */
-create index if not exists scim_resources_inactive_idx
-    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, id)
-    where resource_type = 'User' and deleted_at is null and not coalesce((resource->>'active')::boolean, true);
 
 /* auth_migration: 20261005000000 */
 create index if not exists scim_resources_resource_idx
