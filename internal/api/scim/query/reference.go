@@ -17,7 +17,7 @@ type Reference interface {
 	Exists(inner string, args []any) (string, []any)
 }
 
-func match(ref Reference, definition *core.Attribute, op filter.Operator, value any) (clause, error) {
+func match(ref Reference, definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
 	text, _ := value.(string)
 	if op != filter.OpEquals && op != filter.OpNotEquals {
 		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(ref.Name()+"."+definition.Name) + " supports only eq and ne")

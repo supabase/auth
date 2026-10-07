@@ -1,36 +1,36 @@
 package query
 
-type clause interface {
-	sql() (string, []any)
+type Clause interface {
+	SQL() (string, []any)
 }
 
 type jsonpath struct{ expr expr }
 
-func (j jsonpath) sql() (string, []any) {
+func (j jsonpath) SQL() (string, []any) {
 	return "search @@ ?::jsonpath", []any{j.expr.String()}
 }
 
 type exact struct{ expr expr }
 
-func (e exact) sql() (string, []any) {
+func (e exact) SQL() (string, []any) {
 	return "resource @@ ?::jsonpath", []any{e.expr.String()}
 }
 
 type junction struct {
 	op   string
-	l, r clause
+	l, r Clause
 }
 
-func (j junction) sql() (string, []any) {
-	l, largs := j.l.sql()
-	r, rargs := j.r.sql()
+func (j junction) SQL() (string, []any) {
+	l, largs := j.l.SQL()
+	r, rargs := j.r.SQL()
 	return "(" + l + " " + j.op + " " + r + ")", append(largs, rargs...)
 }
 
-type negation struct{ x clause }
+type negation struct{ x Clause }
 
-func (n negation) sql() (string, []any) {
-	x, args := n.x.sql()
+func (n negation) SQL() (string, []any) {
+	x, args := n.x.SQL()
 	return "NOT (" + x + ")", args
 }
 
@@ -39,14 +39,14 @@ type predicate struct {
 	args []any
 }
 
-func (p predicate) sql() (string, []any) { return p.text, p.args }
+func (p predicate) SQL() (string, []any) { return p.text, p.args }
 
 type reference struct {
 	ref   Reference
-	inner clause
+	inner Clause
 }
 
-func (r reference) sql() (string, []any) {
-	inner, args := r.inner.sql()
+func (r reference) SQL() (string, []any) {
+	inner, args := r.inner.SQL()
 	return r.ref.Exists(inner, args)
 }

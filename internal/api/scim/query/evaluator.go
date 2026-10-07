@@ -22,74 +22,73 @@ type Evaluator struct {
 	references []Reference
 }
 
-func NewEvaluator(schemas core.Schemas, references ...Reference) protocol.Evaluator[Builder] {
+func NewEvaluator(schemas core.Schemas, references ...Reference) protocol.Evaluator[Clause] {
 	return Evaluator{schemas: schemas, references: references}
 }
 
-func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Builder, error) {
+func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
 	if name, ok := e.column(attribute); ok {
-		leaf, err := column(name, op, value)
-		return Builder{leaf}, err
+		return column(name, op, value)
 	}
 	ref, ok := e.reference(attribute)
 	if !ok {
-		return Builder{e.compare(attribute, op, value)}, nil
+		return e.compare(attribute, op, value), nil
 	}
 	leaf, err := match(ref, attribute.Definition, op, value)
 	if err != nil {
-		return Builder{}, err
+		return nil, err
 	}
 	return e.wrap(attribute, ref, leaf), nil
 }
 
-func (e Evaluator) Present(attribute *protocol.Attribute) (Builder, error) {
+func (e Evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
 	if _, ok := e.column(attribute); ok {
-		return Builder{predicate{text: "TRUE"}}, nil
+		return predicate{text: "TRUE"}, nil
 	}
 	ref, ok := e.reference(attribute)
 	if !ok {
-		return Builder{jsonpath{present{e.path(attribute)}}}, nil
+		return jsonpath{present{e.path(attribute)}}, nil
 	}
 	return e.wrap(attribute, ref, predicate{text: "TRUE"}), nil
 }
 
-func (e Evaluator) And(l, r Builder) (Builder, error) {
+func (e Evaluator) And(l, r Clause) (Clause, error) {
 	if lpath, rpath, ok := jsonpaths(l, r); ok {
-		return Builder{jsonpath{and{lpath.expr, rpath.expr}}}, nil
+		return jsonpath{and{lpath.expr, rpath.expr}}, nil
 	}
-	return Builder{junction{"AND", l.clause, r.clause}}, nil
+	return junction{"AND", l, r}, nil
 }
 
-func (e Evaluator) Or(l, r Builder) (Builder, error) {
+func (e Evaluator) Or(l, r Clause) (Clause, error) {
 	if lpath, rpath, ok := jsonpaths(l, r); ok {
-		return Builder{jsonpath{or{lpath.expr, rpath.expr}}}, nil
+		return jsonpath{or{lpath.expr, rpath.expr}}, nil
 	}
-	return Builder{junction{"OR", l.clause, r.clause}}, nil
+	return junction{"OR", l, r}, nil
 }
 
-func (e Evaluator) Not(operand Builder) (Builder, error) {
-	if path, ok := operand.clause.(jsonpath); ok {
-		return Builder{jsonpath{not{path.expr}}}, nil
+func (e Evaluator) Not(operand Clause) (Clause, error) {
+	if path, ok := operand.(jsonpath); ok {
+		return jsonpath{not{path.expr}}, nil
 	}
-	return Builder{negation{operand.clause}}, nil
+	return negation{operand}, nil
 }
 
-func (e Evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (Builder, error)) (Builder, error) {
+func (e Evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (Clause, error)) (Clause, error) {
 	inner, err := valueFilter()
 	if err != nil {
 		return inner, err
 	}
 	if ref, ok := e.reference(attribute); ok {
-		return Builder{reference{ref, inner.clause}}, nil
+		return reference{ref, inner}, nil
 	}
-	path, ok := inner.clause.(jsonpath)
+	path, ok := inner.(jsonpath)
 	if !ok {
-		return Builder{}, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
+		return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
-	return Builder{jsonpath{exists{e.path(attribute), path.expr}}}, nil
+	return jsonpath{exists{e.path(attribute), path.expr}}, nil
 }
 
-func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, value any) clause {
+func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, value any) Clause {
 	folded := jsonpath{compare{e.path(attribute), op, value, false}}
 	if _, text := value.(string); !text || !attribute.Definition.CaseExact {
 		return folded
@@ -101,11 +100,11 @@ func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, va
 	return junction{"AND", folded, exact}
 }
 
-func (e Evaluator) wrap(attribute *protocol.Attribute, ref Reference, leaf clause) Builder {
+func (e Evaluator) wrap(attribute *protocol.Attribute, ref Reference, leaf Clause) Clause {
 	if attribute.Parent != nil {
-		return Builder{leaf}
+		return leaf
 	}
-	return Builder{reference{ref, leaf}}
+	return reference{ref, leaf}
 }
 
 func (e Evaluator) reference(attribute *protocol.Attribute) (Reference, bool) {
@@ -155,8 +154,8 @@ func (e Evaluator) keys(attribute *protocol.Attribute) []string {
 	return []string{attribute.Definition.Name}
 }
 
-func jsonpaths(l, r Builder) (jsonpath, jsonpath, bool) {
-	lpath, lok := l.clause.(jsonpath)
-	rpath, rok := r.clause.(jsonpath)
+func jsonpaths(l, r Clause) (jsonpath, jsonpath, bool) {
+	lpath, lok := l.(jsonpath)
+	rpath, rok := r.(jsonpath)
 	return lpath, rpath, lok && rok
 }

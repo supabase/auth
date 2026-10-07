@@ -223,11 +223,12 @@ func (r *repository[T]) filter(tx *storage.Connection, scope models.SCIMScope, e
 	if expression == "" {
 		return q, nil
 	}
-	builder, err := protocol.Filter(r.schemas, expression, query.NewEvaluator(r.schemas, r.attributes()...))
+	clause, err := protocol.Filter(r.schemas, expression, query.NewEvaluator(r.schemas, r.attributes()...))
 	if err != nil {
 		return nil, err
 	}
-	return builder.Build(q), nil
+	text, args := clause.SQL()
+	return q.Where(text, args...), nil
 }
 
 func (r *repository[T]) page(tx *storage.Connection, scope models.SCIMScope, q *pop.Query, query *protocol.SearchRequest) ([]models.SCIMResource, error) {

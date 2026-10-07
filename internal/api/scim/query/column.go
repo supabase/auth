@@ -23,7 +23,7 @@ var comparisons = map[filter.Operator]string{
 	filter.OpLessThanEquals:    " <= ",
 }
 
-func column(name string, op filter.Operator, value any) (clause, error) {
+func column(name string, op filter.Operator, value any) (Clause, error) {
 	sign, ok := comparisons[op]
 	if !ok {
 		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(name) + " supports only eq, ne, gt, ge, lt and le")
@@ -35,7 +35,7 @@ func column(name string, op filter.Operator, value any) (clause, error) {
 	return uuidPredicate("id", sign, op, text), nil
 }
 
-func uuidPredicate(column, sign string, op filter.Operator, text string) clause {
+func uuidPredicate(column, sign string, op filter.Operator, text string) Clause {
 	id, err := uuid.FromString(text)
 	if err != nil {
 		return predicate{text: strconv.FormatBool(op == filter.OpNotEquals)}
