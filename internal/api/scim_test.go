@@ -111,15 +111,13 @@ func TestSCIM(t *testing.T) {
 	for _, path := range []string{scimResourceTypesPath, scimSchemasPath} {
 		t.Run(path+" rejects the filter query parameter", func(t *testing.T) {
 			res := c.get(t, path+"?"+url.Values{"filter": {`name eq "User"`}}.Encode())
-			require.Equal(t, http.StatusForbidden, res.StatusCode)
-			requireSCIMError(t, res)
+			requireSCIMError(t, res, http.StatusForbidden, "")
 		})
 	}
 
 	t.Run("Unknown endpoint returns a SCIM 404", func(t *testing.T) {
 		res := c.get(t, "/scim/v2/Unknown")
-		require.Equal(t, http.StatusNotFound, res.StatusCode)
-		requireSCIMError(t, res)
+		requireSCIMError(t, res, http.StatusNotFound, "")
 	})
 
 	t.Run("Unsupported method returns a SCIM 405", func(t *testing.T) {
@@ -405,7 +403,7 @@ func TestSCIMUsers(t *testing.T) {
 	t.Run("DELETE removes a user", func(t *testing.T) {
 		user := c.createUser(t, scimUserName("bjensen"))
 
-		require.Equal(t, http.StatusNoContent, c.do(t, http.MethodDelete, scimUsersPath+"/"+user.ID, nil).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+user.ID).StatusCode)
 		require.Equal(t, http.StatusNotFound, c.get(t, scimUsersPath+"/"+user.ID).StatusCode)
 	})
 }
@@ -467,7 +465,7 @@ func TestSCIMGroups(t *testing.T) {
 		user, other := createUser(t), createUser(t)
 		group := create(t, user)
 
-		require.Equal(t, http.StatusNoContent, patch(t, group.ID, map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: other.ID}}}).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.addMembers(t, group.ID, other.ID).StatusCode)
 		require.ElementsMatch(t, []core.Member{scimMember(user), scimMember(other)}, c.group(t, group.ID).Members)
 	})
 
@@ -517,7 +515,7 @@ func TestSCIMGroups(t *testing.T) {
 	t.Run("DELETE removes a group", func(t *testing.T) {
 		group := create(t)
 
-		require.Equal(t, http.StatusNoContent, c.do(t, http.MethodDelete, scimGroupsPath+"/"+group.ID, nil).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.delete(t, scimGroupsPath+"/"+group.ID).StatusCode)
 		require.Equal(t, http.StatusNotFound, c.get(t, scimGroupsPath+"/"+group.ID).StatusCode)
 	})
 
@@ -525,13 +523,13 @@ func TestSCIMGroups(t *testing.T) {
 		user, other := createUser(t), createUser(t)
 		group := create(t, user, other)
 
-		require.Equal(t, http.StatusNoContent, c.do(t, http.MethodDelete, scimUsersPath+"/"+user.ID, nil).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+user.ID).StatusCode)
 		require.Equal(t, []core.Member{scimMember(other)}, c.group(t, group.ID).Members)
 	})
 
 	t.Run("rejects members that are not live resources of the provider", func(t *testing.T) {
 		deleted := createUser(t)
-		require.Equal(t, http.StatusNoContent, c.do(t, http.MethodDelete, scimUsersPath+"/"+deleted.ID, nil).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+deleted.ID).StatusCode)
 		foreign := newSCIMClient(t, nil).createUser(t, scimUserName("foreign"))
 		group := create(t)
 
@@ -541,13 +539,11 @@ func TestSCIMGroups(t *testing.T) {
 				body := newSCIMGroup("Tour Guides " + uuid.Must(uuid.NewV4()).String())
 				body["members"] = members
 				res := c.do(t, http.MethodPost, scimGroupsPath, body)
-				require.Equal(t, http.StatusBadRequest, res.StatusCode)
-				require.Contains(t, string(scimBody(t, res)), `"scimType":"invalidValue"`)
+				requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
 			})
 			t.Run("PATCH "+name, func(t *testing.T) {
-				res := patch(t, group.ID, map[string]any{"op": "add", "path": "members", "value": members})
-				require.Equal(t, http.StatusBadRequest, res.StatusCode)
-				require.Contains(t, string(scimBody(t, res)), `"scimType":"invalidValue"`)
+				res := c.addMembers(t, group.ID, value)
+				requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
 			})
 		}
 		require.Empty(t, c.group(t, group.ID).Members)
@@ -557,7 +553,7 @@ func TestSCIMGroups(t *testing.T) {
 		child := create(t)
 		parent := create(t)
 
-		require.Equal(t, http.StatusNoContent, patch(t, parent.ID, map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: child.ID}}}).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.addMembers(t, parent.ID, child.ID).StatusCode)
 		require.Equal(t, []core.Member{{Value: child.ID, Ref: child.Meta.Location, Type: "Group"}}, c.group(t, parent.ID).Members)
 	})
 
@@ -565,7 +561,7 @@ func TestSCIMGroups(t *testing.T) {
 		user := createUser(t)
 		child := create(t, user)
 		parent := create(t)
-		require.Equal(t, http.StatusNoContent, patch(t, parent.ID, map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: child.ID}}}).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.addMembers(t, parent.ID, child.ID).StatusCode)
 		groups := []core.GroupMembership{
 			{Value: child.ID, Ref: child.Meta.Location, Display: child.DisplayName, Type: "direct"},
 			{Value: parent.ID, Ref: parent.Meta.Location, Display: parent.DisplayName, Type: "indirect"},
@@ -586,7 +582,7 @@ func TestSCIMGroups(t *testing.T) {
 			require.Len(t, scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}}).Resources, want, filter)
 		}
 
-		require.Equal(t, http.StatusNoContent, c.do(t, http.MethodDelete, scimGroupsPath+"/"+child.ID, nil).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.delete(t, scimGroupsPath+"/"+child.ID).StatusCode)
 		require.Empty(t, c.user(t, user.ID).Groups)
 	})
 
@@ -595,7 +591,7 @@ func TestSCIMGroups(t *testing.T) {
 		middle := create(t)
 		top := create(t)
 		add := func(group, member core.Group) *http.Response {
-			return patch(t, group.ID, map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: member.ID}}})
+			return c.addMembers(t, group.ID, member.ID)
 		}
 		require.Equal(t, http.StatusNoContent, add(top, middle).StatusCode)
 		require.Equal(t, http.StatusNoContent, add(middle, bottom).StatusCode)
@@ -607,8 +603,7 @@ func TestSCIMGroups(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				res := add(tc.group, tc.member)
-				require.Equal(t, http.StatusBadRequest, res.StatusCode)
-				require.Contains(t, string(scimBody(t, res)), `"scimType":"invalidValue"`)
+				requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
 			})
 		}
 	})
@@ -629,7 +624,7 @@ func TestSCIMIsolation(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, other.get(t, scimUsersPath+"/"+user.ID).StatusCode)
 	require.Equal(t, http.StatusNotFound, other.get(t, scimGroupsPath+"/"+group.ID).StatusCode)
-	require.Equal(t, http.StatusNotFound, other.do(t, http.MethodDelete, scimUsersPath+"/"+user.ID, nil).StatusCode)
+	require.Equal(t, http.StatusNotFound, other.delete(t, scimUsersPath+"/"+user.ID).StatusCode)
 	require.Zero(t, scimList[core.User](t, other, scimUsersPath, url.Values{"filter": {`userName eq "` + user.UserName + `"`}}).TotalResults)
 	require.Zero(t, scimList[core.Group](t, other, scimGroupsPath, url.Values{"filter": {`displayName eq "` + group.DisplayName + `"`}}).TotalResults)
 	require.Equal(t, user.UserName, other.createUser(t, user.UserName).UserName)
@@ -699,8 +694,7 @@ func TestSCIMErrors(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res := c.do(t, tc.method, tc.path, tc.body)
-			require.Equal(t, tc.status, res.StatusCode)
-			requireSCIMError(t, res)
+			requireSCIMError(t, res, tc.status, "")
 		})
 	}
 }
@@ -728,10 +722,7 @@ func TestSCIMUniqueness(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res := c.do(t, tc.method, tc.path, tc.body)
-			require.Equal(t, http.StatusConflict, res.StatusCode)
-			require.Equal(t, protocol.MediaType, res.Header.Get("Content-Type"))
-			body := scimDecode[scimerrors.Error](t, res)
-			require.Equal(t, scimerrors.Uniqueness, body.ScimType)
+			body := requireSCIMError(t, res, http.StatusConflict, scimerrors.Uniqueness)
 			require.Equal(t, "resource must be unique", body.Detail)
 		})
 	}
@@ -857,8 +848,7 @@ func TestSCIMFilters(t *testing.T) {
 
 	t.Run("refuses a password filter in the URL as sensitive", func(t *testing.T) {
 		res := c.get(t, scimUsersPath+"?"+url.Values{"filter": {`password eq "t1meMa$heen"`}}.Encode())
-		require.Equal(t, http.StatusForbidden, res.StatusCode)
-		require.Contains(t, string(scimBody(t, res)), `"scimType":"sensitive"`)
+		requireSCIMError(t, res, http.StatusForbidden, scimerrors.Sensitive)
 	})
 }
 
@@ -1024,6 +1014,10 @@ func (c scimClient) get(t *testing.T, path string) *http.Response {
 	return c.do(t, http.MethodGet, path, nil)
 }
 
+func (c scimClient) delete(t *testing.T, path string) *http.Response {
+	return c.do(t, http.MethodDelete, path, nil)
+}
+
 func (c scimClient) admin(t *testing.T, method, path string, body any) *http.Response {
 	req := scimRequest(t, method, path, body)
 	req.Header.Set("Content-Type", "application/json")
@@ -1054,6 +1048,14 @@ func (c scimClient) createGroup(t *testing.T, displayName string, members ...cor
 	res := c.do(t, http.MethodPost, scimGroupsPath, newSCIMGroup(displayName, members...))
 	require.Equal(t, http.StatusCreated, res.StatusCode)
 	return scimDecode[core.Group](t, res)
+}
+
+func (c scimClient) addMembers(t *testing.T, id string, values ...string) *http.Response {
+	members := make([]core.Member, len(values))
+	for i, value := range values {
+		members[i] = core.Member{Value: value}
+	}
+	return c.do(t, http.MethodPatch, scimGroupsPath+"/"+id, newSCIMPatch(map[string]any{"op": "add", "path": "members", "value": members}))
 }
 
 func (c scimClient) requireGroup(t *testing.T, id, displayName string, members ...string) {
@@ -1161,7 +1163,13 @@ func scimDecode[T any](t *testing.T, res *http.Response) T {
 	return value
 }
 
-func requireSCIMError(t *testing.T, res *http.Response) {
+func requireSCIMError(t *testing.T, res *http.Response, status int, scimType scimerrors.ErrorType) scimerrors.Error {
+	require.Equal(t, status, res.StatusCode)
 	require.Equal(t, protocol.MediaType, res.Header.Get("Content-Type"))
-	require.Contains(t, string(scimBody(t, res)), protocol.SchemaError)
+	body := scimDecode[scimerrors.Error](t, res)
+	require.Contains(t, body.Schemas, protocol.SchemaError)
+	if scimType != "" {
+		require.Equal(t, scimType, body.ScimType)
+	}
+	return body
 }

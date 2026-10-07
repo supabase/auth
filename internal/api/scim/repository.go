@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/gobuffalo/pop/v6"
@@ -192,7 +191,7 @@ func (r *repository[T]) order(request *protocol.SearchRequest) (string, []any, e
 	if len(keys) == 1 {
 		return `lower(resource ->> ` + models.QuoteLiteral(keys[0]) + `) COLLATE "C"` + direction + ", id", nil, nil
 	}
-	return `lower(resource #>> ?::text[]) COLLATE "C"` + direction + ", id", []any{textArray(keys)}, nil
+	return `lower(resource #>> ?::text[]) COLLATE "C"` + direction + ", id", []any{keys}, nil
 }
 
 func (r *repository[T]) save(ctx context.Context, scope models.SCIMScope, targets map[string][]uuid.UUID, write func(*storage.Connection) (*models.SCIMResource, error)) (T, error) {
@@ -344,12 +343,4 @@ func invalid(err error) error {
 
 func notFound() error {
 	return scimerrors.ErrNotFound("Not found")
-}
-
-func textArray(keys []string) string {
-	quoted := make([]string, len(keys))
-	for i, key := range keys {
-		quoted[i] = strconv.Quote(key)
-	}
-	return "{" + strings.Join(quoted, ",") + "}"
 }

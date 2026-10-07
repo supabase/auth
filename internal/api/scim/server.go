@@ -25,39 +25,30 @@ func BaseURL(config *conf.GlobalConfiguration) string {
 	return strings.TrimRight(config.API.ExternalURL, "/") + BasePath
 }
 
-type Server struct {
-	*server.Server
-	cfg *core.ServiceProviderConfig
-}
-
 func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Handler {
 	locations := map[string]string{"User": BaseURL(config) + "/Users", "Group": BaseURL(config) + "/Groups"}
-	cfg := core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching().Sorting()
-	return &Server{
-		cfg: cfg,
-		Server: server.New(BasePath,
-			cfg,
-			server.WithBaseURL(BaseURL(config)),
-			server.ErrorHandler(func(r *http.Request, err error) {
-				observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
-			}),
-			server.WithResource(server.
-				NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
-				WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...).
-				WithRepository(NewRepository[*core.User](db, "User", locations, core.Schemas{
-					core.NewSchema(core.SchemaUser).With(core.UserAttributes()...),
-					core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...),
-				}, ref.Derived("groups", "Group", "members"))),
-			),
-			server.WithResource(server.
-				NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
-				WithRepository(NewRepository[*core.Group](db, "Group", locations, core.Schemas{
-					core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...),
-				}, ref.Stored("members"))),
-			),
-			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),
+	return server.New(BasePath,
+		core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching().Sorting(),
+		server.WithBaseURL(BaseURL(config)),
+		server.ErrorHandler(func(r *http.Request, err error) {
+			observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
+		}),
+		server.WithResource(server.
+			NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
+			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...).
+			WithRepository(NewRepository[*core.User](db, "User", locations, core.Schemas{
+				core.NewSchema(core.SchemaUser).With(core.UserAttributes()...),
+				core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...),
+			}, ref.Derived("groups", "Group", "members"))),
 		),
-	}
+		server.WithResource(server.
+			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
+			WithRepository(NewRepository[*core.Group](db, "Group", locations, core.Schemas{
+				core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...),
+			}, ref.Stored("members"))),
+		),
+		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),
+	)
 }
 
 func SendTooManyRequests(w http.ResponseWriter) error {

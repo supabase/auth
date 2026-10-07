@@ -40,22 +40,18 @@ func (a *API) adminSCIMGet(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) adminSCIMEnable(w http.ResponseWriter, r *http.Request) error {
-	return a.toggleSCIM(w, r, true)
+	return a.toggleSCIM(w, r, models.EnableSCIM)
 }
 
 func (a *API) adminSCIMDisable(w http.ResponseWriter, r *http.Request) error {
-	return a.toggleSCIM(w, r, false)
+	return a.toggleSCIM(w, r, models.DisableSCIM)
 }
 
-func (a *API) toggleSCIM(w http.ResponseWriter, r *http.Request, enabled bool) error {
+func (a *API) toggleSCIM(w http.ResponseWriter, r *http.Request, set func(*storage.Connection, uuid.UUID) error) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	provider := getSSOProvider(ctx)
 
-	set := models.DisableSCIM
-	if enabled {
-		set = models.EnableSCIM
-	}
 	if err := set(db, provider.ID); err != nil {
 		return apierrors.NewInternalServerError("Error toggling SCIM").WithInternalError(err)
 	}
