@@ -50,11 +50,7 @@ func (t *SCIMToken) AfterFind(*pop.Connection) error {
 }
 
 func CreateSCIMToken(tx *storage.Connection, providerID uuid.UUID, expiresAt *time.Time) (*SCIMToken, string, error) {
-	plaintext, err := generateSCIMToken()
-	if err != nil {
-		return nil, "", errors.Wrap(err, "error generating SCIM token")
-	}
-
+	plaintext := generateSCIMToken()
 	token := &SCIMToken{
 		ID:            uuid.Must(uuid.NewV4()),
 		SSOProviderID: providerID,
@@ -113,8 +109,7 @@ func AuthenticateSCIMToken(tx *storage.Connection, plaintext string) (*SCIMToken
   JOIN %[3]q AS s ON s.sso_provider_id = t.sso_provider_id AND s.enabled
   WHERE (p.disabled IS NULL OR p.disabled = false)
     AND t.token_hash = ?
-    AND t.revoked_at IS NULL
-    AND (t.expires_at IS NULL OR t.expires_at > now())
+    AND %[4]s
 ), touched AS (
   UPDATE %[1]q AS t SET last_used_at = now()
   FROM authenticated AS a
@@ -124,7 +119,7 @@ func AuthenticateSCIMToken(tx *storage.Connection, plaintext string) (*SCIMToken
 )
 SELECT * FROM touched
 UNION ALL
-SELECT * FROM authenticated WHERE NOT EXISTS (SELECT 1 FROM touched)`, token.TableName(), SSOProvider{}.TableName(), SCIMSettings{}.TableName()),
+SELECT * FROM authenticated WHERE NOT EXISTS (SELECT 1 FROM touched)`, token.TableName(), SSOProvider{}.TableName(), SCIMSettings{}.TableName(), activeSCIMTokenClause),
 		hashSCIMToken(plaintext),
 	).First(token); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -135,12 +130,10 @@ SELECT * FROM authenticated WHERE NOT EXISTS (SELECT 1 FROM touched)`, token.Tab
 	return token, nil
 }
 
-func generateSCIMToken() (string, error) {
+func generateSCIMToken() string {
 	b := make([]byte, scimTokenBytes)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return scimTokenMarker + hex.EncodeToString(b), nil
+	_, _ = rand.Read(b)
+	return scimTokenMarker + hex.EncodeToString(b)
 }
 
 func hashSCIMToken(token string) string {
