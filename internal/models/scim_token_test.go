@@ -153,7 +153,10 @@ func (ts *SCIMTokenTestSuite) TestAuthenticateRejects() {
 }
 
 func (ts *SCIMTokenTestSuite) createProvider() *SSOProvider {
-	return createSCIMTestProvider(ts.T(), ts.db)
+	provider := &SSOProvider{}
+	require.NoError(ts.T(), ts.db.Create(provider))
+	require.NoError(ts.T(), EnableSCIM(ts.db, provider.ID))
+	return provider
 }
 
 func (ts *SCIMTokenTestSuite) createToken(expiresAt *time.Time) (*SCIMToken, string) {

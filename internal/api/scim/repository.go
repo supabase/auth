@@ -3,7 +3,6 @@ package scim
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 
 	"github.com/gobuffalo/pop/v6"
@@ -335,7 +334,7 @@ func (r *repository[T]) encode(item T) (string, map[string][]uuid.UUID, error) {
 }
 
 func invalid(err error) error {
-	if _, ok := errors.AsType[models.SCIMUniquenessError](err); ok {
+	if models.IsUniqueConstraintViolatedError(err) {
 		return scimerrors.ErrUniqueness("resource must be unique")
 	}
 	return err

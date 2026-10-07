@@ -32,9 +32,13 @@ func column(name string, op filter.Operator, value any) (clause, error) {
 		return predicate{Columns[name] + sign + "?", []any{value}}, nil
 	}
 	text, _ := value.(string)
+	return uuidPredicate("id", sign, op, text), nil
+}
+
+func uuidPredicate(column, sign string, op filter.Operator, text string) clause {
 	id, err := uuid.FromString(text)
 	if err != nil {
-		return predicate{text: strconv.FormatBool(op == filter.OpNotEquals)}, nil
+		return predicate{text: strconv.FormatBool(op == filter.OpNotEquals)}
 	}
-	return predicate{"id" + sign + "?::uuid", []any{id.String()}}, nil
+	return predicate{column + sign + "?::uuid", []any{id.String()}}
 }

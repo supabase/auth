@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -31,9 +30,5 @@ func match(ref Reference, definition *core.Attribute, op filter.Operator, value 
 	if definition.Name != ValueAttribute {
 		return predicate{column + sign + "?", []any{strings.ToLower(text)}}, nil
 	}
-	target, err := uuid.FromString(text)
-	if err != nil {
-		return predicate{text: strconv.FormatBool(op == filter.OpNotEquals)}, nil
-	}
-	return predicate{column + sign + "?::uuid", []any{target.String()}}, nil
+	return uuidPredicate(column, sign, op, text), nil
 }
