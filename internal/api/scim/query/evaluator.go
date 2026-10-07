@@ -10,6 +10,13 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+var narrowing = map[filter.Operator]bool{
+	filter.OpEquals:     true,
+	filter.OpStartsWith: true,
+	filter.OpContains:   true,
+	filter.OpEndsWith:   true,
+}
+
 type Evaluator struct {
 	schemas    core.Schemas
 	references []Reference
@@ -26,7 +33,7 @@ func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, va
 	}
 	ref, ok := e.reference(attribute)
 	if !ok {
-		return Builder{jsonpath{compare{e.path(attribute), op, value}}}, nil
+		return Builder{e.compare(attribute, op, value)}, nil
 	}
 	leaf, err := match(ref, attribute.Definition, op, value)
 	if err != nil {
@@ -80,6 +87,18 @@ func (e Evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (
 		return Builder{}, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
 	return Builder{jsonpath{exists{e.path(attribute), path.expr}}}, nil
+}
+
+func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, value any) clause {
+	folded := jsonpath{compare{e.path(attribute), op, value, false}}
+	if _, text := value.(string); !text || !attribute.Definition.CaseExact {
+		return folded
+	}
+	exact := exact{compare{e.path(attribute), op, value, true}}
+	if !narrowing[op] {
+		return exact
+	}
+	return junction{"AND", folded, exact}
 }
 
 func (e Evaluator) wrap(attribute *protocol.Attribute, ref Reference, leaf clause) Builder {

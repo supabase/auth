@@ -10,6 +10,12 @@ func (j jsonpath) sql() (string, []any) {
 	return "search @@ ?::jsonpath", []any{j.expr.String()}
 }
 
+type exact struct{ expr expr }
+
+func (e exact) sql() (string, []any) {
+	return "resource @@ ?::jsonpath", []any{e.expr.String()}
+}
+
 type junction struct {
 	op   string
 	l, r clause

@@ -771,8 +771,12 @@ func TestSCIMFilters(t *testing.T) {
 	require.Equal(t, http.StatusCreated, res.StatusCode)
 	user := scimDecode[core.User](t, res)
 
-	c.createGroup(t, "Decoys", decoy)
-	body := newSCIMGroup("Tour Guides", user)
+	body := newSCIMGroup("Decoys", decoy)
+	body["externalId"] = "Tour-Guides"
+	res = c.do(t, http.MethodPost, scimGroupsPath, body)
+	require.Equal(t, http.StatusCreated, res.StatusCode)
+	decoys := scimDecode[core.Group](t, res)
+	body = newSCIMGroup("Tour Guides", user)
 	body["externalId"] = "tour-guides"
 	res = c.do(t, http.MethodPost, scimGroupsPath, body)
 	require.Equal(t, http.StatusCreated, res.StatusCode)
@@ -827,6 +831,10 @@ func TestSCIMFilters(t *testing.T) {
 		{scimUsersPath, enterprise + `:manager.value eq "` + decoy.ID + `"`, user.ID},
 		{scimGroupsPath, `id eq "` + group.ID + `"`, group.ID},
 		{scimGroupsPath, `externalId eq "tour-guides"`, group.ID},
+		{scimGroupsPath, `externalId eq "Tour-Guides"`, decoys.ID},
+		{scimGroupsPath, `externalId ne "Tour-Guides"`, group.ID},
+		{scimGroupsPath, `externalId sw "Tour"`, decoys.ID},
+		{scimGroupsPath, `not (externalId eq "Tour-Guides")`, group.ID},
 		{scimGroupsPath, `displayName eq "Tour Guides"`, group.ID},
 		{scimGroupsPath, `members.value eq "` + user.ID + `"`, group.ID},
 		{scimGroupsPath, `members[value eq "` + user.ID + `"]`, group.ID},
