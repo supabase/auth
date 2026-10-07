@@ -176,7 +176,12 @@ func TestSCIMAuthentication(t *testing.T) {
 		res := c.admin(t, http.MethodDelete, "/admin/sso/providers/"+c.provider.ID.String()+"/scim/tokens/"+token.ID.String(), nil)
 		require.Equal(t, http.StatusOK, res.StatusCode)
 
-		require.Equal(t, http.StatusUnauthorized, c.as(raw).get(t, scimUsersPath).StatusCode)
+		for _, base := range []string{scimUsersPath, scimGroupsPath} {
+			id := base + "/" + scimMissingID
+			for _, route := range [][2]string{{http.MethodGet, base}, {http.MethodPost, base}, {http.MethodPost, base + "/.search"}, {http.MethodGet, id}, {http.MethodPut, id}, {http.MethodPatch, id}, {http.MethodDelete, id}} {
+				require.Equal(t, http.StatusUnauthorized, c.as(raw).do(t, route[0], route[1], map[string]any{}).StatusCode, route)
+			}
+		}
 	})
 
 	t.Run("rejects a token after SCIM is disabled for the provider", func(t *testing.T) {
@@ -405,6 +410,9 @@ func TestSCIMUsers(t *testing.T) {
 
 		require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+user.ID).StatusCode)
 		require.Equal(t, http.StatusNotFound, c.get(t, scimUsersPath+"/"+user.ID).StatusCode)
+		filter := `userName eq "` + user.UserName + `"`
+		require.Zero(t, scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}}).TotalResults)
+		require.Zero(t, scimSearch(t, c, scimUsersPath, map[string]any{"filter": filter}).TotalResults)
 	})
 }
 
@@ -622,14 +630,31 @@ func TestSCIMIsolation(t *testing.T) {
 	user := c.createUser(t, scimUserName("bjensen"))
 	group := c.createGroup(t, "Tour Guides "+uuid.Must(uuid.NewV4()).String(), user)
 
-	require.Equal(t, http.StatusNotFound, other.get(t, scimUsersPath+"/"+user.ID).StatusCode)
-	require.Equal(t, http.StatusNotFound, other.get(t, scimGroupsPath+"/"+group.ID).StatusCode)
-	require.Equal(t, http.StatusNotFound, other.delete(t, scimUsersPath+"/"+user.ID).StatusCode)
+	userPath, groupPath := scimUsersPath+"/"+user.ID, scimGroupsPath+"/"+group.ID
+	for _, tc := range []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodGet, userPath, nil},
+		{http.MethodPut, userPath, newSCIMUser(scimUserName("jsmith"), "John", "Smith")},
+		{http.MethodPatch, userPath, newSCIMPatch(map[string]any{"op": "replace", "path": "active", "value": false})},
+		{http.MethodDelete, userPath, nil},
+		{http.MethodGet, groupPath, nil},
+		{http.MethodPut, groupPath, newSCIMGroup("Group B")},
+		{http.MethodPatch, groupPath, newSCIMPatch(map[string]any{"op": "replace", "path": "displayName", "value": "Group B"})},
+		{http.MethodDelete, groupPath, nil},
+	} {
+		requireSCIMError(t, other.do(t, tc.method, tc.path, tc.body), http.StatusNotFound, "")
+	}
 	require.Zero(t, scimList[core.User](t, other, scimUsersPath, url.Values{"filter": {`userName eq "` + user.UserName + `"`}}).TotalResults)
 	require.Zero(t, scimList[core.Group](t, other, scimGroupsPath, url.Values{"filter": {`displayName eq "` + group.DisplayName + `"`}}).TotalResults)
-	require.Equal(t, user.UserName, other.createUser(t, user.UserName).UserName)
+	require.Zero(t, scimSearch(t, other, scimUsersPath, map[string]any{"filter": `userName eq "` + user.UserName + `"`}).TotalResults)
+	require.Zero(t, scimSearch(t, other, scimGroupsPath, map[string]any{"filter": `displayName eq "` + group.DisplayName + `"`}).TotalResults)
+	twin := other.createUser(t, user.UserName)
+	require.Equal(t, []core.User{twin}, scimList[core.User](t, other, scimUsersPath, url.Values{"filter": {`userName eq "` + user.UserName + `"`}}).Resources)
 	user.Groups = []core.GroupMembership{{Value: group.ID, Ref: group.Meta.Location, Display: group.DisplayName, Type: "direct"}}
 	require.Equal(t, user, c.user(t, user.ID))
+	require.Equal(t, group, c.group(t, group.ID))
 }
 
 func TestSCIMSearch(t *testing.T) {
@@ -638,21 +663,14 @@ func TestSCIMSearch(t *testing.T) {
 	c.createUser(t, scimUserName("jsmith"))
 	group := c.createGroup(t, "Tour Guides", user)
 
-	search := func(t *testing.T, path string, body map[string]any) protocol.ListResponse[map[string]any] {
-		body["schemas"] = []core.SchemaURI{protocol.SchemaSearchRequest}
-		res := c.do(t, http.MethodPost, path+"/.search", body)
-		require.Equal(t, http.StatusOK, res.StatusCode)
-		return scimDecode[protocol.ListResponse[map[string]any]](t, res)
-	}
-
 	t.Run("filters Users", func(t *testing.T) {
-		list := search(t, scimUsersPath, map[string]any{"filter": `userName eq "` + user.UserName + `"`, "attributes": []string{"userName"}})
+		list := scimSearch(t, c, scimUsersPath, map[string]any{"filter": `userName eq "` + user.UserName + `"`, "attributes": []string{"userName"}})
 		require.Equal(t, 1, list.TotalResults)
 		require.Equal(t, []map[string]any{{"id": user.ID, "userName": user.UserName, "schemas": []any{string(core.SchemaUser)}}}, list.Resources)
 	})
 
 	t.Run("filters Groups", func(t *testing.T) {
-		list := search(t, scimGroupsPath, map[string]any{"filter": `displayName eq "Tour Guides"`, "excludedAttributes": []string{"members"}})
+		list := scimSearch(t, c, scimGroupsPath, map[string]any{"filter": `displayName eq "Tour Guides"`, "excludedAttributes": []string{"members"}})
 		require.Equal(t, 1, list.TotalResults)
 		require.Equal(t, group.ID, list.Resources[0]["id"])
 		require.NotContains(t, list.Resources[0], "members")
@@ -1093,6 +1111,13 @@ func newSCIMInstance(t *testing.T, tweak func(*conf.GlobalConfiguration)) *e2eap
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, inst.Close()) })
 	return inst
+}
+
+func scimSearch(t *testing.T, c scimClient, path string, body map[string]any) protocol.ListResponse[map[string]any] {
+	body["schemas"] = []core.SchemaURI{protocol.SchemaSearchRequest}
+	res := c.do(t, http.MethodPost, path+"/.search", body)
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	return scimDecode[protocol.ListResponse[map[string]any]](t, res)
 }
 
 func scimUserName(prefix string) string {
