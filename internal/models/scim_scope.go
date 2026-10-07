@@ -13,6 +13,8 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
+const SCIMMaxDepth = 8
+
 const scimResourceColumns = "id, sso_provider_id, resource_type, resource, created_at, updated_at, deleted_at"
 
 type SCIMAncestor struct {
@@ -134,6 +136,29 @@ func (s SCIMScope) FindAncestors(tx *storage.Connection, targets []uuid.UUID, at
 		uuidStrings(targets), attribute, attribute,
 	).All(&ancestors)
 	return ancestors, errors.Wrap(err, "error finding SCIM ancestors")
+}
+
+func (s SCIMScope) Depth(tx *storage.Connection, ids []uuid.UUID, attribute string, down bool) (int, error) {
+	from, to := "target_id", "source_id"
+	if down {
+		from, to = to, from
+	}
+	var walk struct {
+		Depth int `db:"depth"`
+	}
+	if found, err := s.Query(tx).Where("id = any(?::uuid[])", uuidStrings(ids)).Exists(&SCIMResource{}); err != nil || !found {
+		return 0, errors.Wrap(err, "error finding SCIM depth")
+	}
+	err := tx.RawQuery(
+		fmt.Sprintf(`WITH RECURSIVE walk (id, depth) AS (
+			SELECT id, 1 FROM %[3]q WHERE id = any(?::uuid[]) AND resource_type = ?
+			UNION
+			SELECT t.id, w.depth + 1 FROM walk w JOIN %[2]q r ON r.%[1]s = w.id AND r.attribute = ? JOIN %[3]q t ON t.id = r.%[4]s AND t.resource_type = ? WHERE w.depth <= ?
+		)
+		SELECT coalesce(max(depth), 0) AS depth FROM walk`, from, SCIMReference{}.TableName(), SCIMResource{}.TableName(), to),
+		uuidStrings(ids), s.ResourceType, attribute, s.ResourceType, SCIMMaxDepth,
+	).First(&walk)
+	return walk.Depth, errors.Wrap(err, "error finding SCIM depth")
 }
 
 func (s SCIMScope) DeleteReferences(tx *storage.Connection, id uuid.UUID) error {

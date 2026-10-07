@@ -53,6 +53,9 @@ func (s stored) Link(tx *storage.Connection, scope models.SCIMScope, source uuid
 	if err := s.acyclic(tx, scope, source, add); err != nil {
 		return err
 	}
+	if err := s.shallow(tx, scope, source, add); err != nil {
+		return err
+	}
 	added, err := scope.AddReferences(tx, source, s.Name(), s.targets, add)
 	if err != nil {
 		return err
@@ -84,6 +87,24 @@ func (s stored) acyclic(tx *storage.Connection, scope models.SCIMScope, source u
 		if target == source || slices.ContainsFunc(ancestors, func(ancestor models.SCIMAncestor) bool { return ancestor.SourceID == target }) {
 			return scimerrors.ErrInvalidValue(strconv.Quote(target.String()) + " would make " + s.Name() + " cyclic")
 		}
+	}
+	return nil
+}
+
+func (s stored) shallow(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, targets []uuid.UUID) error {
+	if len(targets) == 0 {
+		return nil
+	}
+	height, err := scope.Depth(tx, targets, s.Name(), true)
+	if err != nil || height == 0 {
+		return err
+	}
+	level, err := scope.Depth(tx, []uuid.UUID{source}, s.Name(), false)
+	if err != nil {
+		return err
+	}
+	if level+height > models.SCIMMaxDepth {
+		return scimerrors.ErrInvalidValue(s.Name() + " would nest more than " + strconv.Itoa(models.SCIMMaxDepth) + " levels deep")
 	}
 	return nil
 }

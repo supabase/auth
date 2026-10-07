@@ -616,6 +616,25 @@ func TestSCIMGroups(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects nesting deeper than the limit", func(t *testing.T) {
+		chain := []core.Group{create(t)}
+		for len(chain) < models.SCIMMaxDepth {
+			chain = append(chain, create(t))
+			require.Equal(t, http.StatusNoContent, c.addMembers(t, chain[len(chain)-2].ID, chain[len(chain)-1].ID).StatusCode)
+		}
+		bottom := chain[len(chain)-1]
+		require.Equal(t, http.StatusNoContent, c.addMembers(t, bottom.ID, createUser(t).ID).StatusCode)
+		requireSCIMError(t, c.addMembers(t, bottom.ID, create(t).ID), http.StatusBadRequest, scimerrors.InvalidValue)
+		requireSCIMError(t, c.addMembers(t, create(t).ID, chain[0].ID), http.StatusBadRequest, scimerrors.InvalidValue)
+
+		shortcut := create(t)
+		require.Equal(t, http.StatusNoContent, c.addMembers(t, shortcut.ID, chain[len(chain)-2].ID).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.addMembers(t, chain[len(chain)-2].ID, create(t).ID).StatusCode)
+		pair := create(t)
+		require.Equal(t, http.StatusNoContent, c.addMembers(t, pair.ID, create(t).ID).StatusCode)
+		requireSCIMError(t, c.addMembers(t, chain[len(chain)-2].ID, pair.ID), http.StatusBadRequest, scimerrors.InvalidValue)
+	})
+
 	t.Run("GET omits members when excluded", func(t *testing.T) {
 		group := create(t, createUser(t))
 
