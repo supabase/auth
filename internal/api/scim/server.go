@@ -9,7 +9,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/server"
-	"github.com/supabase/auth/internal/api/scim/ref"
+	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/ctxkey"
 	"github.com/supabase/auth/internal/models"
@@ -39,13 +39,13 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Ha
 			WithRepository(NewRepository[*core.User](db, "User", locations, core.Schemas{
 				core.NewSchema(core.SchemaUser).With(core.UserAttributes()...),
 				core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...),
-			}, ref.Derived("groups", "Group", "members"))),
+			}, query.Derived("groups", "Group", "members"))),
 		),
 		server.WithResource(server.
 			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
 			WithRepository(NewRepository[*core.Group](db, "Group", locations, core.Schemas{
 				core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...),
-			}, ref.Stored("members"))),
+			}, query.Stored("members", "User", "Group"))),
 		),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),
 	)

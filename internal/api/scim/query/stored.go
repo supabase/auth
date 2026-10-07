@@ -1,13 +1,11 @@
-package ref
+package query
 
 import (
 	"slices"
 	"strconv"
 
 	"github.com/gofrs/uuid"
-	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
-	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -17,14 +15,14 @@ type stored struct {
 	targets []string
 }
 
-func Stored(attribute string) Reference {
-	return stored{named: named(attribute)}
+func Stored(attribute string, targets ...string) Reference {
+	return stored{named: named(attribute), targets: targets}
 }
 
 func (s stored) Columns() map[string]string {
 	return map[string]string{
-		query.ValueAttribute: "edge.target_id",
-		"type":               "lower(target.resource_type)",
+		ValueAttribute: "edge.target_id",
+		"type":         "lower(target.resource_type)",
 	}
 }
 
@@ -32,20 +30,11 @@ func (s stored) Exists(inner string, args []any) (string, []any) {
 	return "EXISTS (SELECT 1 FROM scim_resource_references edge JOIN scim_resources target ON target.id = edge.target_id AND target.deleted_at IS NULL WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + inner + ")", append([]any{s.Name()}, args...)
 }
 
-func (s stored) Resolve(schemas core.Schemas) Reference {
-	var attribute *core.Attribute
-	s.named, attribute = s.canonical(schemas)
-	for _, target := range attribute.SubAttribute("$ref").ReferenceTypes {
-		s.targets = append(s.targets, string(target))
-	}
-	return s
-}
-
 func (s stored) Extract(attribute any) ([]uuid.UUID, error) {
 	elements, _ := attribute.([]any)
 	ids := make([]uuid.UUID, 0, len(elements))
 	for _, element := range elements {
-		value, _ := element.(map[string]any)[query.ValueAttribute].(string)
+		value, _ := element.(map[string]any)[ValueAttribute].(string)
 		id, err := uuid.FromString(value)
 		if err != nil {
 			return nil, s.invalidValue(value)

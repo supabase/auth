@@ -1,9 +1,7 @@
-package ref
+package query
 
 import (
 	"github.com/gofrs/uuid"
-	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -19,7 +17,7 @@ func Derived(attribute, source, via string) Reference {
 }
 
 func (d derived) Columns() map[string]string {
-	return map[string]string{query.ValueAttribute: "chain.source_id"}
+	return map[string]string{ValueAttribute: "chain.source_id"}
 }
 
 func (d derived) Exists(inner string, args []any) (string, []any) {
@@ -28,11 +26,6 @@ func (d derived) Exists(inner string, args []any) (string, []any) {
 		UNION
 		SELECT edge.target_id FROM down JOIN scim_resource_references edge ON edge.source_id = down.id AND edge.attribute = ?
 	) SELECT id FROM down)`, append(append([]any{d.via}, args...), d.via)
-}
-
-func (d derived) Resolve(schemas core.Schemas) Reference {
-	d.named, _ = d.canonical(schemas)
-	return d
 }
 
 func (d derived) Extract(any) ([]uuid.UUID, error) {

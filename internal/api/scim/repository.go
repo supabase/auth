@@ -12,7 +12,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase/auth/internal/api/scim/query"
-	"github.com/supabase/auth/internal/api/scim/ref"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -22,13 +21,10 @@ type repository[T core.Resource] struct {
 	resourceType string
 	locations    map[string]string
 	schemas      core.Schemas
-	references   []ref.Reference
+	references   []query.Reference
 }
 
-func NewRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas, references ...ref.Reference) server.Repository[T] {
-	for i, reference := range references {
-		references[i] = reference.Resolve(schemas)
-	}
+func NewRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas, references ...query.Reference) server.Repository[T] {
 	return &repository[T]{
 		db:           db,
 		resourceType: resourceType,
@@ -223,7 +219,7 @@ func (r *repository[T]) filter(tx *storage.Connection, scope models.SCIMScope, e
 	if expression == "" {
 		return q, nil
 	}
-	clause, err := protocol.Filter(r.schemas, expression, query.NewEvaluator(r.schemas, r.attributes()...))
+	clause, err := protocol.Filter(r.schemas, expression, query.NewEvaluator(r.schemas, r.references...))
 	if err != nil {
 		return nil, err
 	}
@@ -247,14 +243,6 @@ func (r *repository[T]) page(tx *storage.Connection, scope models.SCIMScope, q *
 	}
 	rows := []models.SCIMResource{}
 	return rows, scope.Query(tx).Where("id = any(?::uuid[])", ids).Order(order, args...).All(&rows)
-}
-
-func (r *repository[T]) attributes() []query.Reference {
-	references := make([]query.Reference, len(r.references))
-	for i, reference := range r.references {
-		references[i] = reference
-	}
-	return references
 }
 
 func (r *repository[T]) decodeOne(tx *storage.Connection, scope models.SCIMScope, row *models.SCIMResource) (T, error) {
