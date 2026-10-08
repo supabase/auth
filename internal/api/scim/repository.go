@@ -15,6 +15,7 @@ import (
 	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 type repository[T core.Resource] struct {
@@ -353,7 +354,7 @@ func (r *repository[T]) encode(item T) (string, map[string][]uuid.UUID, error) {
 }
 
 func invalid(err error) error {
-	if models.IsUniqueConstraintViolatedError(err) {
+	if pg := utilities.NewPostgresError(err); pg != nil && pg.IsUniqueConstraintViolated() {
 		return scimerrors.ErrUniqueness("resource must be unique")
 	}
 	return err

@@ -53,7 +53,7 @@ func (s SCIMScope) Create(tx *storage.Connection, document string) (*SCIMResourc
 		fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, resource_type, resource) VALUES (?, ?, ?, ?::jsonb) RETURNING %s", resource.TableName(), scimResourceColumns),
 		uuid.NewV7(), s.ProviderID, s.ResourceType, document,
 	).First(resource)
-	return resource, scimUniqueness(err)
+	return resource, err
 }
 
 func (s SCIMScope) Update(tx *storage.Connection, id uuid.UUID, document, version string) (*SCIMResource, error) {
@@ -65,7 +65,7 @@ func (s SCIMScope) Update(tx *storage.Connection, id uuid.UUID, document, versio
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, SCIMNotFoundError{}
 		}
-		return nil, scimUniqueness(err)
+		return nil, err
 	}
 	return resource, nil
 }
@@ -175,14 +175,6 @@ func QuoteLiteral(s string) string {
 func IsQueryCanceledError(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.QueryCanceled
-}
-
-func scimUniqueness(err error) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-		return SCIMUniquenessError{}
-	}
-	return err
 }
 
 func uuidStrings(ids []uuid.UUID) []string {
