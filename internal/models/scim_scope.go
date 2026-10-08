@@ -101,7 +101,7 @@ func (s SCIMScope) AddReferences(tx *storage.Connection, source uuid.UUID, attri
 		return added, nil
 	}
 	err := tx.RawQuery(
-		fmt.Sprintf("INSERT INTO %q (sso_provider_id, source_id, attribute, target_id) SELECT sso_provider_id, ?, ?, id FROM %q WHERE sso_provider_id = ? AND resource_type = any(?::text[]) AND deleted_at IS NULL AND id = any(?::uuid[]) RETURNING target_id", SCIMReference{}.TableName(), SCIMResource{}.TableName()),
+		fmt.Sprintf("INSERT INTO %q (sso_provider_id, source_id, attribute, target_id, target_type) SELECT sso_provider_id, ?, ?, id, resource_type FROM %q WHERE sso_provider_id = ? AND resource_type = any(?::text[]) AND deleted_at IS NULL AND id = any(?::uuid[]) RETURNING target_id", SCIMReference{}.TableName(), SCIMResource{}.TableName()),
 		source, attribute, s.ProviderID, types, uuidStrings(targets),
 	).All(&added)
 	return added, errors.Wrap(err, "error adding SCIM references")

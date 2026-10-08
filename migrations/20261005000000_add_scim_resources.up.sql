@@ -53,6 +53,7 @@ create table if not exists {{ index .Options "Namespace" }}.scim_resource_refere
     source_id uuid not null,
     attribute text not null,
     target_id uuid not null,
+    target_type text not null,
     constraint scim_resource_references_pkey primary key (source_id, attribute, target_id),
     constraint scim_resource_references_not_self check (source_id <> target_id),
     constraint scim_resource_references_source_fkey foreign key (sso_provider_id, source_id)
@@ -64,3 +65,8 @@ create table if not exists {{ index .Options "Namespace" }}.scim_resource_refere
 /* auth_migration: 20261005000000 */
 create index if not exists scim_resource_references_target_idx
     on {{ index .Options "Namespace" }}.scim_resource_references (target_id, attribute);
+
+/* auth_migration: 20261005000000 */
+create index if not exists scim_resource_references_group_idx
+    on {{ index .Options "Namespace" }}.scim_resource_references (source_id, attribute) include (target_id)
+    where target_type = 'Group';
