@@ -29,9 +29,10 @@ type CaptchaVerifier interface {
 
 // HTTPCaptchaVerifier is the default implementation that calls out to hCaptcha / Turnstile.
 type HTTPCaptchaVerifier struct {
-	client   *http.Client
-	secret   string
-	provider string
+	client    *http.Client
+	secret    string
+	provider  string
+	verifyURL string
 }
 
 func NewCaptchaVerifier(cfg *conf.CaptchaConfiguration) *HTTPCaptchaVerifier {
@@ -41,9 +42,10 @@ func NewCaptchaVerifier(cfg *conf.CaptchaConfiguration) *HTTPCaptchaVerifier {
 	}
 
 	return &HTTPCaptchaVerifier{
-		client:   &http.Client{Timeout: timeout},
-		secret:   strings.TrimSpace(cfg.Secret),
-		provider: cfg.Provider,
+		client:    &http.Client{Timeout: timeout},
+		secret:    strings.TrimSpace(cfg.Secret),
+		provider:  cfg.Provider,
+		verifyURL: strings.TrimSpace(cfg.VerifyURL),
 	}
 }
 
@@ -51,6 +53,9 @@ func (v *HTTPCaptchaVerifier) Verify(ctx context.Context, token, clientIP string
 	captchaURL, err := getCaptchaURL(v.provider)
 	if err != nil {
 		return nil, err
+	}
+	if v.verifyURL != "" {
+		captchaURL = v.verifyURL
 	}
 
 	return v.verifyCaptchaCode(ctx, token, clientIP, captchaURL)

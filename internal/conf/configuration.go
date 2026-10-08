@@ -854,6 +854,9 @@ type CaptchaConfiguration struct {
 	Provider string        `json:"provider" default:"hcaptcha"`
 	Secret   string        `json:"provider_secret"`
 	Timeout  time.Duration `json:"timeout" split_words:"true" default:"10s"`
+	// VerifyURL overrides the provider's verification endpoint (for example
+	// a local stub in end-to-end tests). Empty means the provider default.
+	VerifyURL string `json:"verify_url" split_words:"true"`
 }
 
 func (c *CaptchaConfiguration) Validate() error {
@@ -869,6 +872,14 @@ func (c *CaptchaConfiguration) Validate() error {
 
 	if c.Secret == "" {
 		return errors.New("captcha provider secret is empty")
+	}
+
+	c.VerifyURL = strings.TrimSpace(c.VerifyURL)
+	if c.VerifyURL != "" {
+		u, err := url.Parse(c.VerifyURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("captcha verify URL must be an absolute http(s) URL: %q", c.VerifyURL)
+		}
 	}
 
 	return nil
