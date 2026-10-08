@@ -137,7 +137,7 @@ func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
 		return scope.Update(tx, id, document, common.Meta.Version)
 	})
 	if models.IsNotFoundError(err) {
-		return zero, r.missing(ctx, common.ID)
+		return zero, r.missing(ctx, scope, id)
 	}
 	if err != nil {
 		return zero, invalid(err)
@@ -159,7 +159,7 @@ func (r *repository[T]) Delete(ctx context.Context, item T) error {
 		return scope.DeleteReferences(tx, id)
 	})
 	if models.IsNotFoundError(err) {
-		return r.missing(ctx, common.ID)
+		return r.missing(ctx, scope, id)
 	}
 	return err
 }
@@ -172,8 +172,12 @@ func (r *repository[T]) scope(ctx context.Context) (models.SCIMScope, error) {
 	return models.SCIMScope{ProviderID: token.SSOProviderID, ResourceType: r.resourceType}, nil
 }
 
-func (r *repository[T]) missing(ctx context.Context, id string) error {
-	if _, err := r.Read(ctx, id); err != nil {
+func (r *repository[T]) missing(ctx context.Context, scope models.SCIMScope, id uuid.UUID) error {
+	_, err := scope.Find(r.db.WithContext(ctx), id)
+	if models.IsNotFoundError(err) {
+		return notFound()
+	}
+	if err != nil {
 		return err
 	}
 	return scimerrors.ErrPreconditionFailed("resource has changed on the server")
