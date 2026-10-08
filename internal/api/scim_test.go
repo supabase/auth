@@ -644,6 +644,17 @@ func TestSCIMGroups(t *testing.T) {
 		requireSCIMError(t, c.addMembers(t, chain[len(chain)-2].ID, pair.ID), http.StatusBadRequest, scimerrors.InvalidValue)
 	})
 
+	t.Run("rejects a deep foreign group as invalid, not as too deep", func(t *testing.T) {
+		other := newSCIMClient(t, nil)
+		chain := []core.Group{other.createGroup(t, "Foreign "+uuid.NewV4().String())}
+		for len(chain) < models.SCIMMaxDepth {
+			chain = append(chain, other.createGroup(t, "Foreign "+uuid.NewV4().String()))
+			require.Equal(t, http.StatusNoContent, other.addMembers(t, chain[len(chain)-2].ID, chain[len(chain)-1].ID).StatusCode)
+		}
+		body := requireSCIMError(t, c.addMembers(t, create(t).ID, create(t).ID, chain[0].ID), http.StatusBadRequest, scimerrors.InvalidValue)
+		require.Contains(t, body.Detail, "is not a valid members value")
+	})
+
 	t.Run("GET omits members when excluded", func(t *testing.T) {
 		group := create(t, createUser(t))
 

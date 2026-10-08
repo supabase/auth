@@ -155,17 +155,14 @@ func (s SCIMScope) Depth(tx *storage.Connection, ids []uuid.UUID, attribute stri
 	var walk struct {
 		Depth int `db:"depth"`
 	}
-	if found, err := s.Query(tx).Where("id = any(?::uuid[])", uuidStrings(ids)).Exists(&SCIMResource{}); err != nil || !found {
-		return 0, errors.Wrap(err, "error finding SCIM depth")
-	}
 	err := tx.RawQuery(
 		fmt.Sprintf(`WITH RECURSIVE walk (id, depth) AS (
-			SELECT id, 1 FROM %[3]q WHERE id = any(?::uuid[]) AND resource_type = ?
+			SELECT id, 1 FROM %[3]q WHERE id = any(?::uuid[]) AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL
 			UNION
 			SELECT t.id, w.depth + 1 FROM walk w JOIN %[2]q r ON r.%[1]s = w.id AND r.attribute = ? JOIN %[3]q t ON t.id = r.%[4]s AND t.resource_type = ? WHERE w.depth <= ?
 		)
 		SELECT coalesce(max(depth), 0) AS depth FROM walk`, from, SCIMReference{}.TableName(), SCIMResource{}.TableName(), to),
-		uuidStrings(ids), s.ResourceType, attribute, s.ResourceType, SCIMMaxDepth,
+		uuidStrings(ids), s.ProviderID, s.ResourceType, attribute, s.ResourceType, SCIMMaxDepth,
 	).First(&walk)
 	return walk.Depth, errors.Wrap(err, "error finding SCIM depth")
 }
