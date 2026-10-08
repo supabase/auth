@@ -123,7 +123,7 @@ func (s SCIMScope) FindReferences(tx *storage.Connection, sources []uuid.UUID, a
 		return references, nil
 	}
 	err := tx.RawQuery(
-		fmt.Sprintf("SELECT r.source_id, r.target_id, t.resource_type AS target_type FROM %q r JOIN %q t ON t.id = r.target_id AND t.deleted_at IS NULL WHERE r.source_id = any(?::uuid[]) AND r.attribute = ? ORDER BY r.source_id, r.target_id", SCIMReference{}.TableName(), SCIMResource{}.TableName()),
+		fmt.Sprintf("SELECT source_id, target_id, target_type FROM %q WHERE source_id = any(?::uuid[]) AND attribute = ? ORDER BY source_id, target_id", SCIMReference{}.TableName()),
 		uuidStrings(sources), attribute,
 	).All(&references)
 	return references, errors.Wrap(err, "error finding SCIM references")
