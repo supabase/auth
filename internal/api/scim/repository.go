@@ -213,7 +213,9 @@ func (r *repository[T]) order(request *protocol.SearchRequest) (string, []any, e
 	if parent.MultiValued {
 		value, args = `coalesce(jsonb_path_query_first(resource, ?::jsonpath) #>> '{}', `+value+`)`, []any{primary(keys), keys}
 	}
-	value = "lower(" + value + ")"
+	if !attribute.CaseExact {
+		value = "lower(" + value + ")"
+	}
 	return value + ` COLLATE "C"` + direction + ", id", args, nil
 }
 

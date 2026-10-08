@@ -360,7 +360,7 @@ func TestSCIMUsers(t *testing.T) {
 		}
 		a, b := create("a", "Zulu", "B", "z"), create("b", "Alpha", "a", "c")
 
-		for sortBy, want := range map[string][]string{"userName": {a, b}, "emails.value": {a, b}, "name.familyName": {b, a}, "meta.created": {a, b}} {
+		for sortBy, want := range map[string][]string{"userName": {a, b}, "emails.value": {a, b}, "name.familyName": {b, a}, "meta.created": {a, b}, "externalId": {a, b}} {
 			list := scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}, "sortBy": {sortBy}})
 			got := []string{}
 			for _, user := range list.Resources {
