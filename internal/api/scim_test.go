@@ -326,6 +326,12 @@ func TestSCIMUsers(t *testing.T) {
 		require.Equal(t, 2, list.TotalResults)
 		require.Len(t, list.Resources, 1)
 		require.Equal(t, first.ID, list.Resources[0].ID)
+
+		for startIndex, want := range map[string]int{"1": 2, "2": 1, "5": 0} {
+			list := scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}, "startIndex": {startIndex}, "count": {"5"}})
+			require.Equal(t, 2, list.TotalResults, startIndex)
+			require.Len(t, list.Resources, want, startIndex)
+		}
 	})
 
 	t.Run("POST ignores read-only groups", func(t *testing.T) {

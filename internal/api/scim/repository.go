@@ -3,6 +3,7 @@ package scim
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/gobuffalo/pop/v6"
@@ -48,7 +49,7 @@ func (r *repository[T]) List(ctx context.Context, query *protocol.SearchRequest)
 		total, err := q.Count(&models.SCIMResource{})
 		return []T{}, total, err
 	}
-	rows, err := r.page(tx, scope, q, query)
+	rows, total, err := r.page(ctx, tx, scope, q, query)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -56,7 +57,7 @@ func (r *repository[T]) List(ctx context.Context, query *protocol.SearchRequest)
 	if err != nil {
 		return nil, 0, err
 	}
-	return items, q.Paginator.TotalEntriesSize, nil
+	return items, total, nil
 }
 
 func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
@@ -227,22 +228,31 @@ func (r *repository[T]) filter(tx *storage.Connection, scope models.SCIMScope, e
 	return q.Where(text, args...), nil
 }
 
-func (r *repository[T]) page(tx *storage.Connection, scope models.SCIMScope, q *pop.Query, query *protocol.SearchRequest) ([]models.SCIMResource, error) {
+func (r *repository[T]) page(ctx context.Context, tx *storage.Connection, scope models.SCIMScope, q *pop.Query, query *protocol.SearchRequest) ([]models.SCIMResource, int, error) {
 	order, args, err := r.order(query)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	q.Paginator = &pop.Paginator{PerPage: query.Count, Offset: query.Offset()}
 	keys := []models.SCIMResource{}
-	if err := q.Select("id").Order(order, args...).All(&keys); err != nil || len(keys) == 0 {
-		return keys, err
+	sql, values := q.Select("id").Order(order, args...).ToSQL(pop.NewModel(&keys, ctx))
+	if err := tx.RawQuery(fmt.Sprintf("%s LIMIT %d OFFSET %d", sql, query.Count, query.Offset()), values...).All(&keys); err != nil {
+		return nil, 0, err
+	}
+	total := query.Offset() + len(keys)
+	if len(keys) == query.Count || (len(keys) == 0 && query.Offset() > 0) {
+		if total, err = q.Count(&models.SCIMResource{}); err != nil {
+			return nil, 0, err
+		}
+	}
+	if len(keys) == 0 {
+		return keys, total, nil
 	}
 	ids := make([]string, len(keys))
 	for i, key := range keys {
 		ids[i] = key.ID.String()
 	}
 	rows := []models.SCIMResource{}
-	return rows, scope.Query(tx).Where("id = any(?::uuid[])", ids).Order(order, args...).All(&rows)
+	return rows, total, scope.Query(tx).Where("id = any(?::uuid[])", ids).Order(order, args...).All(&rows)
 }
 
 func (r *repository[T]) decodeOne(tx *storage.Connection, scope models.SCIMScope, row *models.SCIMResource) (T, error) {
