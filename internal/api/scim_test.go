@@ -879,11 +879,13 @@ func TestSCIMFilters(t *testing.T) {
 	for _, tc := range []struct{ path, filter, id string }{
 		{scimUsersPath, `id eq "` + user.ID + `"`, user.ID},
 		{scimUsersPath, `externalId eq "701984"`, user.ID},
+		{scimUsersPath, `not (externalId eq "701984")`, decoy.ID},
 		{scimUsersPath, `meta.created gt "` + decoy.Meta.Created.Format(time.RFC3339Nano) + `"`, user.ID},
 		{scimUsersPath, `meta.lastModified gt "` + decoy.Meta.LastModified.Format(time.RFC3339Nano) + `"`, user.ID},
 		{scimUsersPath, `meta.created ge "` + user.Meta.Created.Format(time.RFC3339Nano) + `"`, user.ID},
 		{scimUsersPath, `meta.created le "` + decoy.Meta.Created.Format(time.RFC3339Nano) + `"`, decoy.ID},
 		{scimUsersPath, `userName eq "bjensen@example.com"`, user.ID},
+		{scimUsersPath, `userName eq "BJensen@Example.com"`, user.ID},
 		{scimUsersPath, `meta.resourceType eq "User" and userName eq "bjensen@example.com"`, user.ID},
 		{scimUsersPath, `meta.resourceType ne "User" or id eq "` + user.ID + `"`, user.ID},
 		{scimUsersPath, `meta.location eq "` + user.Meta.Location + `"`, user.ID},

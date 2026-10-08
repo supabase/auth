@@ -24,6 +24,11 @@ var prefixes = map[string]string{
 	"userName": `lower(resource ->> 'userName') COLLATE "C"`,
 }
 
+var equalities = map[string]string{
+	"userName":   prefixes["userName"],
+	"externalId": `(resource ->> 'externalId') COLLATE "C"`,
+}
+
 var comparisons = map[filter.Operator]string{
 	filter.OpEquals:            " = ",
 	filter.OpNotEquals:         " <> ",
@@ -64,6 +69,17 @@ func uuidPredicate(column, sign string, op filter.Operator, text string) Clause 
 		return predicate{text: strconv.FormatBool(op == filter.OpNotEquals)}
 	}
 	return predicate{column + sign + "?::uuid", []any{id.String()}}
+}
+
+func indexed(name string, op filter.Operator, text string) (Clause, bool) {
+	if op == filter.OpStartsWith {
+		return prefix(name, text)
+	}
+	expression, ok := equalities[name]
+	if !ok || op != filter.OpEquals {
+		return nil, false
+	}
+	return predicate{expression + " IS NOT NULL AND " + expression + " = ?", []any{text}}, true
 }
 
 func prefix(name, text string) (Clause, bool) {

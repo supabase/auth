@@ -33,8 +33,11 @@ func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, va
 	if name, ok := e.column(attribute); ok {
 		return column(name, e.location, op, value)
 	}
-	if text, ok := value.(string); ok && op == filter.OpStartsWith {
-		if clause, ok := prefix(e.name(attribute), strings.ToLower(text)); ok {
+	if text, ok := value.(string); ok {
+		if !attribute.Definition.CaseExact {
+			text = strings.ToLower(text)
+		}
+		if clause, ok := indexed(e.name(attribute), op, text); ok {
 			return clause, nil
 		}
 	}
