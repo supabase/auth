@@ -45,7 +45,7 @@ func (s stored) Extract(attribute any) ([]uuid.UUID, error) {
 }
 
 func (s stored) Link(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, wanted []uuid.UUID) error {
-	current, err := scope.FindReferences(tx, []uuid.UUID{source}, s.Name())
+	current, err := scope.FindTargets(tx, source, s.Name())
 	if err != nil {
 		return err
 	}
@@ -113,10 +113,10 @@ func (s stored) invalidValue(value string) error {
 	return scimerrors.ErrInvalidValue(strconv.Quote(value) + " is not a valid " + s.Name() + " value")
 }
 
-func diff(current []models.SCIMReference, wanted []uuid.UUID) (add, remove []uuid.UUID) {
+func diff(current, wanted []uuid.UUID) (add, remove []uuid.UUID) {
 	have := make(map[uuid.UUID]bool, len(current))
-	for _, reference := range current {
-		have[reference.TargetID] = true
+	for _, id := range current {
+		have[id] = true
 	}
 	for _, id := range wanted {
 		if _, ok := have[id]; !ok {

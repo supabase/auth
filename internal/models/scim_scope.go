@@ -118,6 +118,15 @@ func (s SCIMScope) FindReferences(tx *storage.Connection, sources []uuid.UUID, a
 	return references, errors.Wrap(err, "error finding SCIM references")
 }
 
+func (s SCIMScope) FindTargets(tx *storage.Connection, source uuid.UUID, attribute string) ([]uuid.UUID, error) {
+	targets := []uuid.UUID{}
+	err := tx.RawQuery(
+		fmt.Sprintf("SELECT target_id FROM %q WHERE source_id = ? AND attribute = ?", SCIMReference{}.TableName()),
+		source, attribute,
+	).All(&targets)
+	return targets, errors.Wrap(err, "error finding SCIM targets")
+}
+
 func (s SCIMScope) FindAncestors(tx *storage.Connection, targets []uuid.UUID, attribute string) ([]SCIMAncestor, error) {
 	ancestors := []SCIMAncestor{}
 	if len(targets) == 0 {
