@@ -38,6 +38,11 @@ create index if not exists scim_resources_updated_at_idx
     where deleted_at is null;
 
 /* auth_migration: 20261005000000 */
+create index if not exists scim_resources_type_idx
+    on {{ index .Options "Namespace" }}.scim_resources (id) include (resource_type)
+    where deleted_at is null;
+
+/* auth_migration: 20261005000000 */
 create index if not exists scim_resources_resource_idx
     on {{ index .Options "Namespace" }}.scim_resources using gin (search jsonb_path_ops)
     where deleted_at is null;
