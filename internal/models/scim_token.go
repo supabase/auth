@@ -50,7 +50,10 @@ func (t *SCIMToken) AfterFind(*pop.Connection) error {
 }
 
 func CreateSCIMToken(tx *storage.Connection, providerID uuid.UUID, expiresAt *time.Time) (*SCIMToken, string, error) {
-	plaintext := generateSCIMToken()
+	plaintext, err := generateSCIMToken()
+	if err != nil {
+		return nil, "", errors.Wrap(err, "error generating SCIM token")
+	}
 	token := &SCIMToken{
 		ID:            uuid.NewV4(),
 		SSOProviderID: providerID,
@@ -128,10 +131,12 @@ func findSCIMTokens(tx *storage.Connection, where string, providerID uuid.UUID) 
 	return tokens, errors.Wrap(err, "error finding SCIM tokens")
 }
 
-func generateSCIMToken() string {
+func generateSCIMToken() (string, error) {
 	b := make([]byte, scimTokenBytes)
-	_, _ = rand.Read(b)
-	return scimTokenMarker + hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return scimTokenMarker + hex.EncodeToString(b), nil
 }
 
 func hashSCIMToken(token string) string {
