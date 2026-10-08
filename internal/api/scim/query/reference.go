@@ -3,8 +3,8 @@ package query
 import (
 	"strconv"
 	"strings"
+	"uuid"
 
-	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"

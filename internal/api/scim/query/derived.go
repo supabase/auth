@@ -1,7 +1,8 @@
 package query
 
 import (
-	"github.com/gofrs/uuid"
+	"uuid"
+
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )

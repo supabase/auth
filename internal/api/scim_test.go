@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -169,7 +169,7 @@ func TestSCIMAuthentication(t *testing.T) {
 	}
 
 	t.Run("rejects a revoked token", func(t *testing.T) {
-		token, raw, err := models.CreateSCIMToken(c.inst.Conn, c.provider.ID, nil)
+		token, raw, err := models.CreateSCIMToken(c.inst.Conn, uuid.UUID(c.provider.ID), nil)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, c.as(raw).get(t, scimUsersPath).StatusCode)
 
@@ -272,10 +272,10 @@ func TestSCIMAdmin(t *testing.T) {
 
 	t.Run("DELETE token returns 404 for a token it cannot find", func(t *testing.T) {
 		other := newSCIMClient(t, nil)
-		foreign, _, err := models.CreateSCIMToken(other.inst.Conn, other.provider.ID, nil)
+		foreign, _, err := models.CreateSCIMToken(other.inst.Conn, uuid.UUID(other.provider.ID), nil)
 		require.NoError(t, err)
 
-		for _, id := range []string{uuid.Must(uuid.NewV4()).String(), "not-a-uuid", foreign.ID.String()} {
+		for _, id := range []string{uuid.NewV4().String(), "not-a-uuid", foreign.ID.String()} {
 			require.Equal(t, http.StatusNotFound, revoke(t, id).StatusCode, id)
 		}
 	})
@@ -318,7 +318,7 @@ func TestSCIMUsers(t *testing.T) {
 	})
 
 	t.Run("GET sorts and paginates", func(t *testing.T) {
-		tag := uuid.Must(uuid.NewV4()).String()
+		tag := uuid.NewV4().String()
 		first := c.createUser(t, "a+"+tag+"@example.com")
 		c.createUser(t, "b+"+tag+"@example.com")
 
@@ -335,7 +335,7 @@ func TestSCIMUsers(t *testing.T) {
 	})
 
 	t.Run("POST ignores read-only groups", func(t *testing.T) {
-		group := c.createGroup(t, "readonly-"+uuid.Must(uuid.NewV4()).String())
+		group := c.createGroup(t, "readonly-"+uuid.NewV4().String())
 		body := newSCIMUser(scimUserName("bjensen"), "Barbara", "Jensen")
 		body["groups"] = []map[string]any{{"value": group.ID}}
 		res := c.do(t, http.MethodPost, scimUsersPath, body)
@@ -346,7 +346,7 @@ func TestSCIMUsers(t *testing.T) {
 	})
 
 	t.Run("GET sorts by nested and multi-valued attributes", func(t *testing.T) {
-		tag := uuid.Must(uuid.NewV4()).String()
+		tag := uuid.NewV4().String()
 		create := func(userName, familyName string) string {
 			res := c.do(t, http.MethodPost, scimUsersPath, newSCIMUser(userName+"+"+tag+"@example.com", "Barbara", familyName))
 			require.Equal(t, http.StatusCreated, res.StatusCode)
@@ -429,7 +429,7 @@ func TestSCIMGroups(t *testing.T) {
 		return c.createUser(t, scimUserName("member"))
 	}
 	create := func(t *testing.T, members ...core.User) core.Group {
-		return c.createGroup(t, "Tour Guides "+uuid.Must(uuid.NewV4()).String(), members...)
+		return c.createGroup(t, "Tour Guides "+uuid.NewV4().String(), members...)
 	}
 	patch := func(t *testing.T, id string, operation map[string]any) *http.Response {
 		return c.do(t, http.MethodPatch, scimGroupsPath+"/"+id, newSCIMPatch(operation))
@@ -437,7 +437,7 @@ func TestSCIMGroups(t *testing.T) {
 
 	t.Run("POST creates a group with members", func(t *testing.T) {
 		user := createUser(t)
-		displayName := "Tour Guides " + uuid.Must(uuid.NewV4()).String()
+		displayName := "Tour Guides " + uuid.NewV4().String()
 
 		res := c.do(t, http.MethodPost, scimGroupsPath, newSCIMGroup(displayName, user))
 		require.Equal(t, http.StatusCreated, res.StatusCode)
@@ -465,7 +465,7 @@ func TestSCIMGroups(t *testing.T) {
 	})
 
 	t.Run("GET sorts and paginates", func(t *testing.T) {
-		tag := uuid.Must(uuid.NewV4()).String()
+		tag := uuid.NewV4().String()
 		first := c.createGroup(t, "a "+tag)
 		c.createGroup(t, "b "+tag)
 
@@ -486,7 +486,7 @@ func TestSCIMGroups(t *testing.T) {
 	t.Run("POST stores a repeated member once", func(t *testing.T) {
 		user := createUser(t)
 
-		res := c.do(t, http.MethodPost, scimGroupsPath, newSCIMGroup("Tour Guides "+uuid.Must(uuid.NewV4()).String(), user, user))
+		res := c.do(t, http.MethodPost, scimGroupsPath, newSCIMGroup("Tour Guides "+uuid.NewV4().String(), user, user))
 		require.Equal(t, http.StatusCreated, res.StatusCode)
 		require.Equal(t, []core.Member{scimMember(user)}, scimDecode[core.Group](t, res).Members)
 	})
@@ -550,7 +550,7 @@ func TestSCIMGroups(t *testing.T) {
 		for name, value := range map[string]string{"unknown": scimMissingID, "foreign": foreign.ID, "deleted": deleted.ID, "malformed": "bjensen"} {
 			members := []core.Member{{Value: value}}
 			t.Run("POST "+name, func(t *testing.T) {
-				body := newSCIMGroup("Tour Guides " + uuid.Must(uuid.NewV4()).String())
+				body := newSCIMGroup("Tour Guides " + uuid.NewV4().String())
 				body["members"] = members
 				res := c.do(t, http.MethodPost, scimGroupsPath, body)
 				requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
@@ -591,7 +591,7 @@ func TestSCIMGroups(t *testing.T) {
 			require.Equal(t, user.ID, list.Resources[0].ID)
 			require.Equal(t, groups, list.Resources[0].Groups)
 		}
-		for group, want := range map[string]int{parent.ID: 0, uuid.Must(uuid.NewV4()).String(): 1} {
+		for group, want := range map[string]int{parent.ID: 0, uuid.NewV4().String(): 1} {
 			filter := `userName eq "` + user.UserName + `" and not (groups.value eq "` + group + `")`
 			require.Len(t, scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}}).Resources, want, filter)
 		}
@@ -660,7 +660,7 @@ func TestSCIMGroups(t *testing.T) {
 func TestSCIMIsolation(t *testing.T) {
 	c, other := newSCIMClient(t, nil), newSCIMClient(t, nil)
 	user := c.createUser(t, scimUserName("bjensen"))
-	group := c.createGroup(t, "Tour Guides "+uuid.Must(uuid.NewV4()).String(), user)
+	group := c.createGroup(t, "Tour Guides "+uuid.NewV4().String(), user)
 
 	userPath, groupPath := scimUsersPath+"/"+user.ID, scimGroupsPath+"/"+group.ID
 	for _, tc := range []struct {
@@ -751,7 +751,7 @@ func TestSCIMErrors(t *testing.T) {
 
 func TestSCIMUniqueness(t *testing.T) {
 	c := newSCIMClient(t, nil)
-	externalID := uuid.Must(uuid.NewV4()).String()
+	externalID := uuid.NewV4().String()
 	withExternalID := func(userName string) map[string]any {
 		user := newSCIMUser(userName, "Barbara", "Jensen")
 		user["externalId"] = externalID
@@ -1037,8 +1037,8 @@ func newSCIMClient(t *testing.T, tweak func(*conf.GlobalConfiguration)) scimClie
 	provider := &models.SSOProvider{}
 	require.NoError(t, inst.Conn.Create(provider))
 	t.Cleanup(func() { require.NoError(t, inst.Conn.Destroy(provider)) })
-	require.NoError(t, models.EnableSCIM(inst.Conn, provider.ID))
-	_, token, err := models.CreateSCIMToken(inst.Conn, provider.ID, nil)
+	require.NoError(t, models.EnableSCIM(inst.Conn, uuid.UUID(provider.ID)))
+	_, token, err := models.CreateSCIMToken(inst.Conn, uuid.UUID(provider.ID), nil)
 	require.NoError(t, err)
 	return scimClient{inst, provider, token}
 }
@@ -1153,7 +1153,7 @@ func scimSearch(t *testing.T, c scimClient, path string, body map[string]any) pr
 }
 
 func scimUserName(prefix string) string {
-	return prefix + "+" + uuid.Must(uuid.NewV4()).String() + "@example.com"
+	return prefix + "+" + uuid.NewV4().String() + "@example.com"
 }
 
 func newSCIMUser(userName, givenName, familyName string) map[string]any {

@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"uuid"
 
 	"github.com/gobuffalo/pop/v6"
-	"github.com/gofrs/uuid"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
 	"github.com/pkg/errors"
@@ -51,7 +51,7 @@ func (s SCIMScope) Create(tx *storage.Connection, document string) (*SCIMResourc
 	resource := &SCIMResource{}
 	err := tx.RawQuery(
 		fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, resource_type, resource) VALUES (?, ?, ?, ?::jsonb) RETURNING %s", resource.TableName(), scimResourceColumns),
-		uuid.Must(uuid.NewV4()), s.ProviderID, s.ResourceType, document,
+		uuid.NewV4(), s.ProviderID, s.ResourceType, document,
 	).First(resource)
 	return resource, scimUniqueness(err)
 }

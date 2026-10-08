@@ -3,8 +3,8 @@ package query
 import (
 	"slices"
 	"strconv"
+	"uuid"
 
-	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -35,7 +35,7 @@ func (s stored) Extract(attribute any) ([]uuid.UUID, error) {
 	ids := make([]uuid.UUID, 0, len(elements))
 	for _, element := range elements {
 		value, _ := element.(map[string]any)[ValueAttribute].(string)
-		id, err := uuid.FromString(value)
+		id, err := uuid.Parse(value)
 		if err != nil {
 			return nil, s.invalidValue(value)
 		}

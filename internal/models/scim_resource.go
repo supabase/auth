@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"uuid"
 
-	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 

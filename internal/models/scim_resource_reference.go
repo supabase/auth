@@ -1,7 +1,7 @@
 package models
 
 import (
-	"github.com/gofrs/uuid"
+	"uuid"
 )
 
 type SCIMReference struct {

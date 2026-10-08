@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 	"time"
+	"uuid"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/scim"
 	"github.com/supabase/auth/internal/models"
@@ -52,7 +52,7 @@ func (a *API) toggleSCIM(w http.ResponseWriter, r *http.Request, set func(*stora
 	db := a.db.WithContext(ctx)
 	provider := getSSOProvider(ctx)
 
-	if err := set(db, provider.ID); err != nil {
+	if err := set(db, uuid.UUID(provider.ID)); err != nil {
 		return apierrors.NewInternalServerError("Error toggling SCIM").WithInternalError(err)
 	}
 
@@ -71,7 +71,7 @@ func (a *API) adminSCIMTokensCreate(w http.ResponseWriter, r *http.Request) erro
 		}
 	}
 
-	token, plaintext, err := models.CreateSCIMToken(db, provider.ID, params.ExpiresAt)
+	token, plaintext, err := models.CreateSCIMToken(db, uuid.UUID(provider.ID), params.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, models.ErrSCIMTokenExpiry) {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "expires_at must be in the future")
@@ -90,7 +90,7 @@ func (a *API) adminSCIMTokensList(w http.ResponseWriter, r *http.Request) error 
 	ctx := r.Context()
 	provider := getSSOProvider(ctx)
 
-	tokens, err := models.FindSCIMTokensBySSOProvider(a.db.WithContext(ctx), provider.ID)
+	tokens, err := models.FindSCIMTokensBySSOProvider(a.db.WithContext(ctx), uuid.UUID(provider.ID))
 	if err != nil {
 		return apierrors.NewInternalServerError("Error listing SCIM tokens").WithInternalError(err)
 	}
@@ -103,7 +103,8 @@ func (a *API) adminSCIMTokensRevoke(w http.ResponseWriter, r *http.Request) erro
 	db := a.db.WithContext(ctx)
 	provider := getSSOProvider(ctx)
 
-	token, err := models.RevokeSCIMToken(db, provider.ID, uuid.FromStringOrNil(chi.URLParam(r, "token_id")))
+	id, _ := uuid.Parse(chi.URLParam(r, "token_id"))
+	token, err := models.RevokeSCIMToken(db, uuid.UUID(provider.ID), id)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SCIM token not found")
@@ -115,13 +116,13 @@ func (a *API) adminSCIMTokensRevoke(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (a *API) sendSCIMStatus(w http.ResponseWriter, db *storage.Connection, provider *models.SSOProvider) error {
-	tokens, err := models.FindActiveSCIMTokensBySSOProvider(db, provider.ID)
+	tokens, err := models.FindActiveSCIMTokensBySSOProvider(db, uuid.UUID(provider.ID))
 	if err != nil {
 		return apierrors.NewInternalServerError("Error finding SCIM tokens").WithInternalError(err)
 	}
 	enabled := false
 	if provider.IsEnabled() {
-		if enabled, err = models.IsSCIMEnabled(db, provider.ID); err != nil {
+		if enabled, err = models.IsSCIMEnabled(db, uuid.UUID(provider.ID)); err != nil {
 			return apierrors.NewInternalServerError("Error finding SCIM settings").WithInternalError(err)
 		}
 	}

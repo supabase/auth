@@ -2,8 +2,8 @@ package query
 
 import (
 	"strconv"
+	"uuid"
 
-	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -36,7 +36,7 @@ func column(name string, op filter.Operator, value any) (Clause, error) {
 }
 
 func uuidPredicate(column, sign string, op filter.Operator, text string) Clause {
-	id, err := uuid.FromString(text)
+	id, err := uuid.Parse(text)
 	if err != nil {
 		return predicate{text: strconv.FormatBool(op == filter.OpNotEquals)}
 	}

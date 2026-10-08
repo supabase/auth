@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"uuid"
 
 	"github.com/gobuffalo/pop/v6"
-	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -77,7 +77,7 @@ func (r *repository[T]) list(ctx context.Context, tx *storage.Connection, scope 
 
 func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 	var zero T
-	key, err := uuid.FromString(id)
+	key, err := uuid.Parse(id)
 	if err != nil {
 		return zero, notFound()
 	}
@@ -126,8 +126,9 @@ func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
 		return zero, err
 	}
 	common := item.Common()
+	id, _ := uuid.Parse(common.ID)
 	saved, err := r.save(ctx, scope, targets, func(tx *storage.Connection) (*models.SCIMResource, error) {
-		return scope.Update(tx, uuid.FromStringOrNil(common.ID), document, common.Meta.Version)
+		return scope.Update(tx, id, document, common.Meta.Version)
 	})
 	if models.IsNotFoundError(err) {
 		return zero, r.missing(ctx, common.ID)
@@ -144,7 +145,7 @@ func (r *repository[T]) Delete(ctx context.Context, item T) error {
 		return err
 	}
 	common := item.Common()
-	id := uuid.FromStringOrNil(common.ID)
+	id, _ := uuid.Parse(common.ID)
 	err = r.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
 		if err := scope.Delete(tx, id, common.Meta.Version); err != nil {
 			return err

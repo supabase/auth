@@ -7,9 +7,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"time"
+	"uuid"
 
 	"github.com/gobuffalo/pop/v6"
-	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
@@ -52,7 +52,7 @@ func (t *SCIMToken) AfterFind(*pop.Connection) error {
 func CreateSCIMToken(tx *storage.Connection, providerID uuid.UUID, expiresAt *time.Time) (*SCIMToken, string, error) {
 	plaintext := generateSCIMToken()
 	token := &SCIMToken{
-		ID:            uuid.Must(uuid.NewV4()),
+		ID:            uuid.NewV4(),
 		SSOProviderID: providerID,
 		TokenHash:     hashSCIMToken(plaintext),
 		Prefix:        plaintext[:scimTokenPrefixLength],

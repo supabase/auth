@@ -3,8 +3,8 @@ package models
 import (
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/storage"
@@ -33,7 +33,7 @@ func (ts *SCIMTokenTestSuite) TestCreate() {
 	require.Regexp(ts.T(), `^scim_[0-9a-f]{40}$`, plaintext)
 	require.Equal(ts.T(), plaintext[:12], token.Prefix)
 	require.NotEqual(ts.T(), plaintext, token.TokenHash)
-	require.Equal(ts.T(), ts.provider.ID, token.SSOProviderID)
+	require.Equal(ts.T(), uuid.UUID(ts.provider.ID), token.SSOProviderID)
 	require.False(ts.T(), token.CreatedAt.IsZero())
 	require.Nil(ts.T(), token.ExpiresAt)
 	require.Nil(ts.T(), token.RevokedAt)
@@ -50,7 +50,7 @@ func (ts *SCIMTokenTestSuite) TestTimestampsAreUTC() {
 	authenticated, err := AuthenticateSCIMToken(ts.db, plaintext)
 	require.NoError(ts.T(), err)
 	authenticated = ts.revoke(authenticated)
-	found, err := FindSCIMTokensBySSOProvider(ts.db, ts.provider.ID)
+	found, err := FindSCIMTokensBySSOProvider(ts.db, uuid.UUID(ts.provider.ID))
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), found, 1)
 
@@ -70,20 +70,20 @@ func (ts *SCIMTokenTestSuite) TestFindBySSOProvider() {
 	ts.revoke(revoked)
 	expired, _ := ts.createToken(nil)
 	ts.expire(expired)
-	_, _, err := CreateSCIMToken(ts.db, ts.createProvider().ID, nil)
+	_, _, err := CreateSCIMToken(ts.db, uuid.UUID(ts.createProvider().ID), nil)
 	require.NoError(ts.T(), err)
 
-	tokens, err := FindSCIMTokensBySSOProvider(ts.db, ts.provider.ID)
+	tokens, err := FindSCIMTokensBySSOProvider(ts.db, uuid.UUID(ts.provider.ID))
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), tokens, 3)
 	require.ElementsMatch(ts.T(), []uuid.UUID{active.ID, revoked.ID, expired.ID}, []uuid.UUID{tokens[0].ID, tokens[1].ID, tokens[2].ID})
 
-	tokens, err = FindActiveSCIMTokensBySSOProvider(ts.db, ts.provider.ID)
+	tokens, err = FindActiveSCIMTokensBySSOProvider(ts.db, uuid.UUID(ts.provider.ID))
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), tokens, 1)
 	require.Equal(ts.T(), active.ID, tokens[0].ID)
 
-	tokens, err = FindActiveSCIMTokensBySSOProvider(ts.db, uuid.Must(uuid.NewV4()))
+	tokens, err = FindActiveSCIMTokensBySSOProvider(ts.db, uuid.NewV4())
 	require.NoError(ts.T(), err)
 	require.Empty(ts.T(), tokens)
 }
@@ -94,7 +94,7 @@ func (ts *SCIMTokenTestSuite) TestAuthenticate() {
 	authenticated, err := AuthenticateSCIMToken(ts.db, plaintext)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), token.ID, authenticated.ID)
-	require.Equal(ts.T(), ts.provider.ID, authenticated.SSOProviderID)
+	require.Equal(ts.T(), uuid.UUID(ts.provider.ID), authenticated.SSOProviderID)
 	require.NotNil(ts.T(), authenticated.LastUsedAt)
 	first := *authenticated.LastUsedAt
 
@@ -133,15 +133,15 @@ func (ts *SCIMTokenTestSuite) TestAuthenticateRejects() {
 		{"scim never enabled", func() string {
 			provider := &SSOProvider{}
 			require.NoError(ts.T(), ts.db.Create(provider))
-			_, plaintext, err := CreateSCIMToken(ts.db, provider.ID, nil)
+			_, plaintext, err := CreateSCIMToken(ts.db, uuid.UUID(provider.ID), nil)
 			require.NoError(ts.T(), err)
 			return plaintext
 		}},
 		{"scim disabled", func() string {
 			provider := ts.createProvider()
-			_, plaintext, err := CreateSCIMToken(ts.db, provider.ID, nil)
+			_, plaintext, err := CreateSCIMToken(ts.db, uuid.UUID(provider.ID), nil)
 			require.NoError(ts.T(), err)
-			require.NoError(ts.T(), DisableSCIM(ts.db, provider.ID))
+			require.NoError(ts.T(), DisableSCIM(ts.db, uuid.UUID(provider.ID)))
 			return plaintext
 		}},
 	} {
@@ -155,12 +155,12 @@ func (ts *SCIMTokenTestSuite) TestAuthenticateRejects() {
 func (ts *SCIMTokenTestSuite) createProvider() *SSOProvider {
 	provider := &SSOProvider{}
 	require.NoError(ts.T(), ts.db.Create(provider))
-	require.NoError(ts.T(), EnableSCIM(ts.db, provider.ID))
+	require.NoError(ts.T(), EnableSCIM(ts.db, uuid.UUID(provider.ID)))
 	return provider
 }
 
 func (ts *SCIMTokenTestSuite) createToken(expiresAt *time.Time) (*SCIMToken, string) {
-	token, plaintext, err := CreateSCIMToken(ts.db, ts.provider.ID, expiresAt)
+	token, plaintext, err := CreateSCIMToken(ts.db, uuid.UUID(ts.provider.ID), expiresAt)
 	require.NoError(ts.T(), err)
 	return token, plaintext
 }
