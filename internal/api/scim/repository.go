@@ -57,16 +57,21 @@ func (r *repository[T]) List(ctx context.Context, query *protocol.SearchRequest)
 	return items, total, err
 }
 
-func (r *repository[T]) list(ctx context.Context, tx *storage.Connection, scope models.SCIMScope, query *protocol.SearchRequest) ([]T, int, error) {
-	q, err := r.filter(tx, scope, query.Filter)
+func (r *repository[T]) list(ctx context.Context, tx *storage.Connection, scope models.SCIMScope, request *protocol.SearchRequest) ([]T, int, error) {
+	q, clause, err := r.filter(tx, scope, request.Filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	if query.Count == 0 {
+	if prefix, ok := clause.(query.Prefix); ok && request.SortBy == "" {
+		sorted := *request
+		sorted.SortBy = prefix.Attribute
+		request = &sorted
+	}
+	if request.Count == 0 {
 		total, err := q.Count(&models.SCIMResource{})
 		return []T{}, total, err
 	}
-	rows, total, err := r.page(ctx, tx, scope, q, query)
+	rows, total, err := r.page(ctx, tx, scope, q, request)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -244,17 +249,17 @@ func (r *repository[T]) link(tx *storage.Connection, scope models.SCIMScope, sou
 	return nil
 }
 
-func (r *repository[T]) filter(tx *storage.Connection, scope models.SCIMScope, expression string) (*pop.Query, error) {
+func (r *repository[T]) filter(tx *storage.Connection, scope models.SCIMScope, expression string) (*pop.Query, query.Clause, error) {
 	q := scope.Query(tx)
 	if expression == "" {
-		return q, nil
+		return q, nil, nil
 	}
 	clause, err := protocol.Filter(r.schemas, expression, query.NewEvaluator(r.schemas, r.locations[r.resourceType], r.references...))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	text, args := clause.SQL()
-	return q.Where(text, args...), nil
+	return q.Where(text, args...), clause, nil
 }
 
 func (r *repository[T]) page(ctx context.Context, tx *storage.Connection, scope models.SCIMScope, q *pop.Query, query *protocol.SearchRequest) ([]models.SCIMResource, int, error) {

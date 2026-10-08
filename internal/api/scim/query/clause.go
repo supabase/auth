@@ -50,3 +50,12 @@ func (r reference) SQL() (string, []any) {
 	inner, args := r.inner.SQL()
 	return r.ref.Exists(inner, args)
 }
+
+type Prefix struct {
+	Attribute          string
+	expression, lo, hi string
+}
+
+func (p Prefix) SQL() (string, []any) {
+	return p.expression + " >= ? AND " + p.expression + " < ?", []any{p.lo, p.hi}
+}

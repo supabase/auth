@@ -370,6 +370,33 @@ func TestSCIMUsers(t *testing.T) {
 		}
 	})
 
+	t.Run("GET filters userName sw by prefix in userName order", func(t *testing.T) {
+		tag := uuid.NewV4().String()
+		create := func(userName string) string {
+			res := c.do(t, http.MethodPost, scimUsersPath, newSCIMUser(tag+userName, "Barbara", "Jensen"))
+			require.Equal(t, http.StatusCreated, res.StatusCode)
+			return scimDecode[core.User](t, res).ID
+		}
+		b, a, accent, next := create("-b@example.com"), create("-A@example.com"), create("-pr\u00e9@example.com"), create("-pr\u00ea@example.com")
+
+		for _, tc := range []struct {
+			query url.Values
+			want  []string
+		}{
+			{url.Values{"filter": {`userName sw "` + tag + `-"`}}, []string{a, b, accent, next}},
+			{url.Values{"filter": {`userName sw "` + strings.ToUpper(tag) + `-"`}, "sortBy": {"meta.created"}}, []string{b, a, accent, next}},
+			{url.Values{"filter": {`userName sw "` + tag + `-pr\u00e9"`}}, []string{accent}},
+			{url.Values{"filter": {`userName sw "` + tag + `-a@example.com"`}}, []string{a}},
+		} {
+			list := scimList[core.User](t, c, scimUsersPath, tc.query)
+			got := []string{}
+			for _, user := range list.Resources {
+				got = append(got, user.ID)
+			}
+			require.Equal(t, tc.want, got, tc.query.Encode())
+		}
+	})
+
 	t.Run("GET returns only the requested attributes", func(t *testing.T) {
 		user := c.createUser(t, scimUserName("bjensen"))
 

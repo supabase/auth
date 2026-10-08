@@ -3,6 +3,7 @@ package query
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/filter"
@@ -17,6 +18,10 @@ var Columns = map[string]string{
 	"meta.location":     "id",
 	"meta.resourceType": "resource_type",
 	"meta.version":      "updated_at",
+}
+
+var prefixes = map[string]string{
+	"userName": `lower(resource ->> 'userName') COLLATE "C"`,
 }
 
 var comparisons = map[filter.Operator]string{
@@ -59,4 +64,13 @@ func uuidPredicate(column, sign string, op filter.Operator, text string) Clause 
 		return predicate{text: strconv.FormatBool(op == filter.OpNotEquals)}
 	}
 	return predicate{column + sign + "?::uuid", []any{id.String()}}
+}
+
+func prefix(name, text string) (Clause, bool) {
+	expression, ok := prefixes[name]
+	last, size := utf8.DecodeLastRuneInString(text)
+	if !ok || text == "" || !utf8.ValidRune(last+1) {
+		return nil, false
+	}
+	return Prefix{name, expression, text, text[:len(text)-size] + string(last+1)}, true
 }

@@ -31,6 +31,11 @@ func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, va
 	if name, ok := e.column(attribute); ok {
 		return column(name, e.location, op, value)
 	}
+	if text, ok := value.(string); ok && op == filter.OpStartsWith {
+		if clause, ok := prefix(e.name(attribute), strings.ToLower(text)); ok {
+			return clause, nil
+		}
+	}
 	ref, ok := e.reference(attribute)
 	if !ok {
 		return e.compare(attribute, op, value), nil
@@ -140,12 +145,16 @@ func (e Evaluator) path(attribute *protocol.Attribute) path {
 }
 
 func (e Evaluator) column(attribute *protocol.Attribute) (string, bool) {
-	if attribute.Parent != nil || e.schemas.IsExtension(e.schemas.Lookup(core.SchemaURI(attribute.Path.URI))) {
-		return "", false
-	}
-	name := strings.Join(e.keys(attribute), ".")
+	name := e.name(attribute)
 	_, ok := Columns[name]
 	return name, ok
+}
+
+func (e Evaluator) name(attribute *protocol.Attribute) string {
+	if attribute.Parent != nil || e.schemas.IsExtension(e.schemas.Lookup(core.SchemaURI(attribute.Path.URI))) {
+		return ""
+	}
+	return strings.Join(e.keys(attribute), ".")
 }
 
 func (e Evaluator) keys(attribute *protocol.Attribute) []string {
