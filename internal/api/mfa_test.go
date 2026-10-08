@@ -169,6 +169,13 @@ func (ts *MFATestSuite) generateAAL1Token(user *models.User, sessionId *uuid.UUI
 	return token
 }
 
+// generateAAL2Token records a TOTP verification on the session and returns an
+// access token whose aal claim is aal2.
+func (ts *MFATestSuite) generateAAL2Token(user *models.User, sessionId *uuid.UUID) string {
+	require.NoError(ts.T(), models.AddClaimToSession(ts.API.db, *sessionId, models.TOTPSignIn))
+	return ts.generateAAL1Token(user, sessionId)
+}
+
 func (ts *MFATestSuite) TestEnrollFactor() {
 	testFriendlyName := "bob"
 	alternativeFriendlyName := "john"
@@ -657,17 +664,28 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	cases := []struct {
 		desc             string
-		isAAL2           bool
+		sessionIsAAL2    bool
+		tokenIsAAL2      bool
 		expectedHTTPCode int
 	}{
 		{
-			desc:             "Verified Factor: AAL1",
-			isAAL2:           false,
+			desc:             "Verified Factor: AAL1 session, AAL1 token",
+			sessionIsAAL2:    false,
+			tokenIsAAL2:      false,
 			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
-			desc:             "Verified Factor: AAL2, Success",
-			isAAL2:           true,
+			// An AAL1 token issued before the session was stepped up to AAL2
+			// must not be able to remove a verified factor.
+			desc:             "Verified Factor: AAL2 session, AAL1 token",
+			sessionIsAAL2:    true,
+			tokenIsAAL2:      false,
+			expectedHTTPCode: http.StatusUnprocessableEntity,
+		},
+		{
+			desc:             "Verified Factor: AAL2 session, AAL2 token, Success",
+			sessionIsAAL2:    true,
+			tokenIsAAL2:      true,
 			expectedHTTPCode: http.StatusOK,
 		},
 	}
@@ -678,10 +696,15 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			// Create Session to test behaviour which downgrades other sessions
 			f := ts.TestUser.Factors[0]
 			require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStateVerified))
-			if v.isAAL2 {
-				ts.TestSession.UpdateAALAndAssociatedFactor(ts.API.db, models.AAL2, &f.ID)
+			if v.sessionIsAAL2 {
+				require.NoError(ts.T(), ts.TestSession.UpdateAALAndAssociatedFactor(ts.API.db, models.AAL2, &f.ID))
 			}
-			token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+			var token string
+			if v.tokenIsAAL2 {
+				token = ts.generateAAL2Token(ts.TestUser, &ts.TestSession.ID)
+			} else {
+				token = ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+			}
 			w := ServeAuthenticatedRequest(ts, http.MethodDelete, fmt.Sprintf("/factors/%s", f.ID), token, buffer)
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
 
@@ -691,11 +714,129 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 				session, _ := models.FindSessionByID(ts.API.db, ts.TestSecondarySession.ID, false)
 				require.Equal(ts.T(), models.AAL1.String(), session.GetAAL())
 				require.Nil(ts.T(), session.FactorID)
-
+			} else {
+				_, err := models.FindFactorByFactorID(ts.API.db, f.ID)
+				require.NoError(ts.T(), err, "factor must not be removed")
 			}
 		})
 	}
 
+}
+
+// Reproduces the reported attack: an AAL1 access token kept from before the
+// MFA step-up must not be able to unenroll the factor verified later in the
+// same session.
+func (ts *MFATestSuite) TestUnenrollWithStaleAAL1TokenAfterStepUp() {
+	email := "stale-aal1@example.com"
+	signUpResp := signUp(ts, email, ts.TestPassword)
+	aal1Token := signUpResp.Token
+
+	w := performEnrollFlow(ts, aal1Token, "", models.TOTP, ts.TestDomain, "", http.StatusOK)
+	enrollResp := EnrollFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
+	factorID := enrollResp.ID
+
+	w = performChallengeFlow(ts, factorID, aal1Token)
+	challengeResp := ChallengeFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&challengeResp))
+
+	y := performVerifyFlow(ts, challengeResp.ID, factorID, aal1Token, true)
+	verifyResp := AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(y.Body).Decode(&verifyResp))
+	aal2Token := verifyResp.Token
+
+	var buffer bytes.Buffer
+	w = ServeAuthenticatedRequest(ts, http.MethodDelete, fmt.Sprintf("/factors/%s", factorID), aal1Token, buffer)
+	require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+	errResp := &apierrors.HTTPError{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(errResp))
+	require.Equal(ts.T(), string(apierrors.ErrorCodeInsufficientAAL), errResp.ErrorCode)
+	_, err := models.FindFactorByFactorID(ts.API.db, factorID)
+	require.NoError(ts.T(), err, "factor must survive a delete with the stale AAL1 token")
+
+	w = ServeAuthenticatedRequest(ts, http.MethodDelete, fmt.Sprintf("/factors/%s", factorID), aal2Token, buffer)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	_, err = models.FindFactorByFactorID(ts.API.db, factorID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+}
+
+func (ts *MFATestSuite) TestUnenrollRequiresRecentVerification() {
+	defer func(prev time.Duration) { ts.Config.MFA.UnenrollMaxVerificationAge = prev }(ts.Config.MFA.UnenrollMaxVerificationAge)
+	ts.Config.MFA.UnenrollMaxVerificationAge = 5 * time.Minute
+
+	cases := []struct {
+		desc             string
+		verifiedAgo      time.Duration
+		expectedHTTPCode int
+	}{
+		{
+			desc:             "Verification older than the window",
+			verifiedAgo:      10 * time.Minute,
+			expectedHTTPCode: http.StatusForbidden,
+		},
+		{
+			desc:             "Verification within the window",
+			verifiedAgo:      time.Minute,
+			expectedHTTPCode: http.StatusOK,
+		},
+	}
+	for _, v := range cases {
+		ts.Run(v.desc, func() {
+			var buffer bytes.Buffer
+			f := ts.TestUser.Factors[0]
+			require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStateVerified))
+			require.NoError(ts.T(), ts.TestSession.UpdateAALAndAssociatedFactor(ts.API.db, models.AAL2, &f.ID))
+			require.NoError(ts.T(), models.AddClaimToSession(ts.API.db, ts.TestSession.ID, models.TOTPSignIn))
+			require.NoError(ts.T(), ts.API.db.RawQuery(
+				"UPDATE "+models.AMRClaim{}.TableName()+" SET updated_at = ? WHERE session_id = ?",
+				time.Now().Add(-v.verifiedAgo), ts.TestSession.ID,
+			).Exec())
+
+			token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID) // AAL is derived from the AMR claims, so this is AAL2
+			w := ServeAuthenticatedRequest(ts, http.MethodDelete, fmt.Sprintf("/factors/%s", f.ID), token, buffer)
+			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
+
+			if v.expectedHTTPCode == http.StatusForbidden {
+				errResp := &apierrors.HTTPError{}
+				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(errResp))
+				require.Equal(ts.T(), string(apierrors.ErrorCodeReauthenticationNeeded), errResp.ErrorCode)
+				_, err := models.FindFactorByFactorID(ts.API.db, f.ID)
+				require.NoError(ts.T(), err)
+			} else {
+				_, err := models.FindFactorByFactorID(ts.API.db, f.ID)
+				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+			}
+		})
+	}
+}
+
+func TestHasRecentMFAVerification(t *testing.T) {
+	now := time.Now()
+	maxAge := 5 * time.Minute
+	claimsWith := func(entries ...models.AMREntry) *AccessTokenClaims {
+		return &AccessTokenClaims{AuthenticationMethodReference: entries}
+	}
+
+	cases := []struct {
+		name   string
+		claims *AccessTokenClaims
+		want   bool
+	}{
+		{"no amr", claimsWith(), false},
+		{"recent password only", claimsWith(models.AMREntry{Method: models.PasswordGrant.String(), Timestamp: now.Unix()}), false},
+		{"recent totp", claimsWith(models.AMREntry{Method: models.TOTPSignIn.String(), Timestamp: now.Add(-time.Minute).Unix()}), true},
+		{"stale totp", claimsWith(models.AMREntry{Method: models.TOTPSignIn.String(), Timestamp: now.Add(-10 * time.Minute).Unix()}), false},
+		{"stale totp, recent phone", claimsWith(
+			models.AMREntry{Method: models.TOTPSignIn.String(), Timestamp: now.Add(-10 * time.Minute).Unix()},
+			models.AMREntry{Method: models.MFAPhone.String(), Timestamp: now.Add(-time.Minute).Unix()},
+		), true},
+		{"future timestamp", claimsWith(models.AMREntry{Method: models.TOTPSignIn.String(), Timestamp: now.Add(time.Hour).Unix()}), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, hasRecentMFAVerification(tc.claims, maxAge, now))
+		})
+	}
 }
 
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
