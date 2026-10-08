@@ -405,6 +405,32 @@ func TestValidate(t *testing.T) {
 				Secret:   "abc",
 			},
 		},
+		{
+			val: &CaptchaConfiguration{
+				Enabled:   true,
+				Provider:  "turnstile",
+				Secret:    "abc",
+				VerifyURL: "http://127.0.0.1:9999/siteverify",
+			},
+		},
+		{
+			val: &CaptchaConfiguration{
+				Enabled:   true,
+				Provider:  "turnstile",
+				Secret:    "abc",
+				VerifyURL: "not a url",
+			},
+			err: "captcha verify URL must be an absolute http(s) URL",
+		},
+		{
+			val: &CaptchaConfiguration{
+				Enabled:   true,
+				Provider:  "turnstile",
+				Secret:    "abc",
+				VerifyURL: "ftp://example.com/siteverify",
+			},
+			err: "captcha verify URL must be an absolute http(s) URL",
+		},
 
 		{
 			val: &DatabaseEncryptionConfiguration{Encrypt: false},
