@@ -40,7 +40,22 @@ func (r *repository[T]) List(ctx context.Context, query *protocol.SearchRequest)
 	if err != nil {
 		return nil, 0, err
 	}
-	tx := r.db.WithContext(ctx)
+	var items []T
+	var total int
+	err = r.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
+		if err := tx.RawQuery("SET LOCAL statement_timeout = '5s'").Exec(); err != nil {
+			return err
+		}
+		items, total, err = r.list(ctx, tx, scope, query)
+		return err
+	})
+	if models.IsQueryCanceledError(err) {
+		return nil, 0, scimerrors.ErrTooMany("the query took too long")
+	}
+	return items, total, err
+}
+
+func (r *repository[T]) list(ctx context.Context, tx *storage.Connection, scope models.SCIMScope, query *protocol.SearchRequest) ([]T, int, error) {
 	q, err := r.filter(tx, scope, query.Filter)
 	if err != nil {
 		return nil, 0, err
