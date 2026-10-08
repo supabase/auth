@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"uuid"
 
@@ -205,10 +206,15 @@ func (r *repository[T]) order(request *protocol.SearchRequest) (string, []any, e
 			keys = append([]string{string(extension.ID)}, keys...)
 		}
 	}
+	value, args := `resource #>> ?::text[]`, []any{keys}
 	if len(keys) == 1 {
-		return `lower(resource ->> ` + models.QuoteLiteral(keys[0]) + `) COLLATE "C"` + direction + ", id", nil, nil
+		value, args = `resource ->> `+models.QuoteLiteral(keys[0]), nil
 	}
-	return `lower(resource #>> ?::text[]) COLLATE "C"` + direction + ", id", []any{keys}, nil
+	if parent.MultiValued {
+		value, args = `coalesce(jsonb_path_query_first(resource, ?::jsonpath) #>> '{}', `+value+`)`, []any{primary(keys), keys}
+	}
+	value = "lower(" + value + ")"
+	return value + ` COLLATE "C"` + direction + ", id", args, nil
 }
 
 func (r *repository[T]) save(ctx context.Context, scope models.SCIMScope, targets map[string][]uuid.UUID, write func(*storage.Connection) (*models.SCIMResource, error)) (T, error) {
@@ -358,6 +364,14 @@ func invalid(err error) error {
 		return scimerrors.ErrUniqueness("resource must be unique")
 	}
 	return err
+}
+
+func primary(keys []string) string {
+	quoted := make([]string, len(keys))
+	for i, key := range keys {
+		quoted[i] = strconv.Quote(key)
+	}
+	return "$." + strings.Join(quoted[:len(keys)-2], ".") + "[*] ? (@.primary == true)." + quoted[len(keys)-1]
 }
 
 func notFound() error {

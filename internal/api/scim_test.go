@@ -350,12 +350,15 @@ func TestSCIMUsers(t *testing.T) {
 
 	t.Run("GET sorts by nested and multi-valued attributes", func(t *testing.T) {
 		tag := uuid.NewV4().String()
-		create := func(userName, familyName string) string {
-			res := c.do(t, http.MethodPost, scimUsersPath, newSCIMUser(userName+"+"+tag+"@example.com", "Barbara", familyName))
+		create := func(userName, familyName, externalID, other string) string {
+			body := newSCIMUser(userName+"+"+tag+"@example.com", "Barbara", familyName)
+			body["externalId"] = externalID + tag
+			body["emails"] = []map[string]any{{"value": other + "+" + tag + "@example.com"}, {"value": userName + "+" + tag + "@example.com", "primary": true}}
+			res := c.do(t, http.MethodPost, scimUsersPath, body)
 			require.Equal(t, http.StatusCreated, res.StatusCode)
 			return scimDecode[core.User](t, res).ID
 		}
-		a, b := create("a", "Zulu"), create("b", "Alpha")
+		a, b := create("a", "Zulu", "B", "z"), create("b", "Alpha", "a", "c")
 
 		for sortBy, want := range map[string][]string{"userName": {a, b}, "emails.value": {a, b}, "name.familyName": {b, a}, "meta.created": {a, b}} {
 			list := scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}, "sortBy": {sortBy}})
