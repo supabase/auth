@@ -189,7 +189,11 @@ func (r *repository[T]) order(request *protocol.SearchRequest) (string, []any, e
 	if parent != attribute {
 		keys = append(keys, attribute.Name)
 	}
-	if column, ok := query.Columns[strings.Join(keys, ".")]; ok {
+	path := strings.Join(keys, ".")
+	if path == "meta.created" {
+		return "id" + direction, nil, nil
+	}
+	if column, ok := query.Columns[path]; ok {
 		return column + direction + ", id", nil, nil
 	}
 	if parent.MultiValued {
