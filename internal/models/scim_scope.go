@@ -168,13 +168,8 @@ func (s SCIMScope) Depth(tx *storage.Connection, ids []uuid.UUID, attribute stri
 }
 
 func (s SCIMScope) DeleteReferences(tx *storage.Connection, id uuid.UUID) error {
-	table := SCIMReference{}.TableName()
-	for _, column := range []string{"source_id", "target_id"} {
-		if err := tx.RawQuery(fmt.Sprintf("DELETE FROM %q WHERE %s = ?", table, column), id).Exec(); err != nil {
-			return errors.Wrap(err, "error deleting SCIM references")
-		}
-	}
-	return nil
+	err := tx.RawQuery(fmt.Sprintf("DELETE FROM %q WHERE source_id = ? OR target_id = ?", SCIMReference{}.TableName()), id, id).Exec()
+	return errors.Wrap(err, "error deleting SCIM references")
 }
 
 func QuoteLiteral(s string) string {
