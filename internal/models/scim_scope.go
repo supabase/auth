@@ -147,21 +147,17 @@ func (s SCIMScope) FindAncestors(tx *storage.Connection, targets []uuid.UUID, at
 	return ancestors, errors.Wrap(err, "error finding SCIM ancestors")
 }
 
-func (s SCIMScope) Depth(tx *storage.Connection, ids []uuid.UUID, attribute string, down bool) (int, error) {
-	from, to := "target_id", "source_id"
-	if down {
-		from, to = to, from
-	}
+func (s SCIMScope) Depth(tx *storage.Connection, ids []uuid.UUID, attribute string) (int, error) {
 	var walk struct {
 		Depth int `db:"depth"`
 	}
 	err := tx.RawQuery(
 		fmt.Sprintf(`WITH RECURSIVE walk (id, depth) AS (
-			SELECT id, 1 FROM %[3]q WHERE id = any(?::uuid[]) AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL
+			SELECT id, 1 FROM %[2]q WHERE id = any(?::uuid[]) AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL
 			UNION
-			SELECT t.id, w.depth + 1 FROM walk w JOIN %[2]q r ON r.%[1]s = w.id AND r.attribute = ? JOIN %[3]q t ON t.id = r.%[4]s AND t.resource_type = ? WHERE w.depth <= ?
+			SELECT t.id, w.depth + 1 FROM walk w JOIN %[1]q r ON r.source_id = w.id AND r.attribute = ? JOIN %[2]q t ON t.id = r.target_id AND t.resource_type = ? AND t.deleted_at IS NULL WHERE w.depth <= ?
 		)
-		SELECT coalesce(max(depth), 0) AS depth FROM walk`, from, SCIMReference{}.TableName(), SCIMResource{}.TableName(), to),
+		SELECT coalesce(max(depth), 0) AS depth FROM walk`, SCIMReference{}.TableName(), SCIMResource{}.TableName()),
 		uuidStrings(ids), s.ProviderID, s.ResourceType, attribute, s.ResourceType, SCIMMaxDepth,
 	).First(&walk)
 	return walk.Depth, errors.Wrap(err, "error finding SCIM depth")
