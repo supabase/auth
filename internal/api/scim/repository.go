@@ -93,7 +93,7 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 	if err != nil {
 		return zero, err
 	}
-	return r.decodeOne(tx, scope, row)
+	return r.decodeOne(tx, scope, row, protocol.ProjectionFrom(ctx))
 }
 
 func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
@@ -215,7 +215,7 @@ func (r *repository[T]) save(ctx context.Context, scope models.SCIMScope, target
 		if err := r.link(tx, scope, row.ID, targets); err != nil {
 			return err
 		}
-		saved, err = r.decodeOne(tx, scope, row)
+		saved, err = r.decodeOne(tx, scope, row, protocol.Projection{})
 		return err
 	})
 	return saved, err
@@ -270,8 +270,8 @@ func (r *repository[T]) page(ctx context.Context, tx *storage.Connection, scope 
 	return rows, total, scope.Query(tx).Where("id = any(?::uuid[])", ids).Order(order, args...).All(&rows)
 }
 
-func (r *repository[T]) decodeOne(tx *storage.Connection, scope models.SCIMScope, row *models.SCIMResource) (T, error) {
-	items, err := r.decodeAll(tx, scope, []models.SCIMResource{*row}, protocol.Projection{})
+func (r *repository[T]) decodeOne(tx *storage.Connection, scope models.SCIMScope, row *models.SCIMResource, projection protocol.Projection) (T, error) {
+	items, err := r.decodeAll(tx, scope, []models.SCIMResource{*row}, projection)
 	if err != nil {
 		var zero T
 		return zero, err

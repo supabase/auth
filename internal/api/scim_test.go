@@ -647,6 +647,13 @@ func TestSCIMGroups(t *testing.T) {
 		list := scimList[core.Group](t, c, scimGroupsPath, url.Values{"filter": {`id eq "` + group.ID + `"`}, "excludedAttributes": {"members"}})
 		require.Len(t, list.Resources, 1)
 		require.Empty(t, list.Resources[0].Members)
+
+		res := c.get(t, scimGroupsPath+"/"+group.ID+"?excludedAttributes=members")
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Empty(t, scimDecode[core.Group](t, res).Members)
+		res = c.do(t, http.MethodPatch, scimGroupsPath+"/"+group.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "displayName", "value": "renamed " + group.ID}))
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		c.requireGroup(t, group.ID, "renamed "+group.ID, group.Members[0].Value)
 	})
 }
 
