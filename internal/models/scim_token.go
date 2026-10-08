@@ -71,19 +71,11 @@ func CreateSCIMToken(tx *storage.Connection, providerID uuid.UUID, expiresAt *ti
 }
 
 func FindSCIMTokensBySSOProvider(tx *storage.Connection, providerID uuid.UUID) ([]SCIMToken, error) {
-	tokens := []SCIMToken{}
-	if err := tx.Q().Where("sso_provider_id = ?", providerID).Order("created_at asc, id asc").All(&tokens); err != nil {
-		return nil, errors.Wrap(err, "error finding SCIM tokens")
-	}
-	return tokens, nil
+	return findSCIMTokens(tx, "sso_provider_id = ?", providerID)
 }
 
 func FindActiveSCIMTokensBySSOProvider(tx *storage.Connection, providerID uuid.UUID) ([]SCIMToken, error) {
-	tokens := []SCIMToken{}
-	if err := tx.Q().Where("sso_provider_id = ? AND "+activeSCIMTokenClause, providerID).Order("created_at asc, id asc").All(&tokens); err != nil {
-		return nil, errors.Wrap(err, "error finding active SCIM tokens")
-	}
-	return tokens, nil
+	return findSCIMTokens(tx, "sso_provider_id = ? AND "+activeSCIMTokenClause, providerID)
 }
 
 func RevokeSCIMToken(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMToken, error) {
@@ -128,6 +120,12 @@ SELECT * FROM authenticated WHERE NOT EXISTS (SELECT 1 FROM touched)`, token.Tab
 		return nil, errors.Wrap(err, "error authenticating SCIM token")
 	}
 	return token, nil
+}
+
+func findSCIMTokens(tx *storage.Connection, where string, providerID uuid.UUID) ([]SCIMToken, error) {
+	tokens := []SCIMToken{}
+	err := tx.Q().Where(where, providerID).Order("created_at asc, id asc").All(&tokens)
+	return tokens, errors.Wrap(err, "error finding SCIM tokens")
 }
 
 func generateSCIMToken() string {
