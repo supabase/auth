@@ -434,6 +434,14 @@ func TestSCIMGroups(t *testing.T) {
 	create := func(t *testing.T, members ...core.User) core.Group {
 		return c.createGroup(t, "Tour Guides "+uuid.NewV4().String(), members...)
 	}
+	nest := func(t *testing.T, client scimClient) []core.Group {
+		chain := []core.Group{client.createGroup(t, "Chain "+uuid.NewV4().String())}
+		for len(chain) < models.SCIMMaxDepth {
+			chain = append(chain, client.createGroup(t, "Chain "+uuid.NewV4().String()))
+			require.Equal(t, http.StatusNoContent, client.addMembers(t, chain[len(chain)-2].ID, chain[len(chain)-1].ID).StatusCode)
+		}
+		return chain
+	}
 	patch := func(t *testing.T, id string, operation map[string]any) *http.Response {
 		return c.do(t, http.MethodPatch, scimGroupsPath+"/"+id, newSCIMPatch(operation))
 	}
@@ -626,11 +634,7 @@ func TestSCIMGroups(t *testing.T) {
 	})
 
 	t.Run("rejects nesting deeper than the limit", func(t *testing.T) {
-		chain := []core.Group{create(t)}
-		for len(chain) < models.SCIMMaxDepth {
-			chain = append(chain, create(t))
-			require.Equal(t, http.StatusNoContent, c.addMembers(t, chain[len(chain)-2].ID, chain[len(chain)-1].ID).StatusCode)
-		}
+		chain := nest(t, c)
 		bottom := chain[len(chain)-1]
 		require.Equal(t, http.StatusNoContent, c.addMembers(t, bottom.ID, createUser(t).ID).StatusCode)
 		requireSCIMError(t, c.addMembers(t, bottom.ID, create(t).ID), http.StatusBadRequest, scimerrors.InvalidValue)
@@ -645,12 +649,7 @@ func TestSCIMGroups(t *testing.T) {
 	})
 
 	t.Run("rejects a deep foreign group as invalid, not as too deep", func(t *testing.T) {
-		other := newSCIMClient(t, nil)
-		chain := []core.Group{other.createGroup(t, "Foreign "+uuid.NewV4().String())}
-		for len(chain) < models.SCIMMaxDepth {
-			chain = append(chain, other.createGroup(t, "Foreign "+uuid.NewV4().String()))
-			require.Equal(t, http.StatusNoContent, other.addMembers(t, chain[len(chain)-2].ID, chain[len(chain)-1].ID).StatusCode)
-		}
+		chain := nest(t, newSCIMClient(t, nil))
 		body := requireSCIMError(t, c.addMembers(t, create(t).ID, create(t).ID, chain[0].ID), http.StatusBadRequest, scimerrors.InvalidValue)
 		require.Contains(t, body.Detail, "is not a valid members value")
 	})
