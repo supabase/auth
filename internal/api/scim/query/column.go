@@ -79,7 +79,7 @@ func indexed(name string, op filter.Operator, text string) (Clause, bool) {
 	if !ok || op != filter.OpEquals {
 		return nil, false
 	}
-	return predicate{expression + " IS NOT NULL AND " + expression + " = ?", []any{text}}, true
+	return predicate{"(" + expression + ") IS NOT NULL AND " + expression + " = ?", []any{text}}, true
 }
 
 func prefix(name, text string) (Clause, bool) {
