@@ -1,5 +1,7 @@
 package query
 
+import "uuid"
+
 type Clause interface {
 	SQL() (string, []any)
 }
@@ -42,13 +44,14 @@ type predicate struct {
 func (p predicate) SQL() (string, []any) { return p.text, p.args }
 
 type reference struct {
-	ref   Reference
-	inner Clause
+	ref      Reference
+	provider uuid.UUID
+	inner    Clause
 }
 
 func (r reference) SQL() (string, []any) {
 	inner, args := r.inner.SQL()
-	return r.ref.Exists(inner, args)
+	return r.ref.Exists(r.provider, inner, args)
 }
 
 type Prefix struct {

@@ -21,12 +21,12 @@ func (d derived) Columns() map[string]string {
 	return map[string]string{ValueAttribute: "chain.source_id"}
 }
 
-func (d derived) Exists(inner string, args []any) (string, []any) {
+func (d derived) Exists(provider uuid.UUID, inner string, args []any) (string, []any) {
 	return `scim_resources.id IN (WITH RECURSIVE down (id, depth) AS (
-		SELECT chain.target_id, 1 FROM scim_resource_references chain WHERE chain.attribute = ? AND ` + inner + `
+		SELECT chain.target_id, 1 FROM scim_resource_references chain WHERE chain.sso_provider_id = ? AND chain.attribute = ? AND ` + inner + `
 		UNION
 		SELECT edge.target_id, down.depth + 1 FROM down CROSS JOIN LATERAL (SELECT target_id FROM scim_resource_references WHERE source_id = down.id AND attribute = ? OFFSET 0) edge WHERE down.depth < ?
-	) SELECT id FROM down)`, append(append([]any{d.via}, args...), d.via, models.SCIMMaxDepth)
+	) SELECT id FROM down)`, append(append([]any{provider.String(), d.via}, args...), d.via, models.SCIMMaxDepth)
 }
 
 func (d derived) Extract(any) ([]uuid.UUID, error) {

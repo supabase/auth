@@ -27,6 +27,7 @@ func BaseURL(config *conf.GlobalConfiguration) string {
 
 func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Handler {
 	locations := map[string]string{"User": BaseURL(config) + "/Users", "Group": BaseURL(config) + "/Groups"}
+	user, enterprise, group := core.UserAttributes(), core.EnterpriseUserAttributes(), core.GroupAttributes()
 	return server.New(BasePath,
 		core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching().Sorting(),
 		server.WithBaseURL(BaseURL(config)),
@@ -34,17 +35,17 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Ha
 			observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
 		}),
 		server.WithResource(server.
-			NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
-			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...).
+			NewResource[*core.User]("User", "/Users", core.SchemaUser, user...).
+			WithExtension(core.SchemaEnterpriseUser, enterprise...).
 			WithRepository(NewRepository[*core.User](db, "User", locations, core.Schemas{
-				core.NewSchema(core.SchemaUser).With(core.UserAttributes()...),
-				core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...),
+				core.NewSchema(core.SchemaUser).With(user...),
+				core.NewSchema(core.SchemaEnterpriseUser).With(enterprise...),
 			}, query.Derived("groups", "Group", "members"))),
 		),
 		server.WithResource(server.
-			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
+			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, group...).
 			WithRepository(NewRepository[*core.Group](db, "Group", locations, core.Schemas{
-				core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...),
+				core.NewSchema(core.SchemaGroup).With(group...),
 			}, query.Stored("members", "User", "Group"))),
 		),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),

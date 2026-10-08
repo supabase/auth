@@ -678,6 +678,13 @@ func TestSCIMGroups(t *testing.T) {
 		requireSCIMError(t, c.addMembers(t, chain[len(chain)-2].ID, pair.ID), http.StatusBadRequest, scimerrors.InvalidValue)
 	})
 
+	t.Run("rejects nesting deeper than the limit through a shortcut", func(t *testing.T) {
+		chain := nest(t, c)
+		bottom := chain[len(chain)-1]
+		require.Equal(t, http.StatusNoContent, c.addMembers(t, chain[0].ID, bottom.ID).StatusCode)
+		requireSCIMError(t, c.addMembers(t, bottom.ID, create(t).ID), http.StatusBadRequest, scimerrors.InvalidValue)
+	})
+
 	t.Run("rejects a deep foreign group as invalid, not as too deep", func(t *testing.T) {
 		chain := nest(t, newSCIMClient(t, nil))
 		body := requireSCIMError(t, c.addMembers(t, create(t).ID, create(t).ID, chain[0].ID), http.StatusBadRequest, scimerrors.InvalidValue)
@@ -780,6 +787,9 @@ func TestSCIMErrors(t *testing.T) {
 		{"GET groups with an unsupported members filter", http.MethodGet, scimGroupsPath + "?" + url.Values{"filter": {`members.value co "x"`}}.Encode(), nil, http.StatusBadRequest},
 		{"GET users with an id sw filter", http.MethodGet, scimUsersPath + "?" + url.Values{"filter": {`id sw "x"`}}.Encode(), nil, http.StatusBadRequest},
 		{"GET users with a groups type filter", http.MethodGet, scimUsersPath + "?" + url.Values{"filter": {`groups[type eq "direct"]`}}.Encode(), nil, http.StatusBadRequest},
+		{"GET groups with a members display pr filter", http.MethodGet, scimGroupsPath + "?" + url.Values{"filter": {`members.display pr`}}.Encode(), nil, http.StatusBadRequest},
+		{"GET groups with a members display pr value filter", http.MethodGet, scimGroupsPath + "?" + url.Values{"filter": {`members[display pr]`}}.Encode(), nil, http.StatusBadRequest},
+		{"GET users with a groups display pr filter", http.MethodGet, scimUsersPath + "?" + url.Values{"filter": {`groups.display pr`}}.Encode(), nil, http.StatusBadRequest},
 		{"GET users with an unknown sortBy", http.MethodGet, scimUsersPath + "?sortBy=nope", nil, http.StatusBadRequest},
 		{"POST /.search", http.MethodPost, "/scim/v2/.search", map[string]any{}, http.StatusNotImplemented},
 		{"POST /Users/.search without the SearchRequest schema", http.MethodPost, scimUsersPath + "/.search", map[string]any{}, http.StatusBadRequest},
@@ -935,6 +945,7 @@ func TestSCIMFilters(t *testing.T) {
 		{scimGroupsPath, `members[type eq "user" and value eq "` + user.ID + `"]`, group.ID},
 		{scimGroupsPath, `displayName eq "Tour Guides" and members[value eq "` + user.ID + `"]`, group.ID},
 		{scimGroupsPath, `externalId eq "tour-guides" and members pr`, group.ID},
+		{scimGroupsPath, `externalId eq "tour-guides" and members.type pr`, group.ID},
 		{scimGroupsPath, `not (members[value eq "` + decoy.ID + `"])`, group.ID},
 	} {
 		t.Run(tc.filter, func(t *testing.T) {

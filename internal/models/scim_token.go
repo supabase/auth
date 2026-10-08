@@ -21,7 +21,7 @@ const (
 	scimTokenBytes        = 20
 	scimTokenPrefixLength = len(scimTokenMarker) + 7
 
-	activeSCIMTokenClause = "revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())" // #nosec G101
+	activeSCIMClause = "revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())"
 )
 
 type SCIMToken struct {
@@ -75,7 +75,7 @@ func FindSCIMTokensBySSOProvider(tx *storage.Connection, providerID uuid.UUID) (
 }
 
 func FindActiveSCIMTokensBySSOProvider(tx *storage.Connection, providerID uuid.UUID) ([]SCIMToken, error) {
-	return findSCIMTokens(tx, "sso_provider_id = ? AND "+activeSCIMTokenClause, providerID)
+	return findSCIMTokens(tx, "sso_provider_id = ? AND "+activeSCIMClause, providerID)
 }
 
 func RevokeSCIMToken(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMToken, error) {
@@ -111,7 +111,7 @@ func AuthenticateSCIMToken(tx *storage.Connection, plaintext string) (*SCIMToken
 )
 SELECT * FROM touched
 UNION ALL
-SELECT * FROM authenticated WHERE NOT EXISTS (SELECT 1 FROM touched)`, token.TableName(), SSOProvider{}.TableName(), SCIMSettings{}.TableName(), activeSCIMTokenClause),
+SELECT * FROM authenticated WHERE NOT EXISTS (SELECT 1 FROM touched)`, token.TableName(), SSOProvider{}.TableName(), SCIMSettings{}.TableName(), activeSCIMClause),
 		hashSCIMToken(plaintext),
 	).First(token); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

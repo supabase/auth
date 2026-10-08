@@ -34,7 +34,7 @@ func (p path) render(fold func(string) string) string {
 	var s strings.Builder
 	s.WriteString(p.root)
 	for _, key := range p.keys {
-		s.WriteString("." + quote(fold(key)))
+		s.WriteString("." + Quote(fold(key)))
 	}
 	return s.String()
 }
@@ -92,7 +92,7 @@ func (e exists) String() string {
 
 func literal(value any, fold func(string) string) string {
 	if text, ok := value.(string); ok {
-		return quote(fold(text))
+		return Quote(fold(text))
 	}
 	raw, _ := json.Marshal(value)
 	return string(raw)
@@ -100,10 +100,10 @@ func literal(value any, fold func(string) string) string {
 
 func pattern(value any, suffix string, fold func(string) string) string {
 	s, _ := value.(string)
-	return quote(regexp.QuoteMeta(fold(s)) + suffix)
+	return Quote(regexp.QuoteMeta(fold(s)) + suffix)
 }
 
-func quote(s string) string {
+func Quote(s string) string {
 	raw, _ := json.Marshal(s)
 	return string(raw)
 }

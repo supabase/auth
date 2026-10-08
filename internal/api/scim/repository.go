@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"uuid"
 
@@ -254,7 +253,7 @@ func (r *repository[T]) filter(tx *storage.Connection, scope models.SCIMScope, e
 	if expression == "" {
 		return q, nil, nil
 	}
-	clause, err := protocol.Filter(r.schemas, expression, query.NewEvaluator(r.schemas, r.locations[r.resourceType], r.references...))
+	clause, err := protocol.Filter(r.schemas, expression, query.NewEvaluator(r.schemas, scope.ProviderID, r.locations[r.resourceType], r.references...))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -376,7 +375,7 @@ func invalid(err error) error {
 func primary(keys []string) string {
 	quoted := make([]string, len(keys))
 	for i, key := range keys {
-		quoted[i] = strconv.Quote(key)
+		quoted[i] = query.Quote(key)
 	}
 	return "$." + strings.Join(quoted[:len(keys)-2], ".") + "[*] ? (@.primary == true)." + quoted[len(keys)-1]
 }

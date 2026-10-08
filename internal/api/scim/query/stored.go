@@ -26,7 +26,7 @@ func (s stored) Columns() map[string]string {
 	}
 }
 
-func (s stored) Exists(inner string, args []any) (string, []any) {
+func (s stored) Exists(_ uuid.UUID, inner string, args []any) (string, []any) {
 	return "EXISTS (SELECT 1 FROM scim_resource_references edge JOIN scim_resources target ON target.id = edge.target_id AND target.deleted_at IS NULL WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + inner + ")", append([]any{s.Name()}, args...)
 }
 
@@ -57,7 +57,11 @@ func (s stored) Link(tx *storage.Connection, scope models.SCIMScope, source uuid
 	if err != nil {
 		return err
 	}
-	if i := slices.IndexFunc(add, func(id uuid.UUID) bool { return !slices.Contains(added, id) }); i >= 0 {
+	found := make(map[uuid.UUID]bool, len(added))
+	for _, id := range added {
+		found[id] = true
+	}
+	if i := slices.IndexFunc(add, func(id uuid.UUID) bool { return !found[id] }); i >= 0 {
 		return s.invalidValue(add[i].String())
 	}
 	return scope.RemoveReferences(tx, source, s.Name(), remove)
@@ -82,7 +86,7 @@ func (s stored) nestable(tx *storage.Connection, scope models.SCIMScope, source 
 	}
 	level := 1
 	for _, ancestor := range ancestors {
-		level = max(level, ancestor.Depth+1)
+		level = max(level, ancestor.Longest+1)
 	}
 	for _, target := range targets {
 		if target == source || slices.ContainsFunc(ancestors, func(ancestor models.SCIMAncestor) bool { return ancestor.SourceID == target }) {

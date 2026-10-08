@@ -21,7 +21,18 @@ type SCIMAncestor struct {
 	TargetID uuid.UUID `db:"target_id"`
 	SourceID uuid.UUID `db:"source_id"`
 	Depth    int       `db:"depth"`
+	Longest  int       `db:"longest"`
 	Display  *string   `db:"display"`
+}
+
+type SCIMReference struct {
+	SourceID   uuid.UUID `db:"source_id"`
+	TargetID   uuid.UUID `db:"target_id"`
+	TargetType string    `db:"target_type"`
+}
+
+func (SCIMReference) TableName() string {
+	return "scim_resource_references"
 }
 
 type SCIMScope struct {
@@ -139,7 +150,7 @@ func (s SCIMScope) FindAncestors(tx *storage.Connection, targets []uuid.UUID, at
 			UNION
 			SELECT c.target_id, r.source_id, c.depth + 1 FROM chain c JOIN %q r ON r.target_id = c.source_id AND r.attribute = ? WHERE c.depth < ?
 		)
-		SELECT c.target_id, c.source_id, min(c.depth) AS depth, s.resource->>'displayName' AS display
+		SELECT c.target_id, c.source_id, min(c.depth) AS depth, max(c.depth) AS longest, s.resource->>'displayName' AS display
 		FROM chain c JOIN %q s ON s.id = c.source_id
 		GROUP BY c.target_id, c.source_id, s.id ORDER BY c.target_id, depth, c.source_id`, table, table, SCIMResource{}.TableName()),
 		uuidStrings(targets), attribute, attribute, SCIMMaxDepth,

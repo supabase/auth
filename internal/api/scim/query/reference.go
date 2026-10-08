@@ -17,7 +17,7 @@ const ValueAttribute = "value"
 type Reference interface {
 	Name() string
 	Columns() map[string]string
-	Exists(inner string, args []any) (string, []any)
+	Exists(provider uuid.UUID, inner string, args []any) (string, []any)
 	Extract(attribute any) ([]uuid.UUID, error)
 	Link(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, wanted []uuid.UUID) error
 	Load(tx *storage.Connection, scope models.SCIMScope, ids []uuid.UUID, locations map[string]string) (map[uuid.UUID][]any, error)
@@ -45,10 +45,14 @@ func match(ref Reference, definition *core.Attribute, op filter.Operator, value 
 	sign := comparisons[op]
 	column, ok := ref.Columns()[definition.Name]
 	if !ok {
-		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(ref.Name()+"."+definition.Name) + " cannot be filtered")
+		return nil, unfilterable(ref, definition)
 	}
 	if definition.Name != ValueAttribute {
 		return predicate{column + sign + "?", []any{strings.ToLower(text)}}, nil
 	}
 	return uuidPredicate(column, sign, op, text), nil
+}
+
+func unfilterable(ref Reference, definition *core.Attribute) error {
+	return scimerrors.ErrInvalidFilter(strconv.Quote(ref.Name()+"."+definition.Name) + " cannot be filtered")
 }
