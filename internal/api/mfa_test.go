@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	jwt "github.com/golang-jwt/jwt/v5"
 
 	"github.com/pquerna/otp"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -810,6 +811,40 @@ func (ts *MFATestSuite) TestUnenrollRequiresRecentVerification() {
 	}
 }
 
+// A signed access token may carry the AMR claim in string form (e.g. after a
+// custom access token hook), which has no verification time. It must not
+// satisfy the recent-verification requirement.
+func (ts *MFATestSuite) TestUnenrollRecentVerificationIgnoresStringFormAMR() {
+	defer func(prev time.Duration) { ts.Config.MFA.UnenrollMaxVerificationAge = prev }(ts.Config.MFA.UnenrollMaxVerificationAge)
+	ts.Config.MFA.UnenrollMaxVerificationAge = 5 * time.Minute
+
+	f := ts.TestUser.Factors[0]
+	require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStateVerified))
+	require.NoError(ts.T(), ts.TestSession.UpdateAALAndAssociatedFactor(ts.API.db, models.AAL2, &f.ID))
+
+	claims := jwt.MapClaims{
+		"sub":        ts.TestUser.ID.String(),
+		"aud":        ts.Config.JWT.Aud,
+		"exp":        time.Now().Add(time.Hour).Unix(),
+		"iat":        time.Now().Unix(),
+		"role":       "authenticated",
+		"aal":        models.AAL2.String(),
+		"amr":        []string{models.TOTPSignIn.String()},
+		"session_id": ts.TestSession.ID.String(),
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+	require.NoError(ts.T(), err)
+
+	var buffer bytes.Buffer
+	w := ServeAuthenticatedRequest(ts, http.MethodDelete, fmt.Sprintf("/factors/%s", f.ID), token, buffer)
+	require.Equal(ts.T(), http.StatusForbidden, w.Code)
+	errResp := &apierrors.HTTPError{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(errResp))
+	require.Equal(ts.T(), string(apierrors.ErrorCodeReauthenticationNeeded), errResp.ErrorCode)
+	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+	require.NoError(ts.T(), err)
+}
+
 func TestHasRecentMFAVerification(t *testing.T) {
 	now := time.Now()
 	maxAge := 5 * time.Minute
@@ -830,6 +865,7 @@ func TestHasRecentMFAVerification(t *testing.T) {
 			models.AMREntry{Method: models.TOTPSignIn.String(), Timestamp: now.Add(-10 * time.Minute).Unix()},
 			models.AMREntry{Method: models.MFAPhone.String(), Timestamp: now.Add(-time.Minute).Unix()},
 		), true},
+		{"totp without timestamp (string-form amr)", claimsWith(models.AMREntry{Method: models.TOTPSignIn.String()}), false},
 		{"future timestamp", claimsWith(models.AMREntry{Method: models.TOTPSignIn.String(), Timestamp: now.Add(time.Hour).Unix()}), false},
 	}
 	for _, tc := range cases {

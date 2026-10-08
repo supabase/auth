@@ -1059,7 +1059,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 // a new verification.
 func hasRecentMFAVerification(claims *AccessTokenClaims, maxAge time.Duration, now time.Time) bool {
 	for _, entry := range claims.AuthenticationMethodReference {
-		if !models.IsAAL2AuthenticationMethod(entry.Method) {
+		// A zero timestamp means the time of verification is unknown (string-form
+		// AMR), which never counts as recent.
+		if !models.IsAAL2AuthenticationMethod(entry.Method) || entry.Timestamp == 0 {
 			continue
 		}
 		verifiedAt := time.Unix(entry.Timestamp, 0)
