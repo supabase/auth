@@ -19,16 +19,17 @@ var narrowing = map[filter.Operator]bool{
 
 type Evaluator struct {
 	schemas    core.Schemas
+	location   string
 	references []Reference
 }
 
-func NewEvaluator(schemas core.Schemas, references ...Reference) protocol.Evaluator[Clause] {
-	return Evaluator{schemas: schemas, references: references}
+func NewEvaluator(schemas core.Schemas, location string, references ...Reference) protocol.Evaluator[Clause] {
+	return Evaluator{schemas: schemas, location: location, references: references}
 }
 
 func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
 	if name, ok := e.column(attribute); ok {
-		return column(name, op, value)
+		return column(name, e.location, op, value)
 	}
 	ref, ok := e.reference(attribute)
 	if !ok {

@@ -60,7 +60,7 @@ func (s SCIMScope) Update(tx *storage.Connection, id uuid.UUID, document, versio
 	resource := &SCIMResource{}
 	if err := tx.RawQuery(
 		fmt.Sprintf("UPDATE %q SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND updated_at = COALESCE(?, updated_at) RETURNING %s", resource.TableName(), scimResourceColumns),
-		document, id, s.ProviderID, s.ResourceType, scimVersionTime(version),
+		document, id, s.ProviderID, s.ResourceType, SCIMVersionTime(version),
 	).First(resource); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, SCIMNotFoundError{}
@@ -73,7 +73,7 @@ func (s SCIMScope) Update(tx *storage.Connection, id uuid.UUID, document, versio
 func (s SCIMScope) Delete(tx *storage.Connection, id uuid.UUID, version string) error {
 	count, err := tx.RawQuery(
 		fmt.Sprintf("UPDATE %q SET deleted_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND updated_at = COALESCE(?, updated_at)", SCIMResource{}.TableName()),
-		id, s.ProviderID, s.ResourceType, scimVersionTime(version),
+		id, s.ProviderID, s.ResourceType, SCIMVersionTime(version),
 	).ExecWithCount()
 	if err != nil {
 		return errors.Wrap(err, "error deleting SCIM resource")

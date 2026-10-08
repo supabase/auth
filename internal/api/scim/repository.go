@@ -249,7 +249,7 @@ func (r *repository[T]) filter(tx *storage.Connection, scope models.SCIMScope, e
 	if expression == "" {
 		return q, nil
 	}
-	clause, err := protocol.Filter(r.schemas, expression, query.NewEvaluator(r.schemas, r.references...))
+	clause, err := protocol.Filter(r.schemas, expression, query.NewEvaluator(r.schemas, r.locations[r.resourceType], r.references...))
 	if err != nil {
 		return nil, err
 	}

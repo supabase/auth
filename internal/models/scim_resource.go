@@ -41,7 +41,7 @@ func (r SCIMResource) As[T core.Resource](endpoint string) (T, error) {
 	return item, nil
 }
 
-func scimVersionTime(version string) *time.Time {
+func SCIMVersionTime(version string) *time.Time {
 	micros, err := strconv.ParseInt(strings.TrimSuffix(strings.TrimPrefix(version, `W/"`), `"`), 10, 64)
 	if err != nil {
 		return nil
