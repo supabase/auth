@@ -28,8 +28,8 @@ create index if not exists scim_resources_display_name_idx
     where resource_type = 'Group' and deleted_at is null;
 
 /* auth_migration: 20261005000000 */
-create index if not exists scim_resources_created_at_idx
-    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, created_at, id)
+create index if not exists scim_resources_type_id_idx
+    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, id)
     where deleted_at is null;
 
 /* auth_migration: 20261005000000 */

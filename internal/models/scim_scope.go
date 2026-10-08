@@ -51,7 +51,7 @@ func (s SCIMScope) Create(tx *storage.Connection, document string) (*SCIMResourc
 	resource := &SCIMResource{}
 	err := tx.RawQuery(
 		fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, resource_type, resource) VALUES (?, ?, ?, ?::jsonb) RETURNING %s", resource.TableName(), scimResourceColumns),
-		uuid.NewV4(), s.ProviderID, s.ResourceType, document,
+		uuid.NewV7(), s.ProviderID, s.ResourceType, document,
 	).First(resource)
 	return resource, scimUniqueness(err)
 }

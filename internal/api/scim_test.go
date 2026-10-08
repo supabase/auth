@@ -319,13 +319,16 @@ func TestSCIMUsers(t *testing.T) {
 
 	t.Run("GET sorts and paginates", func(t *testing.T) {
 		tag := uuid.NewV4().String()
+		second := c.createUser(t, "b+"+tag+"@example.com")
 		first := c.createUser(t, "a+"+tag+"@example.com")
-		c.createUser(t, "b+"+tag+"@example.com")
 
 		list := scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}, "sortBy": {"userName"}, "sortOrder": {"descending"}, "startIndex": {"2"}, "count": {"1"}})
 		require.Equal(t, 2, list.TotalResults)
 		require.Len(t, list.Resources, 1)
 		require.Equal(t, first.ID, list.Resources[0].ID)
+
+		created := scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}})
+		require.Equal(t, []string{second.ID, first.ID}, []string{created.Resources[0].ID, created.Resources[1].ID})
 
 		for startIndex, want := range map[string]int{"1": 2, "2": 1, "5": 0} {
 			list := scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}, "startIndex": {startIndex}, "count": {"5"}})

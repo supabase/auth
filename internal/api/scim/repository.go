@@ -175,7 +175,7 @@ func (r *repository[T]) missing(ctx context.Context, id string) error {
 
 func (r *repository[T]) order(request *protocol.SearchRequest) (string, []any, error) {
 	if request.SortBy == "" {
-		return "created_at, id", nil, nil
+		return "id", nil, nil
 	}
 	parent, attribute, err := request.SortAttribute(r.schemas)
 	if err != nil {
