@@ -38,6 +38,7 @@ call() {
     exit 1
   fi
   printf '\033[1;32mHTTP %s\033[0m\n' "$status"
+  if [ -n "${PAUSE:-}" ]; then read -r -p "press enter for the next step "; fi
 }
 
 field() {
