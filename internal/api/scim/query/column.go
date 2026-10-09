@@ -5,6 +5,7 @@ import (
 	"strings"
 	"uuid"
 
+	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/models"
@@ -20,13 +21,14 @@ var Columns = map[string]string{
 	"meta.version":      "updated_at",
 }
 
-var prefixes = map[string]string{
-	"userName": `lower(resource ->> 'userName') COLLATE "C"`,
+var prefixes = map[core.SchemaURI]map[string]string{
+	core.SchemaUser:  {"userName": `lower(resource ->> 'userName') COLLATE "C"`},
+	core.SchemaGroup: {"displayName": `lower(resource ->> 'displayName') COLLATE "C"`},
 }
 
-var equalities = map[string]string{
-	"userName":   prefixes["userName"],
-	"externalId": `(resource ->> 'externalId') COLLATE "C"`,
+var equalities = map[core.SchemaURI]map[string]string{
+	core.SchemaUser:  {"userName": prefixes[core.SchemaUser]["userName"], "externalId": `(resource ->> 'externalId') COLLATE "C"`},
+	core.SchemaGroup: {"displayName": prefixes[core.SchemaGroup]["displayName"], "externalId": `(resource ->> 'externalId') COLLATE "C"`},
 }
 
 var comparisons = map[filter.Operator]string{
@@ -71,11 +73,11 @@ func uuidPredicate(column, sign string, op filter.Operator, text string) Clause 
 	return predicate{column + sign + "?::uuid", []any{id.String()}}
 }
 
-func indexed(name string, op filter.Operator, text string, caseExact bool) (Clause, bool) {
-	if expression, ok := prefixes[name]; ok && op == filter.OpStartsWith {
+func indexed(schema core.SchemaURI, name string, op filter.Operator, text string, caseExact bool) (Clause, bool) {
+	if expression, ok := prefixes[schema][name]; ok && op == filter.OpStartsWith {
 		return Prefix{name, expression, text}, true
 	}
-	expression, ok := equalities[name]
+	expression, ok := equalities[schema][name]
 	if !ok || op != filter.OpEquals {
 		return nil, false
 	}

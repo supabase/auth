@@ -22,6 +22,7 @@ func TestEvaluatorSQL(t *testing.T) {
 	user := NewEvaluator(users, provider, "https://example.com/scim/v2/Users", Derived("groups", "Group", "members"))
 	group := NewEvaluator(groups, provider, "https://example.com/scim/v2/Groups", Stored("members", "User", "Group"))
 	userName := `lower(resource ->> 'userName') COLLATE "C"`
+	displayName := `lower(resource ->> 'displayName') COLLATE "C"`
 
 	for _, test := range []struct {
 		schemas   core.Schemas
@@ -77,13 +78,16 @@ func TestEvaluatorSQL(t *testing.T) {
 		{users, user, `meta.version eq "W/\"-300000000000000000\""`, "false", nil},
 		{users, user, `meta.lastModified gt "2026-01-01T00:00:00Z"`, "updated_at > ?", []any{time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)}},
 		{users, user, `meta.resourceType eq "User"`, "resource_type = ?", []any{"User"}},
-		{groups, group, `displayName eq "Eng"`, "search @@ lower(?)::jsonpath", []any{`$."displayName" == "Eng"`}},
+		{groups, group, `displayName eq "Eng"`, "(" + displayName + ") IS NOT NULL AND " + displayName + " = lower(?)", []any{"Eng"}},
+		{groups, group, `displayName sw "En"`, displayName + " >= lower(?) AND " + displayName + " < (lower(?) || ?)", []any{"En", "En", string(utf8.MaxRune)}},
+		{groups, group, `externalId eq "Ext-1"`, `((resource ->> 'externalId') COLLATE "C") IS NOT NULL AND (resource ->> 'externalId') COLLATE "C" = ?`, []any{"Ext-1"}},
+		{users, user, `displayName eq "Eng"`, "search @@ lower(?)::jsonpath", []any{`$."displayName" == "Eng"`}},
 		{groups, group, `members.value eq "` + id + `"`, edge("edge.target_id = ?::uuid"), []any{"members", id}},
 		{groups, group, `members[type eq "User" and value eq "` + id + `"]`, edge("(lower(target.resource_type) = lower(?) AND edge.target_id = ?::uuid)"), []any{"members", "User", id}},
 		{groups, group, `members.value ne "` + id + `"`, "(" + edge("edge.target_id <> ?::uuid") + " OR NOT (" + edge("TRUE") + "))", []any{"members", id, "members"}},
 		{groups, group, `members pr`, edge("TRUE"), []any{"members"}},
 		{groups, group, `not (members pr)`, "NOT (" + edge("TRUE") + ")", []any{"members"}},
-		{groups, group, `displayName eq "Eng" or members.value eq "` + id + `"`, "(search @@ lower(?)::jsonpath OR " + edge("edge.target_id = ?::uuid") + ")", []any{`$."displayName" == "Eng"`, "members", id}},
+		{groups, group, `displayName eq "Eng" or members.value eq "` + id + `"`, "((" + displayName + ") IS NOT NULL AND " + displayName + " = lower(?) OR " + edge("edge.target_id = ?::uuid") + ")", []any{"Eng", "members", id}},
 	} {
 		t.Run(test.filter, func(t *testing.T) {
 			clause, err := protocol.Filter(test.schemas, test.filter, test.evaluator)

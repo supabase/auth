@@ -940,6 +940,8 @@ func TestSCIMFilters(t *testing.T) {
 		{scimGroupsPath, `externalId sw "Tour"`, decoys.ID},
 		{scimGroupsPath, `not (externalId eq "Tour-Guides")`, group.ID},
 		{scimGroupsPath, `displayName eq "Tour Guides"`, group.ID},
+		{scimGroupsPath, `displayName eq "tour guides"`, group.ID},
+		{scimGroupsPath, `displayName sw "TOUR"`, group.ID},
 		{scimGroupsPath, `meta.resourceType eq "Group" and displayName eq "Tour Guides"`, group.ID},
 		{scimGroupsPath, `meta.location eq "` + group.Meta.Location + `"`, group.ID},
 		{scimGroupsPath, `members.value eq "` + user.ID + `"`, group.ID},

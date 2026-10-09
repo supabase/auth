@@ -108,7 +108,7 @@ func (e Evaluator) assigned(attribute *protocol.Attribute, op filter.Operator, v
 		return column(name, e.location, op, value)
 	}
 	if text, ok := value.(string); ok {
-		if clause, ok := indexed(e.name(attribute), op, text, attribute.Definition.CaseExact); ok {
+		if clause, ok := indexed(e.schemas.Base().ID, e.name(attribute), op, text, attribute.Definition.CaseExact); ok {
 			return clause, nil
 		}
 	}
