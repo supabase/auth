@@ -30,7 +30,10 @@ func NewEvaluator(schemas core.Schemas, provider uuid.UUID, location string, ref
 }
 
 func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
-	if value == nil && (op == filter.OpEquals || op == filter.OpNotEquals) {
+	if value == nil {
+		if op != filter.OpEquals && op != filter.OpNotEquals {
+			return predicate{text: "false"}, nil
+		}
 		present, err := e.Present(attribute)
 		if err != nil || op == filter.OpNotEquals {
 			return present, err
