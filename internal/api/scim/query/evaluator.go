@@ -104,10 +104,7 @@ func (e Evaluator) assigned(attribute *protocol.Attribute, op filter.Operator, v
 		return column(name, e.location, op, value)
 	}
 	if text, ok := value.(string); ok {
-		if !attribute.Definition.CaseExact {
-			text = strings.ToLower(text)
-		}
-		if clause, ok := indexed(e.name(attribute), op, text); ok {
+		if clause, ok := indexed(e.name(attribute), op, text, attribute.Definition.CaseExact); ok {
 			return clause, nil
 		}
 	}
@@ -130,11 +127,11 @@ func (e Evaluator) unassignable(attribute *protocol.Attribute, op filter.Operato
 }
 
 func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, value any) Clause {
-	folded := jsonpath(compare(e.path(attribute), op, value, false))
+	folded := jsonpath(compare(e.path(attribute), op, value))
 	if _, text := value.(string); !text || !attribute.Definition.CaseExact {
 		return folded
 	}
-	strict := exact(compare(e.path(attribute), op, value, true))
+	strict := exact(compare(e.path(attribute), op, value))
 	if !narrowing[op] {
 		return strict
 	}

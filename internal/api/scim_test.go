@@ -843,6 +843,27 @@ func TestSCIMUniqueness(t *testing.T) {
 	}
 }
 
+func TestSCIMFiltersFoldCaseLikePostgres(t *testing.T) {
+	c := newSCIMClient(t, nil)
+	name := "\u00c9MILE\ua7d2"
+	res := c.do(t, http.MethodPost, scimUsersPath, newSCIMUser(name+"@example.com", name, "Zola"))
+	require.Equal(t, http.StatusCreated, res.StatusCode)
+	user := scimDecode[core.User](t, res)
+
+	for _, filter := range []string{
+		`userName eq "` + name + `@example.com"`,
+		`userName sw "` + name + `"`,
+		`name.givenName eq "` + name + `"`,
+		`name.givenName sw "` + name + `"`,
+		`name.givenName co "` + name + `"`,
+		`emails[value ew "` + name + `@example.com"]`,
+	} {
+		list := scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}})
+		require.Len(t, list.Resources, 1, filter)
+		require.Equal(t, user.ID, list.Resources[0].ID, filter)
+	}
+}
+
 func TestSCIMFilters(t *testing.T) {
 	c := newSCIMClient(t, nil)
 	enterprise := string(core.SchemaEnterpriseUser)

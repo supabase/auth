@@ -52,7 +52,7 @@ func match(ref Reference, definition *core.Attribute, op filter.Operator, value 
 		return nil, unfilterable(ref, definition)
 	}
 	if definition.Name != ValueAttribute {
-		return predicate{column + sign + "?", []any{strings.ToLower(text)}}, nil
+		return predicate{column + sign + "lower(?)", []any{text}}, nil
 	}
 	return uuidPredicate(column, sign, op, text), nil
 }

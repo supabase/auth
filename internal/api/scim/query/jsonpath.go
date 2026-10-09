@@ -23,14 +23,10 @@ type path struct {
 }
 
 func (p path) String() string {
-	return p.render(strings.ToLower)
-}
-
-func (p path) render(fold func(string) string) string {
 	var s strings.Builder
 	s.WriteString(p.root)
 	for _, key := range p.keys {
-		s.WriteString("." + Quote(fold(key)))
+		s.WriteString("." + Quote(key))
 	}
 	return s.String()
 }
@@ -40,21 +36,17 @@ func Quote(s string) string {
 	return string(raw)
 }
 
-func compare(p path, op filter.Operator, value any, exact bool) string {
-	fold := strings.ToLower
-	if exact {
-		fold = func(s string) string { return s }
-	}
-	path := p.render(fold)
+func compare(p path, op filter.Operator, value any) string {
+	path := p.String()
 	switch op {
 	case filter.OpStartsWith:
-		return path + " starts with " + literal(value, fold)
+		return path + " starts with " + literal(value)
 	case filter.OpContains:
-		return path + " like_regex " + pattern(value, "", fold)
+		return path + " like_regex " + pattern(value, "")
 	case filter.OpEndsWith:
-		return path + " like_regex " + pattern(value, "$", fold)
+		return path + " like_regex " + pattern(value, "$")
 	}
-	return path + " " + operators[op] + " " + literal(value, fold)
+	return path + " " + operators[op] + " " + literal(value)
 }
 
 func present(p path) string {
@@ -65,15 +57,15 @@ func exists(p path, inner jsonpath) string {
 	return "exists(" + p.String() + "[*] ? (" + string(inner) + "))"
 }
 
-func literal(value any, fold func(string) string) string {
+func literal(value any) string {
 	if text, ok := value.(string); ok {
-		return Quote(fold(text))
+		return Quote(text)
 	}
 	raw, _ := json.Marshal(value)
 	return string(raw)
 }
 
-func pattern(value any, suffix string, fold func(string) string) string {
+func pattern(value any, suffix string) string {
 	s, _ := value.(string)
-	return Quote(regexp.QuoteMeta(fold(s)) + suffix)
+	return Quote(regexp.QuoteMeta(s) + suffix)
 }

@@ -3,6 +3,7 @@ package query
 import (
 	"testing"
 	"time"
+	"unicode/utf8"
 	"uuid"
 
 	"github.com/stretchr/testify/require"
@@ -29,33 +30,33 @@ func TestEvaluatorSQL(t *testing.T) {
 		sql       string
 		args      []any
 	}{
-		{users, user, `userName eq "Alice@Example.com"`, "(" + userName + ") IS NOT NULL AND " + userName + " = ?", []any{"alice@example.com"}},
-		{users, user, `userName sw "Ali"`, userName + " >= ? AND " + userName + " < ?", []any{"ali", "alj"}},
-		{users, user, `userName gt "a"`, "search @@ ?::jsonpath", []any{`$."username" > "a"`}},
+		{users, user, `userName eq "Alice@Example.com"`, "(" + userName + ") IS NOT NULL AND " + userName + " = lower(?)", []any{"Alice@Example.com"}},
+		{users, user, `userName sw "Ali"`, userName + " >= lower(?) AND " + userName + " < (lower(?) || ?)", []any{"Ali", "Ali", string(utf8.MaxRune)}},
+		{users, user, `userName gt "a"`, "search @@ lower(?)::jsonpath", []any{`$."userName" > "a"`}},
 		{users, user, `externalId eq "Ext-1"`, `((resource ->> 'externalId') COLLATE "C") IS NOT NULL AND (resource ->> 'externalId') COLLATE "C" = ?`, []any{"Ext-1"}},
-		{users, user, `externalId sw "Ext"`, "(search @@ ?::jsonpath AND resource @@ ?::jsonpath)", []any{`$."externalid" starts with "ext"`, `$."externalId" starts with "Ext"`}},
+		{users, user, `externalId sw "Ext"`, "(search @@ lower(?)::jsonpath AND resource @@ ?::jsonpath)", []any{`$."externalId" starts with "Ext"`, `$."externalId" starts with "Ext"`}},
 		{users, user, `externalId gt "Ext"`, "resource @@ ?::jsonpath", []any{`$."externalId" > "Ext"`}},
-		{users, user, `title pr`, "search @@ ?::jsonpath", []any{`exists($."title" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))`}},
-		{users, user, `title eq "Boss" and title eq "Chief"`, "search @@ ?::jsonpath", []any{`($."title" == "boss" && $."title" == "chief")`}},
-		{users, user, `title eq "Boss" or title eq "Chief"`, "search @@ ?::jsonpath", []any{`($."title" == "boss" || $."title" == "chief")`}},
-		{users, user, `not (title eq "Boss")`, "search @@ ?::jsonpath", []any{`!($."title" == "boss")`}},
-		{users, user, `title eq "Boss" and userName eq "a"`, "(search @@ ?::jsonpath AND (" + userName + ") IS NOT NULL AND " + userName + " = ?)", []any{`$."title" == "boss"`, "a"}},
-		{users, user, `title eq "Boss" or userName eq "a"`, "(search @@ ?::jsonpath OR (" + userName + ") IS NOT NULL AND " + userName + " = ?)", []any{`$."title" == "boss"`, "a"}},
-		{users, user, `not (userName eq "a")`, "NOT ((" + userName + ") IS NOT NULL AND " + userName + " = ?)", []any{"a"}},
-		{users, user, `name.familyName co "Sm.ith"`, "search @@ ?::jsonpath", []any{`$."name"."familyname" like_regex "sm\\.ith"`}},
-		{users, user, `emails.value ew "@Example.com"`, "search @@ ?::jsonpath", []any{`$."emails"."value" like_regex "@example\\.com$"`}},
-		{users, user, `emails pr`, "search @@ ?::jsonpath", []any{`exists($."emails" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))`}},
-		{users, user, `emails[type eq "work" and not (value pr)]`, "search @@ ?::jsonpath", []any{`exists($."emails"[*] ? ((@."type" == "work" && !(exists(@."value" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))))))`}},
-		{users, user, `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:employeeNumber eq "42"`, "search @@ ?::jsonpath", []any{`$."urn:ietf:params:scim:schemas:extension:enterprise:2.0:user"."employeenumber" == "42"`}},
-		{users, user, `active eq true`, "search @@ ?::jsonpath", []any{`$."active" == true`}},
+		{users, user, `title pr`, "search @@ lower(?)::jsonpath", []any{`exists($."title" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))`}},
+		{users, user, `title eq "Boss" and title eq "Chief"`, "search @@ lower(?)::jsonpath", []any{`($."title" == "Boss" && $."title" == "Chief")`}},
+		{users, user, `title eq "Boss" or title eq "Chief"`, "search @@ lower(?)::jsonpath", []any{`($."title" == "Boss" || $."title" == "Chief")`}},
+		{users, user, `not (title eq "Boss")`, "search @@ lower(?)::jsonpath", []any{`!($."title" == "Boss")`}},
+		{users, user, `title eq "Boss" and userName eq "a"`, "(search @@ lower(?)::jsonpath AND (" + userName + ") IS NOT NULL AND " + userName + " = lower(?))", []any{`$."title" == "Boss"`, "a"}},
+		{users, user, `title eq "Boss" or userName eq "a"`, "(search @@ lower(?)::jsonpath OR (" + userName + ") IS NOT NULL AND " + userName + " = lower(?))", []any{`$."title" == "Boss"`, "a"}},
+		{users, user, `not (userName eq "a")`, "NOT ((" + userName + ") IS NOT NULL AND " + userName + " = lower(?))", []any{"a"}},
+		{users, user, `name.familyName co "Sm.ith"`, "search @@ lower(?)::jsonpath", []any{`$."name"."familyName" like_regex "Sm\\.ith"`}},
+		{users, user, `emails.value ew "@Example.com"`, "search @@ lower(?)::jsonpath", []any{`$."emails"."value" like_regex "@Example\\.com$"`}},
+		{users, user, `emails pr`, "search @@ lower(?)::jsonpath", []any{`exists($."emails" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))`}},
+		{users, user, `emails[type eq "work" and not (value pr)]`, "search @@ lower(?)::jsonpath", []any{`exists($."emails"[*] ? ((@."type" == "work" && !(exists(@."value" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))))))`}},
+		{users, user, `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:employeeNumber eq "42"`, "search @@ lower(?)::jsonpath", []any{`$."urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"."employeeNumber" == "42"`}},
+		{users, user, `active eq true`, "search @@ lower(?)::jsonpath", []any{`$."active" == true`}},
 		{users, user, `groups.value eq "` + id + `"`, walk("chain.id = ?::uuid"), []any{"members", provider.String(), id, "members", models.SCIMMaxDepth}},
 		{users, user, `groups.value ne "nope"`, "(" + walk("true") + " OR NOT (" + walk("TRUE") + "))", []any{"members", provider.String(), "members", models.SCIMMaxDepth, "members", provider.String(), "members", models.SCIMMaxDepth}},
 		{users, user, `groups[value ne "` + id + `"]`, walk("chain.id <> ?::uuid"), []any{"members", provider.String(), id, "members", models.SCIMMaxDepth}},
-		{users, user, `nickName ne "Al"`, "search @@ ?::jsonpath", []any{`($."nickname" != "al" || !(exists($."nickname" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))))`}},
-		{users, user, `externalId ne "Ext"`, "(resource @@ ?::jsonpath OR search @@ ?::jsonpath)", []any{`$."externalId" != "Ext"`, `!(exists($."externalid" ? (@.type() != "null" && !(@.type() == "string" && @ == ""))))`}},
-		{users, user, `emails[value ne "x"]`, "search @@ ?::jsonpath", []any{`exists($."emails"[*] ? ((@."value" != "x" || !(exists(@."value" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))))))`}},
-		{users, user, `nickName ne null`, "search @@ ?::jsonpath", []any{`exists($."nickname" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))`}},
-		{users, user, `nickName eq null`, "search @@ ?::jsonpath", []any{`!(exists($."nickname" ? (@.type() != "null" && !(@.type() == "string" && @ == ""))))`}},
+		{users, user, `nickName ne "Al"`, "search @@ lower(?)::jsonpath", []any{`($."nickName" != "Al" || !(exists($."nickName" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))))`}},
+		{users, user, `externalId ne "Ext"`, "(resource @@ ?::jsonpath OR search @@ lower(?)::jsonpath)", []any{`$."externalId" != "Ext"`, `!(exists($."externalId" ? (@.type() != "null" && !(@.type() == "string" && @ == ""))))`}},
+		{users, user, `emails[value ne "x"]`, "search @@ lower(?)::jsonpath", []any{`exists($."emails"[*] ? ((@."value" != "x" || !(exists(@."value" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))))))`}},
+		{users, user, `nickName ne null`, "search @@ lower(?)::jsonpath", []any{`exists($."nickName" ? (@.type() != "null" && !(@.type() == "string" && @ == "")))`}},
+		{users, user, `nickName eq null`, "search @@ lower(?)::jsonpath", []any{`!(exists($."nickName" ? (@.type() != "null" && !(@.type() == "string" && @ == ""))))`}},
 		{users, user, `groups eq null`, "NOT (" + walk("TRUE") + ")", []any{"members", provider.String(), "members", models.SCIMMaxDepth}},
 		{users, user, `id eq null`, "NOT (TRUE)", nil},
 		{users, user, `groups[value eq "` + id + `"]`, walk("chain.id = ?::uuid"), []any{"members", provider.String(), id, "members", models.SCIMMaxDepth}},
@@ -72,13 +73,13 @@ func TestEvaluatorSQL(t *testing.T) {
 		{users, user, `meta.version eq "W/\"-300000000000000000\""`, "false", nil},
 		{users, user, `meta.lastModified gt "2026-01-01T00:00:00Z"`, "updated_at > ?", []any{time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)}},
 		{users, user, `meta.resourceType eq "User"`, "resource_type = ?", []any{"User"}},
-		{groups, group, `displayName eq "Eng"`, "search @@ ?::jsonpath", []any{`$."displayname" == "eng"`}},
+		{groups, group, `displayName eq "Eng"`, "search @@ lower(?)::jsonpath", []any{`$."displayName" == "Eng"`}},
 		{groups, group, `members.value eq "` + id + `"`, edge("edge.target_id = ?::uuid"), []any{"members", id}},
-		{groups, group, `members[type eq "User" and value eq "` + id + `"]`, edge("(lower(target.resource_type) = ? AND edge.target_id = ?::uuid)"), []any{"members", "user", id}},
+		{groups, group, `members[type eq "User" and value eq "` + id + `"]`, edge("(lower(target.resource_type) = lower(?) AND edge.target_id = ?::uuid)"), []any{"members", "User", id}},
 		{groups, group, `members.value ne "` + id + `"`, "(" + edge("edge.target_id <> ?::uuid") + " OR NOT (" + edge("TRUE") + "))", []any{"members", id, "members"}},
 		{groups, group, `members pr`, edge("TRUE"), []any{"members"}},
 		{groups, group, `not (members pr)`, "NOT (" + edge("TRUE") + ")", []any{"members"}},
-		{groups, group, `displayName eq "Eng" or members.value eq "` + id + `"`, "(search @@ ?::jsonpath OR " + edge("edge.target_id = ?::uuid") + ")", []any{`$."displayname" == "eng"`, "members", id}},
+		{groups, group, `displayName eq "Eng" or members.value eq "` + id + `"`, "(search @@ lower(?)::jsonpath OR " + edge("edge.target_id = ?::uuid") + ")", []any{`$."displayName" == "Eng"`, "members", id}},
 	} {
 		t.Run(test.filter, func(t *testing.T) {
 			clause, err := protocol.Filter(test.schemas, test.filter, test.evaluator)

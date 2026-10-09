@@ -1,6 +1,9 @@
 package query
 
-import "uuid"
+import (
+	"unicode/utf8"
+	"uuid"
+)
 
 type Clause interface {
 	SQL() (string, []any)
@@ -9,7 +12,7 @@ type Clause interface {
 type jsonpath string
 
 func (j jsonpath) SQL() (string, []any) {
-	return "search @@ ?::jsonpath", []any{string(j)}
+	return "search @@ lower(?)::jsonpath", []any{string(j)}
 }
 
 type predicate struct {
@@ -41,10 +44,10 @@ func reference(ref Reference, provider uuid.UUID, inner Clause) Clause {
 }
 
 type Prefix struct {
-	Attribute          string
-	expression, lo, hi string
+	Attribute        string
+	expression, text string
 }
 
 func (p Prefix) SQL() (string, []any) {
-	return p.expression + " >= ? AND " + p.expression + " < ?", []any{p.lo, p.hi}
+	return p.expression + " >= lower(?) AND " + p.expression + " < (lower(?) || ?)", []any{p.text, p.text, string(utf8.MaxRune)}
 }
