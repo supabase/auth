@@ -43,7 +43,7 @@ func (r SCIMResource) As[T core.Resource](endpoint string) (T, error) {
 
 func SCIMVersionTime(version string) *time.Time {
 	micros, err := strconv.ParseInt(strings.TrimSuffix(strings.TrimPrefix(version, `W/"`), `"`), 10, 64)
-	if err != nil {
+	if err != nil || micros < 0 {
 		return nil
 	}
 	t := time.UnixMicro(micros).UTC()

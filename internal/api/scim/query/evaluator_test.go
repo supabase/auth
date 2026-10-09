@@ -68,6 +68,7 @@ func TestEvaluatorSQL(t *testing.T) {
 		{users, user, `meta.location eq "https://example.org/` + id + `"`, "false", nil},
 		{users, user, `meta.version eq "W/\"1700000000000000\""`, "updated_at = ?", []any{time.UnixMicro(1700000000000000).UTC()}},
 		{users, user, `meta.version ne "bad"`, "true", nil},
+		{users, user, `meta.version eq "W/\"-300000000000000000\""`, "false", nil},
 		{users, user, `meta.lastModified gt "2026-01-01T00:00:00Z"`, "updated_at > ?", []any{time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)}},
 		{users, user, `meta.resourceType eq "User"`, "resource_type = ?", []any{"User"}},
 		{groups, group, `displayName eq "Eng"`, "search @@ ?::jsonpath", []any{`$."displayname" == "eng"`}},
