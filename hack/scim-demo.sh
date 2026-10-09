@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BASE_URL="${GOTRUE_URL:-http://localhost:9999}"
-SECRET="${GOTRUE_JWT_SECRET:-$(sed -n 's/^GOTRUE_JWT_SECRET=//p' "$ROOT/.env" 2>/dev/null | tr -d '"')}"
+SECRET="${GOTRUE_JWT_SECRET:-$(sed -n 's/^GOTRUE_JWT_SECRET=//p' "$ROOT/.env" 2>/dev/null | tr -d '"' || true)}"
 RUN="$(date +%s)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -28,11 +28,11 @@ ADMIN_TOKEN="$(admin_jwt)"
 
 call() {
   local expected="$1" method="$2" url="$3" token="$4" body="${5:-}" show="${6:-.}" status
-  local args=(-s -X "$method" -o "$TMP/body" -w '%{http_code}' -H "Authorization: Bearer $token")
+  local args=(-sS -X "$method" -o "$TMP/body" -w '%{http_code}' -H "Authorization: Bearer $token")
   [ -n "$body" ] && args+=(-H 'Content-Type: application/scim+json' --data "$body")
   printf '\n\033[1m%s %s\033[0m\n' "$method" "${url#"$BASE_URL"}"
   status="$(curl "${args[@]}" "$url")"
-  [ -s "$TMP/body" ] && jq -C "$show" < "$TMP/body"
+  [ -s "$TMP/body" ] && { jq -C "$show" < "$TMP/body" || cat "$TMP/body"; }
   if [ "$status" != "$expected" ]; then
     printf '\033[1;31mHTTP %s, expected %s\033[0m\n' "$status" "$expected"
     exit 1
