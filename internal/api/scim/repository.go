@@ -253,7 +253,7 @@ func (r *repository[T]) page(ctx context.Context, q *pop.Query, query *protocol.
 	sql, values := q.Select("id").Order(order, args...).ToSQL(pop.NewModel(&models.SCIMResource{}, ctx))
 	bounded, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
-	items, err := r.fetch(r.db.WithContext(bounded), protocol.ProjectionFrom(ctx), fmt.Sprintf("unnest(array(%s LIMIT %d OFFSET %d)) WITH ORDINALITY page(id, n) JOIN scim_resources USING (id) ORDER BY page.n", sql, query.Count, query.Offset()), values...)
+	items, err := r.fetch(r.db.WithContext(bounded), protocol.ProjectionFrom(ctx), fmt.Sprintf("unnest(array(%s LIMIT $%d OFFSET $%d)) WITH ORDINALITY page(id, n) JOIN scim_resources USING (id) ORDER BY page.n", sql, len(values)+1, len(values)+2), append(values, query.Count, query.Offset())...)
 	if err != nil {
 		return nil, 0, err
 	}

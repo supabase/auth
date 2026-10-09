@@ -2,9 +2,12 @@ package scim
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/gobuffalo/pop/v6"
+	"github.com/gobuffalo/pop/v6/logging"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -28,4 +31,28 @@ func TestRepositoryListPastDeadline(t *testing.T) {
 		_, _, err := groups.List(ctx, &protocol.SearchRequest{StartIndex: 1, Count: count})
 		require.Equal(t, scimerrors.ErrTooMany("the query took too long"), err)
 	}
+}
+
+func TestRepositoryListReusesThePageSQL(t *testing.T) {
+	config, err := confload.LoadGlobal("../../../hack/test.env")
+	require.NoError(t, err)
+	db, err := test.SetupDBConnection(config)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
+	groups := NewRepository[*core.Group](db, "Group", map[string]string{}, core.Schemas{core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...)})
+	ctx := tokenKey.WithValue(context.Background(), &models.SCIMToken{})
+	pages := []string{}
+	pop.SetTxLogger(func(_ logging.Level, _ any, sql string, _ ...any) {
+		if strings.Contains(sql, "WITH ORDINALITY") {
+			pages = append(pages, sql)
+		}
+	})
+	defer pop.SetTxLogger(func(logging.Level, any, string, ...any) {})
+
+	for _, start := range []int{1, 11} {
+		_, _, err := groups.List(ctx, &protocol.SearchRequest{StartIndex: start, Count: 10})
+		require.NoError(t, err)
+	}
+	require.Len(t, pages, 2)
+	require.Equal(t, pages[0], pages[1])
 }
