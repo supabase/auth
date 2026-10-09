@@ -6,34 +6,10 @@ type Clause interface {
 	SQL() (string, []any)
 }
 
-type jsonpath struct{ expr expr }
+type jsonpath string
 
 func (j jsonpath) SQL() (string, []any) {
-	return "search @@ ?::jsonpath", []any{j.expr.String()}
-}
-
-type exact struct{ expr expr }
-
-func (e exact) SQL() (string, []any) {
-	return "resource @@ ?::jsonpath", []any{e.expr.String()}
-}
-
-type junction struct {
-	op   string
-	l, r Clause
-}
-
-func (j junction) SQL() (string, []any) {
-	l, largs := j.l.SQL()
-	r, rargs := j.r.SQL()
-	return "(" + l + " " + j.op + " " + r + ")", append(largs, rargs...)
-}
-
-type negation struct{ x Clause }
-
-func (n negation) SQL() (string, []any) {
-	x, args := n.x.SQL()
-	return "NOT (" + x + ")", args
+	return "search @@ ?::jsonpath", []any{string(j)}
 }
 
 type predicate struct {
@@ -43,15 +19,25 @@ type predicate struct {
 
 func (p predicate) SQL() (string, []any) { return p.text, p.args }
 
-type reference struct {
-	ref      Reference
-	provider uuid.UUID
-	inner    Clause
+func exact(path string) Clause {
+	return predicate{"resource @@ ?::jsonpath", []any{path}}
 }
 
-func (r reference) SQL() (string, []any) {
-	inner, args := r.inner.SQL()
-	return r.ref.Exists(r.provider, inner, args)
+func junction(op string, l, r Clause) Clause {
+	ltext, largs := l.SQL()
+	rtext, rargs := r.SQL()
+	return predicate{"(" + ltext + " " + op + " " + rtext + ")", append(largs, rargs...)}
+}
+
+func negation(x Clause) Clause {
+	text, args := x.SQL()
+	return predicate{"NOT (" + text + ")", args}
+}
+
+func reference(ref Reference, provider uuid.UUID, inner Clause) Clause {
+	text, args := inner.SQL()
+	text, args = ref.Exists(provider, text, args)
+	return predicate{text, args}
 }
 
 type Prefix struct {

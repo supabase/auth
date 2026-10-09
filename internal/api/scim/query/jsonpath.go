@@ -17,10 +17,6 @@ var operators = map[filter.Operator]string{
 	filter.OpLessThanEquals:    "<=",
 }
 
-type expr interface {
-	String() string
-}
-
 type path struct {
 	root string
 	keys []string
@@ -39,55 +35,34 @@ func (p path) render(fold func(string) string) string {
 	return s.String()
 }
 
-type compare struct {
-	path  path
-	op    filter.Operator
-	value any
-	exact bool
+func Quote(s string) string {
+	raw, _ := json.Marshal(s)
+	return string(raw)
 }
 
-func (c compare) String() string {
+func compare(p path, op filter.Operator, value any, exact bool) string {
 	fold := strings.ToLower
-	if c.exact {
+	if exact {
 		fold = func(s string) string { return s }
 	}
-	path := c.path.render(fold)
-	switch c.op {
+	path := p.render(fold)
+	switch op {
 	case filter.OpStartsWith:
-		return path + " starts with " + literal(c.value, fold)
+		return path + " starts with " + literal(value, fold)
 	case filter.OpContains:
-		return path + " like_regex " + pattern(c.value, "", fold)
+		return path + " like_regex " + pattern(value, "", fold)
 	case filter.OpEndsWith:
-		return path + " like_regex " + pattern(c.value, "$", fold)
+		return path + " like_regex " + pattern(value, "$", fold)
 	}
-	return path + " " + operators[c.op] + " " + literal(c.value, fold)
+	return path + " " + operators[op] + " " + literal(value, fold)
 }
 
-type present struct{ path path }
-
-func (p present) String() string {
-	return "exists(" + p.path.String() + ` ? (@.type() != "null" && !(@.type() == "string" && @ == "")))`
+func present(p path) string {
+	return "exists(" + p.String() + ` ? (@.type() != "null" && !(@.type() == "string" && @ == "")))`
 }
 
-type and struct{ l, r expr }
-
-func (a and) String() string { return "(" + a.l.String() + " && " + a.r.String() + ")" }
-
-type or struct{ l, r expr }
-
-func (o or) String() string { return "(" + o.l.String() + " || " + o.r.String() + ")" }
-
-type not struct{ x expr }
-
-func (n not) String() string { return "!(" + n.x.String() + ")" }
-
-type exists struct {
-	path  path
-	inner expr
-}
-
-func (e exists) String() string {
-	return "exists(" + e.path.String() + "[*] ? (" + e.inner.String() + "))"
+func exists(p path, inner jsonpath) string {
+	return "exists(" + p.String() + "[*] ? (" + string(inner) + "))"
 }
 
 func literal(value any, fold func(string) string) string {
@@ -101,9 +76,4 @@ func literal(value any, fold func(string) string) string {
 func pattern(value any, suffix string, fold func(string) string) string {
 	s, _ := value.(string)
 	return Quote(regexp.QuoteMeta(fold(s)) + suffix)
-}
-
-func Quote(s string) string {
-	raw, _ := json.Marshal(s)
-	return string(raw)
 }

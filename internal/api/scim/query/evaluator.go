@@ -58,7 +58,7 @@ func (e Evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
 	}
 	ref, ok := e.reference(attribute)
 	if !ok {
-		return jsonpath{present{e.path(attribute)}}, nil
+		return jsonpath(present(e.path(attribute))), nil
 	}
 	if _, ok := ref.Columns()[attribute.Definition.Name]; !ok && attribute.Definition.Name != ref.Name() {
 		return nil, unfilterable(ref, attribute.Definition)
@@ -68,23 +68,23 @@ func (e Evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
 
 func (e Evaluator) And(l, r Clause) (Clause, error) {
 	if lpath, rpath, ok := jsonpaths(l, r); ok {
-		return jsonpath{and{lpath.expr, rpath.expr}}, nil
+		return "(" + lpath + " && " + rpath + ")", nil
 	}
-	return junction{"AND", l, r}, nil
+	return junction("AND", l, r), nil
 }
 
 func (e Evaluator) Or(l, r Clause) (Clause, error) {
 	if lpath, rpath, ok := jsonpaths(l, r); ok {
-		return jsonpath{or{lpath.expr, rpath.expr}}, nil
+		return "(" + lpath + " || " + rpath + ")", nil
 	}
-	return junction{"OR", l, r}, nil
+	return junction("OR", l, r), nil
 }
 
 func (e Evaluator) Not(operand Clause) (Clause, error) {
 	if path, ok := operand.(jsonpath); ok {
-		return jsonpath{not{path.expr}}, nil
+		return "!(" + path + ")", nil
 	}
-	return negation{operand}, nil
+	return negation(operand), nil
 }
 
 func (e Evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (Clause, error)) (Clause, error) {
@@ -93,32 +93,32 @@ func (e Evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (
 		return inner, err
 	}
 	if ref, ok := e.reference(attribute); ok {
-		return reference{ref, e.provider, inner}, nil
+		return reference(ref, e.provider, inner), nil
 	}
 	path, ok := inner.(jsonpath)
 	if !ok {
 		return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
-	return jsonpath{exists{e.path(attribute), path.expr}}, nil
+	return jsonpath(exists(e.path(attribute), path)), nil
 }
 
 func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, value any) Clause {
-	folded := jsonpath{compare{e.path(attribute), op, value, false}}
+	folded := jsonpath(compare(e.path(attribute), op, value, false))
 	if _, text := value.(string); !text || !attribute.Definition.CaseExact {
 		return folded
 	}
-	exact := exact{compare{e.path(attribute), op, value, true}}
+	strict := exact(compare(e.path(attribute), op, value, true))
 	if !narrowing[op] {
-		return exact
+		return strict
 	}
-	return junction{"AND", folded, exact}
+	return junction("AND", folded, strict)
 }
 
 func (e Evaluator) wrap(attribute *protocol.Attribute, ref Reference, leaf Clause) Clause {
 	if attribute.Parent != nil {
 		return leaf
 	}
-	return reference{ref, e.provider, leaf}
+	return reference(ref, e.provider, leaf)
 }
 
 func (e Evaluator) reference(attribute *protocol.Attribute) (Reference, bool) {
