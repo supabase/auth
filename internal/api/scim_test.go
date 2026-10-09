@@ -341,9 +341,7 @@ func TestSCIMUsers(t *testing.T) {
 		group := c.createGroup(t, "readonly-"+uuid.NewV4().String())
 		body := newSCIMUser(scimUserName("bjensen"), "Barbara", "Jensen")
 		body["groups"] = []map[string]any{{"value": group.ID}}
-		res := c.do(t, http.MethodPost, scimUsersPath, body)
-		require.Equal(t, http.StatusCreated, res.StatusCode)
-		user := scimDecode[core.User](t, res)
+		user := scimCreate[core.User](t, c, scimUsersPath, body)
 		require.Empty(t, user.Groups)
 		require.Empty(t, c.user(t, user.ID).Groups)
 	})
@@ -354,30 +352,18 @@ func TestSCIMUsers(t *testing.T) {
 			body := newSCIMUser(userName+"+"+tag+"@example.com", "Barbara", familyName)
 			body["externalId"] = externalID + tag
 			body["emails"] = []map[string]any{{"value": other + "+" + tag + "@example.com"}, {"value": userName + "+" + tag + "@example.com", "primary": true}}
-			res := c.do(t, http.MethodPost, scimUsersPath, body)
-			require.Equal(t, http.StatusCreated, res.StatusCode)
-			return scimDecode[core.User](t, res).ID
+			return scimCreate[core.User](t, c, scimUsersPath, body).ID
 		}
 		a, b := create("a", "Zulu", "B", "z"), create("b", "Alpha", "a", "c")
 
 		for sortBy, want := range map[string][]string{"userName": {a, b}, "emails.value": {a, b}, "name.familyName": {b, a}, "meta.created": {a, b}, "externalId": {a, b}} {
-			list := scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}, "sortBy": {sortBy}})
-			got := []string{}
-			for _, user := range list.Resources {
-				got = append(got, user.ID)
-			}
-			require.Equal(t, want, got, sortBy)
+			require.Equal(t, want, scimIDs(t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}, "sortBy": {sortBy}}), sortBy)
 		}
 	})
 
 	t.Run("GET filters userName sw by prefix in userName order", func(t *testing.T) {
 		tag := uuid.NewV4().String()
-		create := func(userName string) string {
-			res := c.do(t, http.MethodPost, scimUsersPath, newSCIMUser(tag+userName, "Barbara", "Jensen"))
-			require.Equal(t, http.StatusCreated, res.StatusCode)
-			return scimDecode[core.User](t, res).ID
-		}
-		b, a, accent, next := create("-b@example.com"), create("-A@example.com"), create("-pr\u00e9@example.com"), create("-pr\u00ea@example.com")
+		b, a, accent, next := c.createUser(t, tag+"-b@example.com").ID, c.createUser(t, tag+"-A@example.com").ID, c.createUser(t, tag+"-pr\u00e9@example.com").ID, c.createUser(t, tag+"-pr\u00ea@example.com").ID
 
 		for _, tc := range []struct {
 			query url.Values
@@ -388,12 +374,7 @@ func TestSCIMUsers(t *testing.T) {
 			{url.Values{"filter": {`userName sw "` + tag + `-pr\u00e9"`}}, []string{accent}},
 			{url.Values{"filter": {`userName sw "` + tag + `-a@example.com"`}}, []string{a}},
 		} {
-			list := scimList[core.User](t, c, scimUsersPath, tc.query)
-			got := []string{}
-			for _, user := range list.Resources {
-				got = append(got, user.ID)
-			}
-			require.Equal(t, tc.want, got, tc.query.Encode())
+			require.Equal(t, tc.want, scimIDs(t, c, scimUsersPath, tc.query), tc.query.Encode())
 		}
 	})
 
@@ -529,9 +510,7 @@ func TestSCIMGroups(t *testing.T) {
 	t.Run("POST stores a repeated member once", func(t *testing.T) {
 		user := createUser(t)
 
-		res := c.do(t, http.MethodPost, scimGroupsPath, newSCIMGroup("Tour Guides "+uuid.NewV4().String(), user, user))
-		require.Equal(t, http.StatusCreated, res.StatusCode)
-		require.Equal(t, []core.Member{scimMember(user)}, scimDecode[core.Group](t, res).Members)
+		require.Equal(t, []core.Member{scimMember(user)}, scimCreate[core.Group](t, c, scimGroupsPath, newSCIMGroup("Tour Guides "+uuid.NewV4().String(), user, user)).Members)
 	})
 
 	t.Run("PUT keeps a repeated existing member once", func(t *testing.T) {
@@ -657,11 +636,8 @@ func TestSCIMGroups(t *testing.T) {
 		bottom := create(t)
 		middle := create(t)
 		top := create(t)
-		add := func(group, member core.Group) *http.Response {
-			return c.addMembers(t, group.ID, member.ID)
-		}
-		require.Equal(t, http.StatusNoContent, add(top, middle).StatusCode)
-		require.Equal(t, http.StatusNoContent, add(middle, bottom).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.addMembers(t, top.ID, middle.ID).StatusCode)
+		require.Equal(t, http.StatusNoContent, c.addMembers(t, middle.ID, bottom.ID).StatusCode)
 
 		for name, tc := range map[string]struct{ group, member core.Group }{
 			"self":     {bottom, bottom},
@@ -669,7 +645,7 @@ func TestSCIMGroups(t *testing.T) {
 			"ancestor": {bottom, top},
 		} {
 			t.Run(name, func(t *testing.T) {
-				res := add(tc.group, tc.member)
+				res := c.addMembers(t, tc.group.ID, tc.member.ID)
 				requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
 			})
 		}
@@ -822,9 +798,7 @@ func TestSCIMUniqueness(t *testing.T) {
 		user["externalId"] = externalID
 		return user
 	}
-	res := c.do(t, http.MethodPost, scimUsersPath, withExternalID(scimUserName("bjensen")))
-	require.Equal(t, http.StatusCreated, res.StatusCode)
-	user := scimDecode[core.User](t, res)
+	user := scimCreate[core.User](t, c, scimUsersPath, withExternalID(scimUserName("bjensen")))
 	other := c.createUser(t, scimUserName("jsmith"))
 
 	for _, tc := range []struct {
@@ -846,9 +820,7 @@ func TestSCIMUniqueness(t *testing.T) {
 func TestSCIMFiltersFoldCaseLikePostgres(t *testing.T) {
 	c := newSCIMClient(t, nil)
 	name := "\u00c9MILE\ua7d2"
-	res := c.do(t, http.MethodPost, scimUsersPath, newSCIMUser(name+"@example.com", name, "Zola"))
-	require.Equal(t, http.StatusCreated, res.StatusCode)
-	user := scimDecode[core.User](t, res)
+	user := scimCreate[core.User](t, c, scimUsersPath, newSCIMUser(name+"@example.com", name, "Zola"))
 
 	for _, filter := range []string{
 		`userName eq "` + name + `@example.com"`,
@@ -867,10 +839,8 @@ func TestSCIMFiltersFoldCaseLikePostgres(t *testing.T) {
 func TestSCIMFilters(t *testing.T) {
 	c := newSCIMClient(t, nil)
 	enterprise := string(core.SchemaEnterpriseUser)
-	res := c.do(t, http.MethodPost, scimUsersPath, map[string]any{"schemas": []string{string(core.SchemaUser)}, "userName": "decoy@example.com"})
-	require.Equal(t, http.StatusCreated, res.StatusCode)
-	decoy := scimDecode[core.User](t, res)
-	res = c.do(t, http.MethodPost, scimUsersPath, map[string]any{
+	decoy := scimCreate[core.User](t, c, scimUsersPath, map[string]any{"schemas": []string{string(core.SchemaUser)}, "userName": "decoy@example.com"})
+	user := scimCreate[core.User](t, c, scimUsersPath, map[string]any{
 		"schemas":           []string{string(core.SchemaUser), enterprise},
 		"externalId":        "701984",
 		"userName":          "bjensen@example.com",
@@ -895,19 +865,13 @@ func TestSCIMFilters(t *testing.T) {
 		"x509Certificates":  []map[string]any{{"value": "dGVzdA=="}},
 		enterprise:          map[string]any{"employeeNumber": "701984", "costCenter": "4130", "organization": "Universal Studios", "division": "Theme Park", "department": "Tour Operations", "manager": map[string]any{"value": decoy.ID}},
 	})
-	require.Equal(t, http.StatusCreated, res.StatusCode)
-	user := scimDecode[core.User](t, res)
 
 	body := newSCIMGroup("Decoys", decoy)
 	body["externalId"] = "Tour-Guides"
-	res = c.do(t, http.MethodPost, scimGroupsPath, body)
-	require.Equal(t, http.StatusCreated, res.StatusCode)
-	decoys := scimDecode[core.Group](t, res)
+	decoys := scimCreate[core.Group](t, c, scimGroupsPath, body)
 	body = newSCIMGroup("Tour Guides", user)
 	body["externalId"] = "tour-guides"
-	res = c.do(t, http.MethodPost, scimGroupsPath, body)
-	require.Equal(t, http.StatusCreated, res.StatusCode)
-	group := scimDecode[core.Group](t, res)
+	group := scimCreate[core.Group](t, c, scimGroupsPath, body)
 
 	for _, tc := range []struct{ path, filter, id string }{
 		{scimUsersPath, `id eq "` + user.ID + `"`, user.ID},
@@ -989,12 +953,7 @@ func TestSCIMFilters(t *testing.T) {
 		{scimGroupsPath, `not (members[value eq "` + decoy.ID + `"])`, group.ID},
 	} {
 		t.Run(tc.filter, func(t *testing.T) {
-			list := scimList[core.Base](t, c, tc.path, url.Values{"filter": {tc.filter}})
-			ids := []string{}
-			for _, resource := range list.Resources {
-				ids = append(ids, resource.ID)
-			}
-			require.Equal(t, []string{tc.id}, ids)
+			require.Equal(t, []string{tc.id}, scimIDs(t, c, tc.path, url.Values{"filter": {tc.filter}}))
 		})
 	}
 
@@ -1191,15 +1150,11 @@ func (c scimClient) group(t *testing.T, id string) core.Group {
 }
 
 func (c scimClient) createUser(t *testing.T, userName string) core.User {
-	res := c.do(t, http.MethodPost, scimUsersPath, newSCIMUser(userName, "Barbara", "Jensen"))
-	require.Equal(t, http.StatusCreated, res.StatusCode)
-	return scimDecode[core.User](t, res)
+	return scimCreate[core.User](t, c, scimUsersPath, newSCIMUser(userName, "Barbara", "Jensen"))
 }
 
 func (c scimClient) createGroup(t *testing.T, displayName string, members ...core.User) core.Group {
-	res := c.do(t, http.MethodPost, scimGroupsPath, newSCIMGroup(displayName, members...))
-	require.Equal(t, http.StatusCreated, res.StatusCode)
-	return scimDecode[core.Group](t, res)
+	return scimCreate[core.Group](t, c, scimGroupsPath, newSCIMGroup(displayName, members...))
 }
 
 func (c scimClient) addMembers(t *testing.T, id string, values ...string) *http.Response {
@@ -1227,6 +1182,20 @@ func scimFixture(t *testing.T, name string) []byte {
 	raw, err := root.ReadFile(name)
 	require.NoError(t, err)
 	return raw
+}
+
+func scimCreate[T any](t *testing.T, c scimClient, path string, body any) T {
+	res := c.do(t, http.MethodPost, path, body)
+	require.Equal(t, http.StatusCreated, res.StatusCode)
+	return scimDecode[T](t, res)
+}
+
+func scimIDs(t *testing.T, c scimClient, path string, query url.Values) []string {
+	ids := []string{}
+	for _, resource := range scimList[core.Base](t, c, path, query).Resources {
+		ids = append(ids, resource.ID)
+	}
+	return ids
 }
 
 func scimList[T any](t *testing.T, c scimClient, path string, query url.Values) protocol.ListResponse[T] {
