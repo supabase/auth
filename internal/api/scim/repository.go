@@ -95,10 +95,7 @@ func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
 	saved, err := r.save(ctx, scope, targets, func(tx *storage.Connection) (*models.SCIMResource, error) {
 		return scope.Create(tx, document)
 	})
-	if err != nil {
-		return zero, invalid(err)
-	}
-	return saved, nil
+	return saved, invalid(err)
 }
 
 func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
@@ -119,10 +116,7 @@ func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
 	if models.IsNotFoundError(err) {
 		return zero, r.missing(ctx, scope, id)
 	}
-	if err != nil {
-		return zero, invalid(err)
-	}
-	return saved, nil
+	return saved, invalid(err)
 }
 
 func (r *repository[T]) Delete(ctx context.Context, item T) error {
@@ -153,12 +147,12 @@ func (r *repository[T]) scope(ctx context.Context) (models.SCIMScope, error) {
 }
 
 func (r *repository[T]) missing(ctx context.Context, scope models.SCIMScope, id uuid.UUID) error {
-	_, err := scope.Find(r.db.WithContext(ctx), id)
-	if models.IsNotFoundError(err) {
-		return notFound()
-	}
+	found, err := scope.Query(r.db.WithContext(ctx)).Where("id = ?", id).Exists(&models.SCIMResource{})
 	if err != nil {
 		return err
+	}
+	if !found {
+		return notFound()
 	}
 	return scimerrors.ErrPreconditionFailed("resource has changed on the server")
 }

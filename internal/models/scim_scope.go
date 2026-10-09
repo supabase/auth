@@ -38,17 +38,6 @@ func (s SCIMScope) Query(tx *storage.Connection) *pop.Query {
 		Where("deleted_at IS NULL")
 }
 
-func (s SCIMScope) Find(tx *storage.Connection, id uuid.UUID) (*SCIMResource, error) {
-	resource := &SCIMResource{}
-	if err := s.Query(tx).Where("id = ?", id).First(resource); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, SCIMNotFoundError{}
-		}
-		return nil, errors.Wrap(err, "error finding SCIM resource")
-	}
-	return resource, nil
-}
-
 func (s SCIMScope) Create(tx *storage.Connection, document string) (*SCIMResource, error) {
 	resource := &SCIMResource{}
 	err := tx.RawQuery(
