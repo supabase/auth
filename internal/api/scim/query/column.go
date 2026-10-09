@@ -13,6 +13,7 @@ import (
 
 var Columns = map[string]string{
 	"id":                "id",
+	"meta":              "id",
 	"meta.created":      "created_at",
 	"meta.lastModified": "updated_at",
 	"meta.location":     "id",

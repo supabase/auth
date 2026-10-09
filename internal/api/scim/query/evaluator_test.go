@@ -64,6 +64,7 @@ func TestEvaluatorSQL(t *testing.T) {
 		{users, user, `id eq "nope"`, "false", nil},
 		{users, user, `id ne "nope"`, "true", nil},
 		{users, user, `id pr`, "TRUE", nil},
+		{users, user, `meta pr`, "TRUE", nil},
 		{users, user, `meta.location eq "https://example.com/scim/v2/Users/` + id + `"`, "id = ?::uuid", []any{id}},
 		{users, user, `meta.location eq "https://example.org/` + id + `"`, "false", nil},
 		{users, user, `meta.version eq "W/\"1700000000000000\""`, "updated_at = ?", []any{time.UnixMicro(1700000000000000).UTC()}},
