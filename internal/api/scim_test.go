@@ -627,6 +627,9 @@ func TestSCIMGroups(t *testing.T) {
 		}
 
 		require.Equal(t, groups, c.user(t, user.ID).Groups)
+		res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "displayName", "value": "Babs"}))
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Equal(t, groups, scimDecode[core.User](t, res).Groups)
 		for _, filter := range []string{
 			`groups.value eq "` + parent.ID + `"`,
 			`groups[value eq "` + child.ID + `"]`,

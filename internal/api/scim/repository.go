@@ -217,7 +217,7 @@ func (r *repository[T]) save(ctx context.Context, scope models.SCIMScope, target
 		if err := r.link(tx, scope, row.ID, targets); err != nil {
 			return err
 		}
-		saved, err = r.find(ctx, tx, scope, row.ID, protocol.Projection{})
+		saved, err = r.find(ctx, tx, scope, row.ID, protocol.ProjectionFrom(ctx))
 		return err
 	})
 	return saved, err
