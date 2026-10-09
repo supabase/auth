@@ -1,48 +1,70 @@
 package scim
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
-	"github.com/supabase/auth/internal/api/scim/core"
-	"github.com/supabase/auth/internal/api/scim/protocol"
+	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
+	"github.com/supabase-community/scim-go/pkg/server"
+	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/ctxkey"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 )
+
+var tokenKey = ctxkey.New[*models.SCIMToken]("scim_token")
 
 const BasePath = "/scim/v2"
 
-type Server struct {
-	serviceProviderConfig *core.ServiceProviderConfig
+func BaseURL(config *conf.GlobalConfiguration) string {
+	return strings.TrimRight(config.API.ExternalURL, "/") + BasePath
 }
 
-func NewServer(config *conf.GlobalConfiguration) *Server {
-	return &Server{
-		serviceProviderConfig: core.NewServiceProviderConfig(
-			strings.TrimRight(config.API.ExternalURL, "/")+BasePath,
-			core.NewOAuthBearerToken().AsPrimary(),
+func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Handler {
+	locations := map[string]string{"User": BaseURL(config) + "/Users", "Group": BaseURL(config) + "/Groups"}
+	user, enterprise, group := core.UserAttributes(), core.EnterpriseUserAttributes(), core.GroupAttributes()
+	return server.New(BasePath,
+		core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching().Sorting(),
+		server.WithBaseURL(BaseURL(config)),
+		server.ErrorHandler(func(r *http.Request, err error) {
+			observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
+		}),
+		server.WithResource(server.
+			NewResource[*core.User]("User", "/Users", core.SchemaUser, user...).
+			WithExtension(core.SchemaEnterpriseUser, enterprise...).
+			WithRepository(NewRepository[*core.User](db, "User", locations, core.Schemas{
+				core.NewSchema(core.SchemaUser).With(user...),
+				core.NewSchema(core.SchemaEnterpriseUser).With(enterprise...),
+			}, query.Derived("groups", "Group", "members"))),
 		),
-	}
+		server.WithResource(server.
+			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, group...).
+			WithRepository(NewRepository[*core.Group](db, "Group", locations, core.Schemas{
+				core.NewSchema(core.SchemaGroup).With(group...),
+			}, query.Stored("members", "User", "Group"))),
+		),
+		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),
+	)
 }
 
-func (srv *Server) ServiceProviderConfig(w http.ResponseWriter, r *http.Request) error {
-	return protocol.Send(w, http.StatusOK, srv.serviceProviderConfig)
+func SendTooManyRequests(w http.ResponseWriter) error {
+	return protocol.SendError(w, scimerrors.NewError(http.StatusTooManyRequests, "", "Request rate limit reached"))
 }
 
-func (srv *Server) ResourceTypes(w http.ResponseWriter, r *http.Request) error {
-	return list(w, r, []any{})
-}
-
-func (srv *Server) Schemas(w http.ResponseWriter, r *http.Request) error {
-	return list(w, r, []any{})
-}
-
-func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
-	return protocol.SendError(w, http.StatusNotFound, "", "Endpoint or resource does not exist")
-}
-
-func list[T any](w http.ResponseWriter, r *http.Request, resources []T) error {
-	if r.URL.Query().Has("filter") {
-		return protocol.SendError(w, http.StatusForbidden, "", "Filtering is not supported on this endpoint")
-	}
-	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(resources))
+func authenticate(db *storage.Connection) func(http.Handler) http.Handler {
+	return server.RequireBearerToken(func(ctx context.Context, candidate string) (context.Context, error) {
+		token, err := models.AuthenticateSCIMToken(db.WithContext(ctx), candidate)
+		if models.IsNotFoundError(err) {
+			return ctx, server.ErrInvalidToken
+		}
+		if err != nil {
+			return ctx, err
+		}
+		return tokenKey.WithValue(ctx, token), nil
+	})
 }

@@ -266,7 +266,7 @@ func TestExperimentalCursorPaginationEnabled(t *testing.T) {
 	}
 }
 
-func TestExperimentalScimEndpoints(t *testing.T) {
+func TestSCIMEnabled(t *testing.T) {
 	baseEnv := func() {
 		os.Clearenv()
 		os.Setenv("GOTRUE_SITE_URL", "http://localhost:8080")
@@ -281,16 +281,25 @@ func TestExperimentalScimEndpoints(t *testing.T) {
 		cfg, err := LoadGlobalFromEnv()
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
-		assert.Equal(t, false, cfg.Experimental.ScimEnabled)
+		assert.False(t, cfg.SSO.SCIM.Enabled)
 	}
 
 	{
 		baseEnv()
-		os.Setenv("GOTRUE_EXPERIMENTAL_SCIM_ENABLED", "true")
+		t.Setenv("GOTRUE_SSO_SCIM_ENABLED", "true")
 		cfg, err := LoadGlobalFromEnv()
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
-		assert.Equal(t, true, cfg.Experimental.ScimEnabled)
+		assert.True(t, cfg.SSO.SCIM.Enabled)
+	}
+
+	{
+		baseEnv()
+		t.Setenv("GOTRUE_EXPERIMENTAL_SCIM_ENABLED", "true")
+		cfg, err := LoadGlobalFromEnv()
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.False(t, cfg.SSO.SCIM.Enabled)
 	}
 }
 

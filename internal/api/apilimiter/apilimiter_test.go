@@ -181,6 +181,8 @@ func tollboothByField(o *Limiter, field string) *limiter.Limiter {
 		return o.SAMLAssertion
 	case fieldSSO:
 		return o.SSO
+	case fieldSCIM:
+		return o.SCIM
 	case fieldToken:
 		return o.Token
 	case fieldVerify:
@@ -220,6 +222,8 @@ func tollboothCfgByField(gc *conf.GlobalConfiguration, field string) *float64 {
 		return &gc.SAML.RateLimitAssertion
 	case fieldSSO:
 		return &gc.RateLimitSso
+	case fieldSCIM:
+		return &gc.RateLimitScim
 	case fieldToken:
 		return &gc.RateLimitTokenRefresh
 	case fieldVerify:

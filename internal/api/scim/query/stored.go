@@ -1,0 +1,122 @@
+package query
+
+import (
+	"slices"
+	"strconv"
+	"uuid"
+
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
+)
+
+type stored struct {
+	named
+	targets []string
+}
+
+func Stored(attribute string, targets ...string) Reference {
+	return stored{named: named(attribute), targets: targets}
+}
+
+func (s stored) Columns() map[string]string {
+	return map[string]string{
+		ValueAttribute: "edge.target_id",
+		"type":         "lower(target.resource_type)",
+	}
+}
+
+func (s stored) Exists(_ uuid.UUID, inner string, args []any) (string, []any) {
+	return "EXISTS (SELECT 1 FROM scim_resource_references edge JOIN scim_resources target ON target.id = edge.target_id AND target.deleted_at IS NULL WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + inner + ")", append([]any{s.Name()}, args...)
+}
+
+func (s stored) Extract(attribute any) ([]uuid.UUID, error) {
+	elements, _ := attribute.([]any)
+	ids := make([]uuid.UUID, 0, len(elements))
+	for _, element := range elements {
+		value, _ := element.(map[string]any)[ValueAttribute].(string)
+		id, err := uuid.Parse(value)
+		if err != nil {
+			return nil, s.invalidValue(value)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (s stored) Link(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, wanted []uuid.UUID) error {
+	current, err := scope.FindTargets(tx, source, s.Name())
+	if err != nil {
+		return err
+	}
+	add, remove := diff(current, wanted)
+	if err := s.nestable(tx, scope, source, add); err != nil {
+		return err
+	}
+	added, err := scope.AddReferences(tx, source, s.Name(), s.targets, add)
+	if err != nil {
+		return err
+	}
+	found := make(map[uuid.UUID]bool, len(added))
+	for _, id := range added {
+		found[id] = true
+	}
+	if i := slices.IndexFunc(add, func(id uuid.UUID) bool { return !found[id] }); i >= 0 {
+		return s.invalidValue(add[i].String())
+	}
+	return scope.RemoveReferences(tx, source, s.Name(), remove)
+}
+
+func (s stored) Select(locations map[string]string) string {
+	return `(SELECT json_agg(json_build_object('value', target_id, '$ref', ` + endpoint(locations, "target_type") + ` || target_id, 'type', target_type)) FROM scim_resource_references WHERE source_id = scim_resources.id AND attribute = ` + models.QuoteLiteral(s.Name()) + `)`
+}
+
+func (s stored) nestable(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, targets []uuid.UUID) error {
+	if len(targets) == 0 {
+		return nil
+	}
+	ancestors, err := scope.FindAncestors(tx, source, s.Name())
+	if err != nil {
+		return err
+	}
+	level := 1
+	for _, ancestor := range ancestors {
+		level = max(level, ancestor.Longest+1)
+	}
+	for _, target := range targets {
+		if target == source || slices.ContainsFunc(ancestors, func(ancestor models.SCIMAncestor) bool { return ancestor.SourceID == target }) {
+			return scimerrors.ErrInvalidValue(strconv.Quote(target.String()) + " would make " + s.Name() + " cyclic")
+		}
+	}
+	height, err := scope.Depth(tx, targets, s.Name())
+	if err != nil {
+		return err
+	}
+	if height > 0 && level+height > models.SCIMMaxDepth {
+		return scimerrors.ErrInvalidValue(s.Name() + " would nest more than " + strconv.Itoa(models.SCIMMaxDepth) + " levels deep")
+	}
+	return nil
+}
+
+func (s stored) invalidValue(value string) error {
+	return scimerrors.ErrInvalidValue(strconv.Quote(value) + " is not a valid " + s.Name() + " value")
+}
+
+func diff(current, wanted []uuid.UUID) (add, remove []uuid.UUID) {
+	have := make(map[uuid.UUID]bool, len(current))
+	for _, id := range current {
+		have[id] = true
+	}
+	for _, id := range wanted {
+		if _, ok := have[id]; !ok {
+			add = append(add, id)
+		}
+		have[id] = false
+	}
+	for id, stale := range have {
+		if stale {
+			remove = append(remove, id)
+		}
+	}
+	return add, remove
+}
