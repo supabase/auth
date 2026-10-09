@@ -12,18 +12,23 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
+	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage/test"
 )
 
-func TestRepositoryListPastDeadline(t *testing.T) {
+func newGroups(t *testing.T) server.Repository[*core.Group] {
 	config, err := confload.LoadGlobal("../../../hack/test.env")
 	require.NoError(t, err)
 	db, err := test.SetupDBConnection(config)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, db.Close()) }()
-	groups := NewRepository[*core.Group](db, "Group", map[string]string{}, core.Schemas{core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...)})
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	return NewRepository[*core.Group](db, "Group", map[string]string{}, core.Schemas{core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...)})
+}
+
+func TestRepositoryListPastDeadline(t *testing.T) {
+	groups := newGroups(t)
 	ctx, cancel := context.WithDeadline(tokenKey.WithValue(context.Background(), &models.SCIMToken{}), time.Now().Add(-time.Second))
 	defer cancel()
 
@@ -34,12 +39,7 @@ func TestRepositoryListPastDeadline(t *testing.T) {
 }
 
 func TestRepositoryListReusesThePageSQL(t *testing.T) {
-	config, err := confload.LoadGlobal("../../../hack/test.env")
-	require.NoError(t, err)
-	db, err := test.SetupDBConnection(config)
-	require.NoError(t, err)
-	defer func() { require.NoError(t, db.Close()) }()
-	groups := NewRepository[*core.Group](db, "Group", map[string]string{}, core.Schemas{core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...)})
+	groups := newGroups(t)
 	ctx := tokenKey.WithValue(context.Background(), &models.SCIMToken{})
 	pages := []string{}
 	pop.SetTxLogger(func(_ logging.Level, _ any, sql string, _ ...any) {
