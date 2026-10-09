@@ -128,15 +128,15 @@ func (e Evaluator) unassignable(attribute *protocol.Attribute, op filter.Operato
 }
 
 func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, value any) Clause {
-	folded := jsonpath(compare(e.path(attribute), op, value))
+	path := compare(e.path(attribute), op, value)
 	if _, text := value.(string); !text || !attribute.Definition.CaseExact {
-		return folded
+		return jsonpath(path)
 	}
-	strict := predicate{"resource @@ ?::jsonpath", []any{compare(e.path(attribute), op, value)}}
+	strict := predicate{"resource @@ ?::jsonpath", []any{path}}
 	if !narrowing[op] {
 		return strict
 	}
-	return junction("AND", folded, strict)
+	return junction("AND", jsonpath(path), strict)
 }
 
 func (e Evaluator) wrap(attribute *protocol.Attribute, ref Reference, leaf Clause) Clause {
