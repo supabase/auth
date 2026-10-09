@@ -30,26 +30,23 @@ func NewEvaluator(schemas core.Schemas, provider uuid.UUID, location string, ref
 }
 
 func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
-	if name, ok := e.column(attribute); ok {
-		return column(name, e.location, op, value)
-	}
-	if text, ok := value.(string); ok {
-		if !attribute.Definition.CaseExact {
-			text = strings.ToLower(text)
+	if value == nil && (op == filter.OpEquals || op == filter.OpNotEquals) {
+		present, err := e.Present(attribute)
+		if err != nil || op == filter.OpNotEquals {
+			return present, err
 		}
-		if clause, ok := indexed(e.name(attribute), op, text); ok {
-			return clause, nil
-		}
+		return e.Not(present)
 	}
-	ref, ok := e.reference(attribute)
-	if !ok {
-		return e.compare(attribute, op, value), nil
+	clause, err := e.assigned(attribute, op, value)
+	if err != nil || !e.unassignable(attribute, op) {
+		return clause, err
 	}
-	leaf, err := match(ref, attribute.Definition, op, value)
+	present, err := e.Present(attribute)
 	if err != nil {
 		return nil, err
 	}
-	return e.wrap(attribute, ref, leaf), nil
+	unassigned, _ := e.Not(present)
+	return e.Or(clause, unassigned)
 }
 
 func (e Evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
@@ -100,6 +97,36 @@ func (e Evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (
 		return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
 	return jsonpath(exists(e.path(attribute), path)), nil
+}
+
+func (e Evaluator) assigned(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
+	if name, ok := e.column(attribute); ok {
+		return column(name, e.location, op, value)
+	}
+	if text, ok := value.(string); ok {
+		if !attribute.Definition.CaseExact {
+			text = strings.ToLower(text)
+		}
+		if clause, ok := indexed(e.name(attribute), op, text); ok {
+			return clause, nil
+		}
+	}
+	ref, ok := e.reference(attribute)
+	if !ok {
+		return e.compare(attribute, op, value), nil
+	}
+	leaf, err := match(ref, attribute.Definition, op, value)
+	if err != nil {
+		return nil, err
+	}
+	return e.wrap(attribute, ref, leaf), nil
+}
+
+// RFC 7643 Section 2.5: an unassigned attribute is equivalent to null, so it is not equal to a value.
+func (e Evaluator) unassignable(attribute *protocol.Attribute, op filter.Operator) bool {
+	_, fixed := e.column(attribute)
+	_, linked := e.reference(attribute)
+	return op == filter.OpNotEquals && !fixed && (!linked || attribute.Parent == nil)
 }
 
 func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, value any) Clause {

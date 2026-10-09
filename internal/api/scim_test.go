@@ -643,6 +643,11 @@ func TestSCIMGroups(t *testing.T) {
 			filter := `userName eq "` + user.UserName + `" and not (groups.value eq "` + group + `")`
 			require.Len(t, scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}}).Resources, want, filter)
 		}
+		loner := createUser(t)
+		filter := `userName eq "` + loner.UserName + `" and groups.value ne "` + parent.ID + `"`
+		require.Len(t, scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}}).Resources, 1, filter)
+		filter = `userName eq "` + loner.UserName + `" and groups eq null`
+		require.Len(t, scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}}).Resources, 1, filter)
 
 		require.Equal(t, http.StatusNoContent, c.delete(t, scimGroupsPath+"/"+child.ID).StatusCode)
 		require.Empty(t, c.user(t, user.ID).Groups)
@@ -887,6 +892,11 @@ func TestSCIMFilters(t *testing.T) {
 		{scimUsersPath, `id eq "` + user.ID + `"`, user.ID},
 		{scimUsersPath, `externalId eq "701984"`, user.ID},
 		{scimUsersPath, `not (externalId eq "701984")`, decoy.ID},
+		{scimUsersPath, `externalId ne "701984"`, decoy.ID},
+		{scimUsersPath, `nickName ne "Babsy"`, decoy.ID},
+		{scimUsersPath, `emails.value ne "babs@jensen.org"`, decoy.ID},
+		{scimUsersPath, `nickName eq null`, decoy.ID},
+		{scimUsersPath, `nickName ne null`, user.ID},
 		{scimUsersPath, `meta.created gt "` + decoy.Meta.Created.Format(time.RFC3339Nano) + `"`, user.ID},
 		{scimUsersPath, `meta.lastModified gt "` + decoy.Meta.LastModified.Format(time.RFC3339Nano) + `"`, user.ID},
 		{scimUsersPath, `meta.created ge "` + user.Meta.Created.Format(time.RFC3339Nano) + `"`, user.ID},
