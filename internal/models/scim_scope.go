@@ -7,8 +7,6 @@ import (
 	"uuid"
 
 	"github.com/gobuffalo/pop/v6"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgerrcode"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -156,11 +154,6 @@ func (s SCIMScope) DeleteReferences(tx *storage.Connection, id uuid.UUID) error 
 
 func QuoteLiteral(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
-}
-
-func IsQueryCanceledError(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.QueryCanceled
 }
 
 func uuidStrings(ids []uuid.UUID) []string {

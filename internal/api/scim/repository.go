@@ -3,8 +3,10 @@ package scim
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"uuid"
 
 	"github.com/gobuffalo/pop/v6"
@@ -17,6 +19,8 @@ import (
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
 )
+
+const queryTimeout = 5 * time.Second
 
 type repository[T core.Resource] struct {
 	db           *storage.Connection
@@ -41,23 +45,15 @@ func (r *repository[T]) List(ctx context.Context, query *protocol.SearchRequest)
 	if err != nil {
 		return nil, 0, err
 	}
-	var items []T
-	var total int
-	err = r.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		if err := tx.RawQuery("SET LOCAL statement_timeout = '5s'").Exec(); err != nil {
-			return err
-		}
-		items, total, err = r.list(ctx, tx, scope, query)
-		return err
-	})
-	if models.IsQueryCanceledError(err) {
+	items, total, err := r.list(ctx, scope, query)
+	if errors.Is(err, context.DeadlineExceeded) {
 		return nil, 0, scimerrors.ErrTooMany("the query took too long")
 	}
 	return items, total, err
 }
 
-func (r *repository[T]) list(ctx context.Context, tx *storage.Connection, scope models.SCIMScope, request *protocol.SearchRequest) ([]T, int, error) {
-	q, clause, err := r.filter(tx, scope, request.Filter)
+func (r *repository[T]) list(ctx context.Context, scope models.SCIMScope, request *protocol.SearchRequest) ([]T, int, error) {
+	q, clause, err := r.filter(scope, request.Filter)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -67,10 +63,10 @@ func (r *repository[T]) list(ctx context.Context, tx *storage.Connection, scope 
 		request = &sorted
 	}
 	if request.Count == 0 {
-		total, err := q.Count(&models.SCIMResource{})
+		total, err := r.count(ctx, q)
 		return []T{}, total, err
 	}
-	return r.page(ctx, tx, q, request)
+	return r.page(ctx, q, request)
 }
 
 func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
@@ -236,8 +232,8 @@ func (r *repository[T]) link(tx *storage.Connection, scope models.SCIMScope, sou
 	return nil
 }
 
-func (r *repository[T]) filter(tx *storage.Connection, scope models.SCIMScope, expression string) (*pop.Query, query.Clause, error) {
-	q := scope.Query(tx)
+func (r *repository[T]) filter(scope models.SCIMScope, expression string) (*pop.Query, query.Clause, error) {
+	q := scope.Query(r.db)
 	if expression == "" {
 		return q, nil, nil
 	}
@@ -249,21 +245,31 @@ func (r *repository[T]) filter(tx *storage.Connection, scope models.SCIMScope, e
 	return q.Where(text, args...), clause, nil
 }
 
-func (r *repository[T]) page(ctx context.Context, tx *storage.Connection, q *pop.Query, query *protocol.SearchRequest) ([]T, int, error) {
+func (r *repository[T]) page(ctx context.Context, q *pop.Query, query *protocol.SearchRequest) ([]T, int, error) {
 	order, args, err := r.order(query)
 	if err != nil {
 		return nil, 0, err
 	}
 	sql, values := q.Select("id").Order(order, args...).ToSQL(pop.NewModel(&models.SCIMResource{}, ctx))
-	items, err := r.fetch(tx, protocol.ProjectionFrom(ctx), fmt.Sprintf("unnest(array(%s LIMIT %d OFFSET %d)) WITH ORDINALITY page(id, n) JOIN scim_resources USING (id) ORDER BY page.n", sql, query.Count, query.Offset()), values...)
+	bounded, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	items, err := r.fetch(r.db.WithContext(bounded), protocol.ProjectionFrom(ctx), fmt.Sprintf("unnest(array(%s LIMIT %d OFFSET %d)) WITH ORDINALITY page(id, n) JOIN scim_resources USING (id) ORDER BY page.n", sql, query.Count, query.Offset()), values...)
 	if err != nil {
 		return nil, 0, err
 	}
 	total := query.Offset() + len(items)
 	if len(items) == query.Count || (len(items) == 0 && query.Offset() > 0) {
-		total, err = q.Count(&models.SCIMResource{})
+		total, err = r.count(ctx, q)
 	}
 	return items, total, err
+}
+
+func (r *repository[T]) count(ctx context.Context, q *pop.Query) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	bounded := *q
+	bounded.Connection = q.Connection.WithContext(ctx)
+	return bounded.Count(&models.SCIMResource{})
 }
 
 func (r *repository[T]) find(ctx context.Context, tx *storage.Connection, scope models.SCIMScope, id uuid.UUID, projection protocol.Projection) (T, error) {
