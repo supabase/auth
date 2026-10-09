@@ -81,7 +81,8 @@ func (e Evaluator) Not(operand Clause) (Clause, error) {
 	if path, ok := operand.(jsonpath); ok {
 		return "!(" + path + ")", nil
 	}
-	return negation(operand), nil
+	text, args := operand.SQL()
+	return predicate{"NOT (" + text + ")", args}, nil
 }
 
 func (e Evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (Clause, error)) (Clause, error) {
@@ -131,7 +132,7 @@ func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, va
 	if _, text := value.(string); !text || !attribute.Definition.CaseExact {
 		return folded
 	}
-	strict := exact(compare(e.path(attribute), op, value))
+	strict := predicate{"resource @@ ?::jsonpath", []any{compare(e.path(attribute), op, value)}}
 	if !narrowing[op] {
 		return strict
 	}

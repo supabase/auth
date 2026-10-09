@@ -20,11 +20,7 @@ type SCIMAncestor struct {
 	Longest  int       `db:"longest"`
 }
 
-type SCIMReference struct{}
-
-func (SCIMReference) TableName() string {
-	return "scim_resource_references"
-}
+const scimReferences = "scim_resource_references"
 
 type SCIMScope struct {
 	ProviderID   uuid.UUID
@@ -81,7 +77,7 @@ func (s SCIMScope) AddReferences(tx *storage.Connection, source uuid.UUID, attri
 		return added, nil
 	}
 	err := tx.RawQuery(
-		fmt.Sprintf("INSERT INTO %q (sso_provider_id, source_id, attribute, target_id, target_type) SELECT sso_provider_id, ?, ?, id, resource_type FROM %q WHERE sso_provider_id = ? AND resource_type = any(?::text[]) AND deleted_at IS NULL AND id = any(?::uuid[]) RETURNING target_id", SCIMReference{}.TableName(), SCIMResource{}.TableName()),
+		fmt.Sprintf("INSERT INTO %q (sso_provider_id, source_id, attribute, target_id, target_type) SELECT sso_provider_id, ?, ?, id, resource_type FROM %q WHERE sso_provider_id = ? AND resource_type = any(?::text[]) AND deleted_at IS NULL AND id = any(?::uuid[]) RETURNING target_id", scimReferences, SCIMResource{}.TableName()),
 		source, attribute, s.ProviderID, types, uuidStrings(targets),
 	).All(&added)
 	return added, errors.Wrap(err, "error adding SCIM references")
@@ -92,7 +88,7 @@ func (s SCIMScope) RemoveReferences(tx *storage.Connection, source uuid.UUID, at
 		return nil
 	}
 	return errors.Wrap(tx.RawQuery(
-		fmt.Sprintf("DELETE FROM %q WHERE source_id = ? AND attribute = ? AND target_id = any(?::uuid[])", SCIMReference{}.TableName()),
+		fmt.Sprintf("DELETE FROM %q WHERE source_id = ? AND attribute = ? AND target_id = any(?::uuid[])", scimReferences),
 		source, attribute, uuidStrings(targets),
 	).Exec(), "error removing SCIM references")
 }
@@ -100,7 +96,7 @@ func (s SCIMScope) RemoveReferences(tx *storage.Connection, source uuid.UUID, at
 func (s SCIMScope) FindTargets(tx *storage.Connection, source uuid.UUID, attribute string) ([]uuid.UUID, error) {
 	targets := []uuid.UUID{}
 	err := tx.RawQuery(
-		fmt.Sprintf("SELECT target_id FROM %q WHERE source_id = ? AND attribute = ?", SCIMReference{}.TableName()),
+		fmt.Sprintf("SELECT target_id FROM %q WHERE source_id = ? AND attribute = ?", scimReferences),
 		source, attribute,
 	).All(&targets)
 	return targets, errors.Wrap(err, "error finding SCIM targets")
@@ -114,7 +110,7 @@ func (s SCIMScope) FindAncestors(tx *storage.Connection, target uuid.UUID, attri
 			UNION
 			SELECT r.source_id, c.depth + 1 FROM chain c JOIN %[1]q r ON r.target_id = c.source_id AND r.attribute = ? WHERE c.depth < ?
 		)
-		SELECT source_id, max(depth) AS longest FROM chain GROUP BY source_id`, SCIMReference{}.TableName()),
+		SELECT source_id, max(depth) AS longest FROM chain GROUP BY source_id`, scimReferences),
 		target, attribute, attribute, SCIMMaxDepth,
 	).All(&ancestors)
 	return ancestors, errors.Wrap(err, "error finding SCIM ancestors")
@@ -130,14 +126,14 @@ func (s SCIMScope) Depth(tx *storage.Connection, ids []uuid.UUID, attribute stri
 			UNION
 			SELECT t.id, w.depth + 1 FROM walk w JOIN %[1]q r ON r.source_id = w.id AND r.attribute = ? JOIN %[2]q t ON t.id = r.target_id AND t.resource_type = ? AND t.deleted_at IS NULL WHERE w.depth <= ?
 		)
-		SELECT coalesce(max(depth), 0) AS depth FROM walk`, SCIMReference{}.TableName(), SCIMResource{}.TableName()),
+		SELECT coalesce(max(depth), 0) AS depth FROM walk`, scimReferences, SCIMResource{}.TableName()),
 		uuidStrings(ids), s.ProviderID, s.ResourceType, attribute, s.ResourceType, SCIMMaxDepth,
 	).First(&walk)
 	return walk.Depth, errors.Wrap(err, "error finding SCIM depth")
 }
 
 func (s SCIMScope) DeleteReferences(tx *storage.Connection, id uuid.UUID) error {
-	err := tx.RawQuery(fmt.Sprintf("DELETE FROM %q WHERE source_id = ? OR target_id = ?", SCIMReference{}.TableName()), id, id).Exec()
+	err := tx.RawQuery(fmt.Sprintf("DELETE FROM %q WHERE source_id = ? OR target_id = ?", scimReferences), id, id).Exec()
 	return errors.Wrap(err, "error deleting SCIM references")
 }
 
