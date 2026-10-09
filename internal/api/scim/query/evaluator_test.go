@@ -89,6 +89,10 @@ func TestEvaluatorSQL(t *testing.T) {
 	}
 	_, err := protocol.Filter(groups, `members.value gt "x"`, group)
 	require.EqualError(t, err, `scim: 400 invalidFilter: "members.value" supports only eq and ne`)
+
+	widgets := core.Schemas{core.NewSchema("urn:example:Widget").With(core.NewAttribute("codes", core.TypeComplex).AsMultiValued().With(core.NewAttribute("value", core.TypeString).AsCaseExact()))}
+	_, err = protocol.Filter(widgets, `codes[value eq "X"]`, NewEvaluator(widgets, provider, "https://example.com/scim/v2/Widgets"))
+	require.EqualError(t, err, `scim: 400 invalidFilter: The specified filter syntax was invalid, or the specified attribute and filter comparison combination is not supported.`)
 }
 
 func walk(inner string) string {
