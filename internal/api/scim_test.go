@@ -522,6 +522,8 @@ func TestSCIMGroups(t *testing.T) {
 
 		require.Equal(t, http.StatusNoContent, c.addMembers(t, group.ID, other.ID).StatusCode)
 		require.ElementsMatch(t, []core.Member{scimMember(user), scimMember(other)}, c.group(t, group.ID).Members)
+		list := scimList[core.Group](t, c, scimGroupsPath, url.Values{"filter": {`id eq "` + group.ID + `"`}})
+		require.ElementsMatch(t, []core.Member{scimMember(user), scimMember(other)}, list.Resources[0].Members)
 	})
 
 	t.Run("POST stores a repeated member once", func(t *testing.T) {
@@ -609,7 +611,9 @@ func TestSCIMGroups(t *testing.T) {
 		parent := create(t)
 
 		require.Equal(t, http.StatusNoContent, c.addMembers(t, parent.ID, child.ID).StatusCode)
-		require.Equal(t, []core.Member{{Value: child.ID, Ref: child.Meta.Location, Type: "Group"}}, c.group(t, parent.ID).Members)
+		members := []core.Member{{Value: child.ID, Ref: child.Meta.Location, Type: "Group"}}
+		require.Equal(t, members, c.group(t, parent.ID).Members)
+		require.Equal(t, members, scimList[core.Group](t, c, scimGroupsPath, url.Values{"filter": {`id eq "` + parent.ID + `"`}}).Resources[0].Members)
 	})
 
 	t.Run("derives direct and indirect user groups", func(t *testing.T) {

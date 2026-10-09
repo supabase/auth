@@ -67,20 +67,15 @@ func (s stored) Link(tx *storage.Connection, scope models.SCIMScope, source uuid
 	return scope.RemoveReferences(tx, source, s.Name(), remove)
 }
 
-func (s stored) Load(tx *storage.Connection, scope models.SCIMScope, ids []uuid.UUID, locations map[string]string) (map[uuid.UUID][]any, error) {
-	elements := map[uuid.UUID][]any{}
-	references, err := scope.FindReferences(tx, ids, s.Name())
-	for _, reference := range references {
-		elements[reference.SourceID] = append(elements[reference.SourceID], element(reference.TargetID, locations[reference.TargetType], reference.TargetType))
-	}
-	return elements, err
+func (s stored) Select(locations map[string]string) string {
+	return `(SELECT json_agg(json_build_object('value', target_id, '$ref', ` + endpoint(locations, "target_type") + ` || target_id, 'type', target_type)) FROM scim_resource_references WHERE source_id = scim_resources.id AND attribute = ` + models.QuoteLiteral(s.Name()) + `)`
 }
 
 func (s stored) nestable(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, targets []uuid.UUID) error {
 	if len(targets) == 0 {
 		return nil
 	}
-	ancestors, err := scope.FindAncestors(tx, []uuid.UUID{source}, s.Name())
+	ancestors, err := scope.FindAncestors(tx, source, s.Name())
 	if err != nil {
 		return err
 	}

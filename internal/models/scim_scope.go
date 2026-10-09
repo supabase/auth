@@ -15,21 +15,14 @@ import (
 
 const SCIMMaxDepth = 8
 
-const scimResourceColumns = "id, sso_provider_id, resource_type, resource, created_at, updated_at, deleted_at"
+const SCIMResourceColumns = "id, sso_provider_id, resource_type, resource, created_at, updated_at, deleted_at"
 
 type SCIMAncestor struct {
-	TargetID uuid.UUID `db:"target_id"`
 	SourceID uuid.UUID `db:"source_id"`
-	Depth    int       `db:"depth"`
 	Longest  int       `db:"longest"`
-	Display  *string   `db:"display"`
 }
 
-type SCIMReference struct {
-	SourceID   uuid.UUID `db:"source_id"`
-	TargetID   uuid.UUID `db:"target_id"`
-	TargetType string    `db:"target_type"`
-}
+type SCIMReference struct{}
 
 func (SCIMReference) TableName() string {
 	return "scim_resource_references"
@@ -61,7 +54,7 @@ func (s SCIMScope) Find(tx *storage.Connection, id uuid.UUID) (*SCIMResource, er
 func (s SCIMScope) Create(tx *storage.Connection, document string) (*SCIMResource, error) {
 	resource := &SCIMResource{}
 	err := tx.RawQuery(
-		fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, resource_type, resource) VALUES (?, ?, ?, ?::jsonb) RETURNING %s", resource.TableName(), scimResourceColumns),
+		fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, resource_type, resource) VALUES (?, ?, ?, ?::jsonb) RETURNING %s", resource.TableName(), SCIMResourceColumns),
 		uuid.NewV7(), s.ProviderID, s.ResourceType, document,
 	).First(resource)
 	return resource, err
@@ -70,7 +63,7 @@ func (s SCIMScope) Create(tx *storage.Connection, document string) (*SCIMResourc
 func (s SCIMScope) Update(tx *storage.Connection, id uuid.UUID, document, version string) (*SCIMResource, error) {
 	resource := &SCIMResource{}
 	if err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND updated_at = COALESCE(?, updated_at) RETURNING %s", resource.TableName(), scimResourceColumns),
+		fmt.Sprintf("UPDATE %q SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND updated_at = COALESCE(?, updated_at) RETURNING %s", resource.TableName(), SCIMResourceColumns),
 		document, id, s.ProviderID, s.ResourceType, SCIMVersionTime(version),
 	).First(resource); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -117,18 +110,6 @@ func (s SCIMScope) RemoveReferences(tx *storage.Connection, source uuid.UUID, at
 	).Exec(), "error removing SCIM references")
 }
 
-func (s SCIMScope) FindReferences(tx *storage.Connection, sources []uuid.UUID, attribute string) ([]SCIMReference, error) {
-	references := []SCIMReference{}
-	if len(sources) == 0 {
-		return references, nil
-	}
-	err := tx.RawQuery(
-		fmt.Sprintf("SELECT source_id, target_id, target_type FROM %q WHERE source_id = any(?::uuid[]) AND attribute = ? ORDER BY source_id, target_id", SCIMReference{}.TableName()),
-		uuidStrings(sources), attribute,
-	).All(&references)
-	return references, errors.Wrap(err, "error finding SCIM references")
-}
-
 func (s SCIMScope) FindTargets(tx *storage.Connection, source uuid.UUID, attribute string) ([]uuid.UUID, error) {
 	targets := []uuid.UUID{}
 	err := tx.RawQuery(
@@ -138,22 +119,16 @@ func (s SCIMScope) FindTargets(tx *storage.Connection, source uuid.UUID, attribu
 	return targets, errors.Wrap(err, "error finding SCIM targets")
 }
 
-func (s SCIMScope) FindAncestors(tx *storage.Connection, targets []uuid.UUID, attribute string) ([]SCIMAncestor, error) {
+func (s SCIMScope) FindAncestors(tx *storage.Connection, target uuid.UUID, attribute string) ([]SCIMAncestor, error) {
 	ancestors := []SCIMAncestor{}
-	if len(targets) == 0 {
-		return ancestors, nil
-	}
-	table := SCIMReference{}.TableName()
 	err := tx.RawQuery(
-		fmt.Sprintf(`WITH RECURSIVE chain (target_id, source_id, depth) AS (
-			SELECT target_id, source_id, 1 FROM %q WHERE target_id = any(?::uuid[]) AND attribute = ?
+		fmt.Sprintf(`WITH RECURSIVE chain (source_id, depth) AS (
+			SELECT source_id, 1 FROM %[1]q WHERE target_id = ? AND attribute = ?
 			UNION
-			SELECT c.target_id, r.source_id, c.depth + 1 FROM chain c JOIN %q r ON r.target_id = c.source_id AND r.attribute = ? WHERE c.depth < ?
+			SELECT r.source_id, c.depth + 1 FROM chain c JOIN %[1]q r ON r.target_id = c.source_id AND r.attribute = ? WHERE c.depth < ?
 		)
-		SELECT c.target_id, c.source_id, min(c.depth) AS depth, max(c.depth) AS longest, s.resource->>'displayName' AS display
-		FROM chain c JOIN %q s ON s.id = c.source_id
-		GROUP BY c.target_id, c.source_id, s.id ORDER BY c.target_id, depth, c.source_id`, table, table, SCIMResource{}.TableName()),
-		uuidStrings(targets), attribute, attribute, SCIMMaxDepth,
+		SELECT source_id, max(depth) AS longest FROM chain GROUP BY source_id`, SCIMReference{}.TableName()),
+		target, attribute, attribute, SCIMMaxDepth,
 	).All(&ancestors)
 	return ancestors, errors.Wrap(err, "error finding SCIM ancestors")
 }

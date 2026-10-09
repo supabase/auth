@@ -1,6 +1,7 @@
 package query
 
 import (
+	"strconv"
 	"uuid"
 
 	"github.com/supabase/auth/internal/models"
@@ -38,19 +39,11 @@ func (d derived) Link(*storage.Connection, models.SCIMScope, uuid.UUID, []uuid.U
 	return nil
 }
 
-func (d derived) Load(tx *storage.Connection, scope models.SCIMScope, ids []uuid.UUID, locations map[string]string) (map[uuid.UUID][]any, error) {
-	elements := map[uuid.UUID][]any{}
-	ancestors, err := scope.FindAncestors(tx, ids, d.via)
-	for _, ancestor := range ancestors {
-		kind := "indirect"
-		if ancestor.Depth == 1 {
-			kind = "direct"
-		}
-		entry := element(ancestor.SourceID, locations[d.source], kind)
-		if ancestor.Display != nil {
-			entry["display"] = *ancestor.Display
-		}
-		elements[ancestor.TargetID] = append(elements[ancestor.TargetID], entry)
-	}
-	return elements, err
+func (d derived) Select(locations map[string]string) string {
+	via := models.QuoteLiteral(d.via)
+	return `(SELECT json_agg(json_build_object('value', walk.id, '$ref', ` + models.QuoteLiteral(locations[d.source]+"/") + ` || walk.id, 'type', CASE WHEN walk.depth = 1 THEN 'direct' ELSE 'indirect' END, 'display', source.resource ->> 'displayName') ORDER BY walk.depth, walk.id) FROM (WITH RECURSIVE chain (id, depth) AS (
+		SELECT source_id, 1 FROM scim_resource_references WHERE target_id = scim_resources.id AND attribute = ` + via + `
+		UNION
+		SELECT edge.source_id, chain.depth + 1 FROM chain JOIN scim_resource_references edge ON edge.target_id = chain.id AND edge.attribute = ` + via + ` WHERE chain.depth < ` + strconv.Itoa(models.SCIMMaxDepth) + `
+	) SELECT id, min(depth) AS depth FROM chain GROUP BY id) walk JOIN scim_resources source ON source.id = walk.id)`
 }

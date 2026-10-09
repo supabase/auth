@@ -1,6 +1,8 @@
 package query
 
 import (
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"uuid"
@@ -20,7 +22,7 @@ type Reference interface {
 	Exists(provider uuid.UUID, inner string, args []any) (string, []any)
 	Extract(attribute any) ([]uuid.UUID, error)
 	Link(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, wanted []uuid.UUID) error
-	Load(tx *storage.Connection, scope models.SCIMScope, ids []uuid.UUID, locations map[string]string) (map[uuid.UUID][]any, error)
+	Select(locations map[string]string) string
 }
 
 type named string
@@ -29,12 +31,14 @@ func (n named) Name() string {
 	return string(n)
 }
 
-func element(id uuid.UUID, endpoint, kind string) map[string]any {
-	return map[string]any{
-		ValueAttribute: id.String(),
-		"$ref":         endpoint + "/" + id.String(),
-		"type":         kind,
+func endpoint(locations map[string]string, kind string) string {
+	var s strings.Builder
+	s.WriteString("CASE " + kind)
+	for _, name := range slices.Sorted(maps.Keys(locations)) {
+		s.WriteString(" WHEN " + models.QuoteLiteral(name) + " THEN " + models.QuoteLiteral(locations[name]+"/"))
 	}
+	s.WriteString(" END")
+	return s.String()
 }
 
 func match(ref Reference, definition *core.Attribute, op filter.Operator, value any) (Clause, error) {

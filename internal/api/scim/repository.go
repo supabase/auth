@@ -70,15 +70,7 @@ func (r *repository[T]) list(ctx context.Context, tx *storage.Connection, scope 
 		total, err := q.Count(&models.SCIMResource{})
 		return []T{}, total, err
 	}
-	rows, total, err := r.page(ctx, tx, scope, q, request)
-	if err != nil {
-		return nil, 0, err
-	}
-	items, err := r.decodeAll(tx, scope, rows, protocol.ProjectionFrom(ctx))
-	if err != nil {
-		return nil, 0, err
-	}
-	return items, total, nil
+	return r.page(ctx, tx, q, request)
 }
 
 func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
@@ -91,15 +83,7 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 	if err != nil {
 		return zero, err
 	}
-	tx := r.db.WithContext(ctx)
-	row, err := scope.Find(tx, key)
-	if models.IsNotFoundError(err) {
-		return zero, notFound()
-	}
-	if err != nil {
-		return zero, err
-	}
-	return r.decodeOne(tx, scope, row, protocol.ProjectionFrom(ctx))
+	return r.find(ctx, r.db.WithContext(ctx), scope, key, protocol.ProjectionFrom(ctx))
 }
 
 func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
@@ -237,7 +221,7 @@ func (r *repository[T]) save(ctx context.Context, scope models.SCIMScope, target
 		if err := r.link(tx, scope, row.ID, targets); err != nil {
 			return err
 		}
-		saved, err = r.decodeOne(tx, scope, row, protocol.Projection{})
+		saved, err = r.find(ctx, tx, scope, row.ID, protocol.Projection{})
 		return err
 	})
 	return saved, err
@@ -265,89 +249,71 @@ func (r *repository[T]) filter(tx *storage.Connection, scope models.SCIMScope, e
 	return q.Where(text, args...), clause, nil
 }
 
-func (r *repository[T]) page(ctx context.Context, tx *storage.Connection, scope models.SCIMScope, q *pop.Query, query *protocol.SearchRequest) ([]models.SCIMResource, int, error) {
+func (r *repository[T]) page(ctx context.Context, tx *storage.Connection, q *pop.Query, query *protocol.SearchRequest) ([]T, int, error) {
 	order, args, err := r.order(query)
 	if err != nil {
 		return nil, 0, err
 	}
-	keys := []models.SCIMResource{}
-	sql, values := q.Select("id").Order(order, args...).ToSQL(pop.NewModel(&keys, ctx))
-	if err := tx.RawQuery(fmt.Sprintf("%s LIMIT %d OFFSET %d", sql, query.Count, query.Offset()), values...).All(&keys); err != nil {
+	sql, values := q.Select("id").Order(order, args...).ToSQL(pop.NewModel(&models.SCIMResource{}, ctx))
+	items, err := r.fetch(tx, protocol.ProjectionFrom(ctx), fmt.Sprintf("unnest(array(%s LIMIT %d OFFSET %d)) WITH ORDINALITY page(id, n) JOIN scim_resources USING (id) ORDER BY page.n", sql, query.Count, query.Offset()), values...)
+	if err != nil {
 		return nil, 0, err
 	}
-	total := query.Offset() + len(keys)
-	if len(keys) == query.Count || (len(keys) == 0 && query.Offset() > 0) {
-		if total, err = q.Count(&models.SCIMResource{}); err != nil {
-			return nil, 0, err
-		}
+	total := query.Offset() + len(items)
+	if len(items) == query.Count || (len(items) == 0 && query.Offset() > 0) {
+		total, err = q.Count(&models.SCIMResource{})
 	}
-	if len(keys) == 0 {
-		return keys, total, nil
-	}
-	ids := make([]string, len(keys))
-	for i, key := range keys {
-		ids[i] = key.ID.String()
-	}
-	rows := []models.SCIMResource{}
-	return rows, total, scope.Query(tx).Where("id = any(?::uuid[])", ids).Order(order, args...).All(&rows)
+	return items, total, err
 }
 
-func (r *repository[T]) decodeOne(tx *storage.Connection, scope models.SCIMScope, row *models.SCIMResource, projection protocol.Projection) (T, error) {
-	items, err := r.decodeAll(tx, scope, []models.SCIMResource{*row}, projection)
+func (r *repository[T]) find(ctx context.Context, tx *storage.Connection, scope models.SCIMScope, id uuid.UUID, projection protocol.Projection) (T, error) {
+	var zero T
+	sql, args := scope.Query(tx).Where("id = ?", id).Select("id").ToSQL(pop.NewModel(&models.SCIMResource{}, ctx))
+	items, err := r.fetch(tx, projection, "scim_resources WHERE id = ("+sql+")", args...)
 	if err != nil {
-		var zero T
 		return zero, err
+	}
+	if len(items) == 0 {
+		return zero, notFound()
 	}
 	return items[0], nil
 }
 
-func (r *repository[T]) decodeAll(tx *storage.Connection, scope models.SCIMScope, rows []models.SCIMResource, projection protocol.Projection) ([]T, error) {
-	ids := make([]uuid.UUID, len(rows))
+type record struct {
+	models.SCIMResource
+	References json.RawMessage `db:"refs"`
+}
+
+func (r *repository[T]) fetch(tx *storage.Connection, projection protocol.Projection, from string, args ...any) ([]T, error) {
+	rows := []record{}
+	if err := tx.RawQuery(fmt.Sprintf("SELECT %s, %s AS refs FROM %s", models.SCIMResourceColumns, r.selects(projection), from), args...).All(&rows); err != nil {
+		return nil, err
+	}
+	items := make([]T, len(rows))
 	for i, row := range rows {
-		ids[i] = row.ID
-	}
-	elements := map[uuid.UUID]map[string]any{}
-	for _, reference := range r.references {
-		if !projection.Returns(reference.Name()) {
-			continue
+		item, err := row.As[T](r.locations[r.resourceType])
+		if err == nil {
+			err = json.Unmarshal(row.References, &item)
 		}
-		loaded, err := reference.Load(tx, scope, ids, r.locations)
 		if err != nil {
 			return nil, err
 		}
-		for id, list := range loaded {
-			if elements[id] == nil {
-				elements[id] = map[string]any{}
-			}
-			elements[id][reference.Name()] = list
-		}
-	}
-	items := make([]T, 0, len(rows))
-	for _, row := range rows {
-		item, err := r.decode(&row, elements[row.ID])
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
+		items[i] = item
 	}
 	return items, nil
 }
 
-func (r *repository[T]) decode(row *models.SCIMResource, attributes map[string]any) (T, error) {
-	item, err := row.As[T](r.locations[r.resourceType])
-	if err != nil {
-		return item, err
-	}
-	if len(attributes) > 0 {
-		raw, err := json.Marshal(attributes)
-		if err != nil {
-			return item, err
-		}
-		if err := json.Unmarshal(raw, &item); err != nil {
-			return item, err
+func (r *repository[T]) selects(projection protocol.Projection) string {
+	pairs := []string{}
+	for _, reference := range r.references {
+		if projection.Returns(reference.Name()) {
+			pairs = append(pairs, models.QuoteLiteral(reference.Name()), reference.Select(r.locations))
 		}
 	}
-	return item, nil
+	if len(pairs) == 0 {
+		return "'{}'::json"
+	}
+	return "json_build_object(" + strings.Join(pairs, ", ") + ")"
 }
 
 func (r *repository[T]) encode(item T) (string, map[string][]uuid.UUID, error) {
