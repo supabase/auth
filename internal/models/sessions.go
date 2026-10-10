@@ -350,8 +350,19 @@ func updateFactorAssociatedSessions(tx *storage.Connection, userID, factorID uui
 	return tx.RawQuery("UPDATE "+(&pop.Model{Value: Session{}}).TableName()+" set aal = ?, factor_id = ? WHERE user_id = ? AND factor_id = ?", aal, nil, userID, factorID).Exec()
 }
 
+// InvalidateSessionsWithAALLessThan deletes a user's sessions whose AAL is
+// below the given level. All four callers are MFA step-up paths
+// (verifyTOTPFactor / verifyPhoneFactor / verifyWebAuthnFactor / recoveryCodesVerify)
+// and want to force re-authentication on the user's other first-party sessions
+// after the step-up succeeds.
+//
+// OAuth 2.1 client sessions (identified by a non-NULL oauth_client_id) are
+// explicitly preserved: they represent third-party-client consent grants whose
+// lifecycle is managed independently via RevokeOAuthSessions. Including them
+// in the MFA sweep breaks every MCP / OAuth integration the user has authorized
+// the moment they verify a factor in a first-party surface (issue #2801).
 func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level string) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND (aal IS NULL OR aal < ?)", userID, level).Exec()
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND (aal IS NULL OR aal < ?) AND oauth_client_id IS NULL", userID, level).Exec()
 }
 
 // Logout deletes all sessions for a user.
