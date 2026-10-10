@@ -539,7 +539,21 @@ func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
 	}
 	q := u.Query()
 	q.Set("code", code)
-	u.RawQuery = q.Encode()
+	encodedQuery := q.Encode()
+
+	// url.URL.String drops the "//" authority marker for custom schemes when Host is empty.
+	if u.Scheme != "" && u.Host == "" && strings.Contains(rurl, "://") {
+		base := strings.SplitN(rurl, "?", 2)[0]
+		if encodedQuery == "" {
+			return base, nil
+		}
+		if strings.Contains(base, "?") {
+			return base + "&" + encodedQuery, nil
+		}
+		return base + "?" + encodedQuery, nil
+	}
+
+	u.RawQuery = encodedQuery
 	return u.String(), nil
 }
 

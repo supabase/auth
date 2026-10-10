@@ -1584,3 +1584,19 @@ func (ts *VerifyTestSuite) TestVerifyPhoneChangeSendsNotificationEmailDisabled()
 	// Assert that phone change notification email was not sent
 	require.Len(ts.T(), mockMailer.PhoneChangedMailCalls, 0, "Expected 0 phone change notification email(s) to be sent")
 }
+
+func TestPrepPKCERedirectURLCustomScheme(t *testing.T) {
+	api := &API{}
+
+	got, err := api.prepPKCERedirectURL("myapp://", "auth-code")
+	require.NoError(t, err)
+	require.Equal(t, "myapp://?code=auth-code", got)
+
+	got, err = api.prepPKCERedirectURL("myapp://callback", "auth-code")
+	require.NoError(t, err)
+	require.Equal(t, "myapp://callback?code=auth-code", got)
+
+	got, err = api.prepPKCERedirectURL("https://example.com/cb?state=1", "auth-code")
+	require.NoError(t, err)
+	require.Equal(t, "https://example.com/cb?code=auth-code&state=1", got)
+}
