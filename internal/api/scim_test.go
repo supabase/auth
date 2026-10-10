@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,6 +13,8 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/gobuffalo/pop/v6"
+	"github.com/gobuffalo/pop/v6/logging"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -21,6 +24,7 @@ import (
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/e2e/e2eapi"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 const (
@@ -777,6 +781,9 @@ func TestSCIMErrors(t *testing.T) {
 		{"GET users with a groups type filter", http.MethodGet, scimUsersPath + "?" + url.Values{"filter": {`groups[type eq "direct"]`}}.Encode(), nil, http.StatusBadRequest},
 		{"GET groups with a members display pr filter", http.MethodGet, scimGroupsPath + "?" + url.Values{"filter": {`members.display pr`}}.Encode(), nil, http.StatusBadRequest},
 		{"GET groups with a members display pr value filter", http.MethodGet, scimGroupsPath + "?" + url.Values{"filter": {`members[display pr]`}}.Encode(), nil, http.StatusBadRequest},
+		{"GET users with a groups value sw filter", http.MethodGet, scimUsersPath + "?" + url.Values{"filter": {`groups.value sw "a"`}}.Encode(), nil, http.StatusBadRequest},
+		{"GET users with a groups value path sw filter", http.MethodGet, scimUsersPath + "?" + url.Values{"filter": {`groups[value sw "a"]`}}.Encode(), nil, http.StatusBadRequest},
+		{"GET groups with a members value gt filter", http.MethodGet, scimGroupsPath + "?" + url.Values{"filter": {`members.value gt "x"`}}.Encode(), nil, http.StatusBadRequest},
 		{"GET users with a groups display pr filter", http.MethodGet, scimUsersPath + "?" + url.Values{"filter": {`groups.display pr`}}.Encode(), nil, http.StatusBadRequest},
 		{"GET users with an unknown sortBy", http.MethodGet, scimUsersPath + "?sortBy=nope", nil, http.StatusBadRequest},
 		{"POST /.search", http.MethodPost, "/scim/v2/.search", map[string]any{}, http.StatusNotImplemented},
@@ -956,16 +963,96 @@ func TestSCIMFilters(t *testing.T) {
 		{scimGroupsPath, `externalId eq "tour-guides" and members pr`, group.ID},
 		{scimGroupsPath, `externalId eq "tour-guides" and members.type pr`, group.ID},
 		{scimGroupsPath, `not (members[value eq "` + decoy.ID + `"])`, group.ID},
+		{scimGroupsPath, `members.value ne "` + decoy.ID + `"`, group.ID},
+		{scimUsersPath, `userName eq "bjensen@example.com" and groups pr`, user.ID},
+		{scimUsersPath, `groups[value ne "` + decoys.ID + `"]`, user.ID},
+		{scimUsersPath, `userName sw "BJen"`, user.ID},
+		{scimUsersPath, `userName gt "c"`, decoy.ID},
+		{scimUsersPath, `not (userName eq "bjensen@example.com")`, decoy.ID},
+		{scimUsersPath, `externalId sw "7019"`, user.ID},
+		{scimUsersPath, `externalId gt "7"`, user.ID},
+		{scimUsersPath, `title pr`, user.ID},
+		{scimUsersPath, `not (title eq "Tour Guide")`, decoy.ID},
+		{scimUsersPath, `title eq "Tour Guide" and nickName eq "Babsy"`, user.ID},
+		{scimUsersPath, `title eq "Nope" or nickName eq "Babsy"`, user.ID},
+		{scimUsersPath, `title eq "Tour Guide" and userName eq "bjensen@example.com"`, user.ID},
+		{scimUsersPath, `title eq "Nope" or userName eq "decoy@example.com"`, decoy.ID},
+		{scimUsersPath, `name.honorificPrefix co "s."`, user.ID},
+		{scimUsersPath, `name.familyName co "n.s" or id eq "` + decoy.ID + `"`, decoy.ID},
+		{scimUsersPath, `emails.value ew "@JENSEN.org"`, user.ID},
+		{scimUsersPath, `emails pr`, user.ID},
+		{scimUsersPath, `emails[value ne "x"]`, user.ID},
+		{scimUsersPath, `emails[type eq "home" and not (display pr)]`, user.ID},
+		{scimUsersPath, `id eq null or userName eq "decoy@example.com"`, decoy.ID},
+		{scimUsersPath, `title co null or userName eq "decoy@example.com"`, decoy.ID},
+		{scimUsersPath, `id eq "nope" or userName eq "decoy@example.com"`, decoy.ID},
+		{scimUsersPath, `id ne "nope" and userName eq "decoy@example.com"`, decoy.ID},
+		{scimUsersPath, `id pr and userName eq "decoy@example.com"`, decoy.ID},
+		{scimUsersPath, `meta pr and userName eq "decoy@example.com"`, decoy.ID},
+		{scimUsersPath, `meta.location eq "https://example.org/` + user.ID + `" or userName eq "decoy@example.com"`, decoy.ID},
+		{scimUsersPath, `meta.version ne "bad" and userName eq "decoy@example.com"`, decoy.ID},
+		{scimUsersPath, `meta.version eq "W/\"-300000000000000000\"" or userName eq "decoy@example.com"`, decoy.ID},
 	} {
 		t.Run(tc.filter, func(t *testing.T) {
 			require.Equal(t, []string{tc.id}, scimIDs(t, c, tc.path, url.Values{"filter": {tc.filter}}))
 		})
 	}
 
+	t.Run("matches groups without members", func(t *testing.T) {
+		empty := scimCreate[core.Group](t, c, scimGroupsPath, newSCIMGroup("Empty"))
+		require.Equal(t, []string{empty.ID}, scimIDs(t, c, scimGroupsPath, url.Values{"filter": {`not (members pr)`}}))
+	})
+
 	t.Run("refuses a password filter in the URL as sensitive", func(t *testing.T) {
 		res := c.get(t, scimUsersPath+"?"+url.Values{"filter": {`password eq "t1meMa$heen"`}}.Encode())
 		requireSCIMError(t, res, http.StatusForbidden, scimerrors.Sensitive)
 	})
+}
+
+func TestSCIMFiltersUseIndexes(t *testing.T) {
+	c := newSCIMClient(t, nil)
+	require.NoError(t, c.inst.Conn.RawQuery(`INSERT INTO scim_resources (id, sso_provider_id, resource_type, resource)
+		SELECT gen_random_uuid(), ?, CASE WHEN n % 2 = 0 THEN 'User' ELSE 'Group' END,
+			jsonb_build_object('userName', 'u' || n, 'externalId', 'e' || n, 'displayName', 'g' || n)
+		FROM generate_series(1, 10000) n`, c.provider.ID).Exec())
+	require.NoError(t, c.inst.Conn.RawQuery("ANALYZE scim_resources").Exec())
+	var engine string
+	require.NoError(t, c.inst.Conn.RawQuery("SELECT amname FROM pg_class JOIN pg_am ON pg_am.oid = relam WHERE relname = 'scim_resources'").First(&engine))
+	var sql string
+	var args []any
+	pop.SetTxLogger(func(_ logging.Level, _ any, query string, values ...any) {
+		if strings.Contains(query, "COUNT(") {
+			sql, args = query, values
+		}
+	})
+	defer pop.SetTxLogger(func(logging.Level, any, string, ...any) {})
+
+	for _, tc := range []struct{ path, filter, index string }{
+		{scimUsersPath, `userName eq "bjensen@example.com"`, "scim_resources_user_name_key"},
+		{scimUsersPath, `userName sw "bjen"`, "scim_resources_user_name_key"},
+		{scimUsersPath, `externalId eq "701984"`, "scim_resources_external_id_key"},
+		{scimUsersPath, `title eq "Tour Guide"`, "scim_resources_resource_idx"},
+		{scimGroupsPath, `displayName eq "Tour Guides"`, "scim_resources_display_name_idx"},
+		{scimGroupsPath, `displayName sw "Tour"`, "scim_resources_display_name_idx"},
+	} {
+		t.Run(tc.filter, func(t *testing.T) {
+			if engine == "orioledb" && tc.index == "scim_resources_resource_idx" {
+				t.Skip("orioledb does not plan bitmap scans, which GIN requires")
+			}
+			res := c.get(t, tc.path+"?"+url.Values{"filter": {tc.filter}, "count": {"0"}}.Encode())
+			require.Equal(t, http.StatusOK, res.StatusCode)
+			plans := []struct {
+				Line string `db:"QUERY PLAN"`
+			}{}
+			require.NoError(t, c.inst.Conn.Transaction(func(tx *storage.Connection) error {
+				if err := tx.RawQuery("SET LOCAL enable_seqscan = off").Exec(); err != nil {
+					return err
+				}
+				return tx.RawQuery("EXPLAIN "+sql, args...).All(&plans)
+			}))
+			require.Contains(t, fmt.Sprint(plans), tc.index)
+		})
+	}
 }
 
 func TestSCIMOktaReplay(t *testing.T) {
