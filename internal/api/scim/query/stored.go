@@ -30,21 +30,17 @@ func (s stored) Exists(_ uuid.UUID, inner string, args []any) (string, []any) {
 	return "EXISTS (SELECT 1 FROM scim_resource_references edge JOIN scim_resources target ON target.id = edge.target_id AND target.deleted_at IS NULL WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + inner + ")", append([]any{s.Name()}, args...)
 }
 
-func (s stored) Extract(attribute any) ([]uuid.UUID, error) {
+func (s stored) Link(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, attribute any) error {
 	elements, _ := attribute.([]any)
-	ids := make([]uuid.UUID, 0, len(elements))
+	wanted := make([]uuid.UUID, 0, len(elements))
 	for _, element := range elements {
 		value, _ := element.(map[string]any)[ValueAttribute].(string)
 		id, err := uuid.Parse(value)
 		if err != nil {
-			return nil, s.invalidValue(value)
+			return s.invalidValue(value)
 		}
-		ids = append(ids, id)
+		wanted = append(wanted, id)
 	}
-	return ids, nil
-}
-
-func (s stored) Link(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, wanted []uuid.UUID) error {
 	current, err := scope.FindTargets(tx, source, s.Name())
 	if err != nil {
 		return err

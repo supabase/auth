@@ -20,8 +20,7 @@ type Reference interface {
 	Name() string
 	Columns() map[string]string
 	Exists(provider uuid.UUID, inner string, args []any) (string, []any)
-	Extract(attribute any) ([]uuid.UUID, error)
-	Link(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, wanted []uuid.UUID) error
+	Link(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, attribute any) error
 	Select(locations map[string]string) string
 }
 

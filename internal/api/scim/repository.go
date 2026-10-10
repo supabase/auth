@@ -83,38 +83,20 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 }
 
 func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
-	var zero T
-	scope, err := r.scope(ctx)
-	if err != nil {
-		return zero, err
-	}
-	document, targets, err := r.encode(item)
-	if err != nil {
-		return zero, err
-	}
-	saved, err := r.save(ctx, scope, targets, func(tx *storage.Connection) (*models.SCIMResource, error) {
+	saved, _, err := r.save(ctx, item, func(tx *storage.Connection, scope models.SCIMScope, document string) (*models.SCIMResource, error) {
 		return scope.Create(tx, document)
 	})
 	return saved, invalid(err)
 }
 
 func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
-	var zero T
-	scope, err := r.scope(ctx)
-	if err != nil {
-		return zero, err
-	}
-	document, targets, err := r.encode(item)
-	if err != nil {
-		return zero, err
-	}
 	common := item.Common()
 	id, _ := uuid.Parse(common.ID)
-	saved, err := r.save(ctx, scope, targets, func(tx *storage.Connection) (*models.SCIMResource, error) {
+	saved, scope, err := r.save(ctx, item, func(tx *storage.Connection, scope models.SCIMScope, document string) (*models.SCIMResource, error) {
 		return scope.Update(tx, id, document, common.Meta.Version)
 	})
 	if models.IsNotFoundError(err) {
-		return zero, r.missing(ctx, scope, id)
+		return saved, r.missing(ctx, scope, id)
 	}
 	return saved, invalid(err)
 }
@@ -201,29 +183,30 @@ func (r *repository[T]) order(request *protocol.SearchRequest) (string, []any, e
 	return value + ` COLLATE "C"` + direction + ", id", args, nil
 }
 
-func (r *repository[T]) save(ctx context.Context, scope models.SCIMScope, targets map[string][]uuid.UUID, write func(*storage.Connection) (*models.SCIMResource, error)) (T, error) {
+func (r *repository[T]) save(ctx context.Context, item T, write func(*storage.Connection, models.SCIMScope, string) (*models.SCIMResource, error)) (T, models.SCIMScope, error) {
 	var saved T
-	err := r.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		row, err := write(tx)
+	scope, err := r.scope(ctx)
+	if err != nil {
+		return saved, scope, err
+	}
+	document, targets, err := r.encode(item)
+	if err != nil {
+		return saved, scope, err
+	}
+	err = r.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
+		row, err := write(tx, scope, document)
 		if err != nil {
 			return err
 		}
-		if err := r.link(tx, scope, row.ID, targets); err != nil {
-			return err
+		for _, reference := range r.references {
+			if err := reference.Link(tx, scope, row.ID, targets[reference.Name()]); err != nil {
+				return err
+			}
 		}
 		saved, err = r.find(ctx, tx, scope, row.ID, protocol.ProjectionFrom(ctx))
 		return err
 	})
-	return saved, err
-}
-
-func (r *repository[T]) link(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, targets map[string][]uuid.UUID) error {
-	for _, reference := range r.references {
-		if err := reference.Link(tx, scope, source, targets[reference.Name()]); err != nil {
-			return err
-		}
-	}
-	return nil
+	return saved, scope, err
 }
 
 func (r *repository[T]) filter(scope models.SCIMScope, expression string) (*pop.Query, query.Clause, error) {
@@ -316,7 +299,7 @@ func (r *repository[T]) selects(projection protocol.Projection) string {
 	return "json_build_object(" + strings.Join(pairs, ", ") + ")"
 }
 
-func (r *repository[T]) encode(item T) (string, map[string][]uuid.UUID, error) {
+func (r *repository[T]) encode(item T) (string, map[string]any, error) {
 	document, err := core.NewObject(item)
 	if err != nil {
 		return "", nil, err
@@ -324,11 +307,9 @@ func (r *repository[T]) encode(item T) (string, map[string][]uuid.UUID, error) {
 	for _, key := range []string{"id", "meta", "password"} {
 		document.Remove(key)
 	}
-	targets := map[string][]uuid.UUID{}
+	targets := map[string]any{}
 	for _, reference := range r.references {
-		if targets[reference.Name()], err = reference.Extract(document.Get(reference.Name())); err != nil {
-			return "", nil, err
-		}
+		targets[reference.Name()] = document.Get(reference.Name())
 		document.Remove(reference.Name())
 	}
 	raw, err := json.Marshal(document)
