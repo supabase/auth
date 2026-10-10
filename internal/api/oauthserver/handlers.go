@@ -508,7 +508,7 @@ func (s *Server) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWri
 		ClientID:     clientID,
 	})
 	if err != nil {
-		return err
+		return mapRefreshTokenGrantError(err)
 	}
 
 	// Convert to OAuth-compliant response format (exclude user info for OAuth clients)
