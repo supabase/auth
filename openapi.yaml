@@ -1691,6 +1691,7 @@ paths:
                     - magiclink
                     - signup
                     - recovery
+                    - invite
                     - email_change_current
                     - email_change_new
                 email:
@@ -1759,6 +1760,12 @@ paths:
         - APIKeyAuth: []
           AdminAuth: []
       parameters:
+        - name: query
+          in: query
+          description: >
+            Filter events using `<author|action|type>:<text>`. The author scope searches actor usernames and names, action searches the action, and type searches the log type.
+          schema:
+            type: string
         - name: page
           in: query
           schema:
@@ -1774,6 +1781,11 @@ paths:
       responses:
         200:
           description: List of audit logs.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/PaginationTotalCount"
+            Link:
+              $ref: "#/components/headers/PaginationLink"
           content:
             application/json:
               schema:
@@ -1845,6 +1857,8 @@ paths:
                       format: date-time
                     ip_address:
                       type: string
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
@@ -1874,6 +1888,11 @@ paths:
       responses:
         200:
           description: A page of users.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/PaginationTotalCount"
+            Link:
+              $ref: "#/components/headers/PaginationLink"
           content:
             application/json:
               schema:
@@ -1959,13 +1978,25 @@ paths:
       security:
         - APIKeyAuth: []
           AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                should_soft_delete:
+                  type: boolean
+                  default: false
+                  description: Soft delete the user instead of permanently deleting their account.
       responses:
         200:
-          description: User's account data.
+          description: Empty JSON object. No user data is returned after hard or soft deletion.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserSchema"
+                type: object
+                additionalProperties: false
+                example: {}
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
@@ -2038,6 +2069,14 @@ paths:
           application/json:
             schema:
               type: object
+              properties:
+                friendly_name:
+                  type: string
+                  description: New friendly name for the factor. An empty string leaves the name unchanged.
+                phone:
+                  type: string
+                  format: phone
+                  description: New phone number in E.164 format. Only used for phone factors.
       responses:
         200:
           description: User's MFA factor.
@@ -2088,6 +2127,17 @@ paths:
       security:
         - APIKeyAuth: []
           AdminAuth: []
+      parameters:
+        - name: resource_id
+          in: query
+          description: Filter by an exact resource ID. Takes precedence over resource_id_prefix when nonempty.
+          schema:
+            type: string
+        - name: resource_id_prefix
+          in: query
+          description: Filter by a resource ID prefix. Used only when resource_id is absent or empty.
+          schema:
+            type: string
       responses:
         200:
           description: A list of all providers.
@@ -2131,8 +2181,16 @@ paths:
                     format: hostname
                 attribute_mapping:
                   $ref: "#/components/schemas/SAMLAttributeMappingSchema"
+                name_id_format:
+                  $ref: "#/components/schemas/SAMLNameIDFormatSchema"
+                resource_id:
+                  type: string
+                  description: External resource ID used to identify the provider.
+                disabled:
+                  type: boolean
+                  description: Whether the provider is disabled.
       responses:
-        200:
+        201:
           description: SSO provider was created.
           content:
             application/json:
@@ -2144,15 +2202,21 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
           $ref: "#/components/responses/ForbiddenResponse"
+        422:
+          description: A SAML provider with the same EntityID already exists (saml_idp_already_exists).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
 
   /admin/sso/providers/{ssoProviderId}:
     parameters:
       - name: ssoProviderId
         in: path
         required: true
+        description: Provider UUID or `resource_<resource_id>` to look up the provider by its resource ID.
         schema:
           type: string
-          format: uuid
     get:
       summary: Fetch SSO provider details.
       tags:
@@ -2172,7 +2236,7 @@ paths:
         403:
           $ref: "#/components/responses/ForbiddenResponse"
         404:
-          description: A provider with this UUID does not exist.
+          description: A provider with this identifier does not exist.
           content:
             application/json:
               schema:
@@ -2204,6 +2268,16 @@ paths:
                     pattern: "[a-z0-9-]+([.][a-z0-9-]+)*"
                 attribute_mapping:
                   $ref: "#/components/schemas/SAMLAttributeMappingSchema"
+                name_id_format:
+                  allOf:
+                    - $ref: "#/components/schemas/SAMLNameIDFormatSchema"
+                  description: SAML NameID format. An omitted or empty value clears the configured format.
+                resource_id:
+                  type: string
+                  description: External resource ID. An empty string clears the ID; omit this property to keep it unchanged.
+                disabled:
+                  type: boolean
+                  description: Whether the provider is disabled. Omit this property to keep it unchanged.
       responses:
         200:
           description: SSO provider details were updated.
@@ -2218,7 +2292,13 @@ paths:
         403:
           $ref: "#/components/responses/ForbiddenResponse"
         404:
-          description: A provider with this UUID does not exist.
+          description: A provider with this identifier does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        422:
+          description: Updating the SSO provider failed due to a conflict (conflict).
           content:
             application/json:
               schema:
@@ -2242,7 +2322,7 @@ paths:
         403:
           $ref: "#/components/responses/ForbiddenResponse"
         404:
-          description: A provider with this UUID does not exist.
+          description: A provider with this identifier does not exist.
           content:
             application/json:
               schema:
@@ -3472,6 +3552,17 @@ components:
       description: >
         When deployed on Supabase, this server requires an `apikey` header containing a valid Supabase-issued API key to call any endpoint.
 
+  headers:
+    PaginationTotalCount:
+      description: Total number of matching results when page-based pagination is used.
+      schema:
+        type: integer
+        minimum: 0
+    PaginationLink:
+      description: Links to the next and last pages where available.
+      schema:
+        type: string
+
   schemas:
     GoTrueSecurity:
       type: object
@@ -3628,13 +3719,29 @@ components:
                     - type: boolean
                     - type: object
 
+    SAMLNameIDFormatSchema:
+      type: string
+      description: SAML NameID format. An empty string leaves no explicit format configured.
+      enum:
+        - ""
+        - urn:oasis:names:tc:SAML:2.0:nameid-format:persistent
+        - urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress
+        - urn:oasis:names:tc:SAML:2.0:nameid-format:transient
+        - urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified
+
     SSOProviderSchema:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        sso_domains:
+        resource_id:
+          type: string
+        disabled:
+          type: boolean
+          nullable: true
+          description: Whether the provider is disabled. Null means the provider is enabled.
+        domains:
           type: array
           items:
             type: object
@@ -3653,6 +3760,8 @@ components:
               type: string
             attribute_mapping:
               $ref: "#/components/schemas/SAMLAttributeMappingSchema"
+            name_id_format:
+              $ref: "#/components/schemas/SAMLNameIDFormatSchema"
 
     AccessTokenResponseSchema:
       type: object
