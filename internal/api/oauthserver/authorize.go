@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -555,7 +556,46 @@ func (s *Server) isValidRedirectURI(client *models.OAuthServerClient, redirectUR
 			return true
 		}
 	}
+	for _, registeredURI := range registeredURIs {
+		if isLoopbackRedirectMatch(registeredURI, redirectURI) {
+			return true
+		}
+	}
 	return false
+}
+
+// isLoopbackRedirectMatch reports whether redirectURI matches registeredURI
+// under the loopback exception of OAuth 2.1 section 2.3.1 and RFC 8252
+// section 7.3: a native client registers an http loopback redirect such as
+// http://127.0.0.1/callback and binds a different ephemeral port on every
+// authorization request, so the port is the one component that may differ.
+// Everything else, scheme, host, path, query and fragment, must still match
+// exactly, and the host must be a loopback IP literal, as the specification
+// does not extend the exception to "localhost".
+func isLoopbackRedirectMatch(registeredURI, redirectURI string) bool {
+	registered, err := url.Parse(registeredURI)
+	if err != nil {
+		return false
+	}
+	requested, err := url.Parse(redirectURI)
+	if err != nil {
+		return false
+	}
+	if registered.Scheme != "http" || requested.Scheme != "http" {
+		return false
+	}
+	if !isLoopbackIPLiteral(registered.Hostname()) || registered.Hostname() != requested.Hostname() {
+		return false
+	}
+	return registered.Path == requested.Path &&
+		registered.RawQuery == requested.RawQuery &&
+		registered.Fragment == requested.Fragment &&
+		registered.User.String() == requested.User.String()
+}
+
+func isLoopbackIPLiteral(host string) bool {
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (s *Server) consentCoversScopes(consent *models.OAuthServerConsent, requestedScope string) bool {
