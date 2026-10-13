@@ -57,6 +57,7 @@ type OAuthServerAuthorization struct {
 	CreatedAt           time.Time                      `json:"created_at" db:"created_at"`
 	ExpiresAt           time.Time                      `json:"expires_at" db:"expires_at"`
 	ApprovedAt          *time.Time                     `json:"approved_at" db:"approved_at"`
+	SessionID           *uuid.UUID                     `json:"-" db:"session_id"`
 
 	// Relations with OAuth clients
 	Client *OAuthServerClient `json:"client,omitempty" db:"-"`
@@ -150,8 +151,9 @@ func (auth *OAuthServerAuthorization) GenerateAuthorizationCode() string {
 	return code
 }
 
-// Approve approves the authorization request and generates an authorization code
-func (auth *OAuthServerAuthorization) Approve(tx *storage.Connection) error {
+// Approve approves the authorization request and generates an authorization code.
+// sessionID is the approving session, whose AAL/AMR the issued OAuth session inherits.
+func (auth *OAuthServerAuthorization) Approve(tx *storage.Connection, sessionID *uuid.UUID) error {
 	if auth.IsExpired() {
 		return fmt.Errorf("authorization request has expired")
 	}
@@ -163,9 +165,10 @@ func (auth *OAuthServerAuthorization) Approve(tx *storage.Connection) error {
 	now := time.Now()
 	auth.Status = OAuthServerAuthorizationApproved
 	auth.ApprovedAt = &now
+	auth.SessionID = sessionID
 	auth.GenerateAuthorizationCode()
 
-	return tx.UpdateOnly(auth, "status", "approved_at", "authorization_code")
+	return tx.UpdateOnly(auth, "status", "approved_at", "authorization_code", "session_id")
 }
 
 // Deny denies the authorization request
