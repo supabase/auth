@@ -175,32 +175,71 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	var signupUser *models.User
-	if user == nil {
-		// always call this outside of a database transaction as this method
-		// can be computationally hard and block due to password hashing
-		signupUser, err = params.ToUserModel(false /* <- isSSOUser */)
-		if err != nil {
-			return err
+	if user != nil {
+		if (params.Provider == EmailProvider && user.IsConfirmed()) || (params.Provider == PhoneProvider && user.IsPhoneConfirmed()) {
+			err = db.Transaction(func(tx *storage.Connection) error {
+				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRepeatedSignUpAction, "", map[string]any{
+					"provider": params.Provider,
+				}); terr != nil {
+					return terr
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			if config.Mailer.Autoconfirm || config.Sms.Autoconfirm {
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeUserAlreadyExists, "User already registered")
+			}
+			sanitizedUser, err := sanitizeUser(user, params)
+			if err != nil {
+				return err
+			}
+			return sendJSON(w, http.StatusOK, sanitizedUser)
 		}
-		if err := a.triggerBeforeUserCreated(r, db, signupUser); err != nil {
-			return err
-		}
+	}
+
+	// always call this outside of a database transaction as this method
+	// can be computationally hard and block due to password hashing
+	signupUser, err := params.ToUserModel(false /* <- isSSOUser */)
+	if err != nil {
+		return err
+	}
+	if err := a.triggerBeforeUserCreated(r, db, signupUser); err != nil {
+		return err
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
+
+		if user != nil {
+			tuser, terr := models.FindUserByIDForUpdate(tx, user.ID)
+			if terr == nil {
+				user = tuser
+			} else if !models.IsNotFoundError(terr) {
+				return terr
+			}
+		}
+
 		if user != nil {
 			if (params.Provider == EmailProvider && user.IsConfirmed()) || (params.Provider == PhoneProvider && user.IsPhoneConfirmed()) {
 				return UserExistsError
 			}
-			// do not update the user because we can't be sure of their claimed identity
+
+			// User cannot have both a confirmed email and phone number
+			// so we can safely assume that the user hasn't completed registration.
+			user.EncryptedPassword = signupUser.EncryptedPassword
+			terr = user.UpdatePassword(tx, nil)
+			if terr != nil {
+				return terr
+			}
 		} else {
 			user, terr = a.signupNewUser(tx, signupUser)
 			if terr != nil {
 				return terr
 			}
 		}
+
 		identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), params.Provider)
 		if terr != nil {
 			if !models.IsNotFoundError(terr) {
@@ -357,6 +396,7 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	u.Identities = make([]models.Identity, 0)
 	u.UserMetaData = params.Data
 	u.Aud = params.Aud
+	u.IsSuperAdmin = false
 
 	// sanitize app_metadata
 	u.AppMetaData = map[string]interface{}{
