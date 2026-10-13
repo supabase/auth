@@ -119,7 +119,13 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		// IP address in decimal form also not allowed in redirects!
 		return false
 	} else if ip := net.ParseIP(refurl.Hostname()); ip != nil {
-		return ip.IsLoopback()
+		if !ip.IsLoopback() {
+			return false
+		}
+		if !config.Security.RedirectLoopbackRequiresAllowList {
+			return true
+		}
+		// The loopback address must match an allow list entry below.
 	} else if isHTTP && !regularHostname.MatchString(refurl.Hostname()) {
 		// hostname uses characters that are not typically used
 		return false

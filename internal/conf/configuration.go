@@ -933,6 +933,10 @@ type SecurityConfiguration struct {
 	UpdatePasswordRequireCurrentPassword  bool                 `json:"update_password_require_current_password" split_words:"true"`
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
 	SbForwardedForEnabled                 bool                 `json:"sb_forwarded_for_enabled" split_words:"true" default:"false"`
+	// RedirectLoopbackRequiresAllowList makes a loopback IP address (127.0.0.0/8,
+	// ::1) in a redirect URL subject to the URI allow list like any other host.
+	// When false (the default), any loopback IP address is accepted.
+	RedirectLoopbackRequiresAllowList bool `json:"redirect_loopback_requires_allow_list" split_words:"true" default:"false"`
 
 	DBEncryption DatabaseEncryptionConfiguration `json:"database_encryption" split_words:"true"`
 }

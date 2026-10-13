@@ -336,3 +336,38 @@ func TestGetReferrer(t *tst.T) {
 		})
 	}
 }
+
+func TestLoopbackRedirectRequiresAllowList(t *tst.T) {
+	config := conf.GlobalConfiguration{
+		SiteURL:      "https://example.com",
+		URIAllowList: []string{"http://127.0.0.1:3000/**"},
+		JWT: conf.JWTConfiguration{
+			Secret: "testsecret",
+		},
+	}
+	require.NoError(t, config.ApplyDefaults())
+
+	cases := []struct {
+		desc        string
+		redirectURL string
+		strict      bool
+		expected    bool
+	}{
+		{desc: "default accepts an unlisted loopback port", redirectURL: "http://127.0.0.1:8080/callback", strict: false, expected: true},
+		{desc: "default accepts unlisted IPv6 loopback", redirectURL: "http://[::1]:8080/callback", strict: false, expected: true},
+		{desc: "strict accepts a listed loopback address", redirectURL: "http://127.0.0.1:3000/callback", strict: true, expected: true},
+		{desc: "strict rejects an unlisted loopback port", redirectURL: "http://127.0.0.1:8080/callback", strict: true, expected: false},
+		{desc: "strict rejects another loopback address", redirectURL: "http://127.0.0.2:3000/callback", strict: true, expected: false},
+		{desc: "strict rejects unlisted IPv6 loopback", redirectURL: "http://[::1]:3000/callback", strict: true, expected: false},
+		{desc: "strict rejects IPv4-mapped loopback", redirectURL: "http://[::ffff:127.0.0.1]:3000/callback", strict: true, expected: false},
+		{desc: "strict still rejects a non-loopback IP", redirectURL: "http://10.0.0.1:3000/callback", strict: true, expected: false},
+		{desc: "default still rejects a non-loopback IP", redirectURL: "http://10.0.0.1:3000/callback", strict: false, expected: false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *tst.T) {
+			config.Security.RedirectLoopbackRequiresAllowList = c.strict
+			require.Equal(t, c.expected, IsRedirectURLValid(&config, c.redirectURL))
+		})
+	}
+}
