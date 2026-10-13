@@ -666,3 +666,98 @@ func (ts *OAuthAuthorizeTestSuite) TestConsent_InvalidActionRejected() {
 	err := ts.Server.OAuthServerConsent(w, req)
 	ts.assertHTTPError(err, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
 }
+
+// ---------- loopback redirect (RFC 8252 section 7.3) ----------
+
+func (ts *OAuthAuthorizeTestSuite) TestAuthorize_LoopbackRedirectAcceptsAnyPort() {
+	params := &OAuthServerClientRegisterParams{
+		ClientName:       "Native Loopback Client",
+		RedirectURIs:     []string{"http://127.0.0.1/callback"},
+		RegistrationType: "dynamic",
+	}
+	client, _, err := ts.Server.registerOAuthServerClient(context.Background(), params)
+	require.NoError(ts.T(), err)
+
+	q := url.Values{
+		"client_id":             []string{client.ID.String()},
+		"redirect_uri":          []string{"http://127.0.0.1:51234/callback"},
+		"scope":                 []string{"openid"},
+		"code_challenge":        []string{"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"},
+		"code_challenge_method": []string{"S256"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.OAuthServerAuthorize(w, req))
+	require.Equal(ts.T(), http.StatusFound, w.Code, "authorize: %s", w.Body.String())
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(ts.T(), err)
+	authID := loc.Query().Get("authorization_id")
+	require.NotEmpty(ts.T(), authID, "authorize redirect missing authorization_id (got %q)", w.Header().Get("Location"))
+
+	// The port the client bound is what the code must be delivered to.
+	authorization := ts.reload(authID)
+	assert.Equal(ts.T(), "http://127.0.0.1:51234/callback", authorization.RedirectURI)
+}
+
+func (ts *OAuthAuthorizeTestSuite) TestAuthorize_LoopbackRedirectStillRequiresMatchingPath() {
+	params := &OAuthServerClientRegisterParams{
+		ClientName:       "Native Loopback Client",
+		RedirectURIs:     []string{"http://127.0.0.1/callback"},
+		RegistrationType: "dynamic",
+	}
+	client, _, err := ts.Server.registerOAuthServerClient(context.Background(), params)
+	require.NoError(ts.T(), err)
+
+	q := url.Values{
+		"client_id":             []string{client.ID.String()},
+		"redirect_uri":          []string{"http://127.0.0.1:51234/other"},
+		"scope":                 []string{"openid"},
+		"code_challenge":        []string{"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"},
+		"code_challenge_method": []string{"S256"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	err = ts.Server.OAuthServerAuthorize(w, req)
+	require.Error(ts.T(), err, "a loopback redirect with a different path must be rejected")
+	assert.NotEqual(ts.T(), http.StatusFound, w.Code)
+}
+
+func TestIsValidRedirectURILoopbackPort(t *testing.T) {
+	s := &Server{}
+	client := &models.OAuthServerClient{}
+	client.SetRedirectURIs([]string{
+		"http://127.0.0.1/callback",
+		"http://[::1]:9000/cb",
+		"http://localhost/callback",
+		"https://app.example.com/callback",
+		"http://127.0.0.1/with?state=keep",
+	})
+
+	tests := []struct {
+		name        string
+		redirectURI string
+		want        bool
+	}{
+		{"exact match still works", "https://app.example.com/callback", true},
+		{"loopback IPv4 may add a port", "http://127.0.0.1:51234/callback", true},
+		{"loopback IPv4 with the port omitted", "http://127.0.0.1/callback", true},
+		{"loopback IPv6 may change the port", "http://[::1]:62000/cb", true},
+		{"loopback IPv6 may drop the port", "http://[::1]/cb", true},
+		{"loopback keeps its query", "http://127.0.0.1:4000/with?state=keep", true},
+		{"loopback path must match", "http://127.0.0.1:51234/other", false},
+		{"loopback query must match", "http://127.0.0.1:51234/with?state=other", false},
+		{"loopback fragment is not registered", "http://127.0.0.1:51234/callback#frag", false},
+		{"loopback scheme must match", "https://127.0.0.1:51234/callback", false},
+		{"localhost is not a loopback IP literal", "http://localhost:51234/callback", false},
+		{"non-loopback host gets no port exception", "https://app.example.com:8443/callback", false},
+		{"a different loopback address does not match", "http://127.0.0.2:51234/callback", false},
+		{"userinfo cannot be smuggled in", "http://user@127.0.0.1:51234/callback", false},
+		{"unparseable value is rejected", "http://127.0.0.1:51234/%zz", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, s.isValidRedirectURI(client, tc.redirectURI))
+		})
+	}
+}
