@@ -1,12 +1,14 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"uuid"
 
 	"github.com/gobuffalo/pop/v6"
 	"github.com/pkg/errors"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -22,18 +24,82 @@ type Ancestor struct {
 const scimReferences = "scim_resource_references"
 
 type Scope struct {
+	db           *storage.Connection
 	ProviderID   uuid.UUID
 	ResourceType string
 }
 
-func (s Scope) Query(tx *storage.Connection) *pop.Query {
+func NewScope(db *storage.Connection, provider uuid.UUID, resourceType string) Scope {
+	return Scope{db: db, ProviderID: provider, ResourceType: resourceType}
+}
+
+func (s Scope) Create(ctx context.Context, document string, links []Link, refs string) (Row, error) {
+	row, err := s.write(ctx, links, refs, func(tx *storage.Connection) (*Resource, error) {
+		return s.create(tx, document)
+	})
+	return row, unique(err)
+}
+
+func (s Scope) Update(ctx context.Context, id uuid.UUID, document, version string, links []Link, refs string) (Row, error) {
+	row, err := s.write(ctx, links, refs, func(tx *storage.Connection) (*Resource, error) {
+		return s.update(tx, id, document, version)
+	})
+	if models.IsNotFoundError(err) {
+		return row, s.Missing(ctx, id)
+	}
+	return row, unique(err)
+}
+
+func (s Scope) Delete(ctx context.Context, id uuid.UUID, version string) error {
+	err := s.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
+		if err := s.remove(tx, id, version); err != nil {
+			return err
+		}
+		return s.deleteReferences(tx, id)
+	})
+	if models.IsNotFoundError(err) {
+		return s.Missing(ctx, id)
+	}
+	return err
+}
+
+func (s Scope) Missing(ctx context.Context, id uuid.UUID) error {
+	found, err := s.query(s.db.WithContext(ctx)).Where("id = ?", id).Exists(&Resource{})
+	if err != nil {
+		return err
+	}
+	if !found {
+		return NotFound()
+	}
+	return scimerrors.ErrPreconditionFailed("resource has changed on the server")
+}
+
+func (s Scope) write(ctx context.Context, links []Link, refs string, save func(*storage.Connection) (*Resource, error)) (Row, error) {
+	var row Row
+	err := s.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
+		saved, err := save(tx)
+		if err != nil {
+			return err
+		}
+		for _, link := range links {
+			if err := s.link(tx, saved.ID, link); err != nil {
+				return err
+			}
+		}
+		row, err = s.find(ctx, tx, saved.ID, refs)
+		return err
+	})
+	return row, err
+}
+
+func (s Scope) query(tx *storage.Connection) *pop.Query {
 	return tx.Q().
 		Where("sso_provider_id = ?", s.ProviderID).
 		Where("resource_type = " + query.QuoteLiteral(s.ResourceType)).
 		Where("deleted_at IS NULL")
 }
 
-func (s Scope) Create(tx *storage.Connection, document string) (*Resource, error) {
+func (s Scope) create(tx *storage.Connection, document string) (*Resource, error) {
 	resource := &Resource{}
 	err := tx.RawQuery(
 		fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, resource_type, resource) VALUES (?, ?, ?, ?::jsonb) RETURNING %s", resource.TableName(), ResourceColumns),
@@ -42,7 +108,7 @@ func (s Scope) Create(tx *storage.Connection, document string) (*Resource, error
 	return resource, err
 }
 
-func (s Scope) Update(tx *storage.Connection, id uuid.UUID, document, version string) (*Resource, error) {
+func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version string) (*Resource, error) {
 	resource := &Resource{}
 	if err := tx.RawQuery(
 		fmt.Sprintf("UPDATE %q SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND updated_at = COALESCE(?, updated_at) RETURNING %s", resource.TableName(), ResourceColumns),
@@ -56,7 +122,7 @@ func (s Scope) Update(tx *storage.Connection, id uuid.UUID, document, version st
 	return resource, nil
 }
 
-func (s Scope) Delete(tx *storage.Connection, id uuid.UUID, version string) error {
+func (s Scope) remove(tx *storage.Connection, id uuid.UUID, version string) error {
 	count, err := tx.RawQuery(
 		fmt.Sprintf("UPDATE %q SET deleted_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND updated_at = COALESCE(?, updated_at)", Resource{}.TableName()),
 		id, s.ProviderID, s.ResourceType, query.VersionTime(version),
@@ -70,7 +136,7 @@ func (s Scope) Delete(tx *storage.Connection, id uuid.UUID, version string) erro
 	return nil
 }
 
-func (s Scope) AddReferences(tx *storage.Connection, source uuid.UUID, attribute string, types []string, targets []uuid.UUID) ([]uuid.UUID, error) {
+func (s Scope) addReferences(tx *storage.Connection, source uuid.UUID, attribute string, types []string, targets []uuid.UUID) ([]uuid.UUID, error) {
 	added := []uuid.UUID{}
 	if len(targets) == 0 {
 		return added, nil
@@ -82,7 +148,7 @@ func (s Scope) AddReferences(tx *storage.Connection, source uuid.UUID, attribute
 	return added, errors.Wrap(err, "error adding SCIM references")
 }
 
-func (s Scope) RemoveReferences(tx *storage.Connection, source uuid.UUID, attribute string, targets []uuid.UUID) error {
+func (s Scope) removeReferences(tx *storage.Connection, source uuid.UUID, attribute string, targets []uuid.UUID) error {
 	if len(targets) == 0 {
 		return nil
 	}
@@ -92,7 +158,7 @@ func (s Scope) RemoveReferences(tx *storage.Connection, source uuid.UUID, attrib
 	).Exec(), "error removing SCIM references")
 }
 
-func (s Scope) FindTargets(tx *storage.Connection, source uuid.UUID, attribute string) ([]uuid.UUID, error) {
+func (s Scope) findTargets(tx *storage.Connection, source uuid.UUID, attribute string) ([]uuid.UUID, error) {
 	targets := []uuid.UUID{}
 	err := tx.RawQuery(
 		fmt.Sprintf("SELECT target_id FROM %q WHERE source_id = ? AND attribute = ?", scimReferences),
@@ -101,7 +167,7 @@ func (s Scope) FindTargets(tx *storage.Connection, source uuid.UUID, attribute s
 	return targets, errors.Wrap(err, "error finding SCIM targets")
 }
 
-func (s Scope) FindAncestors(tx *storage.Connection, target uuid.UUID, attribute string) ([]Ancestor, error) {
+func (s Scope) findAncestors(tx *storage.Connection, target uuid.UUID, attribute string) ([]Ancestor, error) {
 	ancestors := []Ancestor{}
 	err := tx.RawQuery(
 		fmt.Sprintf(`WITH RECURSIVE chain (source_id, depth) AS (
@@ -115,7 +181,7 @@ func (s Scope) FindAncestors(tx *storage.Connection, target uuid.UUID, attribute
 	return ancestors, errors.Wrap(err, "error finding SCIM ancestors")
 }
 
-func (s Scope) Depth(tx *storage.Connection, ids []uuid.UUID, attribute string) (int, error) {
+func (s Scope) depth(tx *storage.Connection, ids []uuid.UUID, attribute string) (int, error) {
 	var walk struct {
 		Depth int `db:"depth"`
 	}
@@ -131,7 +197,7 @@ func (s Scope) Depth(tx *storage.Connection, ids []uuid.UUID, attribute string) 
 	return walk.Depth, errors.Wrap(err, "error finding SCIM depth")
 }
 
-func (s Scope) DeleteReferences(tx *storage.Connection, id uuid.UUID) error {
+func (s Scope) deleteReferences(tx *storage.Connection, id uuid.UUID) error {
 	err := tx.RawQuery(fmt.Sprintf("DELETE FROM %q WHERE source_id = ? OR target_id = ?", scimReferences), id, id).Exec()
 	return errors.Wrap(err, "error deleting SCIM references")
 }

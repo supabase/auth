@@ -10,12 +10,19 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
-func (s Scope) Link(tx *storage.Connection, source uuid.UUID, attribute string, types []string, raw any) error {
-	wanted, err := linkTargets(attribute, raw)
+type Link struct {
+	Attribute string
+	Types     []string
+	Values    any
+}
+
+func (s Scope) link(tx *storage.Connection, source uuid.UUID, l Link) error {
+	attribute := l.Attribute
+	wanted, err := linkTargets(attribute, l.Values)
 	if err != nil {
 		return err
 	}
-	current, err := s.FindTargets(tx, source, attribute)
+	current, err := s.findTargets(tx, source, attribute)
 	if err != nil {
 		return err
 	}
@@ -23,7 +30,7 @@ func (s Scope) Link(tx *storage.Connection, source uuid.UUID, attribute string, 
 	if err := s.nestable(tx, source, attribute, add); err != nil {
 		return err
 	}
-	added, err := s.AddReferences(tx, source, attribute, types, add)
+	added, err := s.addReferences(tx, source, attribute, l.Types, add)
 	if err != nil {
 		return err
 	}
@@ -34,14 +41,14 @@ func (s Scope) Link(tx *storage.Connection, source uuid.UUID, attribute string, 
 	if i := slices.IndexFunc(add, func(id uuid.UUID) bool { return !found[id] }); i >= 0 {
 		return linkInvalid(attribute, add[i].String())
 	}
-	return s.RemoveReferences(tx, source, attribute, remove)
+	return s.removeReferences(tx, source, attribute, remove)
 }
 
 func (s Scope) nestable(tx *storage.Connection, source uuid.UUID, attribute string, targets []uuid.UUID) error {
 	if len(targets) == 0 {
 		return nil
 	}
-	ancestors, err := s.FindAncestors(tx, source, attribute)
+	ancestors, err := s.findAncestors(tx, source, attribute)
 	if err != nil {
 		return err
 	}
@@ -54,7 +61,7 @@ func (s Scope) nestable(tx *storage.Connection, source uuid.UUID, attribute stri
 			return scimerrors.ErrInvalidValue(strconv.Quote(target.String()) + " would make " + attribute + " cyclic")
 		}
 	}
-	height, err := s.Depth(tx, targets, attribute)
+	height, err := s.depth(tx, targets, attribute)
 	if err != nil {
 		return err
 	}

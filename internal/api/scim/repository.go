@@ -2,26 +2,16 @@ package scim
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"strings"
-	"time"
 	"uuid"
 
-	"github.com/gobuffalo/pop/v6"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/api/scim/store"
-	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
-
-const queryTimeout = 5 * time.Second
 
 type repository[T core.Resource] struct {
 	db           *storage.Connection
@@ -41,20 +31,12 @@ func NewRepository[T core.Resource](db *storage.Connection, resourceType string,
 	}
 }
 
-func (r *repository[T]) List(ctx context.Context, query *protocol.SearchRequest) ([]T, int, error) {
+func (r *repository[T]) List(ctx context.Context, request *protocol.SearchRequest) ([]T, int, error) {
 	scope, err := r.scope(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
-	items, total, err := r.list(ctx, scope, query)
-	if errors.Is(err, context.DeadlineExceeded) {
-		return nil, 0, scimerrors.ErrTooMany("the query took too long")
-	}
-	return items, total, err
-}
-
-func (r *repository[T]) list(ctx context.Context, scope store.Scope, request *protocol.SearchRequest) ([]T, int, error) {
-	q, clause, err := r.filter(scope, request.Filter)
+	clause, err := query.Where(r.schemas, scope.ProviderID, r.endpoint(), r.references, request.Filter)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -63,43 +45,54 @@ func (r *repository[T]) list(ctx context.Context, scope store.Scope, request *pr
 		sorted.SortBy = prefix.Attribute
 		request = &sorted
 	}
-	if request.Count == 0 {
-		total, err := r.count(ctx, q)
-		return []T{}, total, err
+	order, args, err := query.Order(r.schemas, request)
+	if err != nil {
+		return nil, 0, err
 	}
-	return r.page(ctx, q, request)
+	rows, total, err := scope.Page(ctx, store.Search{
+		Where:     clause,
+		Order:     order,
+		OrderArgs: args,
+		Count:     request.Count,
+		Offset:    request.Offset(),
+		Refs:      r.refs(ctx),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	items, err := store.Decode[T](rows, r.endpoint())
+	return items, total, err
 }
 
 func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 	var zero T
 	key, err := uuid.Parse(id)
 	if err != nil {
-		return zero, notFound()
+		return zero, store.NotFound()
 	}
 	scope, err := r.scope(ctx)
 	if err != nil {
 		return zero, err
 	}
-	return r.find(ctx, r.db.WithContext(ctx), scope, key, protocol.ProjectionFrom(ctx))
+	row, err := scope.Find(ctx, key, r.refs(ctx))
+	if err != nil {
+		return zero, err
+	}
+	return row.Into[T](r.endpoint())
 }
 
 func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
-	saved, _, err := r.save(ctx, item, func(tx *storage.Connection, scope store.Scope, document string) (*store.Resource, error) {
-		return scope.Create(tx, document)
+	return r.save(ctx, item, func(scope store.Scope, document string, links []store.Link, refs string) (store.Row, error) {
+		return scope.Create(ctx, document, links, refs)
 	})
-	return saved, invalid(err)
 }
 
 func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
 	common := item.Common()
 	id, _ := uuid.Parse(common.ID)
-	saved, scope, err := r.save(ctx, item, func(tx *storage.Connection, scope store.Scope, document string) (*store.Resource, error) {
-		return scope.Update(tx, id, document, common.Meta.Version)
+	return r.save(ctx, item, func(scope store.Scope, document string, links []store.Link, refs string) (store.Row, error) {
+		return scope.Update(ctx, id, document, common.Meta.Version, links, refs)
 	})
-	if models.IsNotFoundError(err) {
-		return saved, r.missing(ctx, scope, id)
-	}
-	return saved, invalid(err)
 }
 
 func (r *repository[T]) Delete(ctx context.Context, item T) error {
@@ -109,16 +102,24 @@ func (r *repository[T]) Delete(ctx context.Context, item T) error {
 	}
 	common := item.Common()
 	id, _ := uuid.Parse(common.ID)
-	err = r.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		if err := scope.Delete(tx, id, common.Meta.Version); err != nil {
-			return err
-		}
-		return scope.DeleteReferences(tx, id)
-	})
-	if models.IsNotFoundError(err) {
-		return r.missing(ctx, scope, id)
+	return scope.Delete(ctx, id, common.Meta.Version)
+}
+
+func (r *repository[T]) save(ctx context.Context, item T, write func(store.Scope, string, []store.Link, string) (store.Row, error)) (T, error) {
+	var zero T
+	scope, err := r.scope(ctx)
+	if err != nil {
+		return zero, err
 	}
-	return err
+	document, links, err := store.Encode(item, r.references)
+	if err != nil {
+		return zero, err
+	}
+	row, err := write(scope, document, links, r.refs(ctx))
+	if err != nil {
+		return zero, err
+	}
+	return row.Into[T](r.endpoint())
 }
 
 func (r *repository[T]) scope(ctx context.Context) (store.Scope, error) {
@@ -126,216 +127,13 @@ func (r *repository[T]) scope(ctx context.Context) (store.Scope, error) {
 	if token == nil {
 		return store.Scope{}, scimerrors.ErrInternal("missing SCIM token")
 	}
-	return store.Scope{ProviderID: token.SSOProviderID, ResourceType: r.resourceType}, nil
+	return store.NewScope(r.db, token.SSOProviderID, r.resourceType), nil
 }
 
-func (r *repository[T]) missing(ctx context.Context, scope store.Scope, id uuid.UUID) error {
-	found, err := scope.Query(r.db.WithContext(ctx)).Where("id = ?", id).Exists(&store.Resource{})
-	if err != nil {
-		return err
-	}
-	if !found {
-		return notFound()
-	}
-	return scimerrors.ErrPreconditionFailed("resource has changed on the server")
+func (r *repository[T]) refs(ctx context.Context) string {
+	return query.Select(r.references, protocol.ProjectionFrom(ctx), r.locations)
 }
 
-func (r *repository[T]) order(request *protocol.SearchRequest) (string, []any, error) {
-	if request.SortBy == "" {
-		return "id", nil, nil
-	}
-	parent, attribute, err := request.SortAttribute(r.schemas)
-	if err != nil {
-		return "", nil, err
-	}
-	direction := " ASC"
-	if request.Descending() {
-		direction = " DESC"
-	}
-	keys := []string{parent.Name}
-	if parent != attribute {
-		keys = append(keys, attribute.Name)
-	}
-	path := strings.Join(keys, ".")
-	if path == "meta.created" {
-		return "id" + direction, nil, nil
-	}
-	if column, ok := query.Columns[path]; ok {
-		return column + direction + ", id", nil, nil
-	}
-	if parent.MultiValued {
-		keys = []string{parent.Name, "0", attribute.Name}
-	}
-	for _, extension := range r.schemas.Extensions() {
-		if extension.Attributes.Lookup(parent.Name) == parent {
-			keys = append([]string{string(extension.ID)}, keys...)
-		}
-	}
-	value, args := `resource #>> ?::text[]`, []any{keys}
-	if len(keys) == 1 {
-		value, args = `resource ->> `+query.QuoteLiteral(keys[0]), nil
-	}
-	if parent.MultiValued {
-		value, args = `coalesce(jsonb_path_query_first(resource, ?::jsonpath) #>> '{}', `+value+`)`, []any{primary(keys), keys}
-	}
-	if !attribute.CaseExact {
-		value = "lower(" + value + ")"
-	}
-	return value + ` COLLATE "C"` + direction + ", id", args, nil
-}
-
-func (r *repository[T]) save(ctx context.Context, item T, write func(*storage.Connection, store.Scope, string) (*store.Resource, error)) (T, store.Scope, error) {
-	var saved T
-	scope, err := r.scope(ctx)
-	if err != nil {
-		return saved, scope, err
-	}
-	document, targets, err := r.encode(item)
-	if err != nil {
-		return saved, scope, err
-	}
-	err = r.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		row, err := write(tx, scope, document)
-		if err != nil {
-			return err
-		}
-		for _, reference := range r.references {
-			types := reference.Targets()
-			if types == nil {
-				continue
-			}
-			if err := scope.Link(tx, row.ID, reference.Name(), types, targets[reference.Name()]); err != nil {
-				return err
-			}
-		}
-		saved, err = r.find(ctx, tx, scope, row.ID, protocol.ProjectionFrom(ctx))
-		return err
-	})
-	return saved, scope, err
-}
-
-func (r *repository[T]) filter(scope store.Scope, expression string) (*pop.Query, query.Clause, error) {
-	q := scope.Query(r.db)
-	if expression == "" {
-		return q, nil, nil
-	}
-	clause, err := protocol.Filter(r.schemas, expression, query.NewEvaluator(r.schemas, scope.ProviderID, r.locations[r.resourceType], r.references...))
-	if err != nil {
-		return nil, nil, err
-	}
-	text, args := clause.SQL()
-	return q.Where(text, args...), clause, nil
-}
-
-func (r *repository[T]) page(ctx context.Context, q *pop.Query, query *protocol.SearchRequest) ([]T, int, error) {
-	order, args, err := r.order(query)
-	if err != nil {
-		return nil, 0, err
-	}
-	sql, values := q.Select("id").Order(order, args...).ToSQL(pop.NewModel(&store.Resource{}, ctx))
-	bounded, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
-	items, err := r.fetch(r.db.WithContext(bounded), protocol.ProjectionFrom(ctx), fmt.Sprintf("unnest(array(%s LIMIT $%d OFFSET $%d)) WITH ORDINALITY page(id, n) JOIN scim_resources USING (id) ORDER BY page.n", sql, len(values)+1, len(values)+2), append(values, query.Count, query.Offset())...)
-	if err != nil {
-		return nil, 0, err
-	}
-	total := query.Offset() + len(items)
-	if len(items) == query.Count || (len(items) == 0 && query.Offset() > 0) {
-		total, err = r.count(ctx, q)
-	}
-	return items, total, err
-}
-
-func (r *repository[T]) count(ctx context.Context, q *pop.Query) (int, error) {
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
-	bounded := *q
-	bounded.Connection = q.Connection.WithContext(ctx)
-	return bounded.Count(&store.Resource{})
-}
-
-func (r *repository[T]) find(ctx context.Context, tx *storage.Connection, scope store.Scope, id uuid.UUID, projection protocol.Projection) (T, error) {
-	var zero T
-	sql, args := scope.Query(tx).Where("id = ?", id).Select("id").ToSQL(pop.NewModel(&store.Resource{}, ctx))
-	items, err := r.fetch(tx, projection, "scim_resources WHERE id = ("+sql+")", args...)
-	if err != nil {
-		return zero, err
-	}
-	if len(items) == 0 {
-		return zero, notFound()
-	}
-	return items[0], nil
-}
-
-type record struct {
-	store.Resource
-	References json.RawMessage `db:"refs"`
-}
-
-func (r *repository[T]) fetch(tx *storage.Connection, projection protocol.Projection, from string, args ...any) ([]T, error) {
-	rows := []record{}
-	if err := tx.RawQuery(fmt.Sprintf("SELECT %s, %s AS refs FROM %s", store.ResourceColumns, r.selects(projection), from), args...).All(&rows); err != nil {
-		return nil, err
-	}
-	items := make([]T, len(rows))
-	for i, row := range rows {
-		item, err := row.As[T](r.locations[r.resourceType])
-		if err == nil {
-			err = json.Unmarshal(row.References, &item)
-		}
-		if err != nil {
-			return nil, err
-		}
-		items[i] = item
-	}
-	return items, nil
-}
-
-func (r *repository[T]) selects(projection protocol.Projection) string {
-	pairs := []string{}
-	for _, reference := range r.references {
-		if projection.Returns(reference.Name()) {
-			pairs = append(pairs, query.QuoteLiteral(reference.Name()), reference.Select(r.locations))
-		}
-	}
-	if len(pairs) == 0 {
-		return "'{}'::json"
-	}
-	return "json_build_object(" + strings.Join(pairs, ", ") + ")"
-}
-
-func (r *repository[T]) encode(item T) (string, map[string]any, error) {
-	document, err := core.NewObject(item)
-	if err != nil {
-		return "", nil, err
-	}
-	for _, key := range []string{"id", "meta", "password"} {
-		document.Remove(key)
-	}
-	targets := map[string]any{}
-	for _, reference := range r.references {
-		targets[reference.Name()] = document.Get(reference.Name())
-		document.Remove(reference.Name())
-	}
-	raw, err := json.Marshal(document)
-	return string(raw), targets, err
-}
-
-func invalid(err error) error {
-	if pg := utilities.NewPostgresError(err); pg != nil && pg.IsUniqueConstraintViolated() {
-		return scimerrors.ErrUniqueness("resource must be unique")
-	}
-	return err
-}
-
-func primary(keys []string) string {
-	quoted := make([]string, len(keys))
-	for i, key := range keys {
-		quoted[i] = query.Quote(key)
-	}
-	return "$." + strings.Join(quoted[:len(keys)-2], ".") + "[*] ? (@.primary == true)." + quoted[len(keys)-1]
-}
-
-func notFound() error {
-	return scimerrors.ErrNotFound("Not found")
+func (r *repository[T]) endpoint() string {
+	return r.locations[r.resourceType]
 }
