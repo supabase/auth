@@ -23,7 +23,7 @@ func (ts *OAuthClientTestSuite) mintApprovedCode(clientID, userID uuid.UUID) str
 	})
 	require.NoError(ts.T(), models.CreateOAuthServerAuthorization(ts.DB, auth))
 	require.NoError(ts.T(), auth.SetUser(ts.DB, userID))
-	require.NoError(ts.T(), auth.Approve(ts.DB))
+	require.NoError(ts.T(), auth.Approve(ts.DB, nil))
 	return *auth.AuthorizationCode
 }
 
