@@ -37,7 +37,7 @@ func (d derived) Targets() []string {
 
 func (d derived) Select(locations map[string]string) string {
 	via := QuoteLiteral(d.via)
-	return `(SELECT jsonb_build_object(` + QuoteLiteral(d.Name()) + `, json_agg(json_build_object('value', walk.id, '$ref', ` + QuoteLiteral(locations[d.source]+"/") + ` || walk.id, 'type', CASE WHEN walk.depth = 1 THEN 'direct' ELSE 'indirect' END, 'display', source.resource ->> 'displayName') ORDER BY walk.depth, walk.id)) FROM (WITH RECURSIVE chain (id, depth) AS (
+	return `(SELECT json_build_object(` + QuoteLiteral(d.Name()) + `, json_agg(json_build_object('value', walk.id, '$ref', ` + QuoteLiteral(locations[d.source]+"/") + ` || walk.id, 'type', CASE WHEN walk.depth = 1 THEN 'direct' ELSE 'indirect' END, 'display', source.resource ->> 'displayName') ORDER BY walk.depth, walk.id)) FROM (WITH RECURSIVE chain (id, depth) AS (
 		SELECT source_id, 1 FROM scim_resource_references WHERE target_id = scim_resources.id AND attribute = ` + via + `
 		UNION
 		SELECT edge.source_id, chain.depth + 1 FROM chain JOIN scim_resource_references edge ON edge.target_id = chain.id AND edge.attribute = ` + via + ` WHERE chain.depth < ` + strconv.Itoa(MaxDepth) + `

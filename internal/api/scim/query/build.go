@@ -22,13 +22,10 @@ func Select(references []Reference, projection protocol.Projection, locations ma
 	parts := []string{}
 	for _, reference := range references {
 		if projection.Returns(projected(reference)) {
-			parts = append(parts, "coalesce("+reference.Select(locations)+", '{}'::jsonb)")
+			parts = append(parts, reference.Select(locations))
 		}
 	}
-	if len(parts) == 0 {
-		return "'{}'::jsonb"
-	}
-	return strings.Join(parts, " || ")
+	return "json_build_array(" + strings.Join(parts, ", ") + ")"
 }
 
 func Order(schemas core.Schemas, references []Reference, request *protocol.SearchRequest) (string, []any, error) {

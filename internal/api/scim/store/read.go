@@ -28,7 +28,19 @@ func (r Row) Into[T core.Resource](endpoint string) (T, error) {
 	if err != nil {
 		return item, err
 	}
-	return item, json.Unmarshal(r.References, &item)
+	var parts []json.RawMessage
+	if err := json.Unmarshal(r.References, &parts); err != nil {
+		return item, err
+	}
+	for _, part := range parts {
+		if string(part) == "null" {
+			continue
+		}
+		if err := json.Unmarshal(part, &item); err != nil {
+			return item, err
+		}
+	}
+	return item, nil
 }
 
 func Decode[T core.Resource](rows []Row, endpoint string) ([]T, error) {
