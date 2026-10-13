@@ -16,16 +16,16 @@ func Where(schemas core.Schemas, provider uuid.UUID, location string, references
 }
 
 func Select(references []Reference, projection protocol.Projection, locations map[string]string) string {
-	pairs := []string{}
+	parts := []string{}
 	for _, reference := range references {
 		if projection.Returns(reference.Name()) {
-			pairs = append(pairs, QuoteLiteral(reference.Name()), reference.Select(locations))
+			parts = append(parts, "coalesce("+reference.Select(locations)+", '{}'::jsonb)")
 		}
 	}
-	if len(pairs) == 0 {
-		return "'{}'::json"
+	if len(parts) == 0 {
+		return "'{}'::jsonb"
 	}
-	return "json_build_object(" + strings.Join(pairs, ", ") + ")"
+	return strings.Join(parts, " || ")
 }
 
 func Order(schemas core.Schemas, request *protocol.SearchRequest) (string, []any, error) {

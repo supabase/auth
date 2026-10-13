@@ -2,6 +2,9 @@ package query
 
 import (
 	"uuid"
+
+	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
 type stored struct {
@@ -29,5 +32,13 @@ func (s stored) Exists(_ uuid.UUID, inner string, args []any) (string, []any) {
 }
 
 func (s stored) Select(locations map[string]string) string {
-	return `(SELECT json_agg(json_build_object('value', target_id, '$ref', ` + endpoint(locations, "target_type") + ` || target_id, 'type', target_type)) FROM scim_resource_references WHERE source_id = scim_resources.id AND attribute = ` + QuoteLiteral(s.Name()) + `)`
+	return `(SELECT jsonb_build_object(` + QuoteLiteral(s.Name()) + `, json_agg(json_build_object('value', target_id, '$ref', ` + endpoint(locations, "target_type") + ` || target_id, 'type', target_type))) FROM scim_resource_references WHERE source_id = scim_resources.id AND attribute = ` + QuoteLiteral(s.Name()) + `)`
+}
+
+func (s stored) Leaf(string, filter.Operator, any) (Clause, bool) {
+	return nil, false
+}
+
+func (s stored) Strip(document core.Object) {
+	document.Remove(s.Name())
 }

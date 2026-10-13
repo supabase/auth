@@ -56,7 +56,7 @@ func Encode[T core.Resource](item T, references []query.Reference) (string, []Li
 		if types := reference.Targets(); types != nil {
 			links = append(links, Link{reference.Name(), types, document.Get(reference.Name())})
 		}
-		document.Remove(reference.Name())
+		reference.Strip(document)
 	}
 	raw, err := json.Marshal(document)
 	return string(raw), links, err

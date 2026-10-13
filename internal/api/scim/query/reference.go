@@ -19,7 +19,9 @@ type Reference interface {
 	Columns() map[string]string
 	Exists(provider uuid.UUID, inner string, args []any) (string, []any)
 	Targets() []string
+	Leaf(attribute string, op filter.Operator, value any) (Clause, bool)
 	Select(locations map[string]string) string
+	Strip(document core.Object)
 }
 
 type named string

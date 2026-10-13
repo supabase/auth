@@ -1394,3 +1394,226 @@ func requireSCIMError(t *testing.T, res *http.Response, status int, scimType sci
 	}
 	return body
 }
+
+func TestSCIMManagerRead(t *testing.T) {
+	c := newSCIMClient(t, nil)
+
+	t.Run("resolves a live manager", func(t *testing.T) {
+		boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Barbara Jensen"))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+
+		manager := scimManager(t, report)
+		require.Equal(t, boss.ID, manager.Value)
+		require.Equal(t, boss.Meta.Location, manager.Ref)
+		require.Equal(t, "Barbara Jensen", manager.DisplayName)
+		require.Equal(t, "Tour Operations", report.EnterpriseUser.Department)
+		require.Equal(t, report, c.user(t, report.ID))
+	})
+
+	t.Run("keeps a value that is not a uuid", func(t *testing.T) {
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport("jane@example.com"))
+
+		require.Equal(t, &core.Manager{Value: "jane@example.com"}, scimManager(t, report))
+	})
+
+	t.Run("keeps a uuid that names nothing", func(t *testing.T) {
+		unknown := uuid.NewV4().String()
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(unknown))
+
+		require.Equal(t, &core.Manager{Value: unknown}, scimManager(t, report))
+	})
+
+	t.Run("omits the extension without a manager", func(t *testing.T) {
+		user := c.createUser(t, scimUserName("bjensen"))
+
+		require.Nil(t, user.EnterpriseUser)
+		require.Nil(t, c.user(t, user.ID).EnterpriseUser)
+	})
+
+	t.Run("omits displayName when the manager has none", func(t *testing.T) {
+		boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss(""))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+
+		require.Equal(t, &core.Manager{Value: boss.ID, Ref: boss.Meta.Location}, scimManager(t, report))
+	})
+
+	t.Run("follows a manager rename", func(t *testing.T) {
+		boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Barbara Jensen"))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+
+		res := c.do(t, http.MethodPatch, scimUsersPath+"/"+boss.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "displayName", "value": "Babs Jensen"}))
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Equal(t, "Babs Jensen", scimManager(t, c.user(t, report.ID)).DisplayName)
+	})
+
+	t.Run("drops a deleted manager", func(t *testing.T) {
+		boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Deleted Boss"))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+
+		require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+boss.ID).StatusCode)
+		require.Equal(t, &core.Manager{Value: boss.ID}, scimManager(t, c.user(t, report.ID)))
+		require.Empty(t, scimIDs(t, c, scimUsersPath, url.Values{"filter": {scimEnterprise("manager.displayName eq \"Deleted Boss\"")}}))
+	})
+
+	t.Run("ignores a manager in another tenant", func(t *testing.T) {
+		other := newSCIMClient(t, nil)
+		boss := scimCreate[core.User](t, other, scimUsersPath, newSCIMBoss("Other Tenant Boss"))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+
+		require.Equal(t, &core.Manager{Value: boss.ID}, scimManager(t, report))
+		require.Empty(t, scimIDs(t, c, scimUsersPath, url.Values{"filter": {scimEnterprise("manager.displayName eq \"Other Tenant Boss\"")}}))
+	})
+
+	t.Run("honours attribute projection", func(t *testing.T) {
+		boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Projected Boss"))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+		enterprise := string(core.SchemaEnterpriseUser)
+
+		list := scimSearch(t, c, scimUsersPath, map[string]any{"filter": `id eq "` + report.ID + `"`, "attributes": []string{"userName"}})
+		require.Equal(t, 1, list.TotalResults)
+		require.NotContains(t, list.Resources[0], enterprise)
+
+		list = scimSearch(t, c, scimUsersPath, map[string]any{"filter": `id eq "` + report.ID + `"`, "excludedAttributes": []string{enterprise + ":manager"}})
+		require.Equal(t, 1, list.TotalResults)
+		extension, _ := list.Resources[0][enterprise].(map[string]any)
+		require.Equal(t, "Tour Operations", extension["department"])
+		require.NotContains(t, extension, "manager")
+
+		list = scimSearch(t, c, scimUsersPath, map[string]any{"filter": `id eq "` + report.ID + `"`, "attributes": []string{enterprise + ":manager.displayName"}})
+		require.Equal(t, 1, list.TotalResults)
+		extension, _ = list.Resources[0][enterprise].(map[string]any)
+		manager, _ := extension["manager"].(map[string]any)
+		require.Equal(t, "Projected Boss", manager["displayName"])
+	})
+}
+
+func TestSCIMManagerWrite(t *testing.T) {
+	c := newSCIMClient(t, nil)
+	enterprise := string(core.SchemaEnterpriseUser)
+
+	t.Run("PUT replaces the manager", func(t *testing.T) {
+		first := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("First Boss"))
+		second := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Second Boss"))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(first.ID))
+
+		body := newSCIMReport(second.ID)
+		body["userName"] = report.UserName
+		res := c.do(t, http.MethodPut, scimUsersPath+"/"+report.ID, body)
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Equal(t, "Second Boss", scimManager(t, scimDecode[core.User](t, res)).DisplayName)
+	})
+
+	t.Run("PUT does not store a forged displayName or ref", func(t *testing.T) {
+		boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Real Boss"))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+
+		body := newSCIMReport(boss.ID)
+		body["userName"] = report.UserName
+		body[enterprise].(map[string]any)["manager"] = map[string]any{"value": boss.ID, "displayName": "Forged", "$ref": "https://evil.example.com/Users/1"}
+		res := c.do(t, http.MethodPut, scimUsersPath+"/"+report.ID, body)
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Equal(t, &core.Manager{Value: boss.ID, Ref: boss.Meta.Location, DisplayName: "Real Boss"}, scimManager(t, scimDecode[core.User](t, res)))
+
+		require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+boss.ID).StatusCode)
+		require.Equal(t, &core.Manager{Value: boss.ID}, scimManager(t, c.user(t, report.ID)))
+	})
+
+	t.Run("PATCH replaces manager.value", func(t *testing.T) {
+		first := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Patch First"))
+		second := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Patch Second"))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(first.ID))
+
+		res := c.do(t, http.MethodPatch, scimUsersPath+"/"+report.ID, newSCIMPatch(map[string]any{"op": "replace", "path": enterprise + ":manager.value", "value": second.ID}))
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Equal(t, "Patch Second", scimManager(t, scimDecode[core.User](t, res)).DisplayName)
+	})
+
+	t.Run("PATCH removes the manager through value", func(t *testing.T) {
+		boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Removed Boss"))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+
+		// RFC 7644 3.5.2.2: unassigning the readOnly manager.displayName is a mutability error.
+		remove := c.do(t, http.MethodPatch, scimUsersPath+"/"+report.ID, newSCIMPatch(map[string]any{"op": "remove", "path": enterprise + ":manager"}))
+		requireSCIMError(t, remove, http.StatusBadRequest, scimerrors.Mutability)
+
+		res := c.do(t, http.MethodPatch, scimUsersPath+"/"+report.ID, newSCIMPatch(map[string]any{"op": "remove", "path": enterprise + ":manager.value"}))
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Nil(t, scimDecode[core.User](t, res).EnterpriseUser.Manager)
+		require.Nil(t, c.user(t, report.ID).EnterpriseUser.Manager)
+		require.Equal(t, "Tour Operations", c.user(t, report.ID).EnterpriseUser.Department)
+	})
+}
+
+func TestSCIMManagerFilters(t *testing.T) {
+	c := newSCIMClient(t, nil)
+	boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Barbara Jensen"))
+	report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+	orphan := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport("jane@example.com"))
+
+	for _, tc := range []struct {
+		filter string
+		ids    []string
+	}{
+		{`manager.value eq "` + boss.ID + `"`, []string{report.ID}},
+		{`manager.value eq "jane@example.com"`, []string{orphan.ID}},
+		{`manager pr`, []string{report.ID, orphan.ID}},
+		{`manager.displayName eq "Barbara Jensen"`, []string{report.ID}},
+		{`manager.displayName eq "barbara jensen"`, []string{report.ID}},
+		{`manager.displayName co "Jensen"`, []string{report.ID}},
+		{`manager.displayName sw "Barbara"`, []string{report.ID}},
+		{`manager.displayName ew "Jensen"`, []string{report.ID}},
+		{`manager.displayName pr`, []string{report.ID}},
+		{`manager.displayName eq "Nobody"`, nil},
+	} {
+		t.Run(tc.filter, func(t *testing.T) {
+			ids := scimIDs(t, c, scimUsersPath, url.Values{"filter": {scimEnterprise(tc.filter)}})
+			require.ElementsMatch(t, tc.ids, ids)
+		})
+	}
+
+	t.Run("ne follows RFC 7643 2.5", func(t *testing.T) {
+		ids := scimIDs(t, c, scimUsersPath, url.Values{"filter": {scimEnterprise(`manager.displayName ne "Barbara Jensen"`)}})
+		require.ElementsMatch(t, []string{boss.ID, orphan.ID}, ids)
+	})
+
+	// RFC 7643 4.3: manager is single-valued, so scim-go rejects any value path on it.
+	for _, filter := range []string{
+		`manager[value eq "` + boss.ID + `"]`,
+		`manager[displayName eq "Barbara Jensen"]`,
+		`manager[value eq "` + boss.ID + `" and displayName eq "Barbara Jensen"]`,
+	} {
+		t.Run(filter, func(t *testing.T) {
+			res := c.get(t, scimUsersPath+"?"+url.Values{"filter": {scimEnterprise(filter)}}.Encode())
+			requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidFilter)
+		})
+	}
+}
+
+func scimEnterprise(filter string) string {
+	return string(core.SchemaEnterpriseUser) + ":" + filter
+}
+
+func scimManager(t *testing.T, user core.User) *core.Manager {
+	t.Helper()
+	require.NotNil(t, user.EnterpriseUser)
+	require.NotNil(t, user.EnterpriseUser.Manager)
+	return user.EnterpriseUser.Manager
+}
+
+func newSCIMBoss(displayName string) map[string]any {
+	body := newSCIMUser(scimUserName("boss"), "Barbara", "Jensen")
+	if displayName != "" {
+		body["displayName"] = displayName
+	}
+	return body
+}
+
+func newSCIMReport(manager string) map[string]any {
+	body := newSCIMUser(scimUserName("report"), "Babs", "Jensen")
+	body["schemas"] = []string{string(core.SchemaUser), string(core.SchemaEnterpriseUser)}
+	body[string(core.SchemaEnterpriseUser)] = map[string]any{
+		"department": "Tour Operations",
+		"manager":    map[string]any{"value": manager},
+	}
+	return body
+}

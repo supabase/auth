@@ -60,6 +60,9 @@ func (e Evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
 	if !ok {
 		return jsonpath(present(e.path(attribute))), nil
 	}
+	if leaf, ok := ref.Leaf(attribute.Definition.Name, filter.OpPresent, nil); ok {
+		return e.wrap(attribute, ref, leaf), nil
+	}
 	if _, ok := ref.Columns()[attribute.Definition.Name]; !ok && attribute.Definition.Name != ref.Name() {
 		return nil, unfilterable(ref, attribute.Definition)
 	}
@@ -116,6 +119,9 @@ func (e Evaluator) assigned(attribute *protocol.Attribute, op filter.Operator, v
 	if !ok {
 		return e.compare(attribute, op, value), nil
 	}
+	if leaf, ok := ref.Leaf(attribute.Definition.Name, op, value); ok {
+		return e.wrap(attribute, ref, leaf), nil
+	}
 	leaf, err := match(ref, attribute.Definition, op, value)
 	if err != nil {
 		return nil, err
@@ -152,12 +158,26 @@ func (e Evaluator) wrap(attribute *protocol.Attribute, ref Reference, leaf Claus
 func (e Evaluator) reference(attribute *protocol.Attribute) (Reference, bool) {
 	top := attribute.Parent
 	if top == nil {
-		base := e.schemas.Base()
-		if attribute.Path.URI != "" && e.schemas.Lookup(core.SchemaURI(attribute.Path.URI)) != base {
-			return nil, false
+		schema := e.schemas.Base()
+		if attribute.Path.URI != "" && e.schemas.Lookup(core.SchemaURI(attribute.Path.URI)) != schema {
+			schema = e.schemas.Lookup(core.SchemaURI(attribute.Path.URI))
+			if !e.schemas.IsExtension(schema) {
+				return nil, false
+			}
+			top = schema.Attributes.Lookup(attribute.Path.Name)
+			ref, ok := e.lookup(top)
+			if !ok {
+				return nil, false
+			}
+			_, routable := ref.Leaf(attribute.Definition.Name, filter.OpPresent, nil)
+			return ref, routable
 		}
-		top = base.Attributes.Lookup(attribute.Path.Name)
+		top = schema.Attributes.Lookup(attribute.Path.Name)
 	}
+	return e.lookup(top)
+}
+
+func (e Evaluator) lookup(top *core.Attribute) (Reference, bool) {
 	if top == nil {
 		return nil, false
 	}
