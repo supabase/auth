@@ -226,12 +226,13 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return UserExistsError
 			}
 
-			// A user cannot have both a confirmed email and phone number
-			// so we can safely assume that the user hasn't completed registration.
-			user.EncryptedPassword = signupUser.EncryptedPassword
-			terr = user.UpdatePassword(tx, nil)
-			if terr != nil {
-				return terr
+			// Check user hasn't finished registration.
+			if !user.IsConfirmed() && !user.IsPhoneConfirmed() {
+				user.EncryptedPassword = signupUser.EncryptedPassword
+				terr = user.UpdatePassword(tx, nil)
+				if terr != nil {
+					return terr
+				}
 			}
 		} else {
 			user, terr = a.signupNewUser(tx, signupUser)
