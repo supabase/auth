@@ -1,16 +1,15 @@
-package models
+package store
 
 import (
 	"encoding/json"
 	"strconv"
-	"strings"
 	"time"
 	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-type SCIMResource struct {
+type Resource struct {
 	ID            uuid.UUID       `db:"id"`
 	SSOProviderID uuid.UUID       `db:"sso_provider_id"`
 	ResourceType  string          `db:"resource_type"`
@@ -20,11 +19,11 @@ type SCIMResource struct {
 	DeletedAt     *time.Time      `db:"deleted_at"`
 }
 
-func (SCIMResource) TableName() string {
+func (Resource) TableName() string {
 	return "scim_resources"
 }
 
-func (r SCIMResource) As[T core.Resource](endpoint string) (T, error) {
+func (r Resource) As[T core.Resource](endpoint string) (T, error) {
 	var item T
 	if err := json.Unmarshal(r.Resource, &item); err != nil {
 		return item, err
@@ -39,13 +38,4 @@ func (r SCIMResource) As[T core.Resource](endpoint string) (T, error) {
 		Version:      `W/"` + strconv.FormatInt(r.UpdatedAt.UnixMicro(), 10) + `"`,
 	}
 	return item, nil
-}
-
-func SCIMVersionTime(version string) *time.Time {
-	micros, err := strconv.ParseInt(strings.TrimSuffix(strings.TrimPrefix(version, `W/"`), `"`), 10, 64)
-	if err != nil || micros < 0 {
-		return nil
-	}
-	t := time.UnixMicro(micros).UTC()
-	return &t
 }

@@ -2,8 +2,6 @@ package query
 
 import (
 	"uuid"
-
-	"github.com/supabase/auth/internal/models"
 )
 
 type stored struct {
@@ -31,5 +29,5 @@ func (s stored) Exists(_ uuid.UUID, inner string, args []any) (string, []any) {
 }
 
 func (s stored) Select(locations map[string]string) string {
-	return `(SELECT json_agg(json_build_object('value', target_id, '$ref', ` + endpoint(locations, "target_type") + ` || target_id, 'type', target_type)) FROM scim_resource_references WHERE source_id = scim_resources.id AND attribute = ` + models.QuoteLiteral(s.Name()) + `)`
+	return `(SELECT json_agg(json_build_object('value', target_id, '$ref', ` + endpoint(locations, "target_type") + ` || target_id, 'type', target_type)) FROM scim_resource_references WHERE source_id = scim_resources.id AND attribute = ` + QuoteLiteral(s.Name()) + `)`
 }

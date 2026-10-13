@@ -10,7 +10,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
-	"github.com/supabase/auth/internal/models"
 )
 
 const ValueAttribute = "value"
@@ -33,7 +32,7 @@ func endpoint(locations map[string]string, kind string) string {
 	var s strings.Builder
 	s.WriteString("CASE " + kind)
 	for _, name := range slices.Sorted(maps.Keys(locations)) {
-		s.WriteString(" WHEN " + models.QuoteLiteral(name) + " THEN " + models.QuoteLiteral(locations[name]+"/"))
+		s.WriteString(" WHEN " + QuoteLiteral(name) + " THEN " + QuoteLiteral(locations[name]+"/"))
 	}
 	s.WriteString(" END")
 	return s.String()

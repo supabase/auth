@@ -20,6 +20,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/api"
+	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/e2e/e2eapi"
@@ -451,7 +452,7 @@ func TestSCIMGroups(t *testing.T) {
 	}
 	nest := func(t *testing.T, client scimClient) []core.Group {
 		chain := []core.Group{client.createGroup(t, "Chain "+uuid.NewV4().String())}
-		for len(chain) < models.SCIMMaxDepth {
+		for len(chain) < query.MaxDepth {
 			chain = append(chain, client.createGroup(t, "Chain "+uuid.NewV4().String()))
 			require.Equal(t, http.StatusNoContent, client.addMembers(t, chain[len(chain)-2].ID, chain[len(chain)-1].ID).StatusCode)
 		}

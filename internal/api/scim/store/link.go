@@ -1,4 +1,4 @@
-package models
+package store
 
 import (
 	"slices"
@@ -6,11 +6,12 @@ import (
 	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
+	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/storage"
 )
 
-func (s SCIMScope) Link(tx *storage.Connection, source uuid.UUID, attribute string, types []string, raw any) error {
-	wanted, err := scimLinkTargets(attribute, raw)
+func (s Scope) Link(tx *storage.Connection, source uuid.UUID, attribute string, types []string, raw any) error {
+	wanted, err := linkTargets(attribute, raw)
 	if err != nil {
 		return err
 	}
@@ -18,7 +19,7 @@ func (s SCIMScope) Link(tx *storage.Connection, source uuid.UUID, attribute stri
 	if err != nil {
 		return err
 	}
-	add, remove := scimLinkDiff(current, wanted)
+	add, remove := linkDiff(current, wanted)
 	if err := s.nestable(tx, source, attribute, add); err != nil {
 		return err
 	}
@@ -31,12 +32,12 @@ func (s SCIMScope) Link(tx *storage.Connection, source uuid.UUID, attribute stri
 		found[id] = true
 	}
 	if i := slices.IndexFunc(add, func(id uuid.UUID) bool { return !found[id] }); i >= 0 {
-		return scimLinkInvalid(attribute, add[i].String())
+		return linkInvalid(attribute, add[i].String())
 	}
 	return s.RemoveReferences(tx, source, attribute, remove)
 }
 
-func (s SCIMScope) nestable(tx *storage.Connection, source uuid.UUID, attribute string, targets []uuid.UUID) error {
+func (s Scope) nestable(tx *storage.Connection, source uuid.UUID, attribute string, targets []uuid.UUID) error {
 	if len(targets) == 0 {
 		return nil
 	}
@@ -49,7 +50,7 @@ func (s SCIMScope) nestable(tx *storage.Connection, source uuid.UUID, attribute 
 		level = max(level, ancestor.Longest+1)
 	}
 	for _, target := range targets {
-		if target == source || slices.ContainsFunc(ancestors, func(ancestor SCIMAncestor) bool { return ancestor.SourceID == target }) {
+		if target == source || slices.ContainsFunc(ancestors, func(ancestor Ancestor) bool { return ancestor.SourceID == target }) {
 			return scimerrors.ErrInvalidValue(strconv.Quote(target.String()) + " would make " + attribute + " cyclic")
 		}
 	}
@@ -57,31 +58,31 @@ func (s SCIMScope) nestable(tx *storage.Connection, source uuid.UUID, attribute 
 	if err != nil {
 		return err
 	}
-	if height > 0 && level+height > SCIMMaxDepth {
-		return scimerrors.ErrInvalidValue(attribute + " would nest more than " + strconv.Itoa(SCIMMaxDepth) + " levels deep")
+	if height > 0 && level+height > query.MaxDepth {
+		return scimerrors.ErrInvalidValue(attribute + " would nest more than " + strconv.Itoa(query.MaxDepth) + " levels deep")
 	}
 	return nil
 }
 
-func scimLinkTargets(attribute string, raw any) ([]uuid.UUID, error) {
+func linkTargets(attribute string, raw any) ([]uuid.UUID, error) {
 	elements, _ := raw.([]any)
 	wanted := make([]uuid.UUID, 0, len(elements))
 	for _, element := range elements {
 		value, _ := element.(map[string]any)["value"].(string)
 		id, err := uuid.Parse(value)
 		if err != nil {
-			return nil, scimLinkInvalid(attribute, value)
+			return nil, linkInvalid(attribute, value)
 		}
 		wanted = append(wanted, id)
 	}
 	return wanted, nil
 }
 
-func scimLinkInvalid(attribute, value string) error {
+func linkInvalid(attribute, value string) error {
 	return scimerrors.ErrInvalidValue(strconv.Quote(value) + " is not a valid " + attribute + " value")
 }
 
-func scimLinkDiff(current, wanted []uuid.UUID) (add, remove []uuid.UUID) {
+func linkDiff(current, wanted []uuid.UUID) (add, remove []uuid.UUID) {
 	have := make(map[uuid.UUID]bool, len(current))
 	for _, id := range current {
 		have[id] = true

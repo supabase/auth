@@ -15,6 +15,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase/auth/internal/api/scim/query"
+	"github.com/supabase/auth/internal/api/scim/store"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
@@ -52,7 +53,7 @@ func (r *repository[T]) List(ctx context.Context, query *protocol.SearchRequest)
 	return items, total, err
 }
 
-func (r *repository[T]) list(ctx context.Context, scope models.SCIMScope, request *protocol.SearchRequest) ([]T, int, error) {
+func (r *repository[T]) list(ctx context.Context, scope store.Scope, request *protocol.SearchRequest) ([]T, int, error) {
 	q, clause, err := r.filter(scope, request.Filter)
 	if err != nil {
 		return nil, 0, err
@@ -83,7 +84,7 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 }
 
 func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
-	saved, _, err := r.save(ctx, item, func(tx *storage.Connection, scope models.SCIMScope, document string) (*models.SCIMResource, error) {
+	saved, _, err := r.save(ctx, item, func(tx *storage.Connection, scope store.Scope, document string) (*store.Resource, error) {
 		return scope.Create(tx, document)
 	})
 	return saved, invalid(err)
@@ -92,7 +93,7 @@ func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
 func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
 	common := item.Common()
 	id, _ := uuid.Parse(common.ID)
-	saved, scope, err := r.save(ctx, item, func(tx *storage.Connection, scope models.SCIMScope, document string) (*models.SCIMResource, error) {
+	saved, scope, err := r.save(ctx, item, func(tx *storage.Connection, scope store.Scope, document string) (*store.Resource, error) {
 		return scope.Update(tx, id, document, common.Meta.Version)
 	})
 	if models.IsNotFoundError(err) {
@@ -120,16 +121,16 @@ func (r *repository[T]) Delete(ctx context.Context, item T) error {
 	return err
 }
 
-func (r *repository[T]) scope(ctx context.Context) (models.SCIMScope, error) {
+func (r *repository[T]) scope(ctx context.Context) (store.Scope, error) {
 	token := tokenKey.Value(ctx)
 	if token == nil {
-		return models.SCIMScope{}, scimerrors.ErrInternal("missing SCIM token")
+		return store.Scope{}, scimerrors.ErrInternal("missing SCIM token")
 	}
-	return models.SCIMScope{ProviderID: token.SSOProviderID, ResourceType: r.resourceType}, nil
+	return store.Scope{ProviderID: token.SSOProviderID, ResourceType: r.resourceType}, nil
 }
 
-func (r *repository[T]) missing(ctx context.Context, scope models.SCIMScope, id uuid.UUID) error {
-	found, err := scope.Query(r.db.WithContext(ctx)).Where("id = ?", id).Exists(&models.SCIMResource{})
+func (r *repository[T]) missing(ctx context.Context, scope store.Scope, id uuid.UUID) error {
+	found, err := scope.Query(r.db.WithContext(ctx)).Where("id = ?", id).Exists(&store.Resource{})
 	if err != nil {
 		return err
 	}
@@ -172,7 +173,7 @@ func (r *repository[T]) order(request *protocol.SearchRequest) (string, []any, e
 	}
 	value, args := `resource #>> ?::text[]`, []any{keys}
 	if len(keys) == 1 {
-		value, args = `resource ->> `+models.QuoteLiteral(keys[0]), nil
+		value, args = `resource ->> `+query.QuoteLiteral(keys[0]), nil
 	}
 	if parent.MultiValued {
 		value, args = `coalesce(jsonb_path_query_first(resource, ?::jsonpath) #>> '{}', `+value+`)`, []any{primary(keys), keys}
@@ -183,7 +184,7 @@ func (r *repository[T]) order(request *protocol.SearchRequest) (string, []any, e
 	return value + ` COLLATE "C"` + direction + ", id", args, nil
 }
 
-func (r *repository[T]) save(ctx context.Context, item T, write func(*storage.Connection, models.SCIMScope, string) (*models.SCIMResource, error)) (T, models.SCIMScope, error) {
+func (r *repository[T]) save(ctx context.Context, item T, write func(*storage.Connection, store.Scope, string) (*store.Resource, error)) (T, store.Scope, error) {
 	var saved T
 	scope, err := r.scope(ctx)
 	if err != nil {
@@ -213,7 +214,7 @@ func (r *repository[T]) save(ctx context.Context, item T, write func(*storage.Co
 	return saved, scope, err
 }
 
-func (r *repository[T]) filter(scope models.SCIMScope, expression string) (*pop.Query, query.Clause, error) {
+func (r *repository[T]) filter(scope store.Scope, expression string) (*pop.Query, query.Clause, error) {
 	q := scope.Query(r.db)
 	if expression == "" {
 		return q, nil, nil
@@ -231,7 +232,7 @@ func (r *repository[T]) page(ctx context.Context, q *pop.Query, query *protocol.
 	if err != nil {
 		return nil, 0, err
 	}
-	sql, values := q.Select("id").Order(order, args...).ToSQL(pop.NewModel(&models.SCIMResource{}, ctx))
+	sql, values := q.Select("id").Order(order, args...).ToSQL(pop.NewModel(&store.Resource{}, ctx))
 	bounded, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	items, err := r.fetch(r.db.WithContext(bounded), protocol.ProjectionFrom(ctx), fmt.Sprintf("unnest(array(%s LIMIT $%d OFFSET $%d)) WITH ORDINALITY page(id, n) JOIN scim_resources USING (id) ORDER BY page.n", sql, len(values)+1, len(values)+2), append(values, query.Count, query.Offset())...)
@@ -250,12 +251,12 @@ func (r *repository[T]) count(ctx context.Context, q *pop.Query) (int, error) {
 	defer cancel()
 	bounded := *q
 	bounded.Connection = q.Connection.WithContext(ctx)
-	return bounded.Count(&models.SCIMResource{})
+	return bounded.Count(&store.Resource{})
 }
 
-func (r *repository[T]) find(ctx context.Context, tx *storage.Connection, scope models.SCIMScope, id uuid.UUID, projection protocol.Projection) (T, error) {
+func (r *repository[T]) find(ctx context.Context, tx *storage.Connection, scope store.Scope, id uuid.UUID, projection protocol.Projection) (T, error) {
 	var zero T
-	sql, args := scope.Query(tx).Where("id = ?", id).Select("id").ToSQL(pop.NewModel(&models.SCIMResource{}, ctx))
+	sql, args := scope.Query(tx).Where("id = ?", id).Select("id").ToSQL(pop.NewModel(&store.Resource{}, ctx))
 	items, err := r.fetch(tx, projection, "scim_resources WHERE id = ("+sql+")", args...)
 	if err != nil {
 		return zero, err
@@ -267,13 +268,13 @@ func (r *repository[T]) find(ctx context.Context, tx *storage.Connection, scope 
 }
 
 type record struct {
-	models.SCIMResource
+	store.Resource
 	References json.RawMessage `db:"refs"`
 }
 
 func (r *repository[T]) fetch(tx *storage.Connection, projection protocol.Projection, from string, args ...any) ([]T, error) {
 	rows := []record{}
-	if err := tx.RawQuery(fmt.Sprintf("SELECT %s, %s AS refs FROM %s", models.SCIMResourceColumns, r.selects(projection), from), args...).All(&rows); err != nil {
+	if err := tx.RawQuery(fmt.Sprintf("SELECT %s, %s AS refs FROM %s", store.ResourceColumns, r.selects(projection), from), args...).All(&rows); err != nil {
 		return nil, err
 	}
 	items := make([]T, len(rows))
@@ -294,7 +295,7 @@ func (r *repository[T]) selects(projection protocol.Projection) string {
 	pairs := []string{}
 	for _, reference := range r.references {
 		if projection.Returns(reference.Name()) {
-			pairs = append(pairs, models.QuoteLiteral(reference.Name()), reference.Select(r.locations))
+			pairs = append(pairs, query.QuoteLiteral(reference.Name()), reference.Select(r.locations))
 		}
 	}
 	if len(pairs) == 0 {

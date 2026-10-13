@@ -8,7 +8,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
-	"github.com/supabase/auth/internal/models"
 )
 
 var Columns = map[string]string{
@@ -56,7 +55,7 @@ func column(name, location string, op filter.Operator, value any) (Clause, error
 		}
 		return uuidPredicate("id", sign, op, id), nil
 	case "meta.version":
-		at := models.SCIMVersionTime(text)
+		at := VersionTime(text)
 		if at == nil {
 			return predicate{text: strconv.FormatBool(op == filter.OpNotEquals)}, nil
 		}
