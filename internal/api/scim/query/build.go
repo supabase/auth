@@ -1,11 +1,14 @@
 package query
 
 import (
+	"strconv"
 	"strings"
 	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 func Where(schemas core.Schemas, provider uuid.UUID, location string, references []Reference, expression string) (Clause, error) {
@@ -18,7 +21,7 @@ func Where(schemas core.Schemas, provider uuid.UUID, location string, references
 func Select(references []Reference, projection protocol.Projection, locations map[string]string) string {
 	parts := []string{}
 	for _, reference := range references {
-		if projection.Returns(reference.Name()) {
+		if projection.Returns(projected(reference)) {
 			parts = append(parts, "coalesce("+reference.Select(locations)+", '{}'::jsonb)")
 		}
 	}
@@ -28,13 +31,16 @@ func Select(references []Reference, projection protocol.Projection, locations ma
 	return strings.Join(parts, " || ")
 }
 
-func Order(schemas core.Schemas, request *protocol.SearchRequest) (string, []any, error) {
+func Order(schemas core.Schemas, references []Reference, request *protocol.SearchRequest) (string, []any, error) {
 	if request.SortBy == "" {
 		return "id", nil, nil
 	}
 	parent, attribute, err := request.SortAttribute(schemas)
 	if err != nil {
 		return "", nil, err
+	}
+	if resolved(references, parent, attribute) {
+		return "", nil, scimerrors.ErrInvalidValue(strconv.Quote(request.SortBy) + " cannot be sorted")
 	}
 	direction := " ASC"
 	if request.Descending() {
@@ -78,4 +84,20 @@ func primary(keys []string) string {
 		quoted[i] = Quote(key)
 	}
 	return "$." + strings.Join(quoted[:len(keys)-2], ".") + "[*] ? (@.primary == true)." + quoted[len(keys)-1]
+}
+
+func resolved(references []Reference, parent, attribute *core.Attribute) bool {
+	for _, reference := range references {
+		if _, ok := reference.Leaf(attribute.Name, filter.OpPresent, nil); ok && reference.Name() == parent.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func projected(reference Reference) string {
+	if m, ok := reference.(manager); ok {
+		return string(m.schema) + ":" + m.Name()
+	}
+	return reference.Name()
 }

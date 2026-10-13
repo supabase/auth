@@ -50,7 +50,7 @@ func (m manager) Exists(provider uuid.UUID, inner string, args []any) (string, [
 
 func (m manager) Select(locations map[string]string) string {
 	return `(SELECT jsonb_strip_nulls(jsonb_build_object(` + QuoteLiteral(string(m.schema)) + `, jsonb_build_object(` + QuoteLiteral(m.Name()) +
-		`, jsonb_build_object('value', mgr.id, '$ref', ` + QuoteLiteral(locations[m.source]+"/") + ` || mgr.id, 'displayName', mgr.resource ->> 'displayName'))))` +
+		`, jsonb_build_object('$ref', ` + QuoteLiteral(locations[m.source]+"/") + ` || mgr.id, 'displayName', mgr.resource ->> 'displayName'))))` +
 		` FROM scim_resources mgr WHERE mgr.id = (CASE WHEN ` + m.value() + ` ~ ` + QuoteLiteral(uuidPattern) + ` THEN ` + m.value() + ` END)::uuid` +
 		` AND mgr.sso_provider_id = scim_resources.sso_provider_id AND mgr.resource_type = ` + QuoteLiteral(m.source) + ` AND mgr.deleted_at IS NULL)`
 }

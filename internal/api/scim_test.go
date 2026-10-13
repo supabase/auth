@@ -1410,6 +1410,15 @@ func TestSCIMManagerRead(t *testing.T) {
 		require.Equal(t, report, c.user(t, report.ID))
 	})
 
+	t.Run("keeps the case of the stored value", func(t *testing.T) {
+		boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Barbara Jensen"))
+		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(strings.ToUpper(boss.ID)))
+
+		manager := scimManager(t, report)
+		require.Equal(t, strings.ToUpper(boss.ID), manager.Value)
+		require.Equal(t, "Barbara Jensen", manager.DisplayName)
+	})
+
 	t.Run("keeps a value that is not a uuid", func(t *testing.T) {
 		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport("jane@example.com"))
 
@@ -1587,6 +1596,19 @@ func TestSCIMManagerFilters(t *testing.T) {
 			requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidFilter)
 		})
 	}
+
+	// RFC 7644 3.4.2.2: ATTRNAME starts with ALPHA, so $ref is not filterable.
+	for _, filter := range []string{`manager.$ref eq "` + boss.Meta.Location + `"`, `manager.$ref pr`} {
+		t.Run(filter, func(t *testing.T) {
+			res := c.get(t, scimUsersPath+"?"+url.Values{"filter": {scimEnterprise(filter)}}.Encode())
+			requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidFilter)
+		})
+	}
+
+	t.Run("sortBy manager.displayName", func(t *testing.T) {
+		res := c.get(t, scimUsersPath+"?"+url.Values{"sortBy": {scimEnterprise("manager.displayName")}}.Encode())
+		requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
+	})
 }
 
 func scimEnterprise(filter string) string {
