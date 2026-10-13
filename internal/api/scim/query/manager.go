@@ -43,9 +43,10 @@ func (m manager) Leaf(attribute string, op filter.Operator, value any) (Clause, 
 }
 
 func (m manager) Exists(provider uuid.UUID, inner string, args []any) (string, []any) {
-	return `EXISTS (SELECT 1 FROM scim_resources mgr WHERE mgr.sso_provider_id = ? AND mgr.resource_type = ` + QuoteLiteral(m.source) +
-		` AND mgr.deleted_at IS NULL AND ` + inner + ` AND scim_resources.search @@ lower(` +
-		QuoteLiteral(m.jsonpath()+" == ") + ` || to_jsonb(mgr.id::text)::text)::jsonpath)`, append([]any{provider.String()}, args...)
+	managers := `(SELECT lower(string_agg(` + QuoteLiteral(m.jsonpath()+" == ") + ` || to_jsonb(mgr.id::text)::text, ' || ')) FROM scim_resources mgr` +
+		` WHERE mgr.sso_provider_id = ? AND mgr.resource_type = ` + QuoteLiteral(m.source) + ` AND mgr.deleted_at IS NULL AND ` + inner + `)`
+	args = append([]any{provider.String()}, args...)
+	return `(` + managers + ` IS NOT NULL AND scim_resources.search @@ ` + managers + `::jsonpath)`, append(args, args...)
 }
 
 func (m manager) Select(locations map[string]string) string {

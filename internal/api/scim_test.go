@@ -1585,6 +1585,11 @@ func TestSCIMManagerFilters(t *testing.T) {
 		require.ElementsMatch(t, []string{boss.ID, orphan.ID}, ids)
 	})
 
+	t.Run("not with no matching manager", func(t *testing.T) {
+		ids := scimIDs(t, c, scimUsersPath, url.Values{"filter": {"not (" + scimEnterprise(`manager.displayName eq "Nobody"`) + ")"}})
+		require.ElementsMatch(t, []string{boss.ID, report.ID, orphan.ID}, ids)
+	})
+
 	// RFC 7643 4.3: manager is single-valued, so scim-go rejects any value path on it.
 	for _, filter := range []string{
 		`manager[value eq "` + boss.ID + `"]`,
