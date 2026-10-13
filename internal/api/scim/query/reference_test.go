@@ -9,17 +9,14 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
-var declared = Declared{
-	Inverse: map[Edge]Edge{{Type: "User", Attribute: "groups"}: {Type: "Group", Attribute: "members"}},
-	Display: map[string]string{"User": "displayName", "Group": "displayName"},
-}
+var inverses = map[Edge]Edge{{Type: "User", Attribute: "groups"}: {Type: "Group", Attribute: "members"}}
 
 func TestReferencesFromCoreSchemas(t *testing.T) {
 	users := core.Schemas{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...), core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...)}
 	groups := core.Schemas{core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...)}
 
-	require.Equal(t, map[string]kind{"groups": inverse, string(core.SchemaEnterpriseUser) + ":manager": single}, paths(References("User", users, declared)))
-	members := References("Group", groups, declared)
+	require.Equal(t, map[string]kind{"groups": inverse, string(core.SchemaEnterpriseUser) + ":manager": single}, paths(References("User", users, inverses)))
+	members := References("Group", groups, inverses)
 	require.Equal(t, map[string]kind{"members": multi}, paths(members))
 	require.True(t, members[0].Nested())
 }
@@ -33,7 +30,7 @@ func TestReferencesFromCustomSchemas(t *testing.T) {
 		core.NewSchema("urn:example:Device").With(core.NewAttribute("name", core.TypeString), ref("owner", "User", core.NewAttribute("display", core.TypeString).AsReadOnly())),
 		core.NewSchema(extension).With(ref("approvers", "User").AsMultiValued()),
 	}
-	references := References("Device", schemas, declared)
+	references := References("Device", schemas, inverses)
 	approvers := string(extension) + ":approvers"
 	require.Equal(t, map[string]kind{"owner": single, approvers: multi}, paths(references))
 	require.False(t, references[1].Nested())

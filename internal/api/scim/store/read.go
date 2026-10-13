@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 	"uuid"
 
@@ -48,7 +47,7 @@ func (r Row) Into[T core.Resource](endpoint string) (T, error) {
 		Created:      r.CreatedAt.UTC(),
 		LastModified: r.UpdatedAt.UTC(),
 		Location:     endpoint + "/" + common.ID,
-		Version:      `W/"` + strconv.FormatInt(r.UpdatedAt.UnixMicro(), 10) + `"`,
+		Version:      query.Version(r.UpdatedAt),
 	}
 	return item, nil
 }

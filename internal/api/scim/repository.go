@@ -21,13 +21,13 @@ type repository[T core.Resource] struct {
 	references   []query.Reference
 }
 
-func NewRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas, declared query.Declared) server.Repository[T] {
+func NewRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas, inverses map[query.Edge]query.Edge) server.Repository[T] {
 	return &repository[T]{
 		db:           db,
 		resourceType: resourceType,
 		locations:    locations,
 		schemas:      schemas,
-		references:   query.References(resourceType, schemas, declared),
+		references:   query.References(resourceType, schemas, inverses),
 	}
 }
 

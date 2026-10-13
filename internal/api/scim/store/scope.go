@@ -13,7 +13,7 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
-const resourceColumns = "id, sso_provider_id, resource_type, resource, created_at, updated_at, deleted_at"
+const resourceColumns = "id, resource_type, resource, created_at, updated_at"
 
 type Ancestor struct {
 	SourceID uuid.UUID `db:"source_id"`
@@ -22,13 +22,13 @@ type Ancestor struct {
 
 type Scope struct {
 	db           *storage.Connection
-	ProviderID   uuid.UUID
-	ResourceType string
+	providerID   uuid.UUID
+	resourceType string
 	refs         string
 }
 
 func NewScope(db *storage.Connection, provider uuid.UUID, resourceType, refs string) Scope {
-	return Scope{db: db, ProviderID: provider, ResourceType: resourceType, refs: refs}
+	return Scope{db: db, providerID: provider, resourceType: resourceType, refs: refs}
 }
 
 func (s Scope) Create(ctx context.Context, document string, links []Link) (Row, error) {
@@ -92,8 +92,8 @@ func (s Scope) write(ctx context.Context, links []Link, save func(*storage.Conne
 
 func (s Scope) query(tx *storage.Connection) *pop.Query {
 	return tx.Q().
-		Where("sso_provider_id = ?", s.ProviderID).
-		Where("resource_type = " + query.QuoteLiteral(s.ResourceType)).
+		Where("sso_provider_id = ?", s.providerID).
+		Where("resource_type = " + query.QuoteLiteral(s.resourceType)).
 		Where("deleted_at IS NULL")
 }
 
@@ -101,7 +101,7 @@ func (s Scope) create(tx *storage.Connection, document string) (*Resource, error
 	resource := &Resource{}
 	err := tx.RawQuery(
 		"INSERT INTO scim_resources (id, sso_provider_id, resource_type, resource) VALUES (?, ?, ?, ?::jsonb) RETURNING "+resourceColumns,
-		uuid.NewV7(), s.ProviderID, s.ResourceType, document,
+		uuid.NewV7(), s.providerID, s.resourceType, document,
 	).First(resource)
 	return resource, err
 }
@@ -110,7 +110,7 @@ func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version st
 	resource := &Resource{}
 	if err := tx.RawQuery(
 		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND updated_at = COALESCE(?, updated_at) RETURNING "+resourceColumns,
-		document, id, s.ProviderID, s.ResourceType, query.VersionTime(version),
+		document, id, s.providerID, s.resourceType, query.VersionTime(version),
 	).First(resource); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, models.SCIMNotFoundError{}
@@ -123,7 +123,7 @@ func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version st
 func (s Scope) remove(tx *storage.Connection, id uuid.UUID, version string) error {
 	count, err := tx.RawQuery(
 		"UPDATE scim_resources SET deleted_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND updated_at = COALESCE(?, updated_at)",
-		id, s.ProviderID, s.ResourceType, query.VersionTime(version),
+		id, s.providerID, s.resourceType, query.VersionTime(version),
 	).ExecWithCount()
 	if err != nil {
 		return errors.Wrap(err, "error deleting SCIM resource")
@@ -141,7 +141,7 @@ func (s Scope) addReferences(tx *storage.Connection, source uuid.UUID, attribute
 	}
 	err := tx.RawQuery(
 		"INSERT INTO scim_resource_references (sso_provider_id, source_id, attribute, target_id, target_type) SELECT sso_provider_id, ?, ?, id, resource_type FROM scim_resources WHERE sso_provider_id = ? AND resource_type = any(?::text[]) AND deleted_at IS NULL AND id = any(?::uuid[]) RETURNING target_id",
-		source, attribute, s.ProviderID, types, uuidStrings(targets),
+		source, attribute, s.providerID, types, uuidStrings(targets),
 	).All(&added)
 	return added, errors.Wrap(err, "error adding SCIM references")
 }
@@ -190,7 +190,7 @@ func (s Scope) depth(tx *storage.Connection, ids []uuid.UUID, attribute string) 
 			SELECT t.id, w.depth + 1 FROM walk w JOIN scim_resource_references r ON r.source_id = w.id AND r.attribute = ? JOIN scim_resources t ON t.id = r.target_id AND t.resource_type = ? AND t.deleted_at IS NULL WHERE w.depth <= ?
 		)
 		SELECT coalesce(max(depth), 0) AS depth FROM walk`,
-		uuidStrings(ids), s.ProviderID, s.ResourceType, attribute, s.ResourceType, query.MaxDepth,
+		uuidStrings(ids), s.providerID, s.resourceType, attribute, s.resourceType, query.MaxDepth,
 	).First(&walk)
 	return walk.Depth, errors.Wrap(err, "error finding SCIM depth")
 }

@@ -17,17 +17,13 @@ var narrowing = map[filter.Operator]bool{
 	filter.OpEndsWith:   true,
 }
 
-type Evaluator struct {
+type evaluator struct {
 	schemas    core.Schemas
 	location   string
 	references []Reference
 }
 
-func NewEvaluator(schemas core.Schemas, location string, references ...Reference) protocol.Evaluator[Clause] {
-	return Evaluator{schemas: schemas, location: location, references: references}
-}
-
-func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
+func (e evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
 	if value == nil {
 		if op != filter.OpEquals && op != filter.OpNotEquals {
 			return predicate{text: "false"}, nil
@@ -50,7 +46,7 @@ func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, va
 	return e.Or(clause, unassigned)
 }
 
-func (e Evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
+func (e evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
 	if _, ok := e.column(attribute); ok {
 		return predicate{text: "TRUE"}, nil
 	}
@@ -65,21 +61,15 @@ func (e Evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
 	return e.wrap(attribute, ref, leaf), nil
 }
 
-func (e Evaluator) And(l, r Clause) (Clause, error) {
-	if lpath, rpath, ok := jsonpaths(l, r); ok {
-		return "(" + lpath + " && " + rpath + ")", nil
-	}
-	return junction("AND", l, r), nil
+func (e evaluator) And(l, r Clause) (Clause, error) {
+	return join(l, r, " && ", "AND"), nil
 }
 
-func (e Evaluator) Or(l, r Clause) (Clause, error) {
-	if lpath, rpath, ok := jsonpaths(l, r); ok {
-		return "(" + lpath + " || " + rpath + ")", nil
-	}
-	return junction("OR", l, r), nil
+func (e evaluator) Or(l, r Clause) (Clause, error) {
+	return join(l, r, " || ", "OR"), nil
 }
 
-func (e Evaluator) Not(operand Clause) (Clause, error) {
+func (e evaluator) Not(operand Clause) (Clause, error) {
 	if path, ok := operand.(jsonpath); ok {
 		return "!(" + path + ")", nil
 	}
@@ -87,7 +77,7 @@ func (e Evaluator) Not(operand Clause) (Clause, error) {
 	return predicate{"NOT (" + text + ")", args}, nil
 }
 
-func (e Evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (Clause, error)) (Clause, error) {
+func (e evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (Clause, error)) (Clause, error) {
 	inner, err := valueFilter()
 	if err != nil {
 		return inner, err
@@ -102,7 +92,7 @@ func (e Evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (
 	return jsonpath(exists(e.path(attribute), path)), nil
 }
 
-func (e Evaluator) assigned(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
+func (e evaluator) assigned(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
 	if name, ok := e.column(attribute); ok {
 		return column(name, e.location, op, value)
 	}
@@ -123,13 +113,13 @@ func (e Evaluator) assigned(attribute *protocol.Attribute, op filter.Operator, v
 }
 
 // RFC 7643 Section 2.5: an unassigned attribute is equivalent to null, so it is not equal to a value.
-func (e Evaluator) unassignable(attribute *protocol.Attribute, op filter.Operator) bool {
+func (e evaluator) unassignable(attribute *protocol.Attribute, op filter.Operator) bool {
 	_, fixed := e.column(attribute)
 	_, linked := e.reference(attribute)
 	return op == filter.OpNotEquals && !fixed && (!linked || attribute.Parent == nil)
 }
 
-func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, value any) Clause {
+func (e evaluator) compare(attribute *protocol.Attribute, op filter.Operator, value any) Clause {
 	path := compare(e.path(attribute), op, value)
 	if _, text := value.(string); !text || !attribute.Definition.CaseExact {
 		return jsonpath(path)
@@ -141,14 +131,14 @@ func (e Evaluator) compare(attribute *protocol.Attribute, op filter.Operator, va
 	return junction("AND", jsonpath(path), strict)
 }
 
-func (e Evaluator) wrap(attribute *protocol.Attribute, ref Reference, leaf Clause) Clause {
+func (e evaluator) wrap(attribute *protocol.Attribute, ref Reference, leaf Clause) Clause {
 	if attribute.Parent != nil {
 		return leaf
 	}
 	return ref.exists(leaf)
 }
 
-func (e Evaluator) reference(attribute *protocol.Attribute) (Reference, bool) {
+func (e evaluator) reference(attribute *protocol.Attribute) (Reference, bool) {
 	if attribute.Parent != nil {
 		return e.lookup(attribute.Parent)
 	}
@@ -157,7 +147,7 @@ func (e Evaluator) reference(attribute *protocol.Attribute) (Reference, bool) {
 	return ref, ok && ref.resolves(attribute.Definition.Name)
 }
 
-func (e Evaluator) lookup(top *core.Attribute) (Reference, bool) {
+func (e evaluator) lookup(top *core.Attribute) (Reference, bool) {
 	index := slices.IndexFunc(e.references, func(ref Reference) bool { return ref.attribute == top })
 	if top == nil || index < 0 {
 		return Reference{}, false
@@ -165,7 +155,7 @@ func (e Evaluator) lookup(top *core.Attribute) (Reference, bool) {
 	return e.references[index], true
 }
 
-func (e Evaluator) path(attribute *protocol.Attribute) path {
+func (e evaluator) path(attribute *protocol.Attribute) path {
 	if attribute.Parent != nil {
 		return path{"@", []string{attribute.Definition.Name}}
 	}
@@ -177,28 +167,31 @@ func (e Evaluator) path(attribute *protocol.Attribute) path {
 	return path{"$", keys}
 }
 
-func (e Evaluator) column(attribute *protocol.Attribute) (string, bool) {
+func (e evaluator) column(attribute *protocol.Attribute) (string, bool) {
 	name := e.name(attribute)
 	_, ok := Columns[name]
 	return name, ok
 }
 
-func (e Evaluator) name(attribute *protocol.Attribute) string {
+func (e evaluator) name(attribute *protocol.Attribute) string {
 	if attribute.Parent != nil || e.schemas.IsExtension(e.schemas.Lookup(core.SchemaURI(attribute.Path.URI))) {
 		return ""
 	}
 	return strings.Join(e.keys(attribute), ".")
 }
 
-func (e Evaluator) keys(attribute *protocol.Attribute) []string {
+func (e evaluator) keys(attribute *protocol.Attribute) []string {
 	if top, ok := e.schemas.Resolve(core.SchemaURI(attribute.Path.URI), attribute.Path.Name, ""); ok && top != attribute.Definition {
 		return []string{top.Name, attribute.Definition.Name}
 	}
 	return []string{attribute.Definition.Name}
 }
 
-func jsonpaths(l, r Clause) (jsonpath, jsonpath, bool) {
+func join(l, r Clause, logical, sql string) Clause {
 	lpath, lok := l.(jsonpath)
 	rpath, rok := r.(jsonpath)
-	return lpath, rpath, lok && rok
+	if lok && rok {
+		return "(" + lpath + jsonpath(logical) + rpath + ")"
+	}
+	return junction(sql, l, r)
 }

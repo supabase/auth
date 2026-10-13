@@ -24,7 +24,7 @@ func Where(schemas core.Schemas, location string, references []Reference, expres
 	if expression == "" {
 		return nil, nil
 	}
-	return protocol.Filter(schemas, expression, NewEvaluator(schemas, location, references...))
+	return protocol.Filter(schemas, expression, evaluator{schemas, location, references})
 }
 
 func Order(schemas core.Schemas, references []Reference, request *protocol.SearchRequest) (string, []any, error) {

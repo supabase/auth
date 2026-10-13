@@ -30,15 +30,13 @@ func BaseURL(config *conf.GlobalConfiguration) string {
 }
 
 func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Handler {
-	locations := map[string]string{userType: BaseURL(config) + "/Users", groupType: BaseURL(config) + "/Groups"}
+	base := BaseURL(config)
+	locations := map[string]string{userType: base + "/Users", groupType: base + "/Groups"}
 	user, enterprise, group := core.UserAttributes(), core.EnterpriseUserAttributes(), core.GroupAttributes()
-	declared := query.Declared{
-		Inverse: map[query.Edge]query.Edge{{Type: userType, Attribute: "groups"}: {Type: groupType, Attribute: "members"}},
-		Display: map[string]string{userType: "displayName", groupType: "displayName"},
-	}
+	inverses := map[query.Edge]query.Edge{{Type: userType, Attribute: "groups"}: {Type: groupType, Attribute: "members"}}
 	return server.New(BasePath,
 		core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching().Sorting(),
-		server.WithBaseURL(BaseURL(config)),
+		server.WithBaseURL(base),
 		server.ErrorHandler(func(r *http.Request, err error) {
 			observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
 		}),
@@ -48,13 +46,13 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Ha
 			WithRepository(NewRepository[*core.User](db, userType, locations, core.Schemas{
 				core.NewSchema(core.SchemaUser).With(user...),
 				core.NewSchema(core.SchemaEnterpriseUser).With(enterprise...),
-			}, declared)),
+			}, inverses)),
 		),
 		server.WithResource(server.
 			NewResource[*core.Group](groupType, "/Groups", core.SchemaGroup, group...).
 			WithRepository(NewRepository[*core.Group](db, groupType, locations, core.Schemas{
 				core.NewSchema(core.SchemaGroup).With(group...),
-			}, declared)),
+			}, inverses)),
 		),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),
 	)

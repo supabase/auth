@@ -58,9 +58,6 @@ func exists(p path, inner jsonpath) string {
 }
 
 func literal(value any) string {
-	if text, ok := value.(string); ok {
-		return Quote(text)
-	}
 	raw, _ := json.Marshal(value)
 	return string(raw)
 }

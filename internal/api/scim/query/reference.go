@@ -25,22 +25,16 @@ type Edge struct {
 	Attribute string
 }
 
-type Declared struct {
-	Inverse map[Edge]Edge
-	Display map[string]string
-}
-
 type Reference struct {
 	attribute *core.Attribute
 	uri       core.SchemaURI
 	kind      kind
 	targets   []string
-	display   string
 	via       Edge
 	nested    bool
 }
 
-func References(resourceType string, schemas core.Schemas, declared Declared) []Reference {
+func References(resourceType string, schemas core.Schemas, inverses map[Edge]Edge) []Reference {
 	references := []Reference{}
 	for _, schema := range schemas {
 		uri := core.SchemaURI("")
@@ -54,16 +48,16 @@ func References(resourceType string, schemas core.Schemas, declared Declared) []
 			}
 			ref := Reference{attribute: attribute, uri: uri, targets: targets}
 			self := Edge{resourceType, ref.Path()}
-			via, inverted := declared.Inverse[self]
+			via, inverted := inverses[self]
 			switch {
 			case inverted:
-				ref.kind, ref.via, ref.display = inverse, via, declared.Display[via.Type]
+				ref.kind, ref.via = inverse, via
 			case attribute.Mutability == core.MutabilityReadOnly:
 				continue
 			case attribute.MultiValued:
-				ref.kind, ref.nested = multi, slices.Contains(slices.Collect(maps.Values(declared.Inverse)), self)
+				ref.kind, ref.nested = multi, slices.Contains(slices.Collect(maps.Values(inverses)), self)
 			default:
-				ref.kind, ref.display = single, declared.Display[targets[0]]
+				ref.kind = single
 			}
 			references = append(references, ref)
 		}
