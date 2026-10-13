@@ -339,8 +339,12 @@ func TestGetReferrer(t *tst.T) {
 
 func TestLoopbackRedirectRequiresAllowList(t *tst.T) {
 	config := conf.GlobalConfiguration{
-		SiteURL:      "https://example.com",
-		URIAllowList: []string{"http://127.0.0.1:3000/**"},
+		URIAllowList: []string{
+			"http://127.0.0.1:3000/**",
+			"http://localhost:4000/**",
+			"http://127.0.0.1:4000/**",
+			"http://\\[::1\\]:4000/**",
+		},
 		JWT: conf.JWTConfiguration{
 			Secret: "testsecret",
 		},
@@ -349,23 +353,43 @@ func TestLoopbackRedirectRequiresAllowList(t *tst.T) {
 
 	cases := []struct {
 		desc        string
+		siteURL     string
 		redirectURL string
 		strict      bool
 		expected    bool
 	}{
-		{desc: "default accepts an unlisted loopback port", redirectURL: "http://127.0.0.1:8080/callback", strict: false, expected: true},
-		{desc: "default accepts unlisted IPv6 loopback", redirectURL: "http://[::1]:8080/callback", strict: false, expected: true},
-		{desc: "strict accepts a listed loopback address", redirectURL: "http://127.0.0.1:3000/callback", strict: true, expected: true},
-		{desc: "strict rejects an unlisted loopback port", redirectURL: "http://127.0.0.1:8080/callback", strict: true, expected: false},
-		{desc: "strict rejects another loopback address", redirectURL: "http://127.0.0.2:3000/callback", strict: true, expected: false},
-		{desc: "strict rejects unlisted IPv6 loopback", redirectURL: "http://[::1]:3000/callback", strict: true, expected: false},
-		{desc: "strict rejects IPv4-mapped loopback", redirectURL: "http://[::ffff:127.0.0.1]:3000/callback", strict: true, expected: false},
-		{desc: "strict still rejects a non-loopback IP", redirectURL: "http://10.0.0.1:3000/callback", strict: true, expected: false},
-		{desc: "default still rejects a non-loopback IP", redirectURL: "http://10.0.0.1:3000/callback", strict: false, expected: false},
+		{desc: "default accepts an unlisted loopback port", siteURL: "https://example.com", redirectURL: "http://127.0.0.1:8080/callback", strict: false, expected: true},
+		{desc: "default accepts unlisted IPv6 loopback", siteURL: "https://example.com", redirectURL: "http://[::1]:8080/callback", strict: false, expected: true},
+		{desc: "strict accepts a listed loopback address", siteURL: "https://example.com", redirectURL: "http://127.0.0.1:3000/callback", strict: true, expected: true},
+		{desc: "strict rejects an unlisted loopback port", siteURL: "https://example.com", redirectURL: "http://127.0.0.1:8080/callback", strict: true, expected: false},
+		{desc: "strict rejects another loopback address", siteURL: "https://example.com", redirectURL: "http://127.0.0.2:3000/callback", strict: true, expected: false},
+		{desc: "strict rejects unlisted IPv6 loopback", siteURL: "https://example.com", redirectURL: "http://[::1]:3000/callback", strict: true, expected: false},
+		{desc: "strict rejects IPv4-mapped loopback", siteURL: "https://example.com", redirectURL: "http://[::ffff:127.0.0.1]:3000/callback", strict: true, expected: false},
+		{desc: "strict still rejects a non-loopback IP", siteURL: "https://example.com", redirectURL: "http://10.0.0.1:3000/callback", strict: true, expected: false},
+		{desc: "default still rejects a non-loopback IP", siteURL: "https://example.com", redirectURL: "http://10.0.0.1:3000/callback", strict: false, expected: false},
+		{desc: "strict still accepts the site URL", siteURL: "https://example.com", redirectURL: "https://example.com/callback", strict: true, expected: true},
+		{desc: "strict still rejects an unlisted host", siteURL: "https://example.com", redirectURL: "https://evil.com/callback", strict: true, expected: false},
+
+		// A loopback site URL: RFC 8252 lets the port vary only outside strict mode.
+		{desc: "default accepts the localhost site URL on another port", siteURL: "http://localhost:3000", redirectURL: "http://localhost:4444/cb", strict: false, expected: true},
+		{desc: "strict accepts the localhost site URL port", siteURL: "http://localhost:3000", redirectURL: "http://localhost:3000/cb", strict: true, expected: true},
+		{desc: "strict rejects the localhost site URL on an unlisted port", siteURL: "http://localhost:3000", redirectURL: "http://localhost:4444/cb", strict: true, expected: false},
+		{desc: "strict accepts the localhost site URL on a listed port", siteURL: "http://localhost:3000", redirectURL: "http://localhost:4000/cb", strict: true, expected: true},
+		{desc: "default accepts the IPv4 loopback site URL on another port", siteURL: "http://127.0.0.1:3000", redirectURL: "http://127.0.0.1:4444/cb", strict: false, expected: true},
+		{desc: "strict accepts the IPv4 loopback site URL port", siteURL: "http://127.0.0.1:3000", redirectURL: "http://127.0.0.1:3000/cb", strict: true, expected: true},
+		{desc: "strict rejects the IPv4 loopback site URL on an unlisted port", siteURL: "http://127.0.0.1:3000", redirectURL: "http://127.0.0.1:4444/cb", strict: true, expected: false},
+		{desc: "strict accepts the IPv4 loopback site URL on a listed port", siteURL: "http://127.0.0.1:3000", redirectURL: "http://127.0.0.1:4000/cb", strict: true, expected: true},
+		{desc: "default accepts the IPv6 loopback site URL on another port", siteURL: "http://[::1]:3000", redirectURL: "http://[::1]:4444/cb", strict: false, expected: true},
+		{desc: "strict accepts the IPv6 loopback site URL port", siteURL: "http://[::1]:3000", redirectURL: "http://[::1]:3000/cb", strict: true, expected: true},
+		{desc: "strict rejects the IPv6 loopback site URL on an unlisted port", siteURL: "http://[::1]:3000", redirectURL: "http://[::1]:4444/cb", strict: true, expected: false},
+		{desc: "strict accepts the IPv6 loopback site URL on a listed port", siteURL: "http://[::1]:3000", redirectURL: "http://[::1]:4000/cb", strict: true, expected: true},
+		{desc: "strict rejects a non-loopback site URL on another port", siteURL: "https://example.com", redirectURL: "https://example.com:4444/cb", strict: true, expected: false},
+		{desc: "default rejects a non-loopback site URL on another port", siteURL: "https://example.com", redirectURL: "https://example.com:4444/cb", strict: false, expected: false},
 	}
 
 	for _, c := range cases {
 		t.Run(c.desc, func(t *tst.T) {
+			config.SiteURL = c.siteURL
 			config.Security.RedirectLoopbackRequiresAllowList = c.strict
 			require.Equal(t, c.expected, IsRedirectURLValid(&config, c.redirectURL))
 		})

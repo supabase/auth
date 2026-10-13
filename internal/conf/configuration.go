@@ -934,8 +934,10 @@ type SecurityConfiguration struct {
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
 	SbForwardedForEnabled                 bool                 `json:"sb_forwarded_for_enabled" split_words:"true" default:"false"`
 	// RedirectLoopbackRequiresAllowList makes a loopback IP address (127.0.0.0/8,
-	// ::1) in a redirect URL subject to the URI allow list like any other host.
-	// When false (the default), any loopback IP address is accepted.
+	// ::1) in a redirect URL subject to the URI allow list like any other host,
+	// and a loopback site URL on a port other than its own must match the allow
+	// list too. When false (the default), any loopback IP address is accepted and
+	// a loopback site URL is accepted on any port, per RFC 8252 Section 7.3.
 	RedirectLoopbackRequiresAllowList bool `json:"redirect_loopback_requires_allow_list" split_words:"true" default:"false"`
 
 	DBEncryption DatabaseEncryptionConfiguration `json:"database_encryption" split_words:"true"`
