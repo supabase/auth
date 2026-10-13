@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 	"uuid"
 
@@ -24,8 +25,8 @@ type Row struct {
 }
 
 func (r Row) Into[T core.Resource](endpoint string) (T, error) {
-	item, err := r.As[T](endpoint)
-	if err != nil {
+	var item T
+	if err := json.Unmarshal(r.Resource.Resource, &item); err != nil {
 		return item, err
 	}
 	var parts []json.RawMessage
@@ -39,6 +40,15 @@ func (r Row) Into[T core.Resource](endpoint string) (T, error) {
 		if err := json.Unmarshal(part, &item); err != nil {
 			return item, err
 		}
+	}
+	common := item.Common()
+	common.ID = r.ID.String()
+	common.Meta = core.Meta{
+		ResourceType: core.ResourceTypeName(r.ResourceType),
+		Created:      r.CreatedAt.UTC(),
+		LastModified: r.UpdatedAt.UTC(),
+		Location:     endpoint + "/" + common.ID,
+		Version:      `W/"` + strconv.FormatInt(r.UpdatedAt.UnixMicro(), 10) + `"`,
 	}
 	return item, nil
 }
@@ -66,7 +76,7 @@ func Encode[T core.Resource](item T, references []query.Reference) (string, []Li
 	links := []Link{}
 	for _, reference := range references {
 		if types := reference.Targets(); types != nil {
-			links = append(links, Link{reference.Name(), types, document.Get(reference.Name())})
+			links = append(links, Link{reference.Path(), types, reference.Get(document), reference.Nested()})
 		}
 		reference.Strip(document)
 	}
@@ -80,7 +90,6 @@ type Search struct {
 	OrderArgs []any
 	Count     int
 	Offset    int
-	Refs      string
 }
 
 func (s Scope) Page(ctx context.Context, search Search) ([]Row, int, error) {
@@ -104,7 +113,7 @@ func (s Scope) page(ctx context.Context, search Search) ([]Row, int, error) {
 	sql, values := q.Select("id").Order(search.Order, search.OrderArgs...).ToSQL(pop.NewModel(&Resource{}, ctx))
 	bounded, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
-	rows, err := s.fetch(s.db.WithContext(bounded), search.Refs, fmt.Sprintf("unnest(array(%s LIMIT $%d OFFSET $%d)) WITH ORDINALITY page(id, n) JOIN scim_resources USING (id) ORDER BY page.n", sql, len(values)+1, len(values)+2), append(values, search.Count, search.Offset)...)
+	rows, err := s.fetch(s.db.WithContext(bounded), fmt.Sprintf("unnest(array(%s LIMIT $%d OFFSET $%d)) WITH ORDINALITY page(id, n) JOIN scim_resources USING (id) ORDER BY page.n", sql, len(values)+1, len(values)+2), append(values, search.Count, search.Offset)...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -123,13 +132,13 @@ func (s Scope) count(ctx context.Context, q *pop.Query) (int, error) {
 	return bounded.Count(&Resource{})
 }
 
-func (s Scope) Find(ctx context.Context, id uuid.UUID, refs string) (Row, error) {
-	return s.find(ctx, s.db.WithContext(ctx), id, refs)
+func (s Scope) Find(ctx context.Context, id uuid.UUID) (Row, error) {
+	return s.find(ctx, s.db.WithContext(ctx), id)
 }
 
-func (s Scope) find(ctx context.Context, tx *storage.Connection, id uuid.UUID, refs string) (Row, error) {
+func (s Scope) find(ctx context.Context, tx *storage.Connection, id uuid.UUID) (Row, error) {
 	sql, args := s.query(tx).Where("id = ?", id).Select("id").ToSQL(pop.NewModel(&Resource{}, ctx))
-	rows, err := s.fetch(tx, refs, "scim_resources WHERE id = ("+sql+")", args...)
+	rows, err := s.fetch(tx, "scim_resources WHERE id = ("+sql+")", args...)
 	if err != nil {
 		return Row{}, err
 	}
@@ -139,9 +148,9 @@ func (s Scope) find(ctx context.Context, tx *storage.Connection, id uuid.UUID, r
 	return rows[0], nil
 }
 
-func (s Scope) fetch(tx *storage.Connection, refs, from string, args ...any) ([]Row, error) {
+func (s Scope) fetch(tx *storage.Connection, from string, args ...any) ([]Row, error) {
 	rows := []Row{}
-	err := tx.RawQuery(fmt.Sprintf("SELECT %s, %s AS refs FROM %s", ResourceColumns, refs, from), args...).All(&rows)
+	err := tx.RawQuery("SELECT "+resourceColumns+", "+s.refs+" AS refs FROM "+from, args...).All(&rows)
 	return rows, err
 }
 

@@ -2,11 +2,8 @@ package store
 
 import (
 	"encoding/json"
-	"strconv"
 	"time"
 	"uuid"
-
-	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 type Resource struct {
@@ -21,21 +18,4 @@ type Resource struct {
 
 func (Resource) TableName() string {
 	return "scim_resources"
-}
-
-func (r Resource) As[T core.Resource](endpoint string) (T, error) {
-	var item T
-	if err := json.Unmarshal(r.Resource, &item); err != nil {
-		return item, err
-	}
-	common := item.Common()
-	common.ID = r.ID.String()
-	common.Meta = core.Meta{
-		ResourceType: core.ResourceTypeName(r.ResourceType),
-		Created:      r.CreatedAt.UTC(),
-		LastModified: r.UpdatedAt.UTC(),
-		Location:     endpoint + "/" + common.ID,
-		Version:      `W/"` + strconv.FormatInt(r.UpdatedAt.UnixMicro(), 10) + `"`,
-	}
-	return item, nil
 }

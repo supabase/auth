@@ -1,12 +1,12 @@
 package query
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -14,8 +14,8 @@ import (
 func Select(references []Reference, projection protocol.Projection, locations map[string]string) string {
 	parts := []string{}
 	for _, reference := range references {
-		if projection.Returns(projected(reference)) {
-			parts = append(parts, reference.Select(locations))
+		if projection.Returns(reference.Path()) {
+			parts = append(parts, reference.part(locations))
 		}
 	}
 	return "json_build_array(" + strings.Join(parts, ", ") + ")"
@@ -76,25 +76,11 @@ func Order(schemas core.Schemas, references []Reference, request *protocol.Searc
 }
 
 func primary(keys []string) string {
-	quoted := make([]string, len(keys))
-	for i, key := range keys {
-		quoted[i] = Quote(key)
-	}
-	return "$." + strings.Join(quoted[:len(keys)-2], ".") + "[*] ? (@.primary == true)." + quoted[len(keys)-1]
+	return path{"$", keys[:len(keys)-2]}.String() + "[*] ? (@.primary == true)." + Quote(keys[len(keys)-1])
 }
 
 func resolved(references []Reference, parent, attribute *core.Attribute) bool {
-	for _, reference := range references {
-		if _, ok := reference.Leaf(attribute.Name, filter.OpPresent, nil); ok && reference.Name() == parent.Name {
-			return true
-		}
-	}
-	return false
-}
-
-func projected(reference Reference) string {
-	if m, ok := reference.(manager); ok {
-		return string(m.schema) + ":" + m.Name()
-	}
-	return reference.Name()
+	return slices.ContainsFunc(references, func(reference Reference) bool {
+		return reference.attribute == parent && reference.computed(attribute.Name)
+	})
 }

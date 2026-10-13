@@ -787,6 +787,8 @@ func TestSCIMErrors(t *testing.T) {
 		{"GET groups with a members value gt filter", http.MethodGet, scimGroupsPath + "?" + url.Values{"filter": {`members.value gt "x"`}}.Encode(), nil, http.StatusBadRequest},
 		{"GET users with a groups display pr filter", http.MethodGet, scimUsersPath + "?" + url.Values{"filter": {`groups.display pr`}}.Encode(), nil, http.StatusBadRequest},
 		{"GET users with an unknown sortBy", http.MethodGet, scimUsersPath + "?sortBy=nope", nil, http.StatusBadRequest},
+		{"GET groups sorted by members.value", http.MethodGet, scimGroupsPath + "?sortBy=members.value", nil, http.StatusBadRequest},
+		{"GET users sorted by groups.value", http.MethodGet, scimUsersPath + "?sortBy=groups.value", nil, http.StatusBadRequest},
 		{"POST /.search", http.MethodPost, "/scim/v2/.search", map[string]any{}, http.StatusNotImplemented},
 		{"POST /Users/.search without the SearchRequest schema", http.MethodPost, scimUsersPath + "/.search", map[string]any{}, http.StatusBadRequest},
 		{"POST /Groups/.search without the SearchRequest schema", http.MethodPost, scimGroupsPath + "/.search", map[string]any{}, http.StatusBadRequest},

@@ -19,15 +19,23 @@ import (
 
 var tokenKey = ctxkey.New[*models.SCIMToken]("scim_token")
 
-const BasePath = "/scim/v2"
+const (
+	BasePath  = "/scim/v2"
+	userType  = "User"
+	groupType = "Group"
+)
 
 func BaseURL(config *conf.GlobalConfiguration) string {
 	return strings.TrimRight(config.API.ExternalURL, "/") + BasePath
 }
 
 func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Handler {
-	locations := map[string]string{"User": BaseURL(config) + "/Users", "Group": BaseURL(config) + "/Groups"}
+	locations := map[string]string{userType: BaseURL(config) + "/Users", groupType: BaseURL(config) + "/Groups"}
 	user, enterprise, group := core.UserAttributes(), core.EnterpriseUserAttributes(), core.GroupAttributes()
+	declared := query.Declared{
+		Inverse: map[query.Edge]query.Edge{{Type: userType, Attribute: "groups"}: {Type: groupType, Attribute: "members"}},
+		Display: map[string]string{userType: "displayName", groupType: "displayName"},
+	}
 	return server.New(BasePath,
 		core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching().Sorting(),
 		server.WithBaseURL(BaseURL(config)),
@@ -35,18 +43,18 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Ha
 			observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
 		}),
 		server.WithResource(server.
-			NewResource[*core.User]("User", "/Users", core.SchemaUser, user...).
+			NewResource[*core.User](userType, "/Users", core.SchemaUser, user...).
 			WithExtension(core.SchemaEnterpriseUser, enterprise...).
-			WithRepository(NewRepository[*core.User](db, "User", locations, core.Schemas{
+			WithRepository(NewRepository[*core.User](db, userType, locations, core.Schemas{
 				core.NewSchema(core.SchemaUser).With(user...),
 				core.NewSchema(core.SchemaEnterpriseUser).With(enterprise...),
-			}, query.Derived("groups", "Group", "members"), query.Manager("manager", core.SchemaEnterpriseUser, "User"))),
+			}, declared)),
 		),
 		server.WithResource(server.
-			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, group...).
-			WithRepository(NewRepository[*core.Group](db, "Group", locations, core.Schemas{
+			NewResource[*core.Group](groupType, "/Groups", core.SchemaGroup, group...).
+			WithRepository(NewRepository[*core.Group](db, groupType, locations, core.Schemas{
 				core.NewSchema(core.SchemaGroup).With(group...),
-			}, query.Stored("members", "User", "Group"))),
+			}, declared)),
 		),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),
 	)

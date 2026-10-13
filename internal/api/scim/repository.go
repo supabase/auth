@@ -21,13 +21,13 @@ type repository[T core.Resource] struct {
 	references   []query.Reference
 }
 
-func NewRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas, references ...query.Reference) server.Repository[T] {
+func NewRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas, declared query.Declared) server.Repository[T] {
 	return &repository[T]{
 		db:           db,
 		resourceType: resourceType,
 		locations:    locations,
 		schemas:      schemas,
-		references:   references,
+		references:   query.References(resourceType, schemas, declared),
 	}
 }
 
@@ -55,7 +55,6 @@ func (r *repository[T]) List(ctx context.Context, request *protocol.SearchReques
 		OrderArgs: args,
 		Count:     request.Count,
 		Offset:    request.Offset(),
-		Refs:      r.refs(ctx),
 	})
 	if err != nil {
 		return nil, 0, err
@@ -74,7 +73,7 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 	if err != nil {
 		return zero, err
 	}
-	row, err := scope.Find(ctx, key, r.refs(ctx))
+	row, err := scope.Find(ctx, key)
 	if err != nil {
 		return zero, err
 	}
@@ -82,16 +81,16 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 }
 
 func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
-	return r.save(ctx, item, func(scope store.Scope, document string, links []store.Link, refs string) (store.Row, error) {
-		return scope.Create(ctx, document, links, refs)
+	return r.save(ctx, item, func(scope store.Scope, document string, links []store.Link) (store.Row, error) {
+		return scope.Create(ctx, document, links)
 	})
 }
 
 func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
 	common := item.Common()
 	id, _ := uuid.Parse(common.ID)
-	return r.save(ctx, item, func(scope store.Scope, document string, links []store.Link, refs string) (store.Row, error) {
-		return scope.Update(ctx, id, document, common.Meta.Version, links, refs)
+	return r.save(ctx, item, func(scope store.Scope, document string, links []store.Link) (store.Row, error) {
+		return scope.Update(ctx, id, document, common.Meta.Version, links)
 	})
 }
 
@@ -105,7 +104,7 @@ func (r *repository[T]) Delete(ctx context.Context, item T) error {
 	return scope.Delete(ctx, id, common.Meta.Version)
 }
 
-func (r *repository[T]) save(ctx context.Context, item T, write func(store.Scope, string, []store.Link, string) (store.Row, error)) (T, error) {
+func (r *repository[T]) save(ctx context.Context, item T, write func(store.Scope, string, []store.Link) (store.Row, error)) (T, error) {
 	var zero T
 	scope, err := r.scope(ctx)
 	if err != nil {
@@ -115,7 +114,7 @@ func (r *repository[T]) save(ctx context.Context, item T, write func(store.Scope
 	if err != nil {
 		return zero, err
 	}
-	row, err := write(scope, document, links, r.refs(ctx))
+	row, err := write(scope, document, links)
 	if err != nil {
 		return zero, err
 	}
@@ -127,11 +126,7 @@ func (r *repository[T]) scope(ctx context.Context) (store.Scope, error) {
 	if token == nil {
 		return store.Scope{}, scimerrors.ErrInternal("missing SCIM token")
 	}
-	return store.NewScope(r.db, token.SSOProviderID, r.resourceType), nil
-}
-
-func (r *repository[T]) refs(ctx context.Context) string {
-	return query.Select(r.references, protocol.ProjectionFrom(ctx), r.locations)
+	return store.NewScope(r.db, token.SSOProviderID, r.resourceType, query.Select(r.references, protocol.ProjectionFrom(ctx), r.locations)), nil
 }
 
 func (r *repository[T]) endpoint() string {

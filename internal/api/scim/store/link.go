@@ -14,6 +14,7 @@ type Link struct {
 	Attribute string
 	Types     []string
 	Values    any
+	Nested    bool
 }
 
 func (s Scope) link(tx *storage.Connection, source uuid.UUID, l Link) error {
@@ -27,8 +28,10 @@ func (s Scope) link(tx *storage.Connection, source uuid.UUID, l Link) error {
 		return err
 	}
 	add, remove := linkDiff(current, wanted)
-	if err := s.nestable(tx, source, attribute, add); err != nil {
-		return err
+	if l.Nested {
+		if err := s.nestable(tx, source, attribute, add); err != nil {
+			return err
+		}
 	}
 	added, err := s.addReferences(tx, source, attribute, l.Types, add)
 	if err != nil {
@@ -75,7 +78,7 @@ func linkTargets(attribute string, raw any) ([]uuid.UUID, error) {
 	elements, _ := raw.([]any)
 	wanted := make([]uuid.UUID, 0, len(elements))
 	for _, element := range elements {
-		value, _ := element.(map[string]any)["value"].(string)
+		value, _ := element.(map[string]any)[query.ValueAttribute].(string)
 		id, err := uuid.Parse(value)
 		if err != nil {
 			return nil, linkInvalid(attribute, value)
