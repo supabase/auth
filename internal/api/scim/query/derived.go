@@ -5,7 +5,6 @@ import (
 	"uuid"
 
 	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type derived struct {
@@ -31,7 +30,7 @@ func (d derived) Exists(provider uuid.UUID, inner string, args []any) (string, [
 	) SELECT DISTINCT id FROM walk)))`, append(append([]any{d.via, provider.String()}, args...), d.via, models.SCIMMaxDepth)
 }
 
-func (d derived) Link(*storage.Connection, models.SCIMScope, uuid.UUID, any) error {
+func (d derived) Targets() []string {
 	return nil
 }
 

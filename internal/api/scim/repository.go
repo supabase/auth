@@ -199,7 +199,11 @@ func (r *repository[T]) save(ctx context.Context, item T, write func(*storage.Co
 			return err
 		}
 		for _, reference := range r.references {
-			if err := reference.Link(tx, scope, row.ID, targets[reference.Name()]); err != nil {
+			types := reference.Targets()
+			if types == nil {
+				continue
+			}
+			if err := scope.Link(tx, row.ID, reference.Name(), types, targets[reference.Name()]); err != nil {
 				return err
 			}
 		}

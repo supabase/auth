@@ -11,7 +11,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 const ValueAttribute = "value"
@@ -20,7 +19,7 @@ type Reference interface {
 	Name() string
 	Columns() map[string]string
 	Exists(provider uuid.UUID, inner string, args []any) (string, []any)
-	Link(tx *storage.Connection, scope models.SCIMScope, source uuid.UUID, attribute any) error
+	Targets() []string
 	Select(locations map[string]string) string
 }
 
