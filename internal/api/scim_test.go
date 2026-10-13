@@ -1530,20 +1530,18 @@ func TestSCIMManagerWrite(t *testing.T) {
 		require.Equal(t, "Patch Second", scimManager(t, scimDecode[core.User](t, res)).DisplayName)
 	})
 
-	t.Run("PATCH removes the manager through value", func(t *testing.T) {
-		boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Removed Boss"))
-		report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+	for _, path := range []string{"manager", "manager.value"} {
+		t.Run("PATCH removes the manager through "+path, func(t *testing.T) {
+			boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Removed Boss"))
+			report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
 
-		// RFC 7644 3.5.2.2: unassigning the readOnly manager.displayName is a mutability error.
-		remove := c.do(t, http.MethodPatch, scimUsersPath+"/"+report.ID, newSCIMPatch(map[string]any{"op": "remove", "path": enterprise + ":manager"}))
-		requireSCIMError(t, remove, http.StatusBadRequest, scimerrors.Mutability)
-
-		res := c.do(t, http.MethodPatch, scimUsersPath+"/"+report.ID, newSCIMPatch(map[string]any{"op": "remove", "path": enterprise + ":manager.value"}))
-		require.Equal(t, http.StatusOK, res.StatusCode)
-		require.Nil(t, scimDecode[core.User](t, res).EnterpriseUser.Manager)
-		require.Nil(t, c.user(t, report.ID).EnterpriseUser.Manager)
-		require.Equal(t, "Tour Operations", c.user(t, report.ID).EnterpriseUser.Department)
-	})
+			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+report.ID, newSCIMPatch(map[string]any{"op": "remove", "path": enterprise + ":" + path}))
+			require.Equal(t, http.StatusOK, res.StatusCode)
+			require.Nil(t, scimDecode[core.User](t, res).EnterpriseUser.Manager)
+			require.Nil(t, c.user(t, report.ID).EnterpriseUser.Manager)
+			require.Equal(t, "Tour Operations", c.user(t, report.ID).EnterpriseUser.Department)
+		})
+	}
 }
 
 func TestSCIMManagerFilters(t *testing.T) {
