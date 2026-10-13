@@ -240,3 +240,31 @@ func (ts *SignupTestSuite) TestEmailSignupForEmailConfirmedUser() {
 	err = crypto.CompareHashAndPassword(ts.T().Context(), *user.EncryptedPassword, "password1")
 	require.NoError(ts.T(), err)
 }
+
+// Check an email signup attempt doesn't overwrite password of an phone-confirmed user.
+func (ts *SignupTestSuite) TestEmailSignupForPhoneConfirmedUser() {
+	user, err := models.NewUser("123456789", "test@example.com", "password1", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(user))
+	require.NoError(ts.T(), user.ConfirmPhone(ts.API.db))
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "password2",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	user, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	err = crypto.CompareHashAndPassword(ts.T().Context(), *user.EncryptedPassword, "password1")
+	require.NoError(ts.T(), err)
+}
