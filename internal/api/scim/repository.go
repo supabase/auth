@@ -32,11 +32,7 @@ func NewRepository[T core.Resource](db *storage.Connection, resourceType string,
 }
 
 func (r *repository[T]) List(ctx context.Context, request *protocol.SearchRequest) ([]T, int, error) {
-	scope, err := r.scope(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
-	clause, err := query.Where(r.schemas, scope.ProviderID, r.endpoint(), r.references, request.Filter)
+	clause, err := query.Where(r.schemas, r.endpoint(), r.references, request.Filter)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -46,6 +42,10 @@ func (r *repository[T]) List(ctx context.Context, request *protocol.SearchReques
 		request = &sorted
 	}
 	order, args, err := query.Order(r.schemas, r.references, request)
+	if err != nil {
+		return nil, 0, err
+	}
+	scope, err := r.scope(ctx)
 	if err != nil {
 		return nil, 0, err
 	}

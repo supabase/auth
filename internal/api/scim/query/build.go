@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -21,11 +20,11 @@ func Select(references []Reference, projection protocol.Projection, locations ma
 	return "json_build_array(" + strings.Join(parts, ", ") + ")"
 }
 
-func Where(schemas core.Schemas, provider uuid.UUID, location string, references []Reference, expression string) (Clause, error) {
+func Where(schemas core.Schemas, location string, references []Reference, expression string) (Clause, error) {
 	if expression == "" {
 		return nil, nil
 	}
-	return protocol.Filter(schemas, expression, NewEvaluator(schemas, provider, location, references...))
+	return protocol.Filter(schemas, expression, NewEvaluator(schemas, location, references...))
 }
 
 func Order(schemas core.Schemas, references []Reference, request *protocol.SearchRequest) (string, []any, error) {

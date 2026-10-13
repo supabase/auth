@@ -3,7 +3,6 @@ package query
 import (
 	"slices"
 	"strings"
-	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
@@ -20,13 +19,12 @@ var narrowing = map[filter.Operator]bool{
 
 type Evaluator struct {
 	schemas    core.Schemas
-	provider   uuid.UUID
 	location   string
 	references []Reference
 }
 
-func NewEvaluator(schemas core.Schemas, provider uuid.UUID, location string, references ...Reference) protocol.Evaluator[Clause] {
-	return Evaluator{schemas: schemas, provider: provider, location: location, references: references}
+func NewEvaluator(schemas core.Schemas, location string, references ...Reference) protocol.Evaluator[Clause] {
+	return Evaluator{schemas: schemas, location: location, references: references}
 }
 
 func (e Evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
@@ -95,7 +93,7 @@ func (e Evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (
 		return inner, err
 	}
 	if ref, ok := e.reference(attribute); ok {
-		return reference(ref, e.provider, inner), nil
+		return ref.exists(inner), nil
 	}
 	path, ok := inner.(jsonpath)
 	if !ok {
@@ -147,7 +145,7 @@ func (e Evaluator) wrap(attribute *protocol.Attribute, ref Reference, leaf Claus
 	if attribute.Parent != nil {
 		return leaf
 	}
-	return reference(ref, e.provider, leaf)
+	return ref.exists(leaf)
 }
 
 func (e Evaluator) reference(attribute *protocol.Attribute) (Reference, bool) {

@@ -1,18 +1,6 @@
 package query
 
-import (
-	"strconv"
-	"uuid"
-)
-
-func (r Reference) inverseExists(provider uuid.UUID, inner string, args []any) (string, []any) {
-	source := QuoteLiteral(r.via.Type)
-	return `scim_resources.id = any(array(SELECT target_id FROM scim_resource_references WHERE attribute = ? AND source_id IN (WITH RECURSIVE walk (id, depth) AS (
-		SELECT chain.id, 1 FROM scim_resources chain WHERE chain.sso_provider_id = ? AND chain.resource_type = ` + source + ` AND chain.deleted_at IS NULL AND ` + inner + `
-		UNION
-		SELECT edge.target_id, walk.depth + 1 FROM walk JOIN scim_resource_references edge ON edge.source_id = walk.id AND edge.attribute = ? AND edge.target_type = ` + source + ` WHERE walk.depth < ?
-	) SELECT DISTINCT id FROM walk)))`, append(append([]any{r.via.Attribute, provider.String()}, args...), r.via.Attribute, MaxDepth)
-}
+import "strconv"
 
 func (r Reference) inverseSelect(locations map[string]string) string {
 	via := QuoteLiteral(r.via.Attribute)

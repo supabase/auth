@@ -44,7 +44,7 @@ func TestReferencesFromCustomSchemas(t *testing.T) {
 	require.Contains(t, sql, `attribute = '`+approvers+`'`)
 
 	id := uuid.NewV7().String()
-	clause, err := Where(schemas, uuid.Nil(), "https://x/Devices", references, approvers+`.value eq "`+id+`"`)
+	clause, err := Where(schemas, "https://x/Devices", references, approvers+`.value eq "`+id+`"`)
 	require.NoError(t, err)
 	text, args := clause.SQL()
 	require.Contains(t, text, "edge.attribute = ? AND edge.target_id = ?::uuid")

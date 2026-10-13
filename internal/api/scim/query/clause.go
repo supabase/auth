@@ -1,9 +1,6 @@
 package query
 
-import (
-	"unicode/utf8"
-	"uuid"
-)
+import "unicode/utf8"
 
 type Clause interface {
 	SQL() (string, []any)
@@ -26,12 +23,6 @@ func junction(op string, l, r Clause) Clause {
 	ltext, largs := l.SQL()
 	rtext, rargs := r.SQL()
 	return predicate{"(" + ltext + " " + op + " " + rtext + ")", append(largs, rargs...)}
-}
-
-func reference(ref Reference, provider uuid.UUID, inner Clause) Clause {
-	text, args := inner.SQL()
-	text, args = ref.Exists(provider, text, args)
-	return predicate{text, args}
 }
 
 type Prefix struct {
