@@ -132,14 +132,7 @@ func (r Reference) Strip(document core.Object) {
 
 func (r Reference) Leaf(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
 	if r.kind == single {
-		if definition.Name != r.shown() {
-			return nil, unfilterable(r, definition)
-		}
-		related := path{"$", []string{r.display}}
-		if op == filter.OpPresent {
-			return jsonpath(present(related)), nil
-		}
-		return jsonpath(compare(related, op, value)), nil
+		return nil, unfilterable(r, definition)
 	}
 	if op != filter.OpPresent {
 		return match(r, definition, op, value)
@@ -151,13 +144,10 @@ func (r Reference) Leaf(definition *core.Attribute, op filter.Operator, value an
 }
 
 func (r Reference) Exists(provider uuid.UUID, inner string, args []any) (string, []any) {
-	switch r.kind {
-	case multi:
+	if r.kind == multi {
 		return r.edgeExists(inner, args)
-	case inverse:
-		return r.inverseExists(provider, inner, args)
 	}
-	return r.singleExists(provider, inner, args)
+	return r.inverseExists(provider, inner, args)
 }
 
 func (r Reference) Select(locations map[string]string) string {

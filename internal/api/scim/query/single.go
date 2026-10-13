@@ -1,15 +1,6 @@
 package query
 
-import "uuid"
-
 const uuidPattern = `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
-
-func (r Reference) singleExists(provider uuid.UUID, inner string, args []any) (string, []any) {
-	matches := `(SELECT lower(string_agg(` + QuoteLiteral(path{"$", r.keys()}.String()+" == ") + ` || to_jsonb(target.id::text)::text, ' || ')) FROM scim_resources target` +
-		` WHERE target.sso_provider_id = ? AND target.resource_type IN (` + literals(r.targets) + `) AND target.deleted_at IS NULL AND ` + inner + `)`
-	args = append([]any{provider.String()}, args...)
-	return `(` + matches + ` IS NOT NULL AND scim_resources.search @@ ` + matches + `::jsonpath)`, append(args, args...)
-}
 
 func (r Reference) singleSelect(locations map[string]string) string {
 	value := r.value()
