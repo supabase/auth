@@ -226,7 +226,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return UserExistsError
 			}
 
-			// User cannot have both a confirmed email and phone number
+			// A user cannot have both a confirmed email and phone number
 			// so we can safely assume that the user hasn't completed registration.
 			user.EncryptedPassword = signupUser.EncryptedPassword
 			terr = user.UpdatePassword(tx, nil)
