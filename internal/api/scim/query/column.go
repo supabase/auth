@@ -42,13 +42,13 @@ func column(name, location string, op filter.Operator, value any) (Clause, error
 	text, _ := value.(string)
 	switch name {
 	case "id":
-		return uuidPredicate("id", sign, op, text), nil
+		return uuidPredicate("id", op, text), nil
 	case "meta.location":
 		id, found := strings.CutPrefix(text, location+"/")
 		if !found {
 			id = ""
 		}
-		return uuidPredicate("id", sign, op, id), nil
+		return uuidPredicate("id", op, id), nil
 	case "meta.version":
 		at := VersionTime(text)
 		if at == nil {
@@ -59,12 +59,12 @@ func column(name, location string, op filter.Operator, value any) (Clause, error
 	return predicate{columns[name] + sign + "?", []any{value}}, nil
 }
 
-func uuidPredicate(column, sign string, op filter.Operator, text string) Clause {
+func uuidPredicate(column string, op filter.Operator, text string) Clause {
 	id, err := uuid.Parse(text)
 	if err != nil {
 		return boolean(op == filter.OpNotEquals)
 	}
-	return predicate{column + sign + "?::uuid", []any{id.String()}}
+	return predicate{column + comparisons[op] + "?::uuid", []any{id.String()}}
 }
 
 func indexed(schema core.SchemaURI, name string, op filter.Operator, text string, caseExact bool) (Clause, bool) {

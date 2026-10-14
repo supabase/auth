@@ -31,11 +31,10 @@ func (r Reference) match(definition *core.Attribute, op filter.Operator, value a
 	if op != filter.OpEquals && op != filter.OpNotEquals {
 		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(r.Name()+"."+definition.Name) + " supports only eq and ne")
 	}
-	sign := comparisons[op]
 	if definition.Name != ValueAttribute {
 		return nil, r.unfilterable(definition)
 	}
-	return uuidPredicate("edge.target_id", sign, op, text), nil
+	return uuidPredicate("edge.target_id", op, text), nil
 }
 
 func (r Reference) unfilterable(definition *core.Attribute) error {
