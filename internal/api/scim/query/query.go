@@ -1,6 +1,9 @@
 package query
 
 import (
+	"encoding/json"
+	"maps"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -75,6 +78,42 @@ func Order(schemas core.Schemas, references []Reference, request *protocol.Searc
 	return value + ` COLLATE "C"` + direction + ", id", args, nil
 }
 
+func Quote(s string) string {
+	raw, _ := json.Marshal(s)
+	return string(raw)
+}
+
+func References(resourceType string, schemas core.Schemas, inverses map[Edge]Edge) []Reference {
+	references := []Reference{}
+	for _, schema := range schemas {
+		uri := core.SchemaURI("")
+		if schemas.IsExtension(schema) {
+			uri = schema.ID
+		}
+		for _, attribute := range schema.Attributes {
+			targets := resourceTypes(attribute)
+			if len(targets) == 0 {
+				continue
+			}
+			ref := Reference{attribute: attribute, uri: uri, targets: targets}
+			self := Edge{resourceType, ref.Path()}
+			via, inverted := inverses[self]
+			switch {
+			case inverted:
+				ref.kind, ref.via = inverse, via
+			case attribute.Mutability == core.MutabilityReadOnly:
+				continue
+			case attribute.MultiValued:
+				ref.kind, ref.nested = multi, slices.Contains(slices.Collect(maps.Values(inverses)), self)
+			default:
+				ref.kind = single
+			}
+			references = append(references, ref)
+		}
+	}
+	return references
+}
+
 func build(references []Reference, locations map[string]string, pick func(Reference) ([]string, bool)) string {
 	parts := []string{}
 	for _, reference := range references {
@@ -94,4 +133,14 @@ func resolved(references []Reference, parent, attribute *core.Attribute) bool {
 	return slices.ContainsFunc(references, func(reference Reference) bool {
 		return reference.attribute == parent && reference.computed(attribute.Name)
 	})
+}
+
+func literal(value any) string {
+	raw, _ := json.Marshal(value)
+	return string(raw)
+}
+
+func pattern(value any, suffix string) string {
+	s, _ := value.(string)
+	return Quote(regexp.QuoteMeta(s) + suffix)
 }

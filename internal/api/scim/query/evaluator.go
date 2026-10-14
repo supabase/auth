@@ -52,7 +52,7 @@ func (e evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
 	}
 	ref, ok := e.reference(attribute)
 	if !ok {
-		return jsonpath(present(e.path(attribute))), nil
+		return jsonpath(e.path(attribute).present()), nil
 	}
 	leaf, err := ref.Leaf(attribute.Definition, filter.OpPresent, nil)
 	if err != nil {
@@ -89,7 +89,7 @@ func (e evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (
 	if !ok {
 		return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
-	return jsonpath(exists(e.path(attribute), path)), nil
+	return jsonpath(e.path(attribute).exists(path)), nil
 }
 
 func (e evaluator) assigned(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
@@ -120,7 +120,7 @@ func (e evaluator) unassignable(attribute *protocol.Attribute, op filter.Operato
 }
 
 func (e evaluator) compare(attribute *protocol.Attribute, op filter.Operator, value any) Clause {
-	path := compare(e.path(attribute), op, value)
+	path := e.path(attribute).compare(op, value)
 	if _, text := value.(string); !text || !attribute.Definition.CaseExact {
 		return jsonpath(path)
 	}
