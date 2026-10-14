@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -709,6 +710,17 @@ func TestSCIMGroups(t *testing.T) {
 		}
 	})
 
+	t.Run("concurrent PATCHes cannot nest two groups in each other", func(t *testing.T) {
+		for range 30 {
+			a, b := create(t), create(t)
+			statuses := c.addPairsConcurrently(t, [2]string{a.ID, b.ID}, [2]string{b.ID, a.ID})
+			for _, status := range statuses {
+				require.Contains(t, []int{http.StatusNoContent, http.StatusBadRequest, http.StatusConflict}, status, statuses)
+			}
+			require.False(t, slices.Contains(c.memberValues(t, a.ID), b.ID) && slices.Contains(c.memberValues(t, b.ID), a.ID), "groups are members of each other, statuses %v", statuses)
+		}
+	})
+
 	t.Run("rejects nesting deeper than the limit", func(t *testing.T) {
 		chain := nest(t, c)
 		bottom := chain[len(chain)-1]
@@ -1321,6 +1333,34 @@ func (c scimClient) addConcurrently(t *testing.T, id string, values ...string) [
 	}
 	wg.Wait()
 	return statuses
+}
+
+// addPairsConcurrently adds each [group, member] pair in its own request, all released together.
+func (c scimClient) addPairsConcurrently(t *testing.T, pairs ...[2]string) []int {
+	statuses := make([]int, len(pairs))
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i, pair := range pairs {
+		req := scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+pair[0], newSCIMAddMembers(pair[1]))
+		wg.Go(func() {
+			<-start
+			if res, err := c.inst.DoAuth(req, c.token); err == nil {
+				statuses[i] = res.StatusCode
+				_ = res.Body.Close()
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+	return statuses
+}
+
+func (c scimClient) memberValues(t *testing.T, id string) []string {
+	values := []string{}
+	for _, member := range c.group(t, id).Members {
+		values = append(values, member.Value)
+	}
+	return values
 }
 
 func (c scimClient) engine(t *testing.T) string {

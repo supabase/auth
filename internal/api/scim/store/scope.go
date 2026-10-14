@@ -18,7 +18,11 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
-const queryTimeout = 5 * time.Second
+const (
+	queryTimeout             = 5 * time.Second
+	maxSerializationAttempts = 5
+	retryDelay               = 10 * time.Millisecond
+)
 
 const (
 	resourceColumns = "id, resource_type, resource, created_at, updated_at"
@@ -139,9 +143,33 @@ func (s Scope) missing(ctx context.Context, id uuid.UUID) error {
 	return scimerrors.ErrPreconditionFailed("resource has changed on the server")
 }
 
+// write saves a resource and relinks its references in one transaction. Writes that nest groups
+// run serializable so that two transactions cannot each pass the cycle and depth checks against
+// a snapshot that lacks the other's edges. Postgres aborts one of them with a serialization
+// failure, and the write is retried against the committed result.
 func (s Scope) write(ctx context.Context, id uuid.UUID, links []Link, save func(*storage.Connection) error) (Row, error) {
+	serializable := slices.ContainsFunc(links, func(l Link) bool { return l.Nested })
+	for attempt := 1; ; attempt++ {
+		row, err := s.attempt(ctx, id, links, save, serializable)
+		if !serializable || attempt == maxSerializationAttempts || !isSerializationFailure(err) {
+			return row, err
+		}
+		select {
+		case <-ctx.Done():
+			return row, ctx.Err()
+		case <-time.After(time.Duration(attempt) * retryDelay):
+		}
+	}
+}
+
+func (s Scope) attempt(ctx context.Context, id uuid.UUID, links []Link, save func(*storage.Connection) error, serializable bool) (Row, error) {
 	var row Row
 	err := s.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
+		if serializable {
+			if err := tx.RawQuery("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE").Exec(); err != nil {
+				return errors.Wrap(err, "error setting SCIM transaction isolation")
+			}
+		}
 		if err := save(tx); err != nil {
 			return err
 		}
@@ -196,6 +224,11 @@ func (s Scope) remove(tx *storage.Connection, id uuid.UUID, version string) erro
 	return nil
 }
 
+func isSerializationFailure(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == pgerrcode.SerializationFailure
+}
+
 func conflict(err error) error {
 	var pg *pgconn.PgError
 	if !errors.As(err, &pg) {
@@ -204,7 +237,7 @@ func conflict(err error) error {
 	switch pg.Code {
 	case pgerrcode.UniqueViolation:
 		return scimerrors.ErrUniqueness("resource must be unique")
-	case pgerrcode.DeadlockDetected:
+	case pgerrcode.DeadlockDetected, pgerrcode.SerializationFailure:
 		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
 	}
 	return err
