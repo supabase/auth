@@ -41,14 +41,6 @@ func (r Reference) Nested() bool {
 	return r.nested
 }
 
-func (r Reference) Get(document core.Object) any {
-	return document.Get(r.Name())
-}
-
-func (r Reference) Strip(document core.Object) {
-	document.Remove(r.Name())
-}
-
 func resourceTypes(attribute *core.Attribute) []string {
 	ref := attribute.SubAttribute("$ref")
 	if attribute.Type != core.TypeComplex || ref == nil {

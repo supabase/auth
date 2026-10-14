@@ -22,11 +22,11 @@ func Encode[T core.Resource](item T, references []query.Reference) (string, []Li
 			links = append(links, Link{
 				Attribute: reference.Name(),
 				Types:     types,
-				Values:    reference.Get(document),
+				Values:    document.Get(reference.Name()),
 				Nested:    reference.Nested(),
 			})
 		}
-		reference.Strip(document)
+		document.Remove(reference.Name())
 	}
 	raw, err := json.Marshal(document)
 	return string(raw), links, err
