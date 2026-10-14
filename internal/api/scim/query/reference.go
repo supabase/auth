@@ -23,7 +23,6 @@ type Reference struct {
 	kind      kind
 	targets   []string
 	via       Edge
-	nested    bool
 }
 
 func (r Reference) Name() string {
@@ -35,10 +34,6 @@ func (r Reference) Targets() []string {
 		return nil
 	}
 	return r.targets
-}
-
-func (r Reference) Nested() bool {
-	return r.nested
 }
 
 func resourceTypes(attribute *core.Attribute) []string {

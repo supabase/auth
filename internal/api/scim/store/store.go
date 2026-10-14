@@ -23,7 +23,6 @@ func Encode[T core.Resource](item T, references []query.Reference) (string, []Li
 				Attribute: reference.Name(),
 				Types:     types,
 				Values:    document.Get(reference.Name()),
-				Nested:    reference.Nested(),
 			})
 		}
 		document.Remove(reference.Name())

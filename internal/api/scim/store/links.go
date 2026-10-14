@@ -40,36 +40,6 @@ func (s Scope) findTargets(tx *storage.Connection, source uuid.UUID, attribute s
 	return targets, errors.Wrap(err, "error finding SCIM targets")
 }
 
-func (s Scope) findAncestors(tx *storage.Connection, target uuid.UUID, attribute string) ([]Ancestor, error) {
-	ancestors := []Ancestor{}
-	err := tx.RawQuery(
-		`WITH RECURSIVE chain (source_id, depth) AS (
-			SELECT source_id, 1 FROM scim_resource_references WHERE target_id = ? AND attribute = ?
-			UNION
-			SELECT r.source_id, c.depth + 1 FROM chain c JOIN scim_resource_references r ON r.target_id = c.source_id AND r.attribute = ? WHERE c.depth < ?
-		)
-		SELECT source_id, max(depth) AS longest FROM chain GROUP BY source_id`,
-		target, attribute, attribute, query.MaxDepth,
-	).All(&ancestors)
-	return ancestors, errors.Wrap(err, "error finding SCIM ancestors")
-}
-
-func (s Scope) depth(tx *storage.Connection, ids []uuid.UUID, attribute string) (int, error) {
-	var walk struct {
-		Depth int `db:"depth"`
-	}
-	err := tx.RawQuery(
-		`WITH RECURSIVE walk (id, depth) AS (
-			SELECT id, 1 FROM scim_resources WHERE id = any(?::uuid[]) AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL
-			UNION
-			SELECT t.id, w.depth + 1 FROM walk w JOIN scim_resource_references r ON r.source_id = w.id AND r.attribute = ? JOIN scim_resources t ON t.id = r.target_id AND t.resource_type = ? AND t.deleted_at IS NULL WHERE w.depth <= ?
-		)
-		SELECT coalesce(max(depth), 0) AS depth FROM walk`,
-		uuidStrings(ids), s.providerID, s.resourceType, attribute, s.resourceType, query.MaxDepth,
-	).First(&walk)
-	return walk.Depth, errors.Wrap(err, "error finding SCIM depth")
-}
-
 func (s Scope) deleteReferences(tx *storage.Connection, id uuid.UUID) error {
 	err := tx.RawQuery("DELETE FROM scim_resource_references WHERE source_id = ? OR target_id = ?", id, id).Exec()
 	return errors.Wrap(err, "error deleting SCIM references")
@@ -86,10 +56,8 @@ func (s Scope) link(tx *storage.Connection, source uuid.UUID, l Link) error {
 		return err
 	}
 	add, remove := linkDiff(current, wanted)
-	if l.Nested {
-		if err := s.nestable(tx, source, attribute, add); err != nil {
-			return err
-		}
+	if slices.Contains(add, source) {
+		return linkInvalid(attribute, source.String())
 	}
 	added, err := s.addReferences(tx, source, attribute, l.Types, add)
 	if err != nil {
@@ -103,33 +71,6 @@ func (s Scope) link(tx *storage.Connection, source uuid.UUID, l Link) error {
 		return linkInvalid(attribute, add[i].String())
 	}
 	return s.removeReferences(tx, source, attribute, remove)
-}
-
-func (s Scope) nestable(tx *storage.Connection, source uuid.UUID, attribute string, targets []uuid.UUID) error {
-	if len(targets) == 0 {
-		return nil
-	}
-	ancestors, err := s.findAncestors(tx, source, attribute)
-	if err != nil {
-		return err
-	}
-	level := 1
-	for _, ancestor := range ancestors {
-		level = max(level, ancestor.Longest+1)
-	}
-	for _, target := range targets {
-		if target == source || slices.ContainsFunc(ancestors, func(ancestor Ancestor) bool { return ancestor.SourceID == target }) {
-			return scimerrors.ErrInvalidValue(strconv.Quote(target.String()) + " would make " + attribute + " cyclic")
-		}
-	}
-	height, err := s.depth(tx, targets, attribute)
-	if err != nil {
-		return err
-	}
-	if height > 0 && level+height > query.MaxDepth {
-		return scimerrors.ErrInvalidValue(attribute + " would nest more than " + strconv.Itoa(query.MaxDepth) + " levels deep")
-	}
-	return nil
 }
 
 func uuidStrings(ids []uuid.UUID) []string {

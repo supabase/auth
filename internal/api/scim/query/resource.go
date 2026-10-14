@@ -1,8 +1,6 @@
 package query
 
 import (
-	"maps"
-	"slices"
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -81,7 +79,7 @@ func referencesOf(resourceType string, schemas core.Schemas, inverses map[Edge]E
 		case attribute.Mutability == core.MutabilityReadOnly:
 			continue
 		case attribute.MultiValued:
-			ref.kind, ref.nested = multi, slices.Contains(slices.Collect(maps.Values(inverses)), self)
+			ref.kind = multi
 		default:
 			continue
 		}

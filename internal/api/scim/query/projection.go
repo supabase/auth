@@ -1,7 +1,5 @@
 package query
 
-const MaxDepth = 8
-
 func (r Reference) selection() string {
 	return "json_build_object(" + quoteLiteral(r.Name()) + ", " + r.subquery() + ")"
 }
