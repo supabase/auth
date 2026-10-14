@@ -2,7 +2,6 @@ package scim
 
 import (
 	"context"
-	"slices"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -35,15 +34,15 @@ func (w *write) scope(links []store.Link) []store.Link {
 
 type service[T core.Resource] struct {
 	server.Service[T]
-	references []query.Reference
+	query query.Resource
 }
 
 func (r *repository[T]) wrap(inner server.Service[T]) server.Service[T] {
-	return service[T]{inner, r.references}
+	return service[T]{inner, r.query}
 }
 
 func (s service[T]) Patch(ctx context.Context, req *protocol.PatchRequest) (T, error) {
-	touched := query.Touches(s.references, req.Operations)
+	touched := s.query.Touches(req.Operations)
 	if touched == nil {
 		return s.Service.Patch(ctx, req)
 	}
@@ -56,8 +55,7 @@ func (s service[T]) Patch(ctx context.Context, req *protocol.PatchRequest) (T, e
 }
 
 func (s service[T]) returnsReferences(ctx context.Context) bool {
-	projection := protocol.ProjectionFrom(ctx)
-	return slices.ContainsFunc(s.references, func(r query.Reference) bool { return projection.Returns(r.Path()) })
+	return s.query.Returns(protocol.ProjectionFrom(ctx))
 }
 
 func (s service[T]) Delete(ctx context.Context, req *protocol.DeleteRequest) error {

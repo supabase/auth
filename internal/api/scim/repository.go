@@ -15,32 +15,19 @@ import (
 type repository[T core.Resource] struct {
 	db           *storage.Connection
 	resourceType string
-	locations    map[string]string
-	schemas      core.Schemas
-	references   []query.Reference
+	query        query.Resource
 }
 
 func newRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas) *repository[T] {
 	return &repository[T]{
 		db:           db,
 		resourceType: resourceType,
-		locations:    locations,
-		schemas:      schemas,
-		references:   query.References(resourceType, schemas, inverses),
+		query:        query.NewResource(resourceType, schemas, locations, inverses),
 	}
 }
 
 func (r *repository[T]) List(ctx context.Context, request *protocol.SearchRequest) ([]T, int, error) {
-	clause, err := query.Where(r.schemas, r.endpoint(), r.references, request.Filter)
-	if err != nil {
-		return nil, 0, err
-	}
-	if prefix, ok := clause.(query.Prefix); ok && request.SortBy == "" {
-		sorted := *request
-		sorted.SortBy = prefix.Attribute
-		request = &sorted
-	}
-	order, args, err := query.Order(r.schemas, r.references, request)
+	clause, order, args, err := r.query.Search(request)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -114,7 +101,7 @@ func (r *repository[T]) save(ctx context.Context, item T, write func(store.Scope
 	if err != nil {
 		return zero, err
 	}
-	document, links, err := store.Encode(item, r.references)
+	document, links, err := store.Encode(item, r.query.References())
 	if err != nil {
 		return zero, err
 	}
@@ -134,16 +121,16 @@ func (r *repository[T]) scope(ctx context.Context, refs string) (store.Scope, er
 }
 
 func (r *repository[T]) projected(ctx context.Context) string {
-	return query.Select(r.references, protocol.ProjectionFrom(ctx), r.locations)
+	return r.query.Select(protocol.ProjectionFrom(ctx))
 }
 
 func (r *repository[T]) selected(ctx context.Context) string {
 	if w := writeKey.Value(ctx); w != nil {
-		return query.SelectTouched(r.references, w.touched, r.locations)
+		return r.query.SelectTouched(w.touched)
 	}
 	return r.projected(ctx)
 }
 
 func (r *repository[T]) endpoint() string {
-	return r.locations[r.resourceType]
+	return r.query.Location()
 }

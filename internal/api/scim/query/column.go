@@ -75,7 +75,7 @@ func indexed(schema core.SchemaURI, name string, op filter.Operator, text string
 	}
 	expression, param := expression(name, caseExact)
 	if op == filter.OpStartsWith {
-		return Prefix{name, expression, param, text}, true
+		return prefix{name, expression, param, text}, true
 	}
 	return predicate{"(" + expression + ") IS NOT NULL AND " + expression + sign + param, []any{text}}, true
 }

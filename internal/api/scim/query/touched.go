@@ -11,7 +11,7 @@ import (
 
 type Touched map[string][]string
 
-func Touches(references []Reference, ops []patch.Operation) Touched {
+func touches(references []Reference, ops []patch.Operation) Touched {
 	touched := Touched{}
 	for _, op := range ops {
 		if !touched.op(references, op) {
