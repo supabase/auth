@@ -80,7 +80,7 @@ func indexed(schema core.SchemaURI, name string, op filter.Operator, text string
 }
 
 func expression(name string, caseExact bool) (string, string) {
-	value := "resource ->> " + QuoteLiteral(name)
+	value := "resource ->> " + quoteLiteral(name)
 	if caseExact {
 		return "(" + value + `) COLLATE "C"`, "?"
 	}

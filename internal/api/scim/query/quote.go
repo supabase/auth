@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func QuoteLiteral(s string) string {
+func quoteLiteral(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 

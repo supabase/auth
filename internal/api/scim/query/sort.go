@@ -54,7 +54,7 @@ func (r Resource) sortValue(parent, attribute *core.Attribute) (string, []any) {
 	}
 	value, args := `resource #>> ?::text[]`, []any{keys}
 	if len(keys) == 1 {
-		value, args = `resource ->> `+QuoteLiteral(keys[0]), nil
+		value, args = `resource ->> `+quoteLiteral(keys[0]), nil
 	}
 	if parent.MultiValued {
 		value, args = `coalesce(jsonb_path_query_first(resource, ?::jsonpath) #>> '{}', `+value+`)`, []any{path{"$", keys}.primary(), keys}
