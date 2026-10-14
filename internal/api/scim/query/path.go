@@ -24,7 +24,7 @@ func (p path) String() string {
 	var s strings.Builder
 	s.WriteString(p.root)
 	for _, key := range p.keys {
-		s.WriteString("." + Quote(key))
+		s.WriteString("." + literal(key))
 	}
 	return s.String()
 }

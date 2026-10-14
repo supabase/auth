@@ -78,11 +78,6 @@ func Order(schemas core.Schemas, references []Reference, request *protocol.Searc
 	return value + ` COLLATE "C"` + direction + ", id", args, nil
 }
 
-func Quote(s string) string {
-	raw, _ := json.Marshal(s)
-	return string(raw)
-}
-
 func References(resourceType string, schemas core.Schemas, inverses map[Edge]Edge) []Reference {
 	references := []Reference{}
 	for _, schema := range schemas {
@@ -126,7 +121,7 @@ func build(references []Reference, locations map[string]string, pick func(Refere
 }
 
 func primary(keys []string) string {
-	return path{"$", keys[:len(keys)-2]}.String() + "[*] ? (@.primary == true)." + Quote(keys[len(keys)-1])
+	return path{"$", keys[:len(keys)-2]}.String() + "[*] ? (@.primary == true)." + literal(keys[len(keys)-1])
 }
 
 func resolved(references []Reference, parent, attribute *core.Attribute) bool {
@@ -142,5 +137,5 @@ func literal(value any) string {
 
 func pattern(value any, suffix string) string {
 	s, _ := value.(string)
-	return Quote(regexp.QuoteMeta(s) + suffix)
+	return literal(regexp.QuoteMeta(s) + suffix)
 }
