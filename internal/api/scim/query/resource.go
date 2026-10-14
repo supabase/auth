@@ -51,22 +51,41 @@ func (r Resource) Search(request *protocol.SearchRequest) (Clause, string, []any
 }
 
 func (r Resource) Select(projection protocol.Projection) string {
-	return r.build(func(ref Reference) ([]string, bool) { return nil, projection.Returns(ref.Path()) })
+	return r.SelectTouched(r.returned(projection))
 }
 
 func (r Resource) SelectTouched(touched Touched) string {
-	return r.build(func(ref Reference) ([]string, bool) {
-		only, ok := touched[ref.Path()]
-		return only, ok
-	})
+	parts := []string{}
+	for _, ref := range r.references {
+		if only, ok := touched[ref.Path()]; ok {
+			parts = append(parts, projection{r.locations, only}.part(ref))
+		}
+	}
+	return "json_build_array(" + strings.Join(parts, ", ") + ")"
 }
 
 func (r Resource) Touches(ops []patch.Operation) Touched {
-	return touches(r.references, ops)
+	touched := Touched{}
+	for _, op := range ops {
+		if !touched.op(r.references, op) {
+			return nil
+		}
+	}
+	return touched
 }
 
 func (r Resource) Returns(projection protocol.Projection) bool {
-	return slices.ContainsFunc(r.references, func(ref Reference) bool { return projection.Returns(ref.Path()) })
+	return len(r.returned(projection)) > 0
+}
+
+func (r Resource) returned(projection protocol.Projection) Touched {
+	touched := Touched{}
+	for _, ref := range r.references {
+		if projection.Returns(ref.Path()) {
+			touched[ref.Path()] = nil
+		}
+	}
+	return touched
 }
 
 func (r Resource) where(expression string) (Clause, error) {
@@ -121,16 +140,6 @@ func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) 
 		value = "lower(" + value + ")"
 	}
 	return value + ` COLLATE "C"` + direction + ", id", args, nil
-}
-
-func (r Resource) build(pick func(Reference) ([]string, bool)) string {
-	parts := []string{}
-	for _, reference := range r.references {
-		if only, ok := pick(reference); ok {
-			parts = append(parts, projection{r.locations, only}.part(reference))
-		}
-	}
-	return "json_build_array(" + strings.Join(parts, ", ") + ")"
 }
 
 func referencesOf(resourceType string, schemas core.Schemas, inverses map[Edge]Edge) []Reference {

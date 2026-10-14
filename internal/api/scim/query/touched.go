@@ -11,16 +11,6 @@ import (
 
 type Touched map[string][]string
 
-func touches(references []Reference, ops []patch.Operation) Touched {
-	touched := Touched{}
-	for _, op := range ops {
-		if !touched.op(references, op) {
-			return nil
-		}
-	}
-	return touched
-}
-
 func (t Touched) op(references []Reference, op patch.Operation) bool {
 	if op.Path == "" {
 		return t.object(references, op.Value)

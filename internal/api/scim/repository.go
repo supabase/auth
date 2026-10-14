@@ -45,7 +45,7 @@ func (r *repository[T]) List(ctx context.Context, request *protocol.SearchReques
 	if err != nil {
 		return nil, 0, err
 	}
-	items, err := store.Decode[T](rows, r.endpoint())
+	items, err := store.Decode[T](rows, r.query.Location())
 	return items, total, err
 }
 
@@ -63,7 +63,7 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 	if err != nil {
 		return zero, err
 	}
-	return row.Into[T](r.endpoint())
+	return row.Into[T](r.query.Location())
 }
 
 func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
@@ -109,7 +109,7 @@ func (r *repository[T]) save(ctx context.Context, item T, write func(store.Scope
 	if err != nil {
 		return zero, err
 	}
-	return row.Into[T](r.endpoint())
+	return row.Into[T](r.query.Location())
 }
 
 func (r *repository[T]) scope(ctx context.Context, refs string) (store.Scope, error) {
@@ -129,8 +129,4 @@ func (r *repository[T]) selected(ctx context.Context) string {
 		return r.query.SelectTouched(w.touched)
 	}
 	return r.projected(ctx)
-}
-
-func (r *repository[T]) endpoint() string {
-	return r.query.Location()
 }
