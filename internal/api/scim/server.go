@@ -33,13 +33,6 @@ func BaseURL(config *conf.GlobalConfiguration) string {
 
 func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Handler {
 	base := BaseURL(config)
-	users := query.NewResource(userType, core.Schemas{
-		core.NewSchema(core.SchemaUser).With(core.UserAttributes()...),
-		core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...),
-	}, base+usersPath, map[string]string{"groups": "members"})
-	groups := query.NewResource(groupType, core.Schemas{
-		core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...),
-	}, base+groupsPath, nil)
 	errorHandler := func(r *http.Request, err error) {
 		observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
 	}
@@ -49,15 +42,27 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Ha
 		server.ErrorHandler(errorHandler),
 		server.WithBaseURL(base),
 		server.WithResource(
-			server.
-				NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
+			server.NewResource[*core.User](userType, usersPath, core.SchemaUser, core.UserAttributes()...).
 				WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...).
-				WithRepository(newRepository[*core.User](db, users)),
+				WithRepositoryFunc(func(r *server.Resource[*core.User]) server.Repository[*core.User] {
+					return newRepository[*core.User](db, query.NewResource(
+						userType,
+						r.Schemas(),
+						r.Location(),
+						map[string]string{"groups": "members"},
+					))
+				}),
 		),
 		server.WithResource(
-			server.
-				NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
-				WithRepository(newRepository[*core.Group](db, groups)),
+			server.NewResource[*core.Group](groupType, groupsPath, core.SchemaGroup, core.GroupAttributes()...).
+				WithRepositoryFunc(func(r *server.Resource[*core.Group]) server.Repository[*core.Group] {
+					return newRepository[*core.Group](db, query.NewResource(
+						groupType,
+						r.Schemas(),
+						r.Location(),
+						nil,
+					))
+				}),
 		),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),
 	)
