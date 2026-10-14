@@ -1959,13 +1959,25 @@ paths:
       security:
         - APIKeyAuth: []
           AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                should_soft_delete:
+                  type: boolean
+                  default: false
+                  description: Soft delete the user instead of permanently deleting their account.
       responses:
         200:
-          description: User's account data.
+          description: Empty JSON object. No user data is returned after hard or soft deletion.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserSchema"
+                type: object
+                additionalProperties: false
+                example: {}
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
