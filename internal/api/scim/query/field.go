@@ -54,7 +54,15 @@ func (f field) leaf(op filter.Operator, value any) (Clause, error) {
 	return f.ref.exists(leaf), nil
 }
 
+// RFC 7643 Section 2.4: an unspecified "primary" is assumed to be false.
+func (f field) defaultsFalse(op filter.Operator, value any) bool {
+	return f.attribute.Definition.Name == "primary" && (op == filter.OpEquals || op == filter.OpNotEquals) && value == (op == filter.OpNotEquals)
+}
+
 func (f field) compare(op filter.Operator, value any) Clause {
+	if f.defaultsFalse(op, value) {
+		return jsonpath(f.path.unsetOr(op, value))
+	}
 	path := f.path.compare(op, value)
 	if _, text := value.(string); !text || !f.attribute.Definition.CaseExact {
 		return jsonpath(path)

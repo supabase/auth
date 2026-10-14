@@ -64,7 +64,7 @@ func (j jsonpath) SQL() (string, []any) {
 }
 
 type prefix struct {
-	attribute, expression, param, text string
+	expression, param, text string
 }
 
 func (p prefix) SQL() (string, []any) {

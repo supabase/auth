@@ -8,7 +8,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-var edgeColumns = map[string]string{ValueAttribute: "edge.target_id", "type": "lower(target.resource_type)"}
+var edgeColumns = map[string]string{ValueAttribute: "edge.target_id"}
 
 func (r Reference) leaf(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
 	if r.kind != multi {
@@ -25,7 +25,7 @@ func (r Reference) leaf(definition *core.Attribute, op filter.Operator, value an
 
 func (r Reference) exists(inner Clause) Clause {
 	text, args := inner.SQL()
-	return predicate{"EXISTS (SELECT 1 FROM scim_resource_references edge JOIN scim_resources target ON target.id = edge.target_id AND target.deleted_at IS NULL WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + text + ")", append([]any{r.Path()}, args...)}
+	return predicate{"EXISTS (SELECT 1 FROM scim_resource_references edge JOIN scim_resources target ON target.id = edge.target_id AND target.deleted_at IS NULL WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + text + ")", append([]any{r.Name()}, args...)}
 }
 
 func (r Reference) match(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
@@ -37,9 +37,6 @@ func (r Reference) match(definition *core.Attribute, op filter.Operator, value a
 	column, ok := edgeColumns[definition.Name]
 	if !ok {
 		return nil, r.unfilterable(definition)
-	}
-	if definition.Name != ValueAttribute {
-		return predicate{column + sign + "lower(?)", []any{text}}, nil
 	}
 	return uuidPredicate(column, sign, op, text), nil
 }

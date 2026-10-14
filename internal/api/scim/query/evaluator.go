@@ -94,11 +94,7 @@ func (e evaluator) reference(attribute *protocol.Attribute) *Reference {
 		return e.lookup(attribute.Parent)
 	}
 	top, _ := e.schemas.Resolve(core.SchemaURI(attribute.Path.URI), attribute.Path.Name, "")
-	ref := e.lookup(top)
-	if ref != nil && !ref.resolves(attribute.Definition.Name) {
-		return nil
-	}
-	return ref
+	return e.lookup(top)
 }
 
 func (e evaluator) lookup(top *core.Attribute) *Reference {

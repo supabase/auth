@@ -42,6 +42,16 @@ func (p path) compare(op filter.Operator, value any) string {
 	return path + " " + operators[op] + " " + literal(value)
 }
 
+func (p path) unsetOr(op filter.Operator, value any) string {
+	last := len(p.keys) - 1
+	leaf := path{"@", p.keys[last:]}
+	match := "(" + leaf.compare(op, value) + " || !exists(" + leaf.String() + "))"
+	if p.root == "@" {
+		return match
+	}
+	return path{p.root, p.keys[:last]}.exists(jsonpath(match))
+}
+
 func (p path) present() string {
 	return "exists(" + p.String() + ` ? (@.type() != "null" && !(@.type() == "string" && @ == "")))`
 }

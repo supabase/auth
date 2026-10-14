@@ -72,6 +72,6 @@ func primary(keys []string) string {
 
 func resolved(references []Reference, parent, attribute *core.Attribute) bool {
 	return slices.ContainsFunc(references, func(reference Reference) bool {
-		return reference.attribute == parent && reference.computed(attribute.Name)
+		return reference.attribute == parent
 	})
 }

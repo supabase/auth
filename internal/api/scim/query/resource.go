@@ -16,17 +16,17 @@ type Search struct {
 }
 
 type Resource struct {
+	Type       string
 	schemas    core.Schemas
 	references []Reference
-	locations  map[string]string
 	location   string
 }
 
 func NewResource(resourceType string, schemas core.Schemas, locations map[string]string, inverses map[Edge]Edge) Resource {
 	return Resource{
+		Type:       resourceType,
 		schemas:    schemas,
 		references: referencesOf(resourceType, schemas, inverses),
-		locations:  locations,
 		location:   locations[resourceType],
 	}
 }
@@ -44,11 +44,6 @@ func (r Resource) Search(request *protocol.SearchRequest) (Search, error) {
 	if err != nil {
 		return Search{}, err
 	}
-	if p, ok := where.(prefix); ok && request.SortBy == "" {
-		sorted := *request
-		sorted.SortBy = p.attribute
-		request = &sorted
-	}
 	order, args, err := r.order(request)
 	return Search{Where: where, Order: order, OrderArgs: args}, err
 }
@@ -56,8 +51,8 @@ func (r Resource) Search(request *protocol.SearchRequest) (Search, error) {
 func (r Resource) Select(requested protocol.Projection) string {
 	parts := []string{}
 	for _, ref := range r.references {
-		if requested.Returns(ref.Path()) {
-			parts = append(parts, projection{r.locations}.part(ref))
+		if requested.Returns(ref.Name()) {
+			parts = append(parts, projection{}.part(ref))
 		}
 	}
 	return "json_build_array(" + strings.Join(parts, ", ") + ")"
@@ -72,31 +67,25 @@ func (r Resource) where(expression string) (Clause, error) {
 
 func referencesOf(resourceType string, schemas core.Schemas, inverses map[Edge]Edge) []Reference {
 	references := []Reference{}
-	for _, schema := range schemas {
-		uri := core.SchemaURI("")
-		if schemas.IsExtension(schema) {
-			uri = schema.ID
+	for _, attribute := range schemas.Base().Attributes {
+		targets := resourceTypes(attribute)
+		if len(targets) == 0 {
+			continue
 		}
-		for _, attribute := range schema.Attributes {
-			targets := resourceTypes(attribute)
-			if len(targets) == 0 {
-				continue
-			}
-			ref := Reference{attribute: attribute, uri: uri, targets: targets}
-			self := Edge{resourceType, ref.Path()}
-			via, inverted := inverses[self]
-			switch {
-			case inverted:
-				ref.kind, ref.via = inverse, via
-			case attribute.Mutability == core.MutabilityReadOnly:
-				continue
-			case attribute.MultiValued:
-				ref.kind, ref.nested = multi, slices.Contains(slices.Collect(maps.Values(inverses)), self)
-			default:
-				ref.kind = single
-			}
-			references = append(references, ref)
+		ref := Reference{attribute: attribute, targets: targets}
+		self := Edge{resourceType, ref.Name()}
+		via, inverted := inverses[self]
+		switch {
+		case inverted:
+			ref.kind, ref.via = inverse, via
+		case attribute.Mutability == core.MutabilityReadOnly:
+			continue
+		case attribute.MultiValued:
+			ref.kind, ref.nested = multi, slices.Contains(slices.Collect(maps.Values(inverses)), self)
+		default:
+			continue
 		}
+		references = append(references, ref)
 	}
 	return references
 }
