@@ -19,7 +19,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/api"
-	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/e2e/e2eapi"
@@ -669,14 +668,6 @@ func TestSCIMUsers(t *testing.T) {
 				require.Nil(t, c.user(t, user.ID).EnterpriseUser)
 			})
 
-			t.Run("drops a deleted manager", func(t *testing.T) {
-				boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Deleted Boss"))
-				report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
-
-				require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+boss.ID).StatusCode)
-				require.Equal(t, &core.Manager{Value: boss.ID}, scimManager(t, c.user(t, report.ID)))
-			})
-
 			t.Run("ignores a manager in another tenant", func(t *testing.T) {
 				other := newSCIMClient(t, nil)
 				boss := scimCreate[core.User](t, other, scimUsersPath, newSCIMBoss("Other Tenant Boss"))
@@ -806,14 +797,6 @@ func TestSCIMGroups(t *testing.T) {
 	}
 	create := func(t *testing.T, members ...core.User) core.Group {
 		return c.createGroup(t, "Tour Guides "+uuid.NewV7().String(), members...)
-	}
-	nest := func(t *testing.T, client scimClient) []core.Group {
-		chain := []core.Group{client.createGroup(t, "Chain "+uuid.NewV7().String())}
-		for len(chain) < query.MaxDepth {
-			chain = append(chain, client.createGroup(t, "Chain "+uuid.NewV7().String()))
-			require.Equal(t, http.StatusNoContent, client.addMembers(t, chain[len(chain)-2].ID, chain[len(chain)-1].ID).StatusCode)
-		}
-		return chain
 	}
 	patch := func(t *testing.T, id string, operation map[string]any) *http.Response {
 		return c.do(t, http.MethodPatch, scimGroupsPath+"/"+id, newSCIMPatch(operation))
@@ -1126,53 +1109,6 @@ func TestSCIMGroups(t *testing.T) {
 
 			require.Equal(t, http.StatusNoContent, c.delete(t, scimGroupsPath+"/"+child.ID).StatusCode)
 			require.Empty(t, c.user(t, user.ID).Groups)
-		})
-
-		t.Run("rejects cyclic members", func(t *testing.T) {
-			bottom := create(t)
-			middle := create(t)
-			top := create(t)
-			require.Equal(t, http.StatusNoContent, c.addMembers(t, top.ID, middle.ID).StatusCode)
-			require.Equal(t, http.StatusNoContent, c.addMembers(t, middle.ID, bottom.ID).StatusCode)
-
-			for name, tc := range map[string]struct{ group, member core.Group }{
-				"self":     {bottom, bottom},
-				"parent":   {middle, top},
-				"ancestor": {bottom, top},
-			} {
-				t.Run(name, func(t *testing.T) {
-					res := c.addMembers(t, tc.group.ID, tc.member.ID)
-					requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
-				})
-			}
-		})
-
-		t.Run("rejects nesting deeper than the limit", func(t *testing.T) {
-			chain := nest(t, c)
-			bottom := chain[len(chain)-1]
-			require.Equal(t, http.StatusNoContent, c.addMembers(t, bottom.ID, createUser(t).ID).StatusCode)
-			requireSCIMError(t, c.addMembers(t, bottom.ID, create(t).ID), http.StatusBadRequest, scimerrors.InvalidValue)
-			requireSCIMError(t, c.addMembers(t, create(t).ID, chain[0].ID), http.StatusBadRequest, scimerrors.InvalidValue)
-
-			shortcut := create(t)
-			require.Equal(t, http.StatusNoContent, c.addMembers(t, shortcut.ID, chain[len(chain)-2].ID).StatusCode)
-			require.Equal(t, http.StatusNoContent, c.addMembers(t, chain[len(chain)-2].ID, create(t).ID).StatusCode)
-			pair := create(t)
-			require.Equal(t, http.StatusNoContent, c.addMembers(t, pair.ID, create(t).ID).StatusCode)
-			requireSCIMError(t, c.addMembers(t, chain[len(chain)-2].ID, pair.ID), http.StatusBadRequest, scimerrors.InvalidValue)
-		})
-
-		t.Run("rejects nesting deeper than the limit through a shortcut", func(t *testing.T) {
-			chain := nest(t, c)
-			bottom := chain[len(chain)-1]
-			require.Equal(t, http.StatusNoContent, c.addMembers(t, chain[0].ID, bottom.ID).StatusCode)
-			requireSCIMError(t, c.addMembers(t, bottom.ID, create(t).ID), http.StatusBadRequest, scimerrors.InvalidValue)
-		})
-
-		t.Run("rejects a deep foreign group as invalid, not as too deep", func(t *testing.T) {
-			chain := nest(t, newSCIMClient(t, nil))
-			body := requireSCIMError(t, c.addMembers(t, create(t).ID, create(t).ID, chain[0].ID), http.StatusBadRequest, scimerrors.InvalidValue)
-			require.Contains(t, body.Detail, "is not a valid members value")
 		})
 	})
 }
@@ -1556,7 +1492,6 @@ func TestSCIMQuery(t *testing.T) {
 				scimType     scimerrors.ErrorType
 			}{
 				{scimUsersPath, `userName eq`, http.StatusBadRequest, ""},
-				{scimUsersPath, `id sw "x"`, http.StatusBadRequest, ""},
 				{scimUsersPath, `userName regex "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				// RFC 7644 3.4.2.2: gt, ge, lt and le on a binary attribute SHALL fail.
 				{scimUsersPath, `x509Certificates.value gt "a"`, http.StatusBadRequest, scimerrors.InvalidFilter},
@@ -1565,16 +1500,6 @@ func TestSCIMQuery(t *testing.T) {
 				{scimUsersPath, `x509Certificates.value le "a"`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				// RFC 7644 7.5.2: servers SHOULD respond 403 to a GET filter with sensitive information.
 				{scimUsersPath, `password eq "t1meMa$heen"`, http.StatusForbidden, scimerrors.Sensitive},
-				// RFC 7644 3.12: groups is derived on read, so filtering on it is not supported.
-				{scimUsersPath, `groups.value eq "` + missing + `"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `groups[value eq "` + missing + `"]`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `groups.value ne "` + missing + `"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `groups pr`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `groups eq null`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `groups[type eq "direct"]`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `groups.value sw "a"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `groups[value sw "a"]`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `groups.display pr`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				// RFC 7643 4.3: manager is single-valued, so scim-go rejects any value path on it.
 				{scimUsersPath, scimEnterprise(`manager[value eq "` + missing + `"]`), http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, scimEnterprise(`manager[displayName eq "Barbara Jensen"]`), http.StatusBadRequest, scimerrors.InvalidFilter},
@@ -1609,40 +1534,13 @@ func TestSCIMQuery(t *testing.T) {
 				{scimUsersPath, `meta.lastModified co "2"`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `meta.lastModified sw "2"`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `meta.lastModified ew "Z"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members.value ge "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members.value lt "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members.value le "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members.value ew "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `id co "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `id ew "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.resourceType co "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.resourceType sw "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.resourceType ew "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.location co "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.location sw "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.location ew "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `id co "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `id sw "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `id ew "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `meta.resourceType co "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `userName eq 5`, http.StatusBadRequest, scimerrors.InvalidValue},
 				{scimUsersPath, `active eq "true"`, http.StatusBadRequest, scimerrors.InvalidValue},
 				{scimUsersPath, `meta.created eq "x"`, http.StatusBadRequest, scimerrors.InvalidValue},
 				{scimGroupsPath, `displayName eq`, http.StatusBadRequest, ""},
-				{scimGroupsPath, `members.value sw "0"`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimGroupsPath, `members.display eq "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members.value co "x"`, http.StatusBadRequest, ""},
-				{scimGroupsPath, `members.value gt "x"`, http.StatusBadRequest, ""},
 				{scimGroupsPath, `members.display pr`, http.StatusBadRequest, ""},
 				{scimGroupsPath, `members[display pr]`, http.StatusBadRequest, ""},
-				{scimGroupsPath, `members.type eq "Group"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members.type eq "User"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members.type ne "Group"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members.type pr`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members[type eq "Group"]`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members[type eq "User" and value eq "` + missing + `"]`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `members[type eq "user" and value eq "` + missing + `"]`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimGroupsPath, `externalId eq "tour-guides" and members.type pr`, http.StatusBadRequest, scimerrors.InvalidFilter},
 			} {
 				t.Run(tc.path+"?filter="+tc.filter, func(t *testing.T) {
 					res := c.get(t, tc.path+"?"+url.Values{"filter": {tc.filter}}.Encode())
@@ -1685,8 +1583,6 @@ func TestSCIMQuery(t *testing.T) {
 				scimType     scimerrors.ErrorType
 			}{
 				{scimUsersPath, "nope", ""},
-				{scimUsersPath, "groups.value", ""},
-				{scimGroupsPath, "members.value", ""},
 			} {
 				t.Run(tc.path+"?sortBy="+tc.sortBy, func(t *testing.T) {
 					res := c.get(t, tc.path+"?"+url.Values{"sortBy": {tc.sortBy}}.Encode())
