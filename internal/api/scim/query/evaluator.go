@@ -63,7 +63,7 @@ func (e evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (
 		return inner, err
 	}
 	f := e.field(attribute)
-	if f.linked {
+	if f.ref != nil {
 		return f.ref.exists(inner), nil
 	}
 	path, ok := inner.(jsonpath)
@@ -86,25 +86,27 @@ func (e evaluator) assigned(f field, op filter.Operator, value any) (Clause, err
 }
 
 func (e evaluator) field(attribute *protocol.Attribute) field {
-	ref, linked := e.reference(attribute)
-	return field{attribute: attribute, name: e.name(attribute), path: e.path(attribute), ref: ref, linked: linked}
+	return field{attribute: attribute, name: e.name(attribute), path: e.path(attribute), ref: e.reference(attribute)}
 }
 
-func (e evaluator) reference(attribute *protocol.Attribute) (Reference, bool) {
+func (e evaluator) reference(attribute *protocol.Attribute) *Reference {
 	if attribute.Parent != nil {
 		return e.lookup(attribute.Parent)
 	}
 	top, _ := e.schemas.Resolve(core.SchemaURI(attribute.Path.URI), attribute.Path.Name, "")
-	ref, ok := e.lookup(top)
-	return ref, ok && ref.resolves(attribute.Definition.Name)
+	ref := e.lookup(top)
+	if ref != nil && !ref.resolves(attribute.Definition.Name) {
+		return nil
+	}
+	return ref
 }
 
-func (e evaluator) lookup(top *core.Attribute) (Reference, bool) {
+func (e evaluator) lookup(top *core.Attribute) *Reference {
 	index := slices.IndexFunc(e.references, func(ref Reference) bool { return ref.attribute == top })
-	if top == nil || index < 0 {
-		return Reference{}, false
+	if index < 0 {
+		return nil
 	}
-	return e.references[index], true
+	return &e.references[index]
 }
 
 func (e evaluator) path(attribute *protocol.Attribute) path {

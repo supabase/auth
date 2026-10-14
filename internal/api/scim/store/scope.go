@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
 	"slices"
@@ -21,7 +20,10 @@ import (
 
 const queryTimeout = 5 * time.Second
 
-const resourceColumns = "id, resource_type, resource, created_at, updated_at"
+const (
+	resourceColumns = "id, resource_type, resource, created_at, updated_at"
+	scopeWhere      = "sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL"
+)
 
 type Scope struct {
 	db           *storage.Connection
@@ -43,18 +45,19 @@ func (s Scope) Page(ctx context.Context, search Search) ([]Row, int, error) {
 }
 
 func (s Scope) Find(ctx context.Context, id uuid.UUID) (Row, error) {
-	return s.find(ctx, s.db.WithContext(ctx), id)
+	return s.find(s.db.WithContext(ctx), id)
 }
 
 func (s Scope) Create(ctx context.Context, document string, links []Link) (Row, error) {
-	row, err := s.write(ctx, links, func(tx *storage.Connection) (*Resource, error) {
-		return s.create(tx, document)
+	id := uuid.NewV7()
+	row, err := s.write(ctx, id, links, func(tx *storage.Connection) error {
+		return s.create(tx, id, document)
 	})
 	return row, conflict(err)
 }
 
 func (s Scope) Update(ctx context.Context, id uuid.UUID, document, version string, links []Link) (Row, error) {
-	row, err := s.write(ctx, links, func(tx *storage.Connection) (*Resource, error) {
+	row, err := s.write(ctx, id, links, func(tx *storage.Connection) error {
 		return s.update(tx, id, document, guard(document, version, links))
 	})
 	if models.IsNotFoundError(err) {
@@ -76,9 +79,8 @@ func (s Scope) Delete(ctx context.Context, id uuid.UUID, version string) error {
 	return conflict(err)
 }
 
-func (s Scope) find(ctx context.Context, tx *storage.Connection, id uuid.UUID) (Row, error) {
-	sql, args := s.query(tx).Where("id = ?", id).Select("id").ToSQL(pop.NewModel(&Resource{}, ctx))
-	rows, err := s.fetch(tx, "scim_resources WHERE id = ("+sql+")", args...)
+func (s Scope) find(tx *storage.Connection, id uuid.UUID) (Row, error) {
+	rows, err := s.fetch(tx, "scim_resources WHERE id = ? AND "+scopeWhere, id, s.providerID, s.resourceType)
 	if err != nil {
 		return Row{}, err
 	}
@@ -137,57 +139,52 @@ func (s Scope) missing(ctx context.Context, id uuid.UUID) error {
 	return scimerrors.ErrPreconditionFailed("resource has changed on the server")
 }
 
-func (s Scope) write(ctx context.Context, links []Link, save func(*storage.Connection) (*Resource, error)) (Row, error) {
+func (s Scope) write(ctx context.Context, id uuid.UUID, links []Link, save func(*storage.Connection) error) (Row, error) {
 	var row Row
 	err := s.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		saved, err := save(tx)
-		if err != nil {
+		if err := save(tx); err != nil {
 			return err
 		}
 		for _, link := range links {
-			if err := s.link(tx, saved.ID, link); err != nil {
+			if err := s.link(tx, id, link); err != nil {
 				return err
 			}
 		}
-		row, err = s.find(ctx, tx, saved.ID)
+		var err error
+		row, err = s.find(tx, id)
 		return err
 	})
 	return row, err
 }
 
 func (s Scope) query(tx *storage.Connection) *pop.Query {
-	return tx.Q().
-		Where("sso_provider_id = ?", s.providerID).
-		Where("resource_type = " + query.QuoteLiteral(s.resourceType)).
-		Where("deleted_at IS NULL")
+	return tx.Q().Where(scopeWhere, s.providerID, s.resourceType)
 }
 
-func (s Scope) create(tx *storage.Connection, document string) (*Resource, error) {
-	resource := &Resource{}
-	err := tx.RawQuery(
-		"INSERT INTO scim_resources (id, sso_provider_id, resource_type, resource) VALUES (?, ?, ?, ?::jsonb) RETURNING "+resourceColumns,
-		uuid.NewV7(), s.providerID, s.resourceType, document,
-	).First(resource)
-	return resource, err
+func (s Scope) create(tx *storage.Connection, id uuid.UUID, document string) error {
+	return tx.RawQuery(
+		"INSERT INTO scim_resources (id, sso_provider_id, resource_type, resource) VALUES (?, ?, ?, ?::jsonb)",
+		id, s.providerID, s.resourceType, document,
+	).Exec()
 }
 
-func (s Scope) update(tx *storage.Connection, id uuid.UUID, document string, guard condition) (*Resource, error) {
-	resource := &Resource{}
-	if err := tx.RawQuery(
-		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND "+guard.text+" RETURNING "+resourceColumns,
+func (s Scope) update(tx *storage.Connection, id uuid.UUID, document string, guard condition) error {
+	count, err := tx.RawQuery(
+		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND "+scopeWhere+" AND "+guard.text,
 		append([]any{document, id, s.providerID, s.resourceType}, guard.args...)...,
-	).First(resource); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, models.SCIMNotFoundError{}
-		}
-		return nil, err
+	).ExecWithCount()
+	if err != nil {
+		return err
 	}
-	return resource, nil
+	if count == 0 {
+		return models.SCIMNotFoundError{}
+	}
+	return nil
 }
 
 func (s Scope) remove(tx *storage.Connection, id uuid.UUID, version string) error {
 	count, err := tx.RawQuery(
-		"UPDATE scim_resources SET deleted_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND updated_at = COALESCE(?, updated_at)",
+		"UPDATE scim_resources SET deleted_at = now() WHERE id = ? AND "+scopeWhere+" AND updated_at = COALESCE(?, updated_at)",
 		id, s.providerID, s.resourceType, query.VersionTime(version),
 	).ExecWithCount()
 	if err != nil {

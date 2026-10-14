@@ -72,7 +72,7 @@ func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
 
 func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
 	common := item.Common()
-	id, _ := uuid.Parse(common.ID)
+	id := idOf(item)
 	w := writeKey.Value(ctx)
 	saved, err := r.save(ctx, item, func(scope store.Scope, document string, links []store.Link) (store.Row, error) {
 		return scope.Update(ctx, id, document, common.Meta.Version, w.scope(links))
@@ -88,12 +88,15 @@ func (r *repository[T]) Delete(ctx context.Context, item T) error {
 	if err != nil {
 		return err
 	}
-	common := item.Common()
-	id, _ := uuid.Parse(common.ID)
-	return scope.Delete(ctx, id, common.Meta.Version)
+	return scope.Delete(ctx, idOf(item), item.Common().Meta.Version)
 }
 
-func (r *repository[T]) save(ctx context.Context, item T, write func(store.Scope, string, []store.Link) (store.Row, error)) (T, error) {
+func idOf[T core.Resource](item T) uuid.UUID {
+	id, _ := uuid.Parse(item.Common().ID)
+	return id
+}
+
+func (r *repository[T]) save(ctx context.Context, item T, persist func(store.Scope, string, []store.Link) (store.Row, error)) (T, error) {
 	var zero T
 	scope, err := r.scope(ctx, r.projected(ctx))
 	if err != nil {
@@ -103,7 +106,7 @@ func (r *repository[T]) save(ctx context.Context, item T, write func(store.Scope
 	if err != nil {
 		return zero, err
 	}
-	row, err := write(scope, document, links)
+	row, err := persist(scope, document, links)
 	if err != nil {
 		return zero, err
 	}

@@ -1,6 +1,9 @@
 package query
 
-import "unicode/utf8"
+import (
+	"slices"
+	"unicode/utf8"
+)
 
 type Clause interface {
 	SQL() (string, []any)
@@ -42,7 +45,7 @@ func combine(l, r Clause, logical, op string) Clause {
 	}
 	ltext, largs := l.SQL()
 	rtext, rargs := r.SQL()
-	return predicate{"(" + ltext + " " + op + " " + rtext + ")", append(largs, rargs...)}
+	return predicate{"(" + ltext + " " + op + " " + rtext + ")", slices.Concat(largs, rargs)}
 }
 
 type predicate struct {

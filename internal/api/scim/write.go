@@ -48,14 +48,10 @@ func (s service[T]) Patch(ctx context.Context, req *protocol.PatchRequest) (T, e
 	}
 	w := &write{touched: touched}
 	item, err := s.Service.Patch(writeKey.WithValue(ctx, w), req)
-	if err != nil || w.saved || !s.returnsReferences(ctx) {
+	if err != nil || w.saved || !s.query.Returns(protocol.ProjectionFrom(ctx)) {
 		return item, err
 	}
 	return s.Get(ctx, req.ID)
-}
-
-func (s service[T]) returnsReferences(ctx context.Context) bool {
-	return s.query.Returns(protocol.ProjectionFrom(ctx))
 }
 
 func (s service[T]) Delete(ctx context.Context, req *protocol.DeleteRequest) error {

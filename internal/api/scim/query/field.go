@@ -16,8 +16,7 @@ type field struct {
 	attribute *protocol.Attribute
 	name      string
 	path      path
-	ref       Reference
-	linked    bool
+	ref       *Reference
 }
 
 func (f field) column() bool {
@@ -29,14 +28,14 @@ func (f field) present() (Clause, error) {
 	if f.column() {
 		return always, nil
 	}
-	if !f.linked {
+	if f.ref == nil {
 		return jsonpath(f.path.present()), nil
 	}
 	return f.leaf(filter.OpPresent, nil)
 }
 
 func (f field) match(op filter.Operator, value any) (Clause, error) {
-	if !f.linked {
+	if f.ref == nil {
 		return f.compare(op, value), nil
 	}
 	return f.leaf(op, value)
@@ -44,7 +43,7 @@ func (f field) match(op filter.Operator, value any) (Clause, error) {
 
 // RFC 7643 Section 2.5: an unassigned attribute is equivalent to null, so it is not equal to a value.
 func (f field) unassignable(op filter.Operator) bool {
-	return op == filter.OpNotEquals && !f.column() && (!f.linked || f.attribute.Parent == nil)
+	return op == filter.OpNotEquals && !f.column() && (f.ref == nil || f.attribute.Parent == nil)
 }
 
 func (f field) leaf(op filter.Operator, value any) (Clause, error) {

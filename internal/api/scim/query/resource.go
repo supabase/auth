@@ -79,7 +79,7 @@ func (r Resource) Touches(ops []patch.Operation) Touched {
 }
 
 func (r Resource) Returns(projection protocol.Projection) bool {
-	return len(r.returned(projection)) > 0
+	return slices.ContainsFunc(r.references, func(ref Reference) bool { return projection.Returns(ref.Path()) })
 }
 
 func (r Resource) returned(projection protocol.Projection) Touched {
