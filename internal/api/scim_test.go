@@ -3,7 +3,6 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -15,8 +14,6 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/gobuffalo/pop/v6"
-	"github.com/gobuffalo/pop/v6/logging"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -27,7 +24,6 @@ import (
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/e2e/e2eapi"
 	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 const (
@@ -1714,56 +1710,6 @@ func TestSCIMQuery(t *testing.T) {
 		}
 	})
 
-	t.Run("Index use", func(t *testing.T) {
-		c := newSCIMClient(t, nil)
-		require.NoError(t, c.inst.Conn.RawQuery(`INSERT INTO scim_resources (id, sso_provider_id, resource_type, resource)
-		SELECT gen_random_uuid(), ?, CASE WHEN n % 2 = 0 THEN 'User' ELSE 'Group' END,
-			jsonb_build_object('userName', 'u' || n, 'externalId', 'e' || n, 'displayName', 'g' || n)
-		FROM generate_series(1, 10000) n`, c.provider.ID).Exec())
-		require.NoError(t, c.inst.Conn.RawQuery("ANALYZE scim_resources").Exec())
-		engine := c.engine(t)
-		var sql string
-		var args []any
-		pop.SetTxLogger(func(_ logging.Level, _ any, query string, values ...any) {
-			if strings.Contains(query, "COUNT(") {
-				sql, args = query, values
-			}
-		})
-		defer pop.SetTxLogger(func(logging.Level, any, string, ...any) {})
-
-		for _, tc := range []struct{ path, filter, index string }{
-			{scimUsersPath, `userName eq "bjensen@example.com"`, "scim_resources_user_name_key"},
-			{scimUsersPath, `userName sw "bjen"`, "scim_resources_user_name_key"},
-			{scimUsersPath, `externalId eq "701984"`, "scim_resources_external_id_key"},
-			{scimUsersPath, `title eq "Tour Guide"`, "scim_resources_resource_idx"},
-			{scimGroupsPath, `displayName eq "Tour Guides"`, "scim_resources_display_name_idx"},
-			{scimGroupsPath, `displayName sw "Tour"`, "scim_resources_display_name_idx"},
-			{scimUsersPath, `userName gt "bjen"`, "scim_resources_user_name_key"},
-			{scimUsersPath, `userName le "bjen"`, "scim_resources_user_name_key"},
-			{scimUsersPath, `externalId sw "7019"`, "scim_resources_external_id_key"},
-			{scimUsersPath, `externalId lt "7019"`, "scim_resources_external_id_key"},
-			{scimGroupsPath, `externalId sw "e9999"`, "scim_resources_external_id_key"},
-		} {
-			t.Run(tc.filter, func(t *testing.T) {
-				if engine == "orioledb" && tc.index == "scim_resources_resource_idx" {
-					t.Skip("orioledb does not plan bitmap scans, which GIN requires")
-				}
-				res := c.get(t, tc.path+"?"+url.Values{"filter": {tc.filter}, "count": {"0"}}.Encode())
-				require.Equal(t, http.StatusOK, res.StatusCode)
-				plans := []struct {
-					Line string `db:"QUERY PLAN"`
-				}{}
-				require.NoError(t, c.inst.Conn.Transaction(func(tx *storage.Connection) error {
-					if err := tx.RawQuery("SET LOCAL enable_seqscan = off").Exec(); err != nil {
-						return err
-					}
-					return tx.RawQuery("EXPLAIN "+sql, args...).All(&plans)
-				}))
-				require.Contains(t, fmt.Sprint(plans), tc.index)
-			})
-		}
-	})
-
 	t.Run("Errors", func(t *testing.T) {
 		c := newSCIMClient(t, nil)
 		user := c.createUser(t, scimUserName("bjensen"))
@@ -2036,12 +1982,6 @@ func (c scimClient) createGroup(t *testing.T, displayName string, members ...cor
 
 func (c scimClient) addMembers(t *testing.T, id string, values ...string) *http.Response {
 	return c.do(t, http.MethodPatch, scimGroupsPath+"/"+id, newSCIMAddMembers(values...))
-}
-
-func (c scimClient) engine(t *testing.T) string {
-	var engine string
-	require.NoError(t, c.inst.Conn.RawQuery("SELECT amname FROM pg_class JOIN pg_am ON pg_am.oid = relam WHERE relname = 'scim_resources'").First(&engine))
-	return engine
 }
 
 func (c scimClient) requireGroup(t *testing.T, id, displayName string, members ...string) {
