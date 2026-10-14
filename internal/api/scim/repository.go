@@ -18,7 +18,7 @@ type repository[T core.Resource] struct {
 	query        query.Resource
 }
 
-func newRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas) *repository[T] {
+func newRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas, inverses map[query.Edge]query.Edge) *repository[T] {
 	return &repository[T]{
 		db:           db,
 		resourceType: resourceType,
