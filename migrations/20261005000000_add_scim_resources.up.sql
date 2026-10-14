@@ -14,8 +14,8 @@ create table if not exists {{ index .Options "Namespace" }}.scim_resources (
 
 /* auth_migration: 20261005000000 */
 create unique index if not exists scim_resources_user_name_key
-    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, (lower(resource->>'userName')) collate "C")
-    where resource_type = 'User' and deleted_at is null;
+    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, (lower(resource->>'userName')) collate "C")
+    where deleted_at is null;
 
 /* auth_migration: 20261005000000 */
 create index if not exists scim_resources_type_id_idx
