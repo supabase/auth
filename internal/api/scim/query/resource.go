@@ -110,17 +110,26 @@ func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) 
 	if request.Descending() {
 		direction = " DESC"
 	}
-	keys := []string{parent.Name}
-	if parent != attribute {
-		keys = append(keys, attribute.Name)
-	}
-	path := strings.Join(keys, ".")
+	path := strings.Join(sortKeys(parent, attribute), ".")
 	if path == "meta.created" {
 		return "id" + direction, nil, nil
 	}
 	if column, ok := columns[path]; ok {
 		return column + direction + ", id", nil, nil
 	}
+	value, args := r.sortValue(parent, attribute)
+	return value + ` COLLATE "C"` + direction + ", id", args, nil
+}
+
+func sortKeys(parent, attribute *core.Attribute) []string {
+	if parent == attribute {
+		return []string{parent.Name}
+	}
+	return []string{parent.Name, attribute.Name}
+}
+
+func (r Resource) sortValue(parent, attribute *core.Attribute) (string, []any) {
+	keys := sortKeys(parent, attribute)
 	if parent.MultiValued {
 		keys = []string{parent.Name, "0", attribute.Name}
 	}
@@ -139,7 +148,7 @@ func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) 
 	if !attribute.CaseExact {
 		value = "lower(" + value + ")"
 	}
-	return value + ` COLLATE "C"` + direction + ", id", args, nil
+	return value, args
 }
 
 func referencesOf(resourceType string, schemas core.Schemas, inverses map[Edge]Edge) []Reference {
