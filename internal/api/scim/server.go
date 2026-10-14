@@ -35,24 +35,32 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Ha
 	base := BaseURL(config)
 	locations := map[string]string{userType: base + usersPath, groupType: base + groupsPath}
 	inverses := map[query.Edge]query.Edge{{Type: userType, Attribute: "groups"}: {Type: groupType, Attribute: "members"}}
-	users := newRepository[*core.User](db, userType, query.NewResource(userType, core.Schemas{
+	users := query.NewResource(userType, core.Schemas{
 		core.NewSchema(core.SchemaUser).With(core.UserAttributes()...),
 		core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...),
-	}, locations, inverses))
-	groups := newRepository[*core.Group](db, groupType, query.NewResource(groupType, core.Schemas{
+	}, locations, inverses)
+	groups := query.NewResource(groupType, core.Schemas{
 		core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...),
-	}, locations, inverses))
-	return server.New(BasePath,
-		core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching().Sorting(),
+	}, locations, inverses)
+	errorHandler := func(r *http.Request, err error) {
+		observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
+	}
+
+	cfg := core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching().Sorting()
+	return server.New(BasePath, cfg,
+		server.ErrorHandler(errorHandler),
 		server.WithBaseURL(base),
-		server.ErrorHandler(func(r *http.Request, err error) {
-			observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
-		}),
-		server.WithResource(server.NewResource[*core.User](userType, usersPath, core.SchemaUser, core.UserAttributes()...).
-			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...).
-			WithRepository(users)),
-		server.WithResource(server.NewResource[*core.Group](groupType, groupsPath, core.SchemaGroup, core.GroupAttributes()...).
-			WithRepository(groups)),
+		server.WithResource(
+			server.
+				NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
+				WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...).
+				WithRepository(newRepository[*core.User](db, users)),
+		),
+		server.WithResource(
+			server.
+				NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
+				WithRepository(newRepository[*core.Group](db, groups)),
+		),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),
 	)
 }

@@ -13,13 +13,12 @@ import (
 )
 
 type repository[T core.Resource] struct {
-	db           *storage.Connection
-	resourceType string
-	query        query.Resource
+	db    *storage.Connection
+	query query.Resource
 }
 
-func newRepository[T core.Resource](db *storage.Connection, resourceType string, q query.Resource) *repository[T] {
-	return &repository[T]{db: db, resourceType: resourceType, query: q}
+func newRepository[T core.Resource](db *storage.Connection, q query.Resource) *repository[T] {
+	return &repository[T]{db: db, query: q}
 }
 
 func (r *repository[T]) List(ctx context.Context, request *protocol.SearchRequest) ([]T, int, error) {
@@ -107,7 +106,7 @@ func (r *repository[T]) scope(ctx context.Context, refs string) (store.Scope, er
 	if token == nil {
 		return store.Scope{}, scimerrors.ErrInternal("missing SCIM token")
 	}
-	return store.NewScope(r.db, token.SSOProviderID, r.resourceType, refs), nil
+	return store.NewScope(r.db, token.SSOProviderID, r.query.Type, refs), nil
 }
 
 func (r *repository[T]) projected(ctx context.Context) string {
