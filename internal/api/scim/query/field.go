@@ -19,13 +19,13 @@ type field struct {
 	ref       *Reference
 }
 
-func (f field) column() bool {
+func (f field) isColumn() bool {
 	_, ok := columns[f.name]
 	return ok
 }
 
 func (f field) present() (Clause, error) {
-	if f.column() {
+	if f.isColumn() {
 		return always, nil
 	}
 	if f.ref == nil {
@@ -43,7 +43,7 @@ func (f field) match(op filter.Operator, value any) (Clause, error) {
 
 // RFC 7643 Section 2.5: an unassigned attribute is equivalent to null, so it is not equal to a value.
 func (f field) unassignable(op filter.Operator) bool {
-	return op == filter.OpNotEquals && !f.column() && (f.ref == nil || f.attribute.Parent == nil)
+	return op == filter.OpNotEquals && !f.isColumn() && (f.ref == nil || f.attribute.Parent == nil)
 }
 
 func (f field) leaf(op filter.Operator, value any) (Clause, error) {

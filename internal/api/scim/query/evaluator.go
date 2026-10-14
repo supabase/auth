@@ -70,7 +70,7 @@ func (e evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (
 }
 
 func (e evaluator) assigned(f field, op filter.Operator, value any) (Clause, error) {
-	if f.column() {
+	if f.isColumn() {
 		return column(f.name, e.location, op, value)
 	}
 	if text, ok := value.(string); ok {
