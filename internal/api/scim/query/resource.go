@@ -62,7 +62,7 @@ func (r Resource) where(expression string) (Clause, error) {
 	if expression == "" {
 		return nil, nil
 	}
-	return protocol.Filter(r.schemas, expression, evaluator{r.schemas, r.location, r.references})
+	return protocol.Filter(r.schemas, expression, evaluator(r))
 }
 
 func referencesOf(resourceType string, schemas core.Schemas, inverses map[Edge]Edge) []Reference {

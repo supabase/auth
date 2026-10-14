@@ -12,11 +12,7 @@ import (
 
 var _ protocol.Evaluator[Clause] = evaluator{}
 
-type evaluator struct {
-	schemas    core.Schemas
-	location   string
-	references []Reference
-}
+type evaluator Resource
 
 func (e evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
 	f := e.field(attribute)
