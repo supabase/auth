@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"uuid"
@@ -144,10 +145,14 @@ func uuidStrings(ids []uuid.UUID) []string {
 }
 
 func linkTargets(attribute string, raw any) ([]uuid.UUID, error) {
-	elements, _ := raw.([]any)
+	elements, ok := raw.([]any)
+	if raw != nil && !ok {
+		return nil, linkInvalid(attribute, fmt.Sprint(raw))
+	}
 	wanted := make([]uuid.UUID, 0, len(elements))
 	for _, element := range elements {
-		value, _ := element.(map[string]any)[query.ValueAttribute].(string)
+		object, _ := element.(map[string]any)
+		value, _ := object[query.ValueAttribute].(string)
 		id, err := uuid.Parse(value)
 		if err != nil {
 			return nil, linkInvalid(attribute, value)

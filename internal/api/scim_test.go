@@ -257,6 +257,10 @@ func TestSCIMAdmin(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, res.StatusCode)
 	})
 
+	t.Run("DELETE token rejects an id that is not a uuid", func(t *testing.T) {
+		require.Equal(t, http.StatusNotFound, revoke(t, "not-a-uuid").StatusCode)
+	})
+
 	t.Run("DELETE token revokes once and repeats safely", func(t *testing.T) {
 		token := create(t, nil)
 		first := revoke(t, token.ID.String())

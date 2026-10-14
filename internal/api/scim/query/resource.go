@@ -10,6 +10,12 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
+type Search struct {
+	Where     Clause
+	Order     string
+	OrderArgs []any
+}
+
 type Resource struct {
 	schemas    core.Schemas
 	references []Reference
@@ -34,10 +40,10 @@ func (r Resource) References() []Reference {
 	return r.references
 }
 
-func (r Resource) Search(request *protocol.SearchRequest) (Clause, string, []any, error) {
+func (r Resource) Search(request *protocol.SearchRequest) (Search, error) {
 	where, err := r.where(request.Filter)
 	if err != nil {
-		return nil, "", nil, err
+		return Search{}, err
 	}
 	if p, ok := where.(prefix); ok && request.SortBy == "" {
 		sorted := *request
@@ -45,7 +51,7 @@ func (r Resource) Search(request *protocol.SearchRequest) (Clause, string, []any
 		request = &sorted
 	}
 	order, args, err := r.order(request)
-	return where, order, args, err
+	return Search{Where: where, Order: order, OrderArgs: args}, err
 }
 
 func (r Resource) Select(projection protocol.Projection) string {

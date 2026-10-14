@@ -27,7 +27,7 @@ func newRepository[T core.Resource](db *storage.Connection, resourceType string,
 }
 
 func (r *repository[T]) List(ctx context.Context, request *protocol.SearchRequest) ([]T, int, error) {
-	clause, order, args, err := r.query.Search(request)
+	found, err := r.query.Search(request)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -36,11 +36,9 @@ func (r *repository[T]) List(ctx context.Context, request *protocol.SearchReques
 		return nil, 0, err
 	}
 	rows, total, err := scope.Page(ctx, store.Search{
-		Where:     clause,
-		Order:     order,
-		OrderArgs: args,
-		Count:     request.Count,
-		Offset:    request.Offset(),
+		Search: found,
+		Count:  request.Count,
+		Offset: request.Offset(),
 	})
 	if err != nil {
 		return nil, 0, err
