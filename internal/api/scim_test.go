@@ -571,26 +571,23 @@ func TestSCIMGroups(t *testing.T) {
 
 	t.Run("concurrent PATCHes add every member", func(t *testing.T) {
 		group := create(t)
-		users := []core.User{createUser(t), createUser(t), createUser(t), createUser(t), createUser(t)}
-		requests := make([]*http.Request, len(users))
-		for i, user := range users {
-			requests[i] = scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+group.ID, newSCIMPatch(map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: user.ID}}}))
-		}
-		statuses := make([]int, len(requests))
-		var wg sync.WaitGroup
-		for i, req := range requests {
-			wg.Go(func() {
-				if res, err := c.inst.DoAuth(req, c.token); err == nil {
-					statuses[i] = res.StatusCode
-					_ = res.Body.Close()
-				}
-			})
-		}
-		wg.Wait()
-		require.Equal(t, []int{204, 204, 204, 204, 204}, statuses)
 		ids := []string{}
-		for _, user := range users {
-			ids = append(ids, user.ID)
+		for range 20 {
+			pair := []string{createUser(t).ID, createUser(t).ID}
+			statuses := make([]int, len(pair))
+			var wg sync.WaitGroup
+			for i, id := range pair {
+				req := scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+group.ID, newSCIMPatch(map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: id}}}))
+				wg.Go(func() {
+					if res, err := c.inst.DoAuth(req, c.token); err == nil {
+						statuses[i] = res.StatusCode
+						_ = res.Body.Close()
+					}
+				})
+			}
+			wg.Wait()
+			require.Equal(t, []int{http.StatusNoContent, http.StatusNoContent}, statuses)
+			ids = append(ids, pair...)
 		}
 		c.requireGroup(t, group.ID, group.DisplayName, ids...)
 	})
