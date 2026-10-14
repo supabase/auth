@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
@@ -54,42 +53,14 @@ func (r Resource) Search(request *protocol.SearchRequest) (Search, error) {
 	return Search{Where: where, Order: order, OrderArgs: args}, err
 }
 
-func (r Resource) Select(projection protocol.Projection) string {
-	return r.SelectTouched(r.returned(projection))
-}
-
-func (r Resource) SelectTouched(touched Touched) string {
+func (r Resource) Select(requested protocol.Projection) string {
 	parts := []string{}
 	for _, ref := range r.references {
-		if only, ok := touched[ref.Path()]; ok {
-			parts = append(parts, projection{r.locations, only}.part(ref))
+		if requested.Returns(ref.Path()) {
+			parts = append(parts, projection{r.locations}.part(ref))
 		}
 	}
 	return "json_build_array(" + strings.Join(parts, ", ") + ")"
-}
-
-func (r Resource) Touches(ops []patch.Operation) Touched {
-	touched := Touched{}
-	for _, op := range ops {
-		if !touched.op(r.references, op) {
-			return nil
-		}
-	}
-	return touched
-}
-
-func (r Resource) Returns(projection protocol.Projection) bool {
-	return slices.ContainsFunc(r.references, func(ref Reference) bool { return projection.Returns(ref.Path()) })
-}
-
-func (r Resource) returned(projection protocol.Projection) Touched {
-	touched := Touched{}
-	for _, ref := range r.references {
-		if projection.Returns(ref.Path()) {
-			touched[ref.Path()] = nil
-		}
-	}
-	return touched
 }
 
 func (r Resource) where(expression string) (Clause, error) {

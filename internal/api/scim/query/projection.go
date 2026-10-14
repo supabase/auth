@@ -11,7 +11,6 @@ const MaxDepth = 8
 
 type projection struct {
 	locations map[string]string
-	only      []string
 }
 
 func (p projection) subquery(r Reference) string {
@@ -41,14 +40,7 @@ func (p projection) inverse(r Reference) string {
 }
 
 func (p projection) edge(r Reference) string {
-	return `(SELECT json_agg(json_build_object('value', target_id, '$ref', ` + endpoint(p.locations, "target_type") + ` || target_id, 'type', target_type)) FROM scim_resource_references WHERE source_id = scim_resources.id AND attribute = ` + QuoteLiteral(r.Path()) + p.scoped() + `)`
-}
-
-func (p projection) scoped() string {
-	if p.only == nil {
-		return ""
-	}
-	return ` AND target_id = any(ARRAY[` + literals(p.only) + `]::uuid[])`
+	return `(SELECT json_agg(json_build_object('value', target_id, '$ref', ` + endpoint(p.locations, "target_type") + ` || target_id, 'type', target_type)) FROM scim_resource_references WHERE source_id = scim_resources.id AND attribute = ` + QuoteLiteral(r.Path()) + `)`
 }
 
 func (p projection) single(r Reference) string {

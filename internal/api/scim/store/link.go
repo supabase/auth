@@ -5,5 +5,4 @@ type Link struct {
 	Types     []string
 	Values    any
 	Nested    bool
-	Only      []string
 }

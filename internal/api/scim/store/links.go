@@ -34,13 +34,9 @@ func (s Scope) removeReferences(tx *storage.Connection, source uuid.UUID, attrib
 	).Exec(), "error removing SCIM references")
 }
 
-func (s Scope) findTargets(tx *storage.Connection, source uuid.UUID, attribute string, only []string) ([]uuid.UUID, error) {
+func (s Scope) findTargets(tx *storage.Connection, source uuid.UUID, attribute string) ([]uuid.UUID, error) {
 	targets := []uuid.UUID{}
-	text, args := "SELECT target_id FROM scim_resource_references WHERE source_id = ? AND attribute = ?", []any{source, attribute}
-	if only != nil {
-		text, args = text+" AND target_id = any(?::uuid[])", append(args, only)
-	}
-	err := tx.RawQuery(text, args...).All(&targets)
+	err := tx.RawQuery("SELECT target_id FROM scim_resource_references WHERE source_id = ? AND attribute = ?", source, attribute).All(&targets)
 	return targets, errors.Wrap(err, "error finding SCIM targets")
 }
 
@@ -85,7 +81,7 @@ func (s Scope) link(tx *storage.Connection, source uuid.UUID, l Link) error {
 	if err != nil {
 		return err
 	}
-	current, err := s.findTargets(tx, source, attribute, l.Only)
+	current, err := s.findTargets(tx, source, attribute)
 	if err != nil {
 		return err
 	}

@@ -50,11 +50,9 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Ha
 		}),
 		server.WithResource(server.NewResource[*core.User](userType, usersPath, core.SchemaUser, core.UserAttributes()...).
 			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...).
-			WithRepository(users).
-			WithService(users.wrap)),
+			WithRepository(users)),
 		server.WithResource(server.NewResource[*core.Group](groupType, groupsPath, core.SchemaGroup, core.GroupAttributes()...).
-			WithRepository(groups).
-			WithService(groups.wrap)),
+			WithRepository(groups)),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),
 	)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"slices"
 	"time"
 	"uuid"
 
@@ -60,7 +59,7 @@ func (s Scope) Create(ctx context.Context, document string, links []Link) (Row, 
 
 func (s Scope) Update(ctx context.Context, id uuid.UUID, document, version string, links []Link) (Row, error) {
 	row, err := s.write(ctx, id, links, func(tx *storage.Connection) error {
-		return s.update(tx, id, document, guard(document, version, links))
+		return s.update(tx, id, document, version)
 	})
 	if models.IsNotFoundError(err) {
 		return row, s.missing(ctx, id)
@@ -170,10 +169,10 @@ func (s Scope) create(tx *storage.Connection, id uuid.UUID, document string) err
 	).Exec()
 }
 
-func (s Scope) update(tx *storage.Connection, id uuid.UUID, document string, guard condition) error {
+func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version string) error {
 	count, err := tx.RawQuery(
-		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND "+scopeWhere+" AND "+guard.text,
-		append([]any{document, id, s.providerID, s.resourceType}, guard.args...)...,
+		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND "+scopeWhere+" AND updated_at = COALESCE(?, updated_at)",
+		document, id, s.providerID, s.resourceType, query.VersionTime(version),
 	).ExecWithCount()
 	if err != nil {
 		return err
@@ -210,12 +209,4 @@ func conflict(err error) error {
 		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
 	}
 	return err
-}
-
-func guard(document, version string, links []Link) condition {
-	current := condition{"updated_at = COALESCE(?, updated_at)", []any{query.VersionTime(version)}}
-	if len(links) == 0 || slices.ContainsFunc(links, func(l Link) bool { return l.Only == nil }) {
-		return current
-	}
-	return condition{"(" + current.text + " OR resource = ?::jsonb)", append(current.args, document)}
 }

@@ -49,7 +49,7 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 	if err != nil {
 		return zero, store.NotFound()
 	}
-	scope, err := r.scope(ctx, r.selected(ctx))
+	scope, err := r.scope(ctx, r.projected(ctx))
 	if err != nil {
 		return zero, err
 	}
@@ -67,16 +67,9 @@ func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
 }
 
 func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
-	common := item.Common()
-	id := idOf(item)
-	w := writeKey.Value(ctx)
-	saved, err := r.save(ctx, item, func(scope store.Scope, document string, links []store.Link) (store.Row, error) {
-		return scope.Update(ctx, id, document, common.Meta.Version, w.scope(links))
+	return r.save(ctx, item, func(scope store.Scope, document string, links []store.Link) (store.Row, error) {
+		return scope.Update(ctx, idOf(item), document, item.Common().Meta.Version, links)
 	})
-	if err == nil && w != nil {
-		w.saved = true
-	}
-	return saved, err
 }
 
 func (r *repository[T]) Delete(ctx context.Context, item T) error {
@@ -119,11 +112,4 @@ func (r *repository[T]) scope(ctx context.Context, refs string) (store.Scope, er
 
 func (r *repository[T]) projected(ctx context.Context) string {
 	return r.query.Select(protocol.ProjectionFrom(ctx))
-}
-
-func (r *repository[T]) selected(ctx context.Context) string {
-	if w := writeKey.Value(ctx); w != nil {
-		return r.query.SelectTouched(w.touched)
-	}
-	return r.projected(ctx)
 }

@@ -1,11 +1,7 @@
 package query
 
 import (
-	"strings"
-
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/filter"
-	"github.com/supabase-community/scim-go/pkg/patch"
 )
 
 const (
@@ -115,19 +111,6 @@ func (r Reference) keys() []string {
 		keys = append([]string{string(r.uri)}, keys...)
 	}
 	return keys
-}
-
-func (r Reference) values(op patch.Operation, path filter.Path) []string {
-	if r.kind != multi || r.attribute.Required || path.SubAttribute != "" {
-		return nil
-	}
-	switch patch.Op(strings.ToLower(string(op.Op))) {
-	case patch.OpAdd:
-		return added(op, path)
-	case patch.OpRemove:
-		return removed(path)
-	}
-	return nil
 }
 
 func resourceTypes(attribute *core.Attribute) []string {
