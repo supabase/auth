@@ -22,12 +22,12 @@ type Resource struct {
 	location   string
 }
 
-func NewResource(resourceType string, schemas core.Schemas, locations map[string]string, inverses map[Edge]Edge) Resource {
+func NewResource(resourceType string, schemas core.Schemas, location string, inverses map[Edge]Edge) Resource {
 	return Resource{
 		Type:       resourceType,
 		schemas:    schemas,
 		references: referencesOf(resourceType, schemas, inverses),
-		location:   locations[resourceType],
+		location:   location,
 	}
 }
 

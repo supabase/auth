@@ -33,15 +33,14 @@ func BaseURL(config *conf.GlobalConfiguration) string {
 
 func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Handler {
 	base := BaseURL(config)
-	locations := map[string]string{userType: base + usersPath, groupType: base + groupsPath}
 	inverses := map[query.Edge]query.Edge{{Type: userType, Attribute: "groups"}: {Type: groupType, Attribute: "members"}}
 	users := query.NewResource(userType, core.Schemas{
 		core.NewSchema(core.SchemaUser).With(core.UserAttributes()...),
 		core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...),
-	}, locations, inverses)
+	}, base+usersPath, inverses)
 	groups := query.NewResource(groupType, core.Schemas{
 		core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...),
-	}, locations, inverses)
+	}, base+groupsPath, inverses)
 	errorHandler := func(r *http.Request, err error) {
 		observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
 	}
