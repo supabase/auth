@@ -99,7 +99,7 @@ func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
 }
 
 func (r *repository[T]) Delete(ctx context.Context, item T) error {
-	scope, err := r.scope(ctx, r.projected(ctx))
+	scope, err := r.scope(ctx, "")
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package scim
 
 import (
 	"context"
+	"slices"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -48,10 +49,15 @@ func (s service[T]) Patch(ctx context.Context, req *protocol.PatchRequest) (T, e
 	}
 	w := &write{touched: touched}
 	item, err := s.Service.Patch(writeKey.WithValue(ctx, w), req)
-	if err != nil || w.saved {
+	if err != nil || w.saved || !s.returnsReferences(ctx) {
 		return item, err
 	}
 	return s.Get(ctx, req.ID)
+}
+
+func (s service[T]) returnsReferences(ctx context.Context) bool {
+	projection := protocol.ProjectionFrom(ctx)
+	return slices.ContainsFunc(s.references, func(r query.Reference) bool { return projection.Returns(r.Path()) })
 }
 
 func (s service[T]) Delete(ctx context.Context, req *protocol.DeleteRequest) error {

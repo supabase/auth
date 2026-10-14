@@ -7,7 +7,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 	"uuid"
@@ -43,11 +42,8 @@ func TestSCIMScale(t *testing.T) {
 		require.Contains(t, want, res.StatusCode, "%s: %s", name, string(raw))
 		report = append(report, fmt.Sprintf("| %s | %d | %s | %s | %d |", name, res.StatusCode, median.Round(time.Millisecond), slowest.Round(time.Millisecond), len(raw)))
 	}
-	member := func(op, value string) map[string]any {
-		if op == "remove" {
-			return newSCIMPatch(map[string]any{"op": op, "path": `members[value eq "` + value + `"]`})
-		}
-		return newSCIMPatch(map[string]any{"op": op, "path": "members", "value": []core.Member{{Value: value}}})
+	remove := func(value string) map[string]any {
+		return newSCIMPatch(map[string]any{"op": "remove", "path": `members[value eq "` + value + `"]`})
 	}
 	rename := newSCIMPatch(map[string]any{"op": "replace", "value": map[string]any{"id": s.big, "displayName": "Everyone"}})
 
@@ -62,17 +58,17 @@ func TestSCIMScale(t *testing.T) {
 	timed("GET Groups list", http.MethodGet, scimGroupsPath, nil, http.StatusOK)
 	timed("GET Group 10K", http.MethodGet, scimGroupsPath+"/"+s.small, nil, http.StatusOK)
 	timed("GET Group 100K", http.MethodGet, scimGroupsPath+"/"+s.big, nil, http.StatusOK)
-	timed("PATCH 100K add 1", http.MethodPatch, scimGroupsPath+"/"+s.big, member("add", s.spare[0]), http.StatusNoContent)
-	timed("PATCH 100K remove 1", http.MethodPatch, scimGroupsPath+"/"+s.big, member("remove", s.spare[0]), http.StatusNoContent)
+	timed("PATCH 100K add 1", http.MethodPatch, scimGroupsPath+"/"+s.big, newSCIMAddMembers(s.spare[0]), http.StatusNoContent)
+	timed("PATCH 100K remove 1", http.MethodPatch, scimGroupsPath+"/"+s.big, remove(s.spare[0]), http.StatusNoContent)
 	timed("PATCH 100K replace displayName", http.MethodPatch, scimGroupsPath+"/"+s.big, rename, http.StatusOK)
-	timed("PATCH 10K add 1", http.MethodPatch, scimGroupsPath+"/"+s.small, member("add", s.spare[0]), http.StatusNoContent)
-	parent := seedSCIMGroup(t, s.scimClient, "parent")
+	timed("PATCH 10K add 1", http.MethodPatch, scimGroupsPath+"/"+s.small, newSCIMAddMembers(s.spare[0]), http.StatusNoContent)
+	parent := s.createGroup(t, "parent").ID
 	walk := scimCapture(t, "WITH RECURSIVE walk", func() {
-		timed("PATCH nest 100K group", http.MethodPatch, scimGroupsPath+"/"+parent, member("add", s.big), http.StatusNoContent)
+		timed("PATCH nest 100K group", http.MethodPatch, scimGroupsPath+"/"+parent, newSCIMAddMembers(s.big), http.StatusNoContent)
 	})
-	s.requireGroupHas(t, parent, s.big)
+	require.Contains(t, s.members(t, parent), core.Member{Value: s.big})
 	t.Log(s.explain(t, walk))
-	timed("PATCH nest 10K group", http.MethodPatch, scimGroupsPath+"/"+parent, member("add", s.small), http.StatusNoContent)
+	timed("PATCH nest 10K group", http.MethodPatch, scimGroupsPath+"/"+parent, newSCIMAddMembers(s.small), http.StatusNoContent)
 
 	var sizes struct {
 		Table  string `db:"table_size"`
@@ -84,7 +80,7 @@ func TestSCIMScale(t *testing.T) {
 		pg_size_pretty(pg_relation_size('scim_resources_resource_idx')) AS gin_size`).First(&sizes))
 	report = append(report, fmt.Sprintf("| sizes: table %s, search column %s, GIN %s | | | | |", sizes.Table, sizes.Search, sizes.GIN))
 
-	statuses := s.concurrently(t, s.spare[1:])
+	statuses := s.addConcurrently(t, s.big, s.spare[1:]...)
 	report = append(report, fmt.Sprintf("| PATCH 100K add, %d concurrent | %v | | | |", len(s.spare)-1, statuses))
 
 	put := newSCIMGroup("Everyone")
@@ -112,7 +108,7 @@ func seedSCIMScale(t *testing.T) scimScale {
 		seedSCIMUsers(t, c, uuid.UUID(noise.ID))
 	}
 	seedSCIMUsers(t, c, uuid.UUID(c.provider.ID))
-	s := scimScale{scimClient: c, big: seedSCIMGroup(t, c, "big"), small: seedSCIMGroup(t, c, "small")}
+	s := scimScale{scimClient: c, big: c.createGroup(t, "big").ID, small: c.createGroup(t, "small").ID}
 	require.NoError(t, c.inst.Conn.RawQuery(`INSERT INTO scim_resource_references (sso_provider_id, source_id, attribute, target_id, target_type)
 		SELECT sso_provider_id, CASE WHEN n <= ? THEN ?::uuid ELSE ?::uuid END, 'members', id, 'User'
 		FROM (SELECT sso_provider_id, id, row_number() OVER (ORDER BY id) n FROM scim_resources WHERE sso_provider_id = ? AND resource_type = 'User') u
@@ -121,12 +117,12 @@ func seedSCIMScale(t *testing.T) scimScale {
 		SELECT sso_provider_id, ?::uuid, 'members', id, 'User'
 		FROM (SELECT sso_provider_id, id, row_number() OVER (ORDER BY id) n FROM scim_resources WHERE sso_provider_id = ? AND resource_type = 'User') u
 		WHERE n <= ?`, s.big, c.provider.ID, scimScaleUsers-20).Exec())
-	ids := []string{}
-	require.NoError(t, c.inst.Conn.RawQuery(`SELECT id FROM scim_resources WHERE sso_provider_id = ? AND resource_type = 'User' ORDER BY id`, c.provider.ID).All(&ids))
-	s.user, s.spare = ids[0], ids[len(ids)-11:]
+	const users = `SELECT id FROM scim_resources WHERE sso_provider_id = ? AND resource_type = 'User' ORDER BY id `
+	require.NoError(t, c.inst.Conn.RawQuery(users+"LIMIT 1", c.provider.ID).First(&s.user))
+	require.NoError(t, c.inst.Conn.RawQuery(users+"DESC LIMIT 11", c.provider.ID).All(&s.spare))
 	nested := []string{}
 	for i := range 50 {
-		group := seedSCIMGroup(t, c, fmt.Sprintf("nested%d", i))
+		group := c.createGroup(t, fmt.Sprintf("nested%d", i)).ID
 		nested = append(nested, group)
 		require.Equal(t, http.StatusNoContent, c.addMembers(t, group, s.user).StatusCode)
 	}
@@ -148,38 +144,12 @@ func seedSCIMUsers(t *testing.T, c scimClient, provider uuid.UUID) {
 		FROM generate_series(1, ?) n`, provider, scimScaleUsers).Exec())
 }
 
-func seedSCIMGroup(t *testing.T, c scimClient, displayName string) string {
-	return scimCreate[core.Group](t, c, scimGroupsPath, newSCIMGroup(displayName)).ID
-}
-
 func (s scimScale) members(t *testing.T, id string) []core.Member {
 	members := []core.Member{}
 	for _, member := range s.group(t, id).Members {
 		members = append(members, core.Member{Value: member.Value})
 	}
 	return members
-}
-
-func (s scimScale) concurrently(t *testing.T, values []string) map[int]int {
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	statuses := map[int]int{}
-	for _, value := range values {
-		req := scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+s.big, newSCIMPatch(map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: value}}}))
-		wg.Go(func() {
-			res, err := s.inst.DoAuth(req, s.token)
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				statuses[0]++
-				return
-			}
-			statuses[res.StatusCode]++
-			_ = res.Body.Close()
-		})
-	}
-	wg.Wait()
-	return statuses
 }
 
 func scimMedian(runs int, run func()) (time.Duration, time.Duration) {
@@ -221,10 +191,4 @@ func (s scimScale) explain(t *testing.T, q scimQuery) string {
 		lines = append(lines, plan.Line)
 	}
 	return strings.Join(lines, "\n")
-}
-
-func (s scimScale) requireGroupHas(t *testing.T, id, member string) {
-	res := s.get(t, scimGroupsPath+"/"+id)
-	require.Equal(t, http.StatusOK, res.StatusCode)
-	require.Contains(t, string(scimBody(t, res)), member)
 }

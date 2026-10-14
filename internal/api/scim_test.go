@@ -574,43 +574,21 @@ func TestSCIMGroups(t *testing.T) {
 		ids := []string{}
 		for range 20 {
 			pair := []string{createUser(t).ID, createUser(t).ID}
-			statuses := make([]int, len(pair))
-			var wg sync.WaitGroup
-			for i, id := range pair {
-				req := scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+group.ID, newSCIMPatch(map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: id}}}))
-				wg.Go(func() {
-					if res, err := c.inst.DoAuth(req, c.token); err == nil {
-						statuses[i] = res.StatusCode
-						_ = res.Body.Close()
-					}
-				})
-			}
-			wg.Wait()
-			require.Equal(t, []int{http.StatusNoContent, http.StatusNoContent}, statuses)
+			require.Equal(t, []int{http.StatusNoContent, http.StatusNoContent}, c.addConcurrently(t, group.ID, pair...))
 			ids = append(ids, pair...)
 		}
 		c.requireGroup(t, group.ID, group.DisplayName, ids...)
 	})
 
 	t.Run("a deadlock on concurrent PATCHes is a conflict, not an error", func(t *testing.T) {
-		var engine string
-		require.NoError(t, c.inst.Conn.RawQuery("SELECT amname FROM pg_class JOIN pg_am ON pg_am.oid = relam WHERE relname = 'scim_resources'").First(&engine))
-		if engine != "orioledb" {
+		if c.engine(t) != "orioledb" {
 			t.Skip("only orioledb deadlocks on three or more concurrent updates of one row once a table has a GIN index")
 		}
-		group := create(t)
-		statuses := make([]int, 5)
-		var wg sync.WaitGroup
-		for i := range statuses {
-			req := scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+group.ID, newSCIMPatch(map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: createUser(t).ID}}}))
-			wg.Go(func() {
-				if res, err := c.inst.DoAuth(req, c.token); err == nil {
-					statuses[i] = res.StatusCode
-					_ = res.Body.Close()
-				}
-			})
+		ids := []string{}
+		for range 5 {
+			ids = append(ids, createUser(t).ID)
 		}
-		wg.Wait()
+		statuses := c.addConcurrently(t, create(t).ID, ids...)
 		for _, status := range statuses {
 			require.Contains(t, []int{http.StatusNoContent, http.StatusConflict}, status, statuses)
 		}
@@ -1084,8 +1062,7 @@ func TestSCIMFiltersUseIndexes(t *testing.T) {
 			jsonb_build_object('userName', 'u' || n, 'externalId', 'e' || n, 'displayName', 'g' || n)
 		FROM generate_series(1, 10000) n`, c.provider.ID).Exec())
 	require.NoError(t, c.inst.Conn.RawQuery("ANALYZE scim_resources").Exec())
-	var engine string
-	require.NoError(t, c.inst.Conn.RawQuery("SELECT amname FROM pg_class JOIN pg_am ON pg_am.oid = relam WHERE relname = 'scim_resources'").First(&engine))
+	engine := c.engine(t)
 	var sql string
 	var args []any
 	pop.SetTxLogger(func(_ logging.Level, _ any, query string, values ...any) {
@@ -1318,11 +1295,29 @@ func (c scimClient) createGroup(t *testing.T, displayName string, members ...cor
 }
 
 func (c scimClient) addMembers(t *testing.T, id string, values ...string) *http.Response {
-	members := make([]core.Member, len(values))
+	return c.do(t, http.MethodPatch, scimGroupsPath+"/"+id, newSCIMAddMembers(values...))
+}
+
+func (c scimClient) addConcurrently(t *testing.T, id string, values ...string) []int {
+	statuses := make([]int, len(values))
+	var wg sync.WaitGroup
 	for i, value := range values {
-		members[i] = core.Member{Value: value}
+		req := scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+id, newSCIMAddMembers(value))
+		wg.Go(func() {
+			if res, err := c.inst.DoAuth(req, c.token); err == nil {
+				statuses[i] = res.StatusCode
+				_ = res.Body.Close()
+			}
+		})
 	}
-	return c.do(t, http.MethodPatch, scimGroupsPath+"/"+id, newSCIMPatch(map[string]any{"op": "add", "path": "members", "value": members}))
+	wg.Wait()
+	return statuses
+}
+
+func (c scimClient) engine(t *testing.T) string {
+	var engine string
+	require.NoError(t, c.inst.Conn.RawQuery("SELECT amname FROM pg_class JOIN pg_am ON pg_am.oid = relam WHERE relname = 'scim_resources'").First(&engine))
+	return engine
 }
 
 func (c scimClient) requireGroup(t *testing.T, id, displayName string, members ...string) {
@@ -1659,6 +1654,14 @@ func TestSCIMManagerFilters(t *testing.T) {
 		res := c.get(t, scimUsersPath+"?"+url.Values{"sortBy": {scimEnterprise("manager.displayName")}}.Encode())
 		requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
 	})
+}
+
+func newSCIMAddMembers(values ...string) map[string]any {
+	members := make([]core.Member, len(values))
+	for i, value := range values {
+		members[i] = core.Member{Value: value}
+	}
+	return newSCIMPatch(map[string]any{"op": "add", "path": "members", "value": members})
 }
 
 func scimEnterprise(filter string) string {

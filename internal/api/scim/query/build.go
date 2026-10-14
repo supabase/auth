@@ -11,24 +11,14 @@ import (
 )
 
 func Select(references []Reference, projection protocol.Projection, locations map[string]string) string {
-	parts := []string{}
-	for _, reference := range references {
-		if projection.Returns(reference.Path()) {
-			parts = append(parts, reference.part(locations))
-		}
-	}
-	return "json_build_array(" + strings.Join(parts, ", ") + ")"
+	return build(references, locations, func(r Reference) ([]string, bool) { return nil, projection.Returns(r.Path()) })
 }
 
 func SelectTouched(references []Reference, touched Touched, locations map[string]string) string {
-	parts := []string{}
-	for _, reference := range references {
-		if touched.Has(reference) {
-			reference.only = touched.Values(reference)
-			parts = append(parts, reference.part(locations))
-		}
-	}
-	return "json_build_array(" + strings.Join(parts, ", ") + ")"
+	return build(references, locations, func(r Reference) ([]string, bool) {
+		only, ok := touched[r.Path()]
+		return only, ok
+	})
 }
 
 func Where(schemas core.Schemas, location string, references []Reference, expression string) (Clause, error) {
@@ -83,6 +73,17 @@ func Order(schemas core.Schemas, references []Reference, request *protocol.Searc
 		value = "lower(" + value + ")"
 	}
 	return value + ` COLLATE "C"` + direction + ", id", args, nil
+}
+
+func build(references []Reference, locations map[string]string, pick func(Reference) ([]string, bool)) string {
+	parts := []string{}
+	for _, reference := range references {
+		if only, ok := pick(reference); ok {
+			reference.only = only
+			parts = append(parts, reference.part(locations))
+		}
+	}
+	return "json_build_array(" + strings.Join(parts, ", ") + ")"
 }
 
 func primary(keys []string) string {
