@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"slices"
 	"uuid"
 
 	"github.com/gobuffalo/pop/v6"
@@ -40,7 +41,7 @@ func (s Scope) Create(ctx context.Context, document string, links []Link) (Row, 
 
 func (s Scope) Update(ctx context.Context, id uuid.UUID, document, version string, links []Link) (Row, error) {
 	row, err := s.write(ctx, links, func(tx *storage.Connection) (*Resource, error) {
-		return s.update(tx, id, document, version)
+		return s.update(tx, id, document, guard(document, version, links))
 	})
 	if models.IsNotFoundError(err) {
 		return row, s.missing(ctx, id)
@@ -106,11 +107,24 @@ func (s Scope) create(tx *storage.Connection, document string) (*Resource, error
 	return resource, err
 }
 
-func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version string) (*Resource, error) {
+type condition struct {
+	text string
+	args []any
+}
+
+func guard(document, version string, links []Link) condition {
+	current := condition{"updated_at = COALESCE(?, updated_at)", []any{query.VersionTime(version)}}
+	if len(links) == 0 || slices.ContainsFunc(links, func(l Link) bool { return l.Only == nil }) {
+		return current
+	}
+	return condition{"(" + current.text + " OR resource = ?::jsonb)", append(current.args, document)}
+}
+
+func (s Scope) update(tx *storage.Connection, id uuid.UUID, document string, guard condition) (*Resource, error) {
 	resource := &Resource{}
 	if err := tx.RawQuery(
-		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND (updated_at = COALESCE(?, updated_at) OR resource = ?::jsonb) RETURNING "+resourceColumns,
-		document, id, s.providerID, s.resourceType, query.VersionTime(version), document,
+		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND "+guard.text+" RETURNING "+resourceColumns,
+		append([]any{document, id, s.providerID, s.resourceType}, guard.args...)...,
 	).First(resource); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, models.SCIMNotFoundError{}
@@ -158,11 +172,11 @@ func (s Scope) removeReferences(tx *storage.Connection, source uuid.UUID, attrib
 
 func (s Scope) findTargets(tx *storage.Connection, source uuid.UUID, attribute string, only []string) ([]uuid.UUID, error) {
 	targets := []uuid.UUID{}
-	q := tx.RawQuery("SELECT target_id FROM scim_resource_references WHERE source_id = ? AND attribute = ?", source, attribute)
+	text, args := "SELECT target_id FROM scim_resource_references WHERE source_id = ? AND attribute = ?", []any{source, attribute}
 	if only != nil {
-		q = tx.RawQuery("SELECT target_id FROM scim_resource_references WHERE source_id = ? AND attribute = ? AND target_id = any(?::uuid[])", source, attribute, only)
+		text, args = text+" AND target_id = any(?::uuid[])", append(args, only)
 	}
-	err := q.All(&targets)
+	err := tx.RawQuery(text, args...).All(&targets)
 	return targets, errors.Wrap(err, "error finding SCIM targets")
 }
 
