@@ -26,7 +26,7 @@ func (r *repository[T]) List(ctx context.Context, request *protocol.SearchReques
 	if err != nil {
 		return nil, 0, err
 	}
-	scope, err := r.scope(ctx, r.projected(ctx))
+	scope, err := r.scope(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -48,7 +48,7 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 	if err != nil {
 		return zero, store.NotFound()
 	}
-	scope, err := r.scope(ctx, r.projected(ctx))
+	scope, err := r.scope(ctx)
 	if err != nil {
 		return zero, err
 	}
@@ -72,7 +72,7 @@ func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
 }
 
 func (r *repository[T]) Delete(ctx context.Context, item T) error {
-	scope, err := r.scope(ctx, "")
+	scope, err := r.scope(ctx)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func idOf[T core.Resource](item T) uuid.UUID {
 
 func (r *repository[T]) save(ctx context.Context, item T, persist func(store.Scope, string, []store.Link) (store.Row, error)) (T, error) {
 	var zero T
-	scope, err := r.scope(ctx, r.projected(ctx))
+	scope, err := r.scope(ctx)
 	if err != nil {
 		return zero, err
 	}
@@ -101,12 +101,12 @@ func (r *repository[T]) save(ctx context.Context, item T, persist func(store.Sco
 	return row.Into[T](r.query.Location())
 }
 
-func (r *repository[T]) scope(ctx context.Context, refs string) (store.Scope, error) {
+func (r *repository[T]) scope(ctx context.Context) (store.Scope, error) {
 	token := tokenKey.Value(ctx)
 	if token == nil {
 		return store.Scope{}, scimerrors.ErrInternal("missing SCIM token")
 	}
-	return store.NewScope(r.db, token.SSOProviderID, r.query.Type, refs), nil
+	return store.NewScope(r.db, token.SSOProviderID, r.query.Type, r.projected(ctx)), nil
 }
 
 func (r *repository[T]) projected(ctx context.Context) string {
