@@ -27,13 +27,13 @@ func (r Reference) exists(inner Clause) Clause {
 }
 
 func (r Reference) match(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
-	text, _ := value.(string)
 	if op != filter.OpEquals && op != filter.OpNotEquals {
 		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(r.Name()+"."+definition.Name) + " supports only eq and ne")
 	}
 	if definition.Name != ValueAttribute {
 		return nil, r.unfilterable(definition)
 	}
+	text, _ := value.(string)
 	return uuidPredicate("edge.target_id", op, text), nil
 }
 
