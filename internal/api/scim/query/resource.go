@@ -127,8 +127,7 @@ func (r Resource) build(pick func(Reference) ([]string, bool)) string {
 	parts := []string{}
 	for _, reference := range r.references {
 		if only, ok := pick(reference); ok {
-			reference.only = only
-			parts = append(parts, reference.part(r.locations))
+			parts = append(parts, projection{r.locations, only}.part(reference))
 		}
 	}
 	return "json_build_array(" + strings.Join(parts, ", ") + ")"
