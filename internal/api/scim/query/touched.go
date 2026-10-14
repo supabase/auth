@@ -94,19 +94,6 @@ func find(references []Reference, uri, name string) (*Reference, bool) {
 	return nil, known
 }
 
-func (r Reference) values(op patch.Operation, path filter.Path) []string {
-	if r.kind != multi || r.attribute.Required || path.SubAttribute != "" {
-		return nil
-	}
-	switch patch.Op(strings.ToLower(string(op.Op))) {
-	case patch.OpAdd:
-		return added(op, path)
-	case patch.OpRemove:
-		return removed(path)
-	}
-	return nil
-}
-
 func added(op patch.Operation, path filter.Path) []string {
 	var elements []struct {
 		Value string `json:"value"`

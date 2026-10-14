@@ -8,6 +8,7 @@ import (
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
+	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
@@ -189,15 +190,15 @@ func (r Reference) value() string {
 	return `scim_resources.resource #>> ARRAY[` + literals(r.keys()) + `]`
 }
 
-func (ref Reference) match(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
+func (r Reference) match(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
 	text, _ := value.(string)
 	if op != filter.OpEquals && op != filter.OpNotEquals {
-		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(ref.Name()+"."+definition.Name) + " supports only eq and ne")
+		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(r.Name()+"."+definition.Name) + " supports only eq and ne")
 	}
 	sign := comparisons[op]
 	column, ok := edgeColumns[definition.Name]
 	if !ok {
-		return nil, ref.unfilterable(definition)
+		return nil, r.unfilterable(definition)
 	}
 	if definition.Name != ValueAttribute {
 		return predicate{column + sign + "lower(?)", []any{text}}, nil
@@ -205,8 +206,21 @@ func (ref Reference) match(definition *core.Attribute, op filter.Operator, value
 	return uuidPredicate(column, sign, op, text), nil
 }
 
-func (ref Reference) unfilterable(definition *core.Attribute) error {
-	return scimerrors.ErrInvalidFilter(strconv.Quote(ref.Name()+"."+definition.Name) + " cannot be filtered")
+func (r Reference) unfilterable(definition *core.Attribute) error {
+	return scimerrors.ErrInvalidFilter(strconv.Quote(r.Name()+"."+definition.Name) + " cannot be filtered")
+}
+
+func (r Reference) values(op patch.Operation, path filter.Path) []string {
+	if r.kind != multi || r.attribute.Required || path.SubAttribute != "" {
+		return nil
+	}
+	switch patch.Op(strings.ToLower(string(op.Op))) {
+	case patch.OpAdd:
+		return added(op, path)
+	case patch.OpRemove:
+		return removed(path)
+	}
+	return nil
 }
 
 func resourceTypes(attribute *core.Attribute) []string {
