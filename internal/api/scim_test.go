@@ -585,6 +585,15 @@ func TestSCIMGroups(t *testing.T) {
 		c.requireGroup(t, group.ID, group.DisplayName, ids...)
 	})
 
+	t.Run("concurrent PATCHes adding the same member all succeed", func(t *testing.T) {
+		for range 20 {
+			group, member := create(t), createUser(t)
+			statuses := c.addConcurrently(t, group.ID, member.ID, member.ID, member.ID, member.ID)
+			require.Equal(t, []int{http.StatusNoContent, http.StatusNoContent, http.StatusNoContent, http.StatusNoContent}, statuses)
+			c.requireGroup(t, group.ID, group.DisplayName, member.ID)
+		}
+	})
+
 	t.Run("a deadlock on concurrent PATCHes is a conflict, not an error", func(t *testing.T) {
 		if c.engine(t) != "orioledb" {
 			t.Skip("only orioledb deadlocks on three or more concurrent updates of one row once a table has a GIN index")
