@@ -2,6 +2,8 @@ package query
 
 import (
 	"encoding/json"
+	"maps"
+	"slices"
 	"strings"
 	"uuid"
 
@@ -51,11 +53,7 @@ func attributes(key string, nested any) (string, []string) {
 		return "", []string{key}
 	}
 	sub, _ := nested.(map[string]any)
-	names := []string{}
-	for name := range sub {
-		names = append(names, name)
-	}
-	return key, names
+	return key, slices.Collect(maps.Keys(sub))
 }
 
 func (t Touched) add(path string, values []string) {
