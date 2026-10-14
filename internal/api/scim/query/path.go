@@ -59,3 +59,8 @@ func (p path) present() string {
 func (p path) exists(inner jsonpath) string {
 	return "exists(" + p.String() + "[*] ? (" + string(inner) + "))"
 }
+
+func (p path) primary() string {
+	last := len(p.keys) - 1
+	return path{p.root, p.keys[:last-1]}.String() + "[*] ? (@.primary == true)." + literal(p.keys[last])
+}

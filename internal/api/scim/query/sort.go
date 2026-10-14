@@ -57,14 +57,10 @@ func (r Resource) sortValue(parent, attribute *core.Attribute) (string, []any) {
 		value, args = `resource ->> `+QuoteLiteral(keys[0]), nil
 	}
 	if parent.MultiValued {
-		value, args = `coalesce(jsonb_path_query_first(resource, ?::jsonpath) #>> '{}', `+value+`)`, []any{primary(keys), keys}
+		value, args = `coalesce(jsonb_path_query_first(resource, ?::jsonpath) #>> '{}', `+value+`)`, []any{path{"$", keys}.primary(), keys}
 	}
 	if !attribute.CaseExact {
 		value = "lower(" + value + ")"
 	}
 	return value, args
-}
-
-func primary(keys []string) string {
-	return path{"$", keys[:len(keys)-2]}.String() + "[*] ? (@.primary == true)." + literal(keys[len(keys)-1])
 }
