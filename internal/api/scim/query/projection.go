@@ -52,14 +52,10 @@ func (p projection) scoped() string {
 }
 
 func (p projection) single(r Reference) string {
-	value := p.value(r)
+	value := `scim_resources.resource #>> ARRAY[` + literals(r.keys()) + `]`
 	related := `jsonb_strip_nulls(jsonb_build_object('$ref', ` + endpoint(p.locations, "target.resource_type") + ` || target.id` + r.display("target")
 	return `(SELECT ` + related + `)) FROM scim_resources target WHERE target.id = (CASE WHEN ` + value + ` ~ ` + QuoteLiteral(uuidPattern) + ` THEN ` + value + ` END)::uuid` +
 		` AND target.sso_provider_id = scim_resources.sso_provider_id AND target.resource_type IN (` + literals(r.targets) + `) AND target.deleted_at IS NULL)`
-}
-
-func (p projection) value(r Reference) string {
-	return `scim_resources.resource #>> ARRAY[` + literals(r.keys()) + `]`
 }
 
 func literals(values []string) string {
