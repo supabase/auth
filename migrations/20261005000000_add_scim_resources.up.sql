@@ -18,23 +18,8 @@ create unique index if not exists scim_resources_user_name_key
     where resource_type = 'User' and deleted_at is null;
 
 /* auth_migration: 20261005000000 */
-create unique index if not exists scim_resources_external_id_key
-    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, (resource->>'externalId') collate "C")
-    where resource->>'externalId' is not null and deleted_at is null;
-
-/* auth_migration: 20261005000000 */
-create index if not exists scim_resources_display_name_idx
-    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, (lower(resource->>'displayName')) collate "C", id)
-    where resource_type = 'Group' and deleted_at is null;
-
-/* auth_migration: 20261005000000 */
 create index if not exists scim_resources_type_id_idx
     on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, id)
-    where deleted_at is null;
-
-/* auth_migration: 20261005000000 */
-create index if not exists scim_resources_updated_at_idx
-    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, updated_at, id)
     where deleted_at is null;
 
 /* auth_migration: 20261005000000 */

@@ -22,8 +22,7 @@ var columns = map[string]string{
 }
 
 var indexes = map[core.SchemaURI][]string{
-	core.SchemaUser:  {"userName", "externalId"},
-	core.SchemaGroup: {"displayName", "externalId"},
+	core.SchemaUser: {"userName"},
 }
 
 var comparisons = map[filter.Operator]string{

@@ -1922,13 +1922,7 @@ func TestSCIMQuery(t *testing.T) {
 
 	t.Run("Uniqueness", func(t *testing.T) {
 		c := newSCIMClient(t, nil)
-		externalID := uuid.NewV7().String()
-		withExternalID := func(userName string) map[string]any {
-			user := newSCIMUser(userName, "Barbara", "Jensen")
-			user["externalId"] = externalID
-			return user
-		}
-		user := scimCreate[core.User](t, c, scimUsersPath, withExternalID(scimUserName("bjensen")))
+		user := c.createUser(t, scimUserName("bjensen"))
 		other := c.createUser(t, scimUserName("jsmith"))
 
 		for _, tc := range []struct {
@@ -1937,7 +1931,6 @@ func TestSCIMQuery(t *testing.T) {
 		}{
 			{"POST duplicate userName", http.MethodPost, scimUsersPath, newSCIMUser(user.UserName, "Barbara", "Jensen")},
 			{"POST userName that differs only in case", http.MethodPost, scimUsersPath, newSCIMUser(strings.ToUpper(user.UserName), "Barbara", "Jensen")},
-			{"POST duplicate externalId", http.MethodPost, scimUsersPath, withExternalID(scimUserName("bjensen"))},
 			{"PUT duplicate userName", http.MethodPut, scimUsersPath + "/" + other.ID, newSCIMUser(user.UserName, "John", "Smith")},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
@@ -1947,27 +1940,25 @@ func TestSCIMQuery(t *testing.T) {
 		}
 	})
 
-	t.Run("Group uniqueness", func(t *testing.T) {
+	t.Run("Duplicate externalId", func(t *testing.T) {
 		c := newSCIMClient(t, nil)
 		externalID := uuid.NewV7().String()
-		withExternalID := func(displayName string) map[string]any {
+		user := func(userName string) map[string]any {
+			user := newSCIMUser(userName, "Barbara", "Jensen")
+			user["externalId"] = externalID
+			return user
+		}
+		group := func(displayName string) map[string]any {
 			return map[string]any{"schemas": []string{string(core.SchemaGroup)}, "displayName": displayName, "externalId": externalID}
 		}
-		scimCreate[core.Group](t, c, scimGroupsPath, withExternalID("Unique "+externalID))
-		other := c.createGroup(t, "Other "+externalID)
-
-		for _, tc := range []struct {
-			name, method, path string
-			body               any
-		}{
-			{"POST duplicate externalId", http.MethodPost, scimGroupsPath, withExternalID("Duplicate " + externalID)},
-			{"PUT duplicate externalId", http.MethodPut, scimGroupsPath + "/" + other.ID, withExternalID(other.DisplayName)},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				res := c.do(t, tc.method, tc.path, tc.body)
-				requireSCIMError(t, res, http.StatusConflict, scimerrors.Uniqueness)
-			})
+		// RFC 7643 Section 3.1: the server does not enforce externalId uniqueness.
+		for range 2 {
+			scimCreate[core.User](t, c, scimUsersPath, user(scimUserName("bjensen")))
+			scimCreate[core.Group](t, c, scimGroupsPath, group("Group "+uuid.NewV7().String()))
 		}
+		filter := url.Values{"filter": {`externalId eq "` + externalID + `"`}}
+		require.Equal(t, 2, scimList[core.User](t, c, scimUsersPath, filter).TotalResults)
+		require.Equal(t, 2, scimList[core.Group](t, c, scimGroupsPath, filter).TotalResults)
 	})
 }
 
