@@ -56,22 +56,6 @@ func (p projection) single(r Reference) string {
 		` AND target.sso_provider_id = scim_resources.sso_provider_id AND target.resource_type IN (` + literals(r.targets) + `) AND target.deleted_at IS NULL)`
 }
 
-func (r Reference) display(table string) string {
-	shown := r.shown()
-	if shown == "" {
-		return ""
-	}
-	return `, ` + QuoteLiteral(shown) + `, ` + table + `.resource ->> ` + QuoteLiteral(displayNameAttribute)
-}
-
-func (r Reference) keys() []string {
-	keys := []string{r.Name(), ValueAttribute}
-	if r.uri != "" {
-		keys = append([]string{string(r.uri)}, keys...)
-	}
-	return keys
-}
-
 func (p projection) value(r Reference) string {
 	return `scim_resources.resource #>> ARRAY[` + literals(r.keys()) + `]`
 }

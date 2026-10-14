@@ -118,6 +118,22 @@ func (r Reference) shown() string {
 	return ""
 }
 
+func (r Reference) display(table string) string {
+	shown := r.shown()
+	if shown == "" {
+		return ""
+	}
+	return `, ` + QuoteLiteral(shown) + `, ` + table + `.resource ->> ` + QuoteLiteral(displayNameAttribute)
+}
+
+func (r Reference) keys() []string {
+	keys := []string{r.Name(), ValueAttribute}
+	if r.uri != "" {
+		keys = append([]string{string(r.uri)}, keys...)
+	}
+	return keys
+}
+
 func (r Reference) exists(inner Clause) Clause {
 	text, args := inner.SQL()
 	return predicate{"EXISTS (SELECT 1 FROM scim_resource_references edge JOIN scim_resources target ON target.id = edge.target_id AND target.deleted_at IS NULL WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + text + ")", append([]any{r.Path()}, args...)}
