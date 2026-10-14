@@ -8,8 +8,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-var edgeColumns = map[string]string{ValueAttribute: "edge.target_id"}
-
 func (r Reference) leaf(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
 	if r.kind != multi {
 		return nil, r.unfilterable(definition)
@@ -17,7 +15,7 @@ func (r Reference) leaf(definition *core.Attribute, op filter.Operator, value an
 	if op != filter.OpPresent {
 		return r.match(definition, op, value)
 	}
-	if _, ok := edgeColumns[definition.Name]; !ok && definition.Name != r.Name() {
+	if definition.Name != ValueAttribute && definition.Name != r.Name() {
 		return nil, r.unfilterable(definition)
 	}
 	return always, nil
@@ -34,11 +32,10 @@ func (r Reference) match(definition *core.Attribute, op filter.Operator, value a
 		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(r.Name()+"."+definition.Name) + " supports only eq and ne")
 	}
 	sign := comparisons[op]
-	column, ok := edgeColumns[definition.Name]
-	if !ok {
+	if definition.Name != ValueAttribute {
 		return nil, r.unfilterable(definition)
 	}
-	return uuidPredicate(column, sign, op, text), nil
+	return uuidPredicate("edge.target_id", sign, op, text), nil
 }
 
 func (r Reference) unfilterable(definition *core.Attribute) error {
