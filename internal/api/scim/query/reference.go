@@ -1,13 +1,11 @@
 package query
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/patch"
-	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 const (
@@ -15,8 +13,6 @@ const (
 	displayNameAttribute = "displayName"
 	uuidPattern          = `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
 )
-
-var edgeColumns = map[string]string{ValueAttribute: "edge.target_id", "type": "lower(target.resource_type)"}
 
 type kind int
 
@@ -80,19 +76,6 @@ func (r Reference) Strip(document core.Object) {
 	}
 }
 
-func (r Reference) leaf(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
-	if r.kind != multi {
-		return nil, r.unfilterable(definition)
-	}
-	if op != filter.OpPresent {
-		return r.match(definition, op, value)
-	}
-	if _, ok := edgeColumns[definition.Name]; !ok && definition.Name != r.Name() {
-		return nil, r.unfilterable(definition)
-	}
-	return always, nil
-}
-
 func (r Reference) resolves(sub string) bool {
 	return r.kind != single || sub == r.shown()
 }
@@ -132,31 +115,6 @@ func (r Reference) keys() []string {
 		keys = append([]string{string(r.uri)}, keys...)
 	}
 	return keys
-}
-
-func (r Reference) exists(inner Clause) Clause {
-	text, args := inner.SQL()
-	return predicate{"EXISTS (SELECT 1 FROM scim_resource_references edge JOIN scim_resources target ON target.id = edge.target_id AND target.deleted_at IS NULL WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + text + ")", append([]any{r.Path()}, args...)}
-}
-
-func (r Reference) match(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
-	text, _ := value.(string)
-	if op != filter.OpEquals && op != filter.OpNotEquals {
-		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(r.Name()+"."+definition.Name) + " supports only eq and ne")
-	}
-	sign := comparisons[op]
-	column, ok := edgeColumns[definition.Name]
-	if !ok {
-		return nil, r.unfilterable(definition)
-	}
-	if definition.Name != ValueAttribute {
-		return predicate{column + sign + "lower(?)", []any{text}}, nil
-	}
-	return uuidPredicate(column, sign, op, text), nil
-}
-
-func (r Reference) unfilterable(definition *core.Attribute) error {
-	return scimerrors.ErrInvalidFilter(strconv.Quote(r.Name()+"."+definition.Name) + " cannot be filtered")
 }
 
 func (r Reference) values(op patch.Operation, path filter.Path) []string {
