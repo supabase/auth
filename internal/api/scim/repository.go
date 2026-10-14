@@ -18,12 +18,8 @@ type repository[T core.Resource] struct {
 	query        query.Resource
 }
 
-func newRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas, inverses map[query.Edge]query.Edge) *repository[T] {
-	return &repository[T]{
-		db:           db,
-		resourceType: resourceType,
-		query:        query.NewResource(resourceType, schemas, locations, inverses),
-	}
+func newRepository[T core.Resource](db *storage.Connection, resourceType string, q query.Resource) *repository[T] {
+	return &repository[T]{db: db, resourceType: resourceType, query: q}
 }
 
 func (r *repository[T]) List(ctx context.Context, request *protocol.SearchRequest) ([]T, int, error) {
