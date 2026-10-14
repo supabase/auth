@@ -1,7 +1,6 @@
 package query
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 
@@ -18,7 +17,7 @@ func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) 
 	if err != nil {
 		return "", nil, err
 	}
-	if resolved(r.references, parent, attribute) {
+	if evaluator(r).lookup(parent) != nil {
 		return "", nil, scimerrors.ErrInvalidValue(strconv.Quote(request.SortBy) + " cannot be sorted")
 	}
 	direction := " ASC"
@@ -68,10 +67,4 @@ func (r Resource) sortValue(parent, attribute *core.Attribute) (string, []any) {
 
 func primary(keys []string) string {
 	return path{"$", keys[:len(keys)-2]}.String() + "[*] ? (@.primary == true)." + literal(keys[len(keys)-1])
-}
-
-func resolved(references []Reference, parent, attribute *core.Attribute) bool {
-	return slices.ContainsFunc(references, func(reference Reference) bool {
-		return reference.attribute == parent
-	})
 }
