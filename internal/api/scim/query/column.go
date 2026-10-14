@@ -1,6 +1,7 @@
 package query
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"uuid"
@@ -20,14 +21,9 @@ var Columns = map[string]string{
 	"meta.version":      "updated_at",
 }
 
-var prefixes = map[core.SchemaURI]map[string]string{
-	core.SchemaUser:  {"userName": `lower(resource ->> 'userName') COLLATE "C"`},
-	core.SchemaGroup: {"displayName": `lower(resource ->> 'displayName') COLLATE "C"`},
-}
-
-var equalities = map[core.SchemaURI]map[string]string{
-	core.SchemaUser:  {"userName": prefixes[core.SchemaUser]["userName"], "externalId": `(resource ->> 'externalId') COLLATE "C"`},
-	core.SchemaGroup: {"displayName": prefixes[core.SchemaGroup]["displayName"], "externalId": `(resource ->> 'externalId') COLLATE "C"`},
+var indexes = map[core.SchemaURI][]string{
+	core.SchemaUser:  {"userName", "externalId"},
+	core.SchemaGroup: {"displayName", "externalId"},
 }
 
 var comparisons = map[filter.Operator]string{
@@ -73,16 +69,21 @@ func uuidPredicate(column, sign string, op filter.Operator, text string) Clause 
 }
 
 func indexed(schema core.SchemaURI, name string, op filter.Operator, text string, caseExact bool) (Clause, bool) {
-	if expression, ok := prefixes[schema][name]; ok && op == filter.OpStartsWith {
-		return Prefix{name, expression, text}, true
-	}
-	expression, ok := equalities[schema][name]
-	if !ok || op != filter.OpEquals {
+	sign, ranged := comparisons[op]
+	if !slices.Contains(indexes[schema], name) || op == filter.OpNotEquals || !ranged && op != filter.OpStartsWith {
 		return nil, false
 	}
-	param := "lower(?)"
-	if caseExact {
-		param = "?"
+	expression, param := expression(name, caseExact)
+	if op == filter.OpStartsWith {
+		return Prefix{name, expression, param, text}, true
 	}
-	return predicate{"(" + expression + ") IS NOT NULL AND " + expression + " = " + param, []any{text}}, true
+	return predicate{"(" + expression + ") IS NOT NULL AND " + expression + sign + param, []any{text}}, true
+}
+
+func expression(name string, caseExact bool) (string, string) {
+	value := "resource ->> " + QuoteLiteral(name)
+	if caseExact {
+		return "(" + value + `) COLLATE "C"`, "?"
+	}
+	return "lower(" + value + `) COLLATE "C"`, "lower(?)"
 }

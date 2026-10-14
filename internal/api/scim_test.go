@@ -1079,6 +1079,11 @@ func TestSCIMFiltersUseIndexes(t *testing.T) {
 		{scimUsersPath, `title eq "Tour Guide"`, "scim_resources_resource_idx"},
 		{scimGroupsPath, `displayName eq "Tour Guides"`, "scim_resources_display_name_idx"},
 		{scimGroupsPath, `displayName sw "Tour"`, "scim_resources_display_name_idx"},
+		{scimUsersPath, `userName gt "bjen"`, "scim_resources_user_name_key"},
+		{scimUsersPath, `userName le "bjen"`, "scim_resources_user_name_key"},
+		{scimUsersPath, `externalId sw "7019"`, "scim_resources_external_id_key"},
+		{scimUsersPath, `externalId lt "7019"`, "scim_resources_external_id_key"},
+		{scimGroupsPath, `externalId sw "e9999"`, "scim_resources_external_id_key"},
 	} {
 		t.Run(tc.filter, func(t *testing.T) {
 			if engine == "orioledb" && tc.index == "scim_resources_resource_idx" {
