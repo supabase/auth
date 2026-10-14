@@ -14,6 +14,8 @@ func TestTouches(t *testing.T) {
 	manager := string(core.SchemaEnterpriseUser) + ":manager"
 	groups := References("Group", core.Schemas{core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...)}, inverses)
 	users := References("User", core.Schemas{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...), core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...)}, inverses)
+	approvers := core.NewAttribute("approvers", core.TypeComplex).AsMultiValued().AsRequired().With(core.NewAttribute("value", core.TypeString), core.NewAttribute("$ref", core.TypeReference).Referencing("User"))
+	devices := References("Device", core.Schemas{core.NewSchema("urn:example:Device").With(approvers)}, inverses)
 	op := func(op, path string, value any) patch.Operation {
 		raw, _ := json.Marshal(value)
 		if value == nil {
@@ -45,6 +47,7 @@ func TestTouches(t *testing.T) {
 		{"remove by type", groups, []patch.Operation{op("remove", `members[type eq "User"]`, nil)}, Touched{"members": nil}},
 		{"replace members", groups, []patch.Operation{op("add", "members", members(a)), op("replace", "members", members(b))}, Touched{"members": nil}},
 		{"members in a value object", groups, []patch.Operation{op("add", "", map[string]any{"members": members(a)})}, Touched{"members": nil}},
+		{"required references load in full", devices, []patch.Operation{op("remove", `approvers[value eq "`+a+`"]`, nil)}, Touched{"approvers": nil}},
 		{"manager by path", users, []patch.Operation{op("replace", manager+".value", a)}, Touched{manager: nil}},
 		{"manager in a value object", users, []patch.Operation{op("replace", "", map[string]any{string(core.SchemaEnterpriseUser): map[string]any{"manager": map[string]any{"value": a}}})}, Touched{manager: nil}},
 		{"user name", users, []patch.Operation{op("replace", "userName", "x")}, Touched{}},

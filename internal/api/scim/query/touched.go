@@ -98,7 +98,7 @@ func find(references []Reference, uri, name string) (*Reference, bool) {
 }
 
 func (r Reference) values(op patch.Operation, path filter.Path) []string {
-	if r.kind != multi || path.SubAttribute != "" {
+	if r.kind != multi || r.attribute.Required || path.SubAttribute != "" {
 		return nil
 	}
 	switch patch.Op(strings.ToLower(string(op.Op))) {
