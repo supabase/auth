@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const MaxDepth = 8
+
 type projection struct {
 	locations map[string]string
 	only      []string

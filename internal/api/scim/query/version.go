@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-const MaxDepth = 8
-
-func QuoteLiteral(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
-}
-
 func Version(t time.Time) string {
 	return `W/"` + strconv.FormatInt(t.UnixMicro(), 10) + `"`
 }

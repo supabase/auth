@@ -1,6 +1,7 @@
 package query
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -63,4 +64,14 @@ func (r Resource) sortValue(parent, attribute *core.Attribute) (string, []any) {
 		value = "lower(" + value + ")"
 	}
 	return value, args
+}
+
+func primary(keys []string) string {
+	return path{"$", keys[:len(keys)-2]}.String() + "[*] ? (@.primary == true)." + literal(keys[len(keys)-1])
+}
+
+func resolved(references []Reference, parent, attribute *core.Attribute) bool {
+	return slices.ContainsFunc(references, func(reference Reference) bool {
+		return reference.attribute == parent && reference.computed(attribute.Name)
+	})
 }
