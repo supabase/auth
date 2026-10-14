@@ -12,6 +12,8 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/gobuffalo/pop/v6"
+	"github.com/gobuffalo/pop/v6/logging"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase/auth/internal/models"
@@ -34,12 +36,12 @@ func TestSCIMScale(t *testing.T) {
 	timed := func(name, method, path string, body any, want ...int) {
 		var res *http.Response
 		var raw []byte
-		elapsed := scimMedian(3, func() {
+		median, slowest := scimMedian(3, func() {
 			res = s.do(t, method, path, body)
 			raw = scimBody(t, res)
 		})
 		require.Contains(t, want, res.StatusCode, "%s: %s", name, string(raw))
-		report = append(report, fmt.Sprintf("| %s | %d | %s | %d |", name, res.StatusCode, elapsed.Round(time.Millisecond), len(raw)))
+		report = append(report, fmt.Sprintf("| %s | %d | %s | %s | %d |", name, res.StatusCode, median.Round(time.Millisecond), slowest.Round(time.Millisecond), len(raw)))
 	}
 	member := func(op, value string) map[string]any {
 		if op == "remove" {
@@ -64,9 +66,26 @@ func TestSCIMScale(t *testing.T) {
 	timed("PATCH 100K remove 1", http.MethodPatch, scimGroupsPath+"/"+s.big, member("remove", s.spare[0]), http.StatusNoContent)
 	timed("PATCH 100K replace displayName", http.MethodPatch, scimGroupsPath+"/"+s.big, rename, http.StatusOK)
 	timed("PATCH 10K add 1", http.MethodPatch, scimGroupsPath+"/"+s.small, member("add", s.spare[0]), http.StatusNoContent)
+	parent := seedSCIMGroup(t, s.scimClient, "parent")
+	walk := scimCapture(t, "WITH RECURSIVE walk", func() {
+		timed("PATCH nest 100K group", http.MethodPatch, scimGroupsPath+"/"+parent, member("add", s.big), http.StatusNoContent)
+	})
+	s.requireGroupHas(t, parent, s.big)
+	t.Log(s.explain(t, walk))
+	timed("PATCH nest 10K group", http.MethodPatch, scimGroupsPath+"/"+parent, member("add", s.small), http.StatusNoContent)
+
+	var sizes struct {
+		Table  string `db:"table_size"`
+		Search string `db:"search_size"`
+		GIN    string `db:"gin_size"`
+	}
+	require.NoError(t, s.inst.Conn.RawQuery(`SELECT pg_size_pretty(pg_total_relation_size('scim_resources')) AS table_size,
+		(SELECT pg_size_pretty(sum(pg_column_size(search))) FROM scim_resources) AS search_size,
+		pg_size_pretty(pg_relation_size('scim_resources_resource_idx')) AS gin_size`).First(&sizes))
+	report = append(report, fmt.Sprintf("| sizes: table %s, search column %s, GIN %s | | | | |", sizes.Table, sizes.Search, sizes.GIN))
 
 	statuses := s.concurrently(t, s.spare[1:])
-	report = append(report, fmt.Sprintf("| PATCH 100K add, %d concurrent | %v | | |", len(s.spare)-1, statuses))
+	report = append(report, fmt.Sprintf("| PATCH 100K add, %d concurrent | %v | | | |", len(s.spare)-1, statuses))
 
 	put := newSCIMGroup("Everyone")
 	put["members"] = s.members(t, s.big)
@@ -75,13 +94,13 @@ func TestSCIMScale(t *testing.T) {
 	start := time.Now()
 	res := s.delete(t, scimGroupsPath+"/"+s.big)
 	require.Equal(t, http.StatusNoContent, res.StatusCode)
-	report = append(report, fmt.Sprintf("| DELETE Group 100K | %d | %s | |", res.StatusCode, time.Since(start).Round(time.Millisecond)))
+	report = append(report, fmt.Sprintf("| DELETE Group 100K | %d | %s | | |", res.StatusCode, time.Since(start).Round(time.Millisecond)))
 
 	start = time.Now()
 	require.NoError(t, s.inst.Conn.Destroy(s.provider))
-	report = append(report, fmt.Sprintf("| DELETE sso provider cascade | | %s | |", time.Since(start).Round(time.Millisecond)))
+	report = append(report, fmt.Sprintf("| DELETE sso provider cascade | | %s | | |", time.Since(start).Round(time.Millisecond)))
 
-	t.Log("\n| Case | Status | Median | Bytes |\n| --- | --- | --- | --- |\n" + strings.Join(report, "\n"))
+	t.Log("\n| Case | Status | Median | Max | Bytes |\n| --- | --- | --- | --- | --- |\n" + strings.Join(report, "\n"))
 }
 
 func seedSCIMScale(t *testing.T) scimScale {
@@ -112,8 +131,8 @@ func seedSCIMScale(t *testing.T) scimScale {
 		require.Equal(t, http.StatusNoContent, c.addMembers(t, group, s.user).StatusCode)
 	}
 	require.Equal(t, http.StatusNoContent, c.addMembers(t, s.small, nested...).StatusCode)
-	require.NoError(t, c.inst.Conn.RawQuery("ANALYZE scim_resources").Exec())
-	require.NoError(t, c.inst.Conn.RawQuery("ANALYZE scim_resource_references").Exec())
+	require.NoError(t, c.inst.Conn.RawQuery("VACUUM ANALYZE scim_resources").Exec())
+	require.NoError(t, c.inst.Conn.RawQuery("VACUUM ANALYZE scim_resource_references").Exec())
 	return s
 }
 
@@ -163,7 +182,7 @@ func (s scimScale) concurrently(t *testing.T, values []string) map[int]int {
 	return statuses
 }
 
-func scimMedian(runs int, run func()) time.Duration {
+func scimMedian(runs int, run func()) (time.Duration, time.Duration) {
 	durations := make([]time.Duration, runs)
 	for i := range durations {
 		start := time.Now()
@@ -171,5 +190,41 @@ func scimMedian(runs int, run func()) time.Duration {
 		durations[i] = time.Since(start)
 	}
 	slices.Sort(durations)
-	return durations[runs/2]
+	return durations[runs/2], durations[runs-1]
+}
+
+type scimQuery struct {
+	sql  string
+	args []any
+}
+
+func scimCapture(t *testing.T, marker string, run func()) scimQuery {
+	var captured scimQuery
+	pop.SetTxLogger(func(_ logging.Level, _ any, sql string, values ...any) {
+		if strings.Contains(sql, marker) && captured.sql == "" {
+			captured = scimQuery{sql, values}
+		}
+	})
+	defer pop.SetTxLogger(func(logging.Level, any, string, ...any) {})
+	run()
+	require.NotEmpty(t, captured.sql, marker)
+	return captured
+}
+
+func (s scimScale) explain(t *testing.T, q scimQuery) string {
+	plans := []struct {
+		Line string `db:"QUERY PLAN"`
+	}{}
+	require.NoError(t, s.inst.Conn.RawQuery("EXPLAIN (ANALYZE, BUFFERS) "+q.sql, q.args...).All(&plans))
+	lines := []string{}
+	for _, plan := range plans {
+		lines = append(lines, plan.Line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (s scimScale) requireGroupHas(t *testing.T, id, member string) {
+	res := s.get(t, scimGroupsPath+"/"+id)
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	require.Contains(t, string(scimBody(t, res)), member)
 }
