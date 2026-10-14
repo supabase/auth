@@ -1,5 +1,7 @@
 package query
 
+import "unicode/utf8"
+
 type Clause interface {
 	SQL() (string, []any)
 }
@@ -41,4 +43,27 @@ func combine(l, r Clause, logical, op string) Clause {
 	ltext, largs := l.SQL()
 	rtext, rargs := r.SQL()
 	return predicate{"(" + ltext + " " + op + " " + rtext + ")", append(largs, rargs...)}
+}
+
+type predicate struct {
+	text string
+	args []any
+}
+
+func (p predicate) SQL() (string, []any) {
+	return p.text, p.args
+}
+
+type jsonpath string
+
+func (j jsonpath) SQL() (string, []any) {
+	return "search @@ lower(?)::jsonpath", []any{string(j)}
+}
+
+type prefix struct {
+	attribute, expression, param, text string
+}
+
+func (p prefix) SQL() (string, []any) {
+	return p.expression + " >= " + p.param + " AND " + p.expression + " < (" + p.param + " || ?)", []any{p.text, p.text, string(utf8.MaxRune)}
 }
