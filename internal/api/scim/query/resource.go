@@ -20,11 +20,11 @@ type Resource struct {
 	location   string
 }
 
-func NewResource(resourceType string, schemas core.Schemas, location string, inverses map[Edge]Edge) Resource {
+func NewResource(resourceType string, schemas core.Schemas, location string, inverses map[string]string) Resource {
 	return Resource{
 		Type:       resourceType,
 		schemas:    schemas,
-		references: referencesOf(resourceType, schemas, inverses),
+		references: referencesOf(schemas, inverses),
 		location:   location,
 	}
 }
@@ -63,7 +63,7 @@ func (r Resource) where(expression string) (Clause, error) {
 	return protocol.Filter(r.schemas, expression, evaluator(r))
 }
 
-func referencesOf(resourceType string, schemas core.Schemas, inverses map[Edge]Edge) []Reference {
+func referencesOf(schemas core.Schemas, inverses map[string]string) []Reference {
 	references := []Reference{}
 	for _, attribute := range schemas.Base().Attributes {
 		targets := resourceTypes(attribute)
@@ -71,8 +71,7 @@ func referencesOf(resourceType string, schemas core.Schemas, inverses map[Edge]E
 			continue
 		}
 		ref := Reference{attribute: attribute, targets: targets}
-		self := Edge{resourceType, ref.Name()}
-		via, inverted := inverses[self]
+		via, inverted := inverses[ref.Name()]
 		switch {
 		case inverted:
 			ref.kind, ref.via = inverse, via

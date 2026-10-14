@@ -13,16 +13,11 @@ const (
 	inverse
 )
 
-type Edge struct {
-	Type      string
-	Attribute string
-}
-
 type Reference struct {
 	attribute *core.Attribute
 	kind      kind
 	targets   []string
-	via       Edge
+	via       string
 }
 
 func (r Reference) Name() string {
