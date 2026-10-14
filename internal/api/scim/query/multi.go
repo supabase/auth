@@ -6,5 +6,12 @@ func (r Reference) exists(inner Clause) Clause {
 }
 
 func (r Reference) edgeSelect(locations map[string]string) string {
-	return `(SELECT json_agg(json_build_object('value', target_id, '$ref', ` + endpoint(locations, "target_type") + ` || target_id, 'type', target_type)) FROM scim_resource_references WHERE source_id = scim_resources.id AND attribute = ` + QuoteLiteral(r.Path()) + `)`
+	return `(SELECT json_agg(json_build_object('value', target_id, '$ref', ` + endpoint(locations, "target_type") + ` || target_id, 'type', target_type)) FROM scim_resource_references WHERE source_id = scim_resources.id AND attribute = ` + QuoteLiteral(r.Path()) + r.scoped() + `)`
+}
+
+func (r Reference) scoped() string {
+	if r.only == nil {
+		return ""
+	}
+	return ` AND target_id = any(ARRAY[` + literals(r.only) + `]::uuid[])`
 }

@@ -75,7 +75,7 @@ func Encode[T core.Resource](item T, references []query.Reference) (string, []Li
 	links := []Link{}
 	for _, reference := range references {
 		if types := reference.Targets(); types != nil {
-			links = append(links, Link{reference.Path(), types, reference.Get(document), reference.Nested()})
+			links = append(links, Link{Attribute: reference.Path(), Types: types, Values: reference.Get(document), Nested: reference.Nested()})
 		}
 		reference.Strip(document)
 	}

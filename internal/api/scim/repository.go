@@ -7,7 +7,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
-	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/api/scim/store"
 	"github.com/supabase/auth/internal/storage"
@@ -21,7 +20,7 @@ type repository[T core.Resource] struct {
 	references   []query.Reference
 }
 
-func NewRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas, inverses map[query.Edge]query.Edge) server.Repository[T] {
+func newRepository[T core.Resource](db *storage.Connection, resourceType string, locations map[string]string, schemas core.Schemas) *repository[T] {
 	return &repository[T]{
 		db:           db,
 		resourceType: resourceType,
@@ -45,7 +44,7 @@ func (r *repository[T]) List(ctx context.Context, request *protocol.SearchReques
 	if err != nil {
 		return nil, 0, err
 	}
-	scope, err := r.scope(ctx)
+	scope, err := r.scope(ctx, r.projected(ctx))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -69,7 +68,7 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 	if err != nil {
 		return zero, store.NotFound()
 	}
-	scope, err := r.scope(ctx)
+	scope, err := r.scope(ctx, r.selected(ctx))
 	if err != nil {
 		return zero, err
 	}
@@ -89,13 +88,18 @@ func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
 func (r *repository[T]) Update(ctx context.Context, item T) (T, error) {
 	common := item.Common()
 	id, _ := uuid.Parse(common.ID)
-	return r.save(ctx, item, func(scope store.Scope, document string, links []store.Link) (store.Row, error) {
-		return scope.Update(ctx, id, document, common.Meta.Version, links)
+	w := writeKey.Value(ctx)
+	saved, err := r.save(ctx, item, func(scope store.Scope, document string, links []store.Link) (store.Row, error) {
+		return scope.Update(ctx, id, document, common.Meta.Version, w.scope(links))
 	})
+	if err == nil && w != nil {
+		w.saved = true
+	}
+	return saved, err
 }
 
 func (r *repository[T]) Delete(ctx context.Context, item T) error {
-	scope, err := r.scope(ctx)
+	scope, err := r.scope(ctx, r.projected(ctx))
 	if err != nil {
 		return err
 	}
@@ -106,7 +110,7 @@ func (r *repository[T]) Delete(ctx context.Context, item T) error {
 
 func (r *repository[T]) save(ctx context.Context, item T, write func(store.Scope, string, []store.Link) (store.Row, error)) (T, error) {
 	var zero T
-	scope, err := r.scope(ctx)
+	scope, err := r.scope(ctx, r.projected(ctx))
 	if err != nil {
 		return zero, err
 	}
@@ -121,12 +125,23 @@ func (r *repository[T]) save(ctx context.Context, item T, write func(store.Scope
 	return row.Into[T](r.endpoint())
 }
 
-func (r *repository[T]) scope(ctx context.Context) (store.Scope, error) {
+func (r *repository[T]) scope(ctx context.Context, refs string) (store.Scope, error) {
 	token := tokenKey.Value(ctx)
 	if token == nil {
 		return store.Scope{}, scimerrors.ErrInternal("missing SCIM token")
 	}
-	return store.NewScope(r.db, token.SSOProviderID, r.resourceType, query.Select(r.references, protocol.ProjectionFrom(ctx), r.locations)), nil
+	return store.NewScope(r.db, token.SSOProviderID, r.resourceType, refs), nil
+}
+
+func (r *repository[T]) projected(ctx context.Context) string {
+	return query.Select(r.references, protocol.ProjectionFrom(ctx), r.locations)
+}
+
+func (r *repository[T]) selected(ctx context.Context) string {
+	if w := writeKey.Value(ctx); w != nil {
+		return query.SelectTouched(r.references, w.touched, r.locations)
+	}
+	return r.projected(ctx)
 }
 
 func (r *repository[T]) endpoint() string {

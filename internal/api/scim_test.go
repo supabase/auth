@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"uuid"
@@ -542,6 +543,56 @@ func TestSCIMGroups(t *testing.T) {
 		require.Equal(t, http.StatusOK, res.StatusCode)
 		require.Equal(t, "Group B", scimDecode[core.Group](t, res).DisplayName)
 		require.Equal(t, "Group B", c.group(t, group.ID).DisplayName)
+	})
+
+	t.Run("PATCH returns every member when it changes only displayName", func(t *testing.T) {
+		user, other := createUser(t), createUser(t)
+		group := create(t, user, other)
+
+		for _, name := range []string{"Renamed " + uuid.NewV4().String(), group.DisplayName} {
+			res := patch(t, group.ID, map[string]any{"op": "replace", "value": map[string]any{"id": group.ID, "displayName": name}})
+			require.Equal(t, http.StatusOK, res.StatusCode)
+			require.ElementsMatch(t, []core.Member{scimMember(user), scimMember(other)}, scimDecode[core.Group](t, res).Members)
+		}
+	})
+
+	t.Run("PATCH adds and removes members in one request", func(t *testing.T) {
+		kept, removed, added, absent := createUser(t), createUser(t), createUser(t), createUser(t)
+		group := create(t, kept, removed)
+
+		res := c.do(t, http.MethodPatch, scimGroupsPath+"/"+group.ID, newSCIMPatch(
+			map[string]any{"op": "Add", "path": "members", "value": []core.Member{{Value: added.ID}, {Value: kept.ID}}},
+			map[string]any{"op": "Remove", "path": `members[value eq "` + removed.ID + `"]`},
+			map[string]any{"op": "remove", "path": `members[value eq "` + absent.ID + `"]`},
+		))
+		require.Equal(t, http.StatusNoContent, res.StatusCode)
+		c.requireGroup(t, group.ID, group.DisplayName, kept.ID, added.ID)
+	})
+
+	t.Run("concurrent PATCHes add every member", func(t *testing.T) {
+		group := create(t)
+		users := []core.User{createUser(t), createUser(t), createUser(t), createUser(t), createUser(t)}
+		requests := make([]*http.Request, len(users))
+		for i, user := range users {
+			requests[i] = scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+group.ID, newSCIMPatch(map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: user.ID}}}))
+		}
+		statuses := make([]int, len(requests))
+		var wg sync.WaitGroup
+		for i, req := range requests {
+			wg.Go(func() {
+				if res, err := c.inst.DoAuth(req, c.token); err == nil {
+					statuses[i] = res.StatusCode
+					_ = res.Body.Close()
+				}
+			})
+		}
+		wg.Wait()
+		require.Equal(t, []int{204, 204, 204, 204, 204}, statuses)
+		ids := []string{}
+		for _, user := range users {
+			ids = append(ids, user.ID)
+		}
+		c.requireGroup(t, group.ID, group.DisplayName, ids...)
 	})
 
 	t.Run("PUT replaces a group", func(t *testing.T) {

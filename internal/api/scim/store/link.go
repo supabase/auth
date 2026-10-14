@@ -15,6 +15,7 @@ type Link struct {
 	Types     []string
 	Values    any
 	Nested    bool
+	Only      []string
 }
 
 func (s Scope) link(tx *storage.Connection, source uuid.UUID, l Link) error {
@@ -23,7 +24,7 @@ func (s Scope) link(tx *storage.Connection, source uuid.UUID, l Link) error {
 	if err != nil {
 		return err
 	}
-	current, err := s.findTargets(tx, source, attribute)
+	current, err := s.findTargets(tx, source, attribute, l.Only)
 	if err != nil {
 		return err
 	}

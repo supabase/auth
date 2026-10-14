@@ -20,6 +20,17 @@ func Select(references []Reference, projection protocol.Projection, locations ma
 	return "json_build_array(" + strings.Join(parts, ", ") + ")"
 }
 
+func SelectTouched(references []Reference, touched Touched, locations map[string]string) string {
+	parts := []string{}
+	for _, reference := range references {
+		if touched.Has(reference) {
+			reference.only = touched.Values(reference)
+			parts = append(parts, reference.part(locations))
+		}
+	}
+	return "json_build_array(" + strings.Join(parts, ", ") + ")"
+}
+
 func Where(schemas core.Schemas, location string, references []Reference, expression string) (Clause, error) {
 	if expression == "" {
 		return nil, nil

@@ -32,6 +32,7 @@ type Reference struct {
 	targets   []string
 	via       Edge
 	nested    bool
+	only      []string
 }
 
 func References(resourceType string, schemas core.Schemas, inverses map[Edge]Edge) []Reference {

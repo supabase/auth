@@ -109,8 +109,8 @@ func (s Scope) create(tx *storage.Connection, document string) (*Resource, error
 func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version string) (*Resource, error) {
 	resource := &Resource{}
 	if err := tx.RawQuery(
-		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND updated_at = COALESCE(?, updated_at) RETURNING "+resourceColumns,
-		document, id, s.providerID, s.resourceType, query.VersionTime(version),
+		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL AND (updated_at = COALESCE(?, updated_at) OR resource = ?::jsonb) RETURNING "+resourceColumns,
+		document, id, s.providerID, s.resourceType, query.VersionTime(version), document,
 	).First(resource); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, models.SCIMNotFoundError{}
@@ -156,12 +156,13 @@ func (s Scope) removeReferences(tx *storage.Connection, source uuid.UUID, attrib
 	).Exec(), "error removing SCIM references")
 }
 
-func (s Scope) findTargets(tx *storage.Connection, source uuid.UUID, attribute string) ([]uuid.UUID, error) {
+func (s Scope) findTargets(tx *storage.Connection, source uuid.UUID, attribute string, only []string) ([]uuid.UUID, error) {
 	targets := []uuid.UUID{}
-	err := tx.RawQuery(
-		"SELECT target_id FROM scim_resource_references WHERE source_id = ? AND attribute = ?",
-		source, attribute,
-	).All(&targets)
+	q := tx.RawQuery("SELECT target_id FROM scim_resource_references WHERE source_id = ? AND attribute = ?", source, attribute)
+	if only != nil {
+		q = tx.RawQuery("SELECT target_id FROM scim_resource_references WHERE source_id = ? AND attribute = ? AND target_id = any(?::uuid[])", source, attribute, only)
+	}
+	err := q.All(&targets)
 	return targets, errors.Wrap(err, "error finding SCIM targets")
 }
 
