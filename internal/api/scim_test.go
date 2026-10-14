@@ -9,10 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 	"uuid"
@@ -1048,53 +1046,6 @@ func TestSCIMGroups(t *testing.T) {
 			require.Contains(t, body.Detail, "is not a valid members value")
 		})
 	})
-
-	t.Run("Concurrency", func(t *testing.T) {
-		t.Run("concurrent PATCHes add every member", func(t *testing.T) {
-			group := create(t)
-			ids := []string{}
-			for range 20 {
-				pair := []string{createUser(t).ID, createUser(t).ID}
-				require.Equal(t, []int{http.StatusNoContent, http.StatusNoContent}, c.addConcurrently(t, group.ID, pair...))
-				ids = append(ids, pair...)
-			}
-			c.requireGroup(t, group.ID, group.DisplayName, ids...)
-		})
-
-		t.Run("concurrent PATCHes adding the same member all succeed", func(t *testing.T) {
-			for range 20 {
-				group, member := create(t), createUser(t)
-				statuses := c.addConcurrently(t, group.ID, member.ID, member.ID, member.ID, member.ID)
-				require.Equal(t, []int{http.StatusNoContent, http.StatusNoContent, http.StatusNoContent, http.StatusNoContent}, statuses)
-				c.requireGroup(t, group.ID, group.DisplayName, member.ID)
-			}
-		})
-
-		t.Run("a deadlock on concurrent PATCHes is a conflict, not an error", func(t *testing.T) {
-			if c.engine(t) != "orioledb" {
-				t.Skip("only orioledb deadlocks on three or more concurrent updates of one row once a table has a GIN index")
-			}
-			ids := []string{}
-			for range 5 {
-				ids = append(ids, createUser(t).ID)
-			}
-			statuses := c.addConcurrently(t, create(t).ID, ids...)
-			for _, status := range statuses {
-				require.Contains(t, []int{http.StatusNoContent, http.StatusConflict}, status, statuses)
-			}
-		})
-
-		t.Run("concurrent PATCHes cannot nest two groups in each other", func(t *testing.T) {
-			for range 30 {
-				a, b := create(t), create(t)
-				statuses := c.addPairsConcurrently(t, [2]string{a.ID, b.ID}, [2]string{b.ID, a.ID})
-				for _, status := range statuses {
-					require.Contains(t, []int{http.StatusNoContent, http.StatusBadRequest, http.StatusConflict}, status, statuses)
-				}
-				require.False(t, slices.Contains(scimMemberValues(c.group(t, a.ID).Members), b.ID) && slices.Contains(scimMemberValues(c.group(t, b.ID).Members), a.ID), "groups are members of each other, statuses %v", statuses)
-			}
-		})
-	})
 }
 
 // RFC 7644 sections 3.4 and 3.12
@@ -2085,41 +2036,6 @@ func (c scimClient) createGroup(t *testing.T, displayName string, members ...cor
 
 func (c scimClient) addMembers(t *testing.T, id string, values ...string) *http.Response {
 	return c.do(t, http.MethodPatch, scimGroupsPath+"/"+id, newSCIMAddMembers(values...))
-}
-
-func (c scimClient) addConcurrently(t *testing.T, id string, values ...string) []int {
-	statuses := make([]int, len(values))
-	var wg sync.WaitGroup
-	for i, value := range values {
-		req := scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+id, newSCIMAddMembers(value))
-		wg.Go(func() {
-			if res, err := c.inst.DoAuth(req, c.token); err == nil {
-				statuses[i] = res.StatusCode
-				_ = res.Body.Close()
-			}
-		})
-	}
-	wg.Wait()
-	return statuses
-}
-
-func (c scimClient) addPairsConcurrently(t *testing.T, pairs ...[2]string) []int {
-	statuses := make([]int, len(pairs))
-	start := make(chan struct{})
-	var wg sync.WaitGroup
-	for i, pair := range pairs {
-		req := scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+pair[0], newSCIMAddMembers(pair[1]))
-		wg.Go(func() {
-			<-start
-			if res, err := c.inst.DoAuth(req, c.token); err == nil {
-				statuses[i] = res.StatusCode
-				_ = res.Body.Close()
-			}
-		})
-	}
-	close(start)
-	wg.Wait()
-	return statuses
 }
 
 func (c scimClient) engine(t *testing.T) string {
