@@ -48,7 +48,7 @@ func (f field) unassignable(op filter.Operator) bool {
 }
 
 func (f field) leaf(op filter.Operator, value any) (Clause, error) {
-	leaf, err := f.ref.Leaf(f.attribute.Definition, op, value)
+	leaf, err := f.ref.leaf(f.attribute.Definition, op, value)
 	if err != nil || f.attribute.Parent != nil {
 		return leaf, err
 	}

@@ -80,7 +80,7 @@ func (r Reference) Strip(document core.Object) {
 	}
 }
 
-func (r Reference) Leaf(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
+func (r Reference) leaf(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
 	if r.kind != multi {
 		return nil, r.unfilterable(definition)
 	}
