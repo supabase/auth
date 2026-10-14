@@ -1,8 +1,11 @@
 package query
 
 import (
+	"strconv"
+
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 var narrowing = map[filter.Operator]bool{
@@ -22,6 +25,25 @@ type field struct {
 func (f field) isColumn() bool {
 	_, ok := columns[f.name]
 	return ok
+}
+
+func (f field) columnMatch(op filter.Operator, value any) (Clause, error) {
+	sign, ok := comparisons[op]
+	if !ok {
+		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(f.name) + " supports only eq, ne, gt, ge, lt and le")
+	}
+	text, _ := value.(string)
+	switch f.name {
+	case "id", metaLocation:
+		return uuidPredicate("id", op, text), nil
+	case "meta.version":
+		at := VersionTime(text)
+		if at == nil {
+			return boolean(op == filter.OpNotEquals), nil
+		}
+		return predicate{"updated_at" + sign + "?", []any{*at}}, nil
+	}
+	return predicate{columns[f.name] + sign + "?", []any{value}}, nil
 }
 
 func (f field) present() (Clause, error) {

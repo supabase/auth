@@ -71,7 +71,10 @@ func (e evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (
 
 func (e evaluator) assigned(f field, op filter.Operator, value any) (Clause, error) {
 	if f.isColumn() {
-		return column(f.name, e.location, op, value)
+		if f.name == metaLocation {
+			value = e.relativeLocation(value)
+		}
+		return f.columnMatch(op, value)
 	}
 	if text, ok := value.(string); ok {
 		if clause, ok := indexed(e.schemas.Base().ID, f.name, op, text, f.attribute.Definition.CaseExact); ok {
@@ -79,6 +82,15 @@ func (e evaluator) assigned(f field, op filter.Operator, value any) (Clause, err
 		}
 	}
 	return f.match(op, value)
+}
+
+func (e evaluator) relativeLocation(value any) string {
+	text, _ := value.(string)
+	id, found := strings.CutPrefix(text, e.location+"/")
+	if !found {
+		return ""
+	}
+	return id
 }
 
 func (e evaluator) field(attribute *protocol.Attribute) field {

@@ -2,21 +2,20 @@ package query
 
 import (
 	"slices"
-	"strconv"
-	"strings"
 	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
-	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
+
+const metaLocation = "meta.location"
 
 var columns = map[string]string{
 	"id":                "id",
 	"meta":              "id",
 	"meta.created":      "created_at",
 	"meta.lastModified": "updated_at",
-	"meta.location":     "id",
+	metaLocation:        "id",
 	"meta.resourceType": "resource_type",
 	"meta.version":      "updated_at",
 }
@@ -32,31 +31,6 @@ var comparisons = map[filter.Operator]string{
 	filter.OpGreaterThanEquals: " >= ",
 	filter.OpLessThan:          " < ",
 	filter.OpLessThanEquals:    " <= ",
-}
-
-func column(name, location string, op filter.Operator, value any) (Clause, error) {
-	sign, ok := comparisons[op]
-	if !ok {
-		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(name) + " supports only eq, ne, gt, ge, lt and le")
-	}
-	text, _ := value.(string)
-	switch name {
-	case "id":
-		return uuidPredicate("id", op, text), nil
-	case "meta.location":
-		id, found := strings.CutPrefix(text, location+"/")
-		if !found {
-			id = ""
-		}
-		return uuidPredicate("id", op, id), nil
-	case "meta.version":
-		at := VersionTime(text)
-		if at == nil {
-			return boolean(op == filter.OpNotEquals), nil
-		}
-		return predicate{"updated_at" + sign + "?", []any{*at}}, nil
-	}
-	return predicate{columns[name] + sign + "?", []any{value}}, nil
 }
 
 func uuidPredicate(column string, op filter.Operator, text string) Clause {
