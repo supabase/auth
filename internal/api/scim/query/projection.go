@@ -31,7 +31,7 @@ func (p projection) part(r Reference) string {
 
 func (p projection) inverse(r Reference) string {
 	via := QuoteLiteral(r.via.Attribute)
-	return `(SELECT json_agg(json_build_object('value', walk.id, '$ref', ` + QuoteLiteral(p.locations[r.via.Type]+"/") + ` || walk.id, 'type', CASE WHEN walk.depth = 1 THEN 'direct' ELSE 'indirect' END` + p.display(r, "source") + `) ORDER BY walk.depth, walk.id) FROM (WITH RECURSIVE chain (id, depth) AS (
+	return `(SELECT json_agg(json_build_object('value', walk.id, '$ref', ` + QuoteLiteral(p.locations[r.via.Type]+"/") + ` || walk.id, 'type', CASE WHEN walk.depth = 1 THEN 'direct' ELSE 'indirect' END` + r.display("source") + `) ORDER BY walk.depth, walk.id) FROM (WITH RECURSIVE chain (id, depth) AS (
 		SELECT source_id, 1 FROM scim_resource_references WHERE target_id = scim_resources.id AND attribute = ` + via + `
 		UNION
 		SELECT edge.source_id, chain.depth + 1 FROM chain JOIN scim_resource_references edge ON edge.target_id = chain.id AND edge.attribute = ` + via + ` WHERE chain.depth < ` + strconv.Itoa(MaxDepth) + `
@@ -51,12 +51,12 @@ func (p projection) scoped() string {
 
 func (p projection) single(r Reference) string {
 	value := p.value(r)
-	related := `jsonb_strip_nulls(jsonb_build_object('$ref', ` + endpoint(p.locations, "target.resource_type") + ` || target.id` + p.display(r, "target")
+	related := `jsonb_strip_nulls(jsonb_build_object('$ref', ` + endpoint(p.locations, "target.resource_type") + ` || target.id` + r.display("target")
 	return `(SELECT ` + related + `)) FROM scim_resources target WHERE target.id = (CASE WHEN ` + value + ` ~ ` + QuoteLiteral(uuidPattern) + ` THEN ` + value + ` END)::uuid` +
 		` AND target.sso_provider_id = scim_resources.sso_provider_id AND target.resource_type IN (` + literals(r.targets) + `) AND target.deleted_at IS NULL)`
 }
 
-func (p projection) display(r Reference, table string) string {
+func (r Reference) display(table string) string {
 	shown := r.shown()
 	if shown == "" {
 		return ""
@@ -64,7 +64,7 @@ func (p projection) display(r Reference, table string) string {
 	return `, ` + QuoteLiteral(shown) + `, ` + table + `.resource ->> ` + QuoteLiteral(displayNameAttribute)
 }
 
-func (p projection) keys(r Reference) []string {
+func (r Reference) keys() []string {
 	keys := []string{r.Name(), ValueAttribute}
 	if r.uri != "" {
 		keys = append([]string{string(r.uri)}, keys...)
@@ -73,7 +73,7 @@ func (p projection) keys(r Reference) []string {
 }
 
 func (p projection) value(r Reference) string {
-	return `scim_resources.resource #>> ARRAY[` + literals(p.keys(r)) + `]`
+	return `scim_resources.resource #>> ARRAY[` + literals(r.keys()) + `]`
 }
 
 func literals(values []string) string {
