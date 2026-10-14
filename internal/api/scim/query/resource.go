@@ -52,7 +52,7 @@ func (r Resource) Select(requested protocol.Projection) string {
 	parts := []string{}
 	for _, ref := range r.references {
 		if requested.Returns(ref.Name()) {
-			parts = append(parts, projection{}.part(ref))
+			parts = append(parts, ref.selection())
 		}
 	}
 	return "json_build_array(" + strings.Join(parts, ", ") + ")"
