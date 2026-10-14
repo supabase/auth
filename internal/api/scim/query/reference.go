@@ -93,7 +93,7 @@ func (r Reference) Leaf(definition *core.Attribute, op filter.Operator, value an
 	if _, ok := edgeColumns[definition.Name]; !ok && definition.Name != r.Name() {
 		return nil, r.unfilterable(definition)
 	}
-	return predicate{text: "TRUE"}, nil
+	return always, nil
 }
 
 func (r Reference) Select(locations map[string]string) string {

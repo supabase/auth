@@ -26,13 +26,13 @@ type evaluator struct {
 func (e evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
 	if value == nil {
 		if op != filter.OpEquals && op != filter.OpNotEquals {
-			return predicate{text: "false"}, nil
+			return never, nil
 		}
 		present, err := e.Present(attribute)
 		if err != nil || op == filter.OpNotEquals {
 			return present, err
 		}
-		return e.Not(present)
+		return not(present), nil
 	}
 	clause, err := e.assigned(attribute, op, value)
 	if err != nil || !e.unassignable(attribute, op) {
@@ -42,13 +42,12 @@ func (e evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, va
 	if err != nil {
 		return nil, err
 	}
-	unassigned, _ := e.Not(present)
-	return e.Or(clause, unassigned)
+	return or(clause, not(present)), nil
 }
 
 func (e evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
 	if _, ok := e.column(attribute); ok {
-		return predicate{text: "TRUE"}, nil
+		return always, nil
 	}
 	ref, ok := e.reference(attribute)
 	if !ok {
@@ -62,19 +61,15 @@ func (e evaluator) Present(attribute *protocol.Attribute) (Clause, error) {
 }
 
 func (e evaluator) And(l, r Clause) (Clause, error) {
-	return join(l, r, " && ", "AND"), nil
+	return and(l, r), nil
 }
 
 func (e evaluator) Or(l, r Clause) (Clause, error) {
-	return join(l, r, " || ", "OR"), nil
+	return or(l, r), nil
 }
 
 func (e evaluator) Not(operand Clause) (Clause, error) {
-	if path, ok := operand.(jsonpath); ok {
-		return "!(" + path + ")", nil
-	}
-	text, args := operand.SQL()
-	return predicate{"NOT (" + text + ")", args}, nil
+	return not(operand), nil
 }
 
 func (e evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (Clause, error)) (Clause, error) {
@@ -128,7 +123,7 @@ func (e evaluator) compare(attribute *protocol.Attribute, op filter.Operator, va
 	if !narrowing[op] {
 		return strict
 	}
-	return junction("AND", jsonpath(path), strict)
+	return and(jsonpath(path), strict)
 }
 
 func (e evaluator) wrap(attribute *protocol.Attribute, ref Reference, leaf Clause) Clause {
@@ -185,13 +180,4 @@ func (e evaluator) keys(attribute *protocol.Attribute) []string {
 		return []string{top.Name, attribute.Definition.Name}
 	}
 	return []string{attribute.Definition.Name}
-}
-
-func join(l, r Clause, logical, sql string) Clause {
-	lpath, lok := l.(jsonpath)
-	rpath, rok := r.(jsonpath)
-	if lok && rok {
-		return "(" + lpath + jsonpath(logical) + rpath + ")"
-	}
-	return junction(sql, l, r)
 }

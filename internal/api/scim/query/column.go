@@ -53,7 +53,7 @@ func column(name, location string, op filter.Operator, value any) (Clause, error
 	case "meta.version":
 		at := VersionTime(text)
 		if at == nil {
-			return predicate{text: strconv.FormatBool(op == filter.OpNotEquals)}, nil
+			return boolean(op == filter.OpNotEquals), nil
 		}
 		return predicate{"updated_at" + sign + "?", []any{*at}}, nil
 	}
@@ -63,7 +63,7 @@ func column(name, location string, op filter.Operator, value any) (Clause, error
 func uuidPredicate(column, sign string, op filter.Operator, text string) Clause {
 	id, err := uuid.Parse(text)
 	if err != nil {
-		return predicate{text: strconv.FormatBool(op == filter.OpNotEquals)}
+		return boolean(op == filter.OpNotEquals)
 	}
 	return predicate{column + sign + "?::uuid", []any{id.String()}}
 }
