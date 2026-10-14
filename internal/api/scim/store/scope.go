@@ -35,7 +35,7 @@ func (s Scope) Create(ctx context.Context, document string, links []Link) (Row, 
 	row, err := s.write(ctx, links, func(tx *storage.Connection) (*Resource, error) {
 		return s.create(tx, document)
 	})
-	return row, unique(err)
+	return row, conflict(err)
 }
 
 func (s Scope) Update(ctx context.Context, id uuid.UUID, document, version string, links []Link) (Row, error) {
@@ -45,7 +45,7 @@ func (s Scope) Update(ctx context.Context, id uuid.UUID, document, version strin
 	if models.IsNotFoundError(err) {
 		return row, s.missing(ctx, id)
 	}
-	return row, unique(err)
+	return row, conflict(err)
 }
 
 func (s Scope) Delete(ctx context.Context, id uuid.UUID, version string) error {
@@ -58,7 +58,7 @@ func (s Scope) Delete(ctx context.Context, id uuid.UUID, version string) error {
 	if models.IsNotFoundError(err) {
 		return s.missing(ctx, id)
 	}
-	return err
+	return conflict(err)
 }
 
 func (s Scope) missing(ctx context.Context, id uuid.UUID) error {

@@ -592,6 +592,30 @@ func TestSCIMGroups(t *testing.T) {
 		c.requireGroup(t, group.ID, group.DisplayName, ids...)
 	})
 
+	t.Run("a deadlock on concurrent PATCHes is a conflict, not an error", func(t *testing.T) {
+		var engine string
+		require.NoError(t, c.inst.Conn.RawQuery("SELECT amname FROM pg_class JOIN pg_am ON pg_am.oid = relam WHERE relname = 'scim_resources'").First(&engine))
+		if engine != "orioledb" {
+			t.Skip("only orioledb deadlocks on three or more concurrent updates of one row once a table has a GIN index")
+		}
+		group := create(t)
+		statuses := make([]int, 5)
+		var wg sync.WaitGroup
+		for i := range statuses {
+			req := scimRequest(t, http.MethodPatch, scimGroupsPath+"/"+group.ID, newSCIMPatch(map[string]any{"op": "add", "path": "members", "value": []core.Member{{Value: createUser(t).ID}}}))
+			wg.Go(func() {
+				if res, err := c.inst.DoAuth(req, c.token); err == nil {
+					statuses[i] = res.StatusCode
+					_ = res.Body.Close()
+				}
+			})
+		}
+		wg.Wait()
+		for _, status := range statuses {
+			require.Contains(t, []int{http.StatusNoContent, http.StatusConflict}, status, statuses)
+		}
+	})
+
 	t.Run("PUT replaces a group", func(t *testing.T) {
 		group := create(t, createUser(t))
 		other := createUser(t)

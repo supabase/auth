@@ -5,15 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 	"uuid"
 
 	"github.com/gobuffalo/pop/v6"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 const queryTimeout = 5 * time.Second
@@ -157,9 +159,16 @@ func NotFound() error {
 	return scimerrors.ErrNotFound("Not found")
 }
 
-func unique(err error) error {
-	if pg := utilities.NewPostgresError(err); pg != nil && pg.IsUniqueConstraintViolated() {
+func conflict(err error) error {
+	var pg *pgconn.PgError
+	if !errors.As(err, &pg) {
+		return err
+	}
+	switch pg.Code {
+	case pgerrcode.UniqueViolation:
 		return scimerrors.ErrUniqueness("resource must be unique")
+	case pgerrcode.DeadlockDetected:
+		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
 	}
 	return err
 }
