@@ -11,7 +11,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-var Columns = map[string]string{
+var columns = map[string]string{
 	"id":                "id",
 	"meta":              "id",
 	"meta.created":      "created_at",
@@ -57,7 +57,7 @@ func column(name, location string, op filter.Operator, value any) (Clause, error
 		}
 		return predicate{"updated_at" + sign + "?", []any{*at}}, nil
 	}
-	return predicate{Columns[name] + sign + "?", []any{value}}, nil
+	return predicate{columns[name] + sign + "?", []any{value}}, nil
 }
 
 func uuidPredicate(column, sign string, op filter.Operator, text string) Clause {

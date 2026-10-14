@@ -118,7 +118,7 @@ func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) 
 	if path == "meta.created" {
 		return "id" + direction, nil, nil
 	}
-	if column, ok := Columns[path]; ok {
+	if column, ok := columns[path]; ok {
 		return column + direction + ", id", nil, nil
 	}
 	if parent.MultiValued {

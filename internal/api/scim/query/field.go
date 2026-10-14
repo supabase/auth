@@ -21,7 +21,7 @@ type field struct {
 }
 
 func (f field) column() bool {
-	_, ok := Columns[f.name]
+	_, ok := columns[f.name]
 	return ok
 }
 
