@@ -189,17 +189,6 @@ func TestSCIMService(t *testing.T) {
 			}
 		})
 
-		t.Run("revoking an unknown token is not found", func(t *testing.T) {
-			bodies := []string{}
-			for _, id := range []string{"unknown", scimMissingID} {
-				res := c.admin(t, http.MethodDelete, "/admin/sso/providers/"+c.provider.ID.String()+"/scim/tokens/"+id, nil)
-				require.Equal(t, http.StatusNotFound, res.StatusCode)
-				bodies = append(bodies, string(scimBody(t, res)))
-			}
-			require.Contains(t, bodies[0], `"error_code":"sso_provider_not_found"`)
-			require.Equal(t, bodies[0], bodies[1])
-		})
-
 		t.Run("rejects a token after SCIM is disabled for the provider", func(t *testing.T) {
 			other := newSCIMClient(t, nil)
 			require.Equal(t, http.StatusOK, other.get(t, scimUsersPath).StatusCode)
@@ -267,10 +256,6 @@ func TestSCIMService(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, res.StatusCode)
 		})
 
-		t.Run("DELETE token rejects an id that is not a uuid", func(t *testing.T) {
-			require.Equal(t, http.StatusNotFound, revoke(t, "not-a-uuid").StatusCode)
-		})
-
 		t.Run("DELETE token revokes once and repeats safely", func(t *testing.T) {
 			token := create(t, nil)
 			first := revoke(t, token.ID.String())
@@ -295,8 +280,12 @@ func TestSCIMService(t *testing.T) {
 			foreign, _, err := models.CreateSCIMToken(other.inst.Conn, uuid.UUID(other.provider.ID), nil)
 			require.NoError(t, err)
 
-			for _, id := range []string{uuid.NewV7().String(), "not-a-uuid", foreign.ID.String()} {
-				require.Equal(t, http.StatusNotFound, revoke(t, id).StatusCode, id)
+			want := string(scimBody(t, revoke(t, "not-a-uuid")))
+			require.Contains(t, want, `"error_code":"sso_provider_not_found"`)
+			for _, id := range []string{uuid.NewV7().String(), foreign.ID.String()} {
+				res := revoke(t, id)
+				require.Equal(t, http.StatusNotFound, res.StatusCode, id)
+				require.Equal(t, want, string(scimBody(t, res)), id)
 			}
 		})
 	})
