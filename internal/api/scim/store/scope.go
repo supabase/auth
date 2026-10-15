@@ -96,7 +96,7 @@ func (s Scope) page(ctx context.Context, search Search) ([]Row, int, error) {
 	q := s.query(s.db)
 	if search.Where != nil {
 		text, args := search.Where.SQL()
-		q = q.Where(text, args...)
+		q = q.Where("("+text+")", args...)
 	}
 	if search.Count == 0 {
 		total, err := s.count(ctx, q)
