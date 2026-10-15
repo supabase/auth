@@ -21,7 +21,7 @@
     "supported": true
   },
   "etag": {
-    "supported": false
+    "supported": true
   },
   "authenticationSchemes": [
     {

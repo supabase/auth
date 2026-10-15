@@ -37,7 +37,7 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Ha
 		observability.GetLogEntry(r).Entry.WithError(err).Error("scim: request failed")
 	}
 
-	cfg := core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching().Sorting()
+	cfg := core.NewServiceProviderConfig().Filtering(protocol.DefaultLimits.MaxCount).Patching().Sorting().Versioning()
 	return server.New(BasePath, cfg,
 		server.ErrorHandler(errorHandler),
 		server.WithBaseURL(base),

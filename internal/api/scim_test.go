@@ -386,7 +386,7 @@ func TestSCIMUsers(t *testing.T) {
 
 			res := c.get(t, scimUsersPath+"/"+user.ID)
 			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Empty(t, res.Header.Get("ETag"))
+			require.Equal(t, user.Meta.Version, res.Header.Get("ETag"))
 			require.Equal(t, user, scimDecode[core.User](t, res))
 		})
 	})
@@ -400,13 +400,13 @@ func TestSCIMUsers(t *testing.T) {
 			require.Equal(t, core.Name{GivenName: "Babs", FamilyName: "Jensen"}, scimDecode[core.User](t, res).Name)
 		})
 
-		t.Run("PUT ignores a stale If-Match because versioning is off", func(t *testing.T) {
+		t.Run("PUT rejects a stale If-Match", func(t *testing.T) {
 			user := c.createUser(t, scimUserName("bjensen"))
 
 			req := scimRequest(t, http.MethodPut, scimUsersPath+"/"+user.ID, newSCIMUser(user.UserName, "Babs", "Jensen"))
 			req.Header.Set("Authorization", "Bearer "+c.token)
 			req.Header.Set("If-Match", `W/"stale"`)
-			require.Equal(t, http.StatusOK, c.send(t, req).StatusCode)
+			requireSCIMError(t, c.send(t, req), http.StatusPreconditionFailed, "")
 		})
 
 		t.Run("PUT rejects an invalid body", func(t *testing.T) {
@@ -933,13 +933,13 @@ func TestSCIMGroups(t *testing.T) {
 			requireSCIMError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
 		})
 
-		t.Run("PUT ignores a stale If-Match because versioning is off", func(t *testing.T) {
+		t.Run("PUT rejects a stale If-Match", func(t *testing.T) {
 			group := create(t)
 
 			req := scimRequest(t, http.MethodPut, scimGroupsPath+"/"+group.ID, newSCIMGroup(group.DisplayName))
 			req.Header.Set("Authorization", "Bearer "+c.token)
 			req.Header.Set("If-Match", `W/"stale"`)
-			require.Equal(t, http.StatusOK, c.send(t, req).StatusCode)
+			requireSCIMError(t, c.send(t, req), http.StatusPreconditionFailed, "")
 		})
 
 		t.Run("PUT accepts a displayName that another group has", func(t *testing.T) {

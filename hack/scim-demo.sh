@@ -258,9 +258,9 @@ section "RFC 7644 s4: discovery"
 call 200 GET "$SCIM/ServiceProviderConfig" "$SCIM_TOKEN"
 expect_header Content-Type '^application/scim\+json'
 expect '.schemas == ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"]'
-expect '.patch.supported and .filter.supported and .sort.supported'
+expect '.patch.supported and .filter.supported and .sort.supported and .etag.supported'
 expect '.filter.maxResults == 100'
-expect '(.bulk.supported | not) and (.changePassword.supported | not) and (.etag.supported | not)'
+expect '(.bulk.supported | not) and (.changePassword.supported | not)'
 expect '.authenticationSchemes | length > 0'
 call 200 GET "$SCIM/ResourceTypes/User" "$SCIM_TOKEN"
 expect '.endpoint == "/Users" and .schema == "urn:ietf:params:scim:schemas:core:2.0:User"'
