@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase/auth/internal/api/scim/query"
+	"github.com/supabase-community/scim-go/pkg/server"
 )
 
 type Row struct {
@@ -36,7 +36,7 @@ func (r Row) Into[T core.Resource](endpoint string) (T, error) {
 		Created:      r.CreatedAt.UTC(),
 		LastModified: r.UpdatedAt.UTC(),
 		Location:     endpoint + "/" + common.ID,
-		Version:      query.Version(r.UpdatedAt),
+		Version:      server.WeakETag(r.UpdatedAt),
 	}
 	return item, nil
 }
