@@ -109,7 +109,7 @@ func AuthenticateSCIMToken(tx *storage.Connection, plaintext string) (*SCIMToken
   UPDATE %[1]q AS t SET last_used_at = now()
   FROM authenticated AS a
   WHERE t.id = a.id
-    AND (a.last_used_at IS NULL OR a.last_used_at < now() - interval '1 minute')
+    AND (t.last_used_at IS NULL OR t.last_used_at < now() - interval '1 minute')
   RETURNING t.*
 )
 SELECT * FROM touched
