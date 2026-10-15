@@ -9,6 +9,11 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+var sortKeyPaths = map[string]string{
+	"User":  "userName",
+	"Group": "displayName",
+}
+
 func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) {
 	if request.SortBy == "" {
 		return "id", nil, nil
@@ -30,6 +35,9 @@ func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) 
 	}
 	if column, ok := columns[path]; ok {
 		return column + direction + ", id", nil, nil
+	}
+	if sortKeyPaths[r.Type] == path && !attribute.CaseExact {
+		return "sort_key" + direction + ", id", nil, nil
 	}
 	value, args := r.sortValue(parent, attribute)
 	return value + ` COLLATE "C"` + direction + ", id", args, nil
