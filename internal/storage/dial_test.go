@@ -11,6 +11,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/observability"
 	"golang.org/x/sync/errgroup"
 )
@@ -37,7 +38,7 @@ func TestGetExcludedColumns_InvalidName(t *testing.T) {
 
 func TestTransaction(t *testing.T) {
 	apiTestConfig := "../../hack/test.env"
-	config, err := conf.LoadGlobal(apiTestConfig)
+	config, err := confload.LoadGlobal(apiTestConfig)
 	require.NoError(t, err)
 	conn, err := Dial(config)
 	require.NoError(t, err)
@@ -70,7 +71,7 @@ func TestPopConnToStd(t *testing.T) {
 	defer cancel()
 
 	apiTestConfig := "../../hack/test.env"
-	config, err := conf.LoadGlobal(apiTestConfig)
+	config, err := confload.LoadGlobal(apiTestConfig)
 	require.NoError(t, err)
 
 	cd, err := newConnectionDetails(config)
@@ -477,7 +478,7 @@ func TestConnLimits(t *testing.T) {
 
 func mustConfig(t *testing.T) *conf.GlobalConfiguration {
 	apiTestConfig := "../../hack/test.env"
-	config, err := conf.LoadGlobal(apiTestConfig)
+	config, err := confload.LoadGlobal(apiTestConfig)
 	require.NoError(t, err)
 
 	config.Tracing.Enabled = true

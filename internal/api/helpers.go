@@ -57,6 +57,8 @@ type RequestParams interface {
 		PKCEGrantParams |
 		PasswordGrantParams |
 		RecoverParams |
+		RecoveryCodesGenerateParams |
+		RecoveryCodesVerifyParams |
 		RefreshTokenGrantParams |
 		ResendConfirmationParams |
 		SignupParams |

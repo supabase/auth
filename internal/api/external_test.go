@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 )
@@ -42,6 +44,54 @@ func (ts *ExternalTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 }
 
+func (ts *ExternalTestSuite) TestAutomaticLinkIdentityWritesAuditLog() {
+	existingUser, err := ts.createUser("", "automatic-link@example.com", "", "", "")
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), existingUser.Confirm(ts.API.db))
+
+	userData := &provider.UserProvidedData{
+		Metadata: &provider.Claims{
+			Subject:       "automatic-link-subject",
+			Email:         existingUser.GetEmail(),
+			EmailVerified: true,
+		},
+		Emails: []provider.Email{{
+			Email:    existingUser.GetEmail(),
+			Primary:  true,
+			Verified: true,
+		}},
+	}
+	r := httptest.NewRequest(http.MethodGet, "/callback", nil)
+	r.RemoteAddr = "192.0.2.1:1234"
+
+	decision, user, err := ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.LinkAccount, decision)
+	require.Equal(ts.T(), existingUser.ID, user.ID)
+
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, userData.Metadata.Subject, "google")
+	require.NoError(ts.T(), err)
+	logs, err := models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1)
+	require.Equal(ts.T(), string(models.IdentityLinkAction), logs[0].Payload["action"])
+	require.Equal(ts.T(), "user", logs[0].Payload["log_type"])
+	traits, ok := logs[0].Payload["traits"].(map[string]any)
+	require.True(ts.T(), ok)
+	require.Equal(ts.T(), identity.ID.String(), traits["identity_id"])
+	require.Equal(ts.T(), "google", traits["provider"])
+	require.Equal(ts.T(), userData.Metadata.Subject, traits["provider_id"])
+	require.Equal(ts.T(), "192.0.2.1", logs[0].IPAddress)
+
+	decision, _, err = ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.AccountExists, decision)
+
+	logs, err = models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1, "signing in with an existing identity must not emit another audit log")
+}
+
 func (ts *ExternalTestSuite) createUser(providerId string, email string, name string, avatar string, confirmationToken string) (*models.User, error) {
 	// Cleanup existing user, if they already exist
 	if u, _ := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud); u != nil {
@@ -61,7 +111,7 @@ func (ts *ExternalTestSuite) createUser(providerId string, email string, name st
 	ts.Require().NoError(ts.API.db.Create(u), "Error creating user")
 
 	if confirmationToken != "" {
-		ts.Require().NoError(models.CreateOneTimeToken(ts.API.db, u.ID, email, u.ConfirmationToken, models.ConfirmationToken), "Error creating one-time confirmation/invite token")
+		ts.Require().NoError(models.CreateOneTimeToken(ts.API.db, u.ID, email, u.ConfirmationToken, models.ConfirmationToken, ts.Config.Mailer.OtpExpAsDuration(), true), "Error creating one-time confirmation/invite token")
 	}
 
 	i, err := models.NewIdentity(u, "email", map[string]interface{}{
@@ -93,7 +143,7 @@ func (ts *ExternalTestSuite) createUserWithIdentity(providerType, providerId str
 	ts.Require().NoError(ts.API.db.Create(u), "Error creating user")
 
 	if confirmationToken != "" {
-		ts.Require().NoError(models.CreateOneTimeToken(ts.API.db, u.ID, email, u.ConfirmationToken, models.ConfirmationToken), "Error creating one-time confirmation/invite token")
+		ts.Require().NoError(models.CreateOneTimeToken(ts.API.db, u.ID, email, u.ConfirmationToken, models.ConfirmationToken, ts.Config.Mailer.OtpExpAsDuration(), true), "Error creating one-time confirmation/invite token")
 	}
 
 	if email != "" {
@@ -282,6 +332,50 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	ts.Equal(w.Code, http.StatusBadRequest)
 }
 
+// TestAuthorizeStripsReservedOAuthParams verifies that OAuth params the auth
+// server controls (see reservedOAuthParams in custom_oauth_admin.go) cannot
+// be overridden by passing them as query params on the /authorize request -
+// they must be stripped before being forwarded to the provider's authorize
+// URL. code_challenge/code_challenge_method are exercised by the dedicated
+// PKCE tests instead, since they go through separate validation.
+func (ts *ExternalTestSuite) TestAuthorizeStripsReservedOAuthParams() {
+	authorizeURL := "http://localhost/authorize?" + url.Values{
+		"provider":      {"github"},
+		"client_id":     {"attacker-client-id"},
+		"client_secret": {"attacker-client-secret"},
+		"redirect_uri":  {"https://evil.example/callback"},
+		"response_type": {"token"},
+		"state":         {"attacker-controlled-state"},
+		"code_verifier": {"attacker-code-verifier"},
+		"login_hint":    {"user@example.com"}, // non-reserved: should still pass through
+	}.Encode()
+
+	req := httptest.NewRequest(http.MethodGet, authorizeURL, nil)
+	req.Header.Set("Referer", "https://example.netlify.com/admin")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.Require().Equal(http.StatusFound, w.Code)
+
+	u, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err, "redirect url parse failed")
+	q := u.Query()
+
+	// the auth server's own values are used, not the attacker-supplied ones
+	ts.Equal("testclientid", q.Get("client_id"))
+	ts.Equal("https://identity.services.netlify.com/callback", q.Get("redirect_uri"))
+	ts.Equal("code", q.Get("response_type"))
+	assertValidOAuthState(ts, q.Get("state"), "github")
+
+	// none of the attacker-supplied reserved values made it through
+	ts.Empty(q.Get("client_secret"), "client_secret should never be forwarded to the provider")
+	ts.NotEqual("attacker-code-verifier", q.Get("code_verifier"))
+
+	// a non-reserved param is still forwarded, proving the loop isn't
+	// stripping everything
+	ts.Equal("user@example.com", q.Get("login_hint"))
+}
+
 func (ts *ExternalTestSuite) TestRedirectErrorsShouldPreserveParams() {
 	// Request with invalid external provider
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=external", nil)
@@ -461,4 +555,84 @@ func (ts *ExternalTestSuite) TestPKCEFlowStateReuseRejected() {
 	ts.Require().NoError(err)
 	ts.Contains(errorQuery.Get("error_description"), "already been used",
 		"second callback with same state should be rejected as already used")
+}
+
+// startAfterUserCreatedHookServer points the after-user-created hook at a test
+// server and returns its invocation count.
+func startAfterUserCreatedHookServer(ts *ExternalTestSuite) (calls func() int, cleanup func()) {
+	var mu sync.Mutex
+	count := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		count++
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	}))
+
+	ts.Config.Hook.AfterUserCreated = conf.ExtensibilityPointConfiguration{
+		Enabled: true,
+		URI:     server.URL,
+	}
+
+	calls = func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return count
+	}
+	cleanup = func() {
+		server.Close()
+		ts.Config.Hook.AfterUserCreated = conf.ExtensibilityPointConfiguration{}
+	}
+
+	return calls, cleanup
+}
+
+// TestAfterUserCreatedHookOnlyFiresOnAccountCreation signs in twice with the same
+// GitHub account and asserts the hook fires only for the first sign-in.
+func (ts *ExternalTestSuite) TestAfterUserCreatedHookOnlyFiresOnAccountCreation() {
+	hookCalls, cleanup := startAfterUserCreatedHookServer(ts)
+	defer cleanup()
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
+	ts.Require().Equal(1, hookCalls())
+
+	// Signing in again resolves to models.AccountExists.
+	u = performAuthorization(ts, "github", code, "")
+	v, err := url.ParseQuery(u.Fragment)
+	ts.Require().NoError(err)
+	ts.Require().NotEmpty(v.Get("access_token"), "second sign-in should succeed")
+
+	ts.Require().Equal(1, hookCalls(), "hook must not fire again for a returning user")
+}
+
+// TestAfterUserCreatedHookNotFiredOnIdentityLinking signs in with GitHub as a user
+// who already has an email identity and asserts the hook does not fire.
+func (ts *ExternalTestSuite) TestAfterUserCreatedHookNotFiredOnIdentityLinking() {
+	hookCalls, cleanup := startAfterUserCreatedHookServer(ts)
+	defer cleanup()
+
+	// The existing email identity makes this resolve to models.LinkAccount.
+	_, err := ts.createUser("123", "github@example.com", "GitHub Test", "http://example.com/avatar", "")
+	ts.Require().NoError(err)
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
+
+	ts.Require().Equal(0, hookCalls(), "hook must not fire when an identity is linked to an existing user")
 }

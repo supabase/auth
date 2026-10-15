@@ -6,8 +6,21 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/sync/singleflight"
 )
+
+// oidcSupportedAlgorithms mirrors the set that go-oidc's discovery path filters
+// against internally. We duplicate it here because the manual ProviderConfig
+// path doesn't go through that filter — without it, a misconfigured upstream
+// could push a verifier into accepting algorithms go-oidc doesn't actually
+// support. Keep in sync with go-oidc's supportedAlgorithms.
+var oidcSupportedAlgorithms = map[string]bool{
+	"RS256": true, "RS384": true, "RS512": true,
+	"ES256": true, "ES384": true, "ES512": true,
+	"PS256": true, "PS384": true, "PS512": true,
+	"EdDSA": true,
+}
 
 type oidcCacheEntry struct {
 	provider  *oidc.Provider
@@ -36,6 +49,27 @@ func NewOIDCProviderCache(ttl time.Duration) *OIDCProviderCache {
 	}
 }
 
+// getEntry returns the cached entry for issuer, if any. It holds the read lock
+// only for the map access and releases it via defer, so a panic in a future
+// caller can't leave the mutex held and deadlock the auth server.
+func (c *OIDCProviderCache) getEntry(issuer string) (*oidcCacheEntry, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	entry, ok := c.cache[issuer]
+	return entry, ok
+}
+
+// putEntry stores provider for issuer, stamped with the current time. The write
+// lock is released via defer for the same panic-safety reason as getEntry.
+func (c *OIDCProviderCache) putEntry(issuer string, provider *oidc.Provider) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache[issuer] = &oidcCacheEntry{
+		provider:  provider,
+		fetchedAt: c.now(),
+	}
+}
+
 // GetProvider returns a cached *oidc.Provider for the given issuer, fetching
 // it via oidc.NewProvider if not cached or expired. Concurrent requests for
 // the same issuer are deduplicated via singleflight.
@@ -43,12 +77,9 @@ func (c *OIDCProviderCache) GetProvider(ctx context.Context, issuer string) (*oi
 	now := c.now()
 
 	// Fast path: read-lock check
-	c.mu.RLock()
-	if entry, ok := c.cache[issuer]; ok && now.Sub(entry.fetchedAt) < c.ttl {
-		c.mu.RUnlock()
+	if entry, ok := c.getEntry(issuer); ok && now.Sub(entry.fetchedAt) < c.ttl {
 		return entry.provider, nil
 	}
-	c.mu.RUnlock()
 
 	// Slow path: singleflight fetch
 	val, err, _ := c.sf.Do(issuer, func() (interface{}, error) {
@@ -57,24 +88,65 @@ func (c *OIDCProviderCache) GetProvider(ctx context.Context, issuer string) (*oi
 			return nil, err
 		}
 
-		c.mu.Lock()
-		c.cache[issuer] = &oidcCacheEntry{
-			provider:  p,
-			fetchedAt: c.now(),
-		}
-		c.mu.Unlock()
-
+		c.putEntry(issuer, p)
 		return p, nil
 	})
 	if err != nil {
 		// Serve stale entry if available — keeps auth working during
 		// transient network failures or issuer outages.
-		c.mu.RLock()
-		if entry, ok := c.cache[issuer]; ok {
-			c.mu.RUnlock()
+		if entry, ok := c.getEntry(issuer); ok {
 			return entry.provider, nil
 		}
-		c.mu.RUnlock()
+		return nil, err
+	}
+
+	return val.(*oidc.Provider), nil
+}
+
+// GetProviderFromURL returns an *oidc.Provider built from an explicit discovery URL,
+// rather than the standard {issuer}/.well-known/openid-configuration path.
+// The result is cached and deduplicated (singleflight) under the issuer key,
+// so Invalidate(issuer) continues to work unchanged.
+func (c *OIDCProviderCache) GetProviderFromURL(ctx context.Context, issuer, discoveryURL string) (*oidc.Provider, error) {
+	now := c.now()
+
+	// Fast path: read-lock check
+	if entry, ok := c.getEntry(issuer); ok && now.Sub(entry.fetchedAt) < c.ttl {
+		return entry.provider, nil
+	}
+
+	// Slow path: singleflight fetch
+	val, err, _ := c.sf.Do(issuer, func() (interface{}, error) {
+		doc, err := utilities.FetchAndValidateOIDCDiscovery(ctx, discoveryURL, issuer)
+		if err != nil {
+			return nil, err
+		}
+
+		var algs []string
+		for _, a := range doc.IDTokenSigningAlgValuesSupported {
+			if oidcSupportedAlgorithms[a] {
+				algs = append(algs, a)
+			}
+		}
+
+		p := (&oidc.ProviderConfig{
+			IssuerURL:   doc.Issuer,
+			AuthURL:     doc.AuthorizationEndpoint,
+			TokenURL:    doc.TokenEndpoint,
+			UserInfoURL: doc.UserinfoEndpoint,
+			JWKSURL:     doc.JwksURI,
+			Algorithms:  algs,
+		}).NewProvider(ctx)
+
+		c.putEntry(issuer, p)
+		return p, nil
+	})
+	if err != nil {
+		// Serve stale entry if available — keeps auth working during
+		// transient network failures or issuer outages.
+		if entry, ok := c.getEntry(issuer); ok {
+			return entry.provider, nil
+		}
 		return nil, err
 	}
 

@@ -82,7 +82,7 @@ func (t *TwilioVerifyProvider) SendSms(phone, message, channel string) (string, 
 		return "", err
 	}
 	defer utilities.SafeClose(res.Body)
-	if !(res.StatusCode == http.StatusOK || res.StatusCode == http.StatusCreated) {
+	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
 		resp := &twilioErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 			return "", err

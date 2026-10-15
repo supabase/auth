@@ -28,6 +28,12 @@ import (
 
 const retryLoopDuration = 5.0
 
+// OAuth2 server grant type values
+const (
+	GrantTypeAuthorizationCode = "authorization_code"
+	GrantTypeRefreshToken      = "refresh_token"
+)
+
 // AMRClaim supports unmarshalling AMR as either strings or AMREntry objects.
 type AMRClaim []models.AMREntry
 
@@ -627,7 +633,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 			newTokenResponse = &AccessTokenResponse{
 				Token:        tokenString,
 				TokenType:    "bearer",
-				ExpiresIn:    config.JWT.Exp,
+				ExpiresIn:    int(expiresAt - s.now().Unix()),
 				ExpiresAt:    expiresAt,
 				RefreshToken: issuedToken,
 				User:         user,
@@ -647,6 +653,14 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 			}
 		}
 		metering.RecordLogin(metering.LoginTypeToken, user.ID, nil)
+		if sessionClientID != nil {
+			metering.RecordLogin(metering.LoginTypeOAuthServer, user.ID, &metering.LoginData{
+				OAuthServer: &metering.OAuthServerData{
+					ClientID:  sessionClientID.String(),
+					GrantType: GrantTypeRefreshToken,
+				},
+			})
+		}
 		return newTokenResponse, nil
 	}
 
@@ -655,6 +669,8 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 
 // GenerateAccessToken generates an access token using shared logic
 func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, params GenerateAccessTokenParams) (string, int64, error) {
+	ctx := r.Context()
+
 	config := s.config
 	if params.SessionID == nil {
 		return "", 0, apierrors.NewInternalServerError("Session is required to issue access token")
@@ -671,6 +687,18 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 
 	issuedAt := s.now().UTC()
 	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
+
+	if config.Sessions.AllowLowAAL != nil && *config.Sessions.AllowLowAAL != 0 && models.CompareAAL(aal, params.User.HighestPossibleAAL()) < 0 {
+		// if user has mfa enabled and the session has not yet been upgraded
+		// and Limit duration of AAL1 sessions is enabled
+		// expiresAt should be set to the maximum duration for low aal sessions
+		// don't allow sessions.AllowLowAAL to exceed config.JWT.Exp
+		lowAALExp := session.CreatedAt.UTC().Add(*config.Sessions.AllowLowAAL)
+		if lowAALExp.Before(expiresAt) {
+			expiresAt = lowAALExp
+		}
+	}
+
 	var clientID string
 	if params.ClientID != nil && *params.ClientID != uuid.Nil {
 		clientID = params.ClientID.String()
@@ -724,7 +752,7 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		gotrueClaims = jwt.MapClaims(output.Claims)
 	}
 
-	signed, err := SignJWT(&config.JWT, gotrueClaims)
+	signed, err := SignJWT(ctx, &config.JWT, gotrueClaims)
 	if err != nil {
 		return "", 0, err
 	}
@@ -739,7 +767,7 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 // - email: email, email_verified
 // - profile: name, picture, updated_at, preferred_username
 // - phone: phone_number, phone_number_verified
-func (s *Service) GenerateIDToken(params GenerateIDTokenParams) (string, error) {
+func (s *Service) GenerateIDToken(ctx context.Context, params GenerateIDTokenParams) (string, error) {
 	config := s.config
 
 	signingJwk, err := conf.GetSigningJwk(&s.config.JWT)
@@ -833,7 +861,7 @@ func (s *Service) GenerateIDToken(params GenerateIDTokenParams) (string, error) 
 	}
 
 	// Sign the ID token with the same key as access tokens
-	signed, err := SignJWT(&config.JWT, claims)
+	signed, err := SignJWT(ctx, &config.JWT, claims)
 	if err != nil {
 		return "", err
 	}
@@ -872,6 +900,10 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 
 			if terr := tx.Create(session); terr != nil {
 				return apierrors.NewInternalServerError("Database error creating new session").WithInternalError(terr)
+			}
+
+			if terr := user.UpdateLastSignInAt(tx); terr != nil {
+				return apierrors.NewInternalServerError("Database error updating user's last_sign_in_at").WithInternalError(terr)
 			}
 
 			signingKey, _, terr := session.GetRefreshTokenHmacKey(config.Security.DBEncryption)
@@ -932,7 +964,7 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 	return &AccessTokenResponse{
 		Token:        tokenString,
 		TokenType:    "bearer",
-		ExpiresIn:    config.JWT.Exp,
+		ExpiresIn:    int(expiresAt - s.now().Unix()),
 		ExpiresAt:    expiresAt,
 		RefreshToken: refreshToken,
 		User:         user,
@@ -940,7 +972,7 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 }
 
 // SignJWT signs a JWT token with the configured signing key
-func SignJWT(config *conf.JWTConfiguration, claims jwt.Claims) (string, error) {
+func SignJWT(ctx context.Context, config *conf.JWTConfiguration, claims jwt.Claims) (string, error) {
 	signingJwk, err := conf.GetSigningJwk(config)
 	if err != nil {
 		return "", err
@@ -958,7 +990,7 @@ func SignJWT(config *conf.JWTConfiguration, claims jwt.Claims) (string, error) {
 	}
 	// this serializes the aud claim to a string
 	jwt.MarshalSingleStringAsArray = false
-	signingKey, err := conf.GetSigningKey(signingJwk)
+	signingKey, err := config.SigningKey(ctx)
 	if err != nil {
 		return "", err
 	}

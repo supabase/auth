@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
 )
@@ -31,7 +32,7 @@ func (ts *SessionsTestSuite) SetupTest() {
 }
 
 func TestSession(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
+	globalConfig, err := confload.LoadGlobal(modelsTestConfig)
 	require.NoError(t, err)
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
@@ -54,6 +55,36 @@ func (ts *SessionsTestSuite) TestFindBySessionIDWithForUpdate() {
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), session.ID, found.ID)
+}
+
+func (ts *SessionsTestSuite) TestInvalidateSessionsWithAALLessThan() {
+	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	aal1Session, err := NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(aal1Session))
+
+	// Simulates a legacy session created before the aal column was backfilled.
+	legacySession := &Session{ID: uuid.Must(uuid.NewV4()), UserID: u.ID, AAL: nil}
+	require.NoError(ts.T(), ts.db.Create(legacySession))
+
+	aal2Session, err := NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	aal2Session.AAL = AAL2.PointerString()
+	require.NoError(ts.T(), ts.db.Create(aal2Session))
+
+	require.NoError(ts.T(), InvalidateSessionsWithAALLessThan(ts.db, u.ID, AAL2.String()))
+
+	_, err = FindSessionByID(ts.db, aal1Session.ID, false)
+	require.ErrorIs(ts.T(), err, SessionNotFoundError{})
+
+	_, err = FindSessionByID(ts.db, legacySession.ID, false)
+	require.ErrorIs(ts.T(), err, SessionNotFoundError{})
+
+	found, err := FindSessionByID(ts.db, aal2Session.ID, false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), aal2Session.ID, found.ID)
 }
 
 func (ts *SessionsTestSuite) AddClaimAndReloadSession(session *Session, claim AuthenticationMethod) *Session {

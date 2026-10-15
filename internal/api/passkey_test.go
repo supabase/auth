@@ -85,6 +85,22 @@ func (ts *PasskeyTestSuite) generateToken(user *models.User, sessionID *uuid.UUI
 	return token
 }
 
+// enrollVerifiedFactor creates a verified TOTP MFA factor for the user so that
+// user.HasMFAEnabled() returns true, exercising the passkey AAL2 step-up gate.
+func (ts *PasskeyTestSuite) enrollVerifiedFactor(user *models.User) *models.Factor {
+	f := models.NewTOTPFactor(user, fmt.Sprintf("factor-%s", uuid.Must(uuid.NewV4()).String()[:8]))
+	require.NoError(ts.T(), f.SetSecret("secretkey", ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey))
+	require.NoError(ts.T(), ts.API.db.Create(f))
+	require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStateVerified))
+	return f
+}
+
+// elevateSessionToAAL2 marks the session as AAL2 in the database, simulating a
+// completed MFA verification.
+func (ts *PasskeyTestSuite) elevateSessionToAAL2(session *models.Session, factorID uuid.UUID) {
+	require.NoError(ts.T(), session.UpdateAALAndAssociatedFactor(ts.API.db, models.AAL2, &factorID))
+}
+
 // requestOption configures an HTTP request built by makeRequest.
 type requestOption func(*http.Request)
 

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/apilimiter"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
@@ -29,7 +30,7 @@ func init() {
 // Using this function allows us to keep track of the database connection
 // and cleaning up data between tests.
 func setupAPIForTest(opts ...Option) (*API, *conf.GlobalConfiguration, error) {
-	config, err := conf.LoadGlobal(apiTestConfig)
+	config, err := confload.LoadGlobal(apiTestConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -43,7 +44,7 @@ func setupAPIForTest(opts ...Option) (*API, *conf.GlobalConfiguration, error) {
 }
 
 func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Connection)) (*API, *conf.GlobalConfiguration, error) {
-	config, err := conf.LoadGlobal(apiTestConfig)
+	config, err := confload.LoadGlobal(apiTestConfig)
 	if err != nil {
 		return nil, nil, err
 	}

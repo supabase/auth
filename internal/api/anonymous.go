@@ -24,7 +24,7 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	params.Aud = aud
-	params.Provider = "anonymous"
+	params.Provider = AnonymousProvider
 
 	newUser, err := params.ToUserModel(false /* <- isSSOUser */)
 	if err != nil {

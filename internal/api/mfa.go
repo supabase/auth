@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/aaronarduino/goqrsvg"
@@ -77,8 +75,6 @@ type WebAuthnChallengeData struct {
 }
 
 type WebAuthnParams struct {
-	RPID               string          `json:"rpId,omitempty"`
-	RPOrigins          []string        `json:"rpOrigins,omitempty"`
 	Type               string          `json:"type"` // "create" or "request"
 	CredentialResponse json.RawMessage `json:"credential_response"`
 }
@@ -87,39 +83,14 @@ type UnenrollFactorResponse struct {
 	ID uuid.UUID `json:"id"`
 }
 
-func (w *WebAuthnParams) ToConfig() (*webauthn.WebAuthn, error) {
-	if w.RPID == "" {
-		return nil, fmt.Errorf("webAuthn RP ID cannot be empty")
-	}
+func (a *API) getWebAuthnMFA() (*webauthn.WebAuthn, error) {
+	rpConfig := a.config.WebAuthn
 
-	if len(w.RPOrigins) == 0 {
-		return nil, fmt.Errorf("webAuthn RP Origins cannot be empty")
-	}
-
-	var validOrigins []string
-	var invalidOrigins []string
-
-	for _, origin := range w.RPOrigins {
-		parsedURL, err := url.Parse(origin)
-		if err != nil || (parsedURL.Scheme != "https" && !(parsedURL.Scheme == "http" && parsedURL.Hostname() == "localhost")) || parsedURL.Host == "" {
-			invalidOrigins = append(invalidOrigins, origin)
-		} else {
-			validOrigins = append(validOrigins, origin)
-		}
-	}
-
-	if len(invalidOrigins) > 0 {
-		return nil, fmt.Errorf("invalid RP origins: %s", strings.Join(invalidOrigins, ", "))
-	}
-
-	wconfig := &webauthn.Config{
-		// DisplayName is optional in spec but required to be non-empty in libary, we use the RPID as a placeholder.
-		RPDisplayName: w.RPID,
-		RPID:          w.RPID,
-		RPOrigins:     validOrigins,
-	}
-
-	return webauthn.New(wconfig)
+	return webauthn.New(&webauthn.Config{
+		RPDisplayName: rpConfig.RPDisplayName,
+		RPID:          rpConfig.RPID,
+		RPOrigins:     rpConfig.RPOrigins,
+	})
 }
 
 const (
@@ -161,6 +132,37 @@ func validateFactors(db *storage.Connection, user *models.User, newFactorName st
 	}
 
 	return nil
+}
+
+func isFactorTypeVerifyEnabled(config *conf.GlobalConfiguration, factorType string) bool {
+	switch factorType {
+	case models.TOTP:
+		return config.MFA.TOTP.VerifyEnabled
+	case models.Phone:
+		return config.MFA.Phone.VerifyEnabled
+	case models.WebAuthn:
+		return config.MFA.WebAuthn.VerifyEnabled
+	case models.RecoveryCode:
+		return config.MFA.RecoveryCodes.VerifyEnabled
+	default:
+		return false
+	}
+}
+
+// hasUsableNonRecoveryFactor reports whether the user has a second factor,
+// other than recovery codes, that can actually be used at sign-in (verified and enabled in config).
+func hasUsableNonRecoveryFactor(config *conf.GlobalConfiguration, factors []models.Factor, excludeID uuid.UUID) bool {
+	for _, f := range factors {
+		if f.ID == excludeID || !f.IsVerified() || f.IsRecoveryCodeFactor() {
+			continue
+		}
+
+		if isFactorTypeVerifyEnabled(config, f.FactorType) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *EnrollFactorParams) error {
@@ -500,10 +502,7 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
-	if params.WebAuthn == nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "web_authn config required")
-	}
-	webAuthn, err := params.WebAuthn.ToConfig()
+	webAuthn, err := a.getWebAuthnMFA()
 	if err != nil {
 		return err
 	}
@@ -917,7 +916,7 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 	case params.WebAuthn.CredentialResponse == nil:
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "credential_response required")
 	default:
-		webAuthn, err = params.WebAuthn.ToConfig()
+		webAuthn, err = a.getWebAuthnMFA()
 		if err != nil {
 			return err
 		}
@@ -1067,6 +1066,10 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewInternalServerError("A valid session and factor are required to unenroll a factor")
 	}
 
+	if factor.IsRecoveryCodeFactor() {
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeValidationFailed, "Recovery codes cannot be unenrolled with this endpoint, use DELETE /factors/recovery-codes")
+	}
+
 	if factor.IsVerified() && !session.IsAAL2() {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeInsufficientAAL, "AAL2 required to unenroll verified factor")
 	}
@@ -1075,6 +1078,25 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
+
+		// Recovery codes can never be a user's only second factor.
+		if factor.IsVerified() {
+			_, terr := models.FindRecoveryCodeSetForUpdate(tx, user.ID)
+			if terr == nil {
+				if terr := tx.Load(user, "Factors"); terr != nil {
+					return apierrors.NewInternalServerError("Database error loading factors").WithInternalError(terr)
+				}
+
+				if !hasUsableNonRecoveryFactor(config, user.Factors, factor.ID) {
+					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFARecoveryCodesSoleFactor, "Recovery codes cannot be the only verified factor. Please enroll another factor before unenrolling this one or delete your recovery codes.")
+				}
+			} else if !models.IsNotFoundError(terr) {
+				return apierrors.NewInternalServerError("Database error locking recovery code set").WithInternalError(terr)
+			}
+
+			// no recovery codes are enrolled, nothing to protect.
+		}
+
 		if terr := tx.Destroy(factor); terr != nil {
 			return terr
 		}

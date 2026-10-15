@@ -42,9 +42,9 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 	}
 
 	switch true {
-	case p.Provider == "apple" || provider.IsAppleIssuer(p.Issuer):
+	case p.Provider == AppleProvider || provider.IsAppleIssuer(p.Issuer):
 		cfg = &config.External.Apple
-		providerType = "apple"
+		providerType = AppleProvider
 
 		detectedIssuer, err := provider.DetectAppleIDTokenIssuer(ctx, p.IdToken)
 		if err != nil {
@@ -66,13 +66,13 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 			acceptableClientIDs = append(acceptableClientIDs, config.External.IosBundleId)
 		}
 
-	case p.Provider == "google" || p.Issuer == provider.IssuerGoogle:
+	case p.Provider == GoogleProvider || p.Issuer == provider.IssuerGoogle:
 		cfg = &config.External.Google
-		providerType = "google"
+		providerType = GoogleProvider
 		issuer = provider.IssuerGoogle
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Google.ClientID...)
 
-	case p.Provider == "azure" || provider.IsAzureIssuer(p.Issuer):
+	case p.Provider == AzureProvider || provider.IsAzureIssuer(p.Issuer):
 		detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
 		if err != nil {
 			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
@@ -88,38 +88,38 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 
 		issuer = detectedIssuer
 		cfg = &config.External.Azure
-		providerType = "azure"
+		providerType = AzureProvider
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Azure.ClientID...)
 
-	case p.Provider == "facebook" || p.Issuer == provider.IssuerFacebook:
+	case p.Provider == FacebookProvider || p.Issuer == provider.IssuerFacebook:
 		cfg = &config.External.Facebook
 		// Facebook (Limited Login) nonce check is not supported
 		cfg.SkipNonceCheck = true
-		providerType = "facebook"
+		providerType = FacebookProvider
 		issuer = provider.IssuerFacebook
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Facebook.ClientID...)
 
-	case p.Provider == "keycloak" || (config.External.Keycloak.Enabled && config.External.Keycloak.URL != "" && p.Issuer == config.External.Keycloak.URL):
+	case p.Provider == KeycloakProvider || (config.External.Keycloak.Enabled && config.External.Keycloak.URL != "" && p.Issuer == config.External.Keycloak.URL):
 		cfg = &config.External.Keycloak
-		providerType = "keycloak"
+		providerType = KeycloakProvider
 		issuer = config.External.Keycloak.URL
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Keycloak.ClientID...)
 
-	case p.Provider == "kakao" || p.Issuer == provider.IssuerKakao:
+	case p.Provider == KakaoProvider || p.Issuer == provider.IssuerKakao:
 		cfg = &config.External.Kakao
-		providerType = "kakao"
+		providerType = KakaoProvider
 		issuer = provider.IssuerKakao
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Kakao.ClientID...)
 
-	case p.Provider == "vercel_marketplace" || p.Issuer == provider.IssuerVercelMarketplace:
+	case p.Provider == VercelMarketplaceProvider || p.Issuer == provider.IssuerVercelMarketplace:
 		cfg = &config.External.VercelMarketplace
-		providerType = "vercel_marketplace"
+		providerType = VercelMarketplaceProvider
 		issuer = provider.IssuerVercelMarketplace
 		acceptableClientIDs = append(acceptableClientIDs, config.External.VercelMarketplace.ClientID...)
 
-	case p.Provider == "snapchat" || p.Issuer == provider.IssuerSnapchat:
+	case p.Provider == SnapchatProvider || p.Issuer == provider.IssuerSnapchat:
 		cfg = &config.External.Snapchat
-		providerType = "snapchat"
+		providerType = SnapchatProvider
 		issuer = provider.IssuerSnapchat
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Snapchat.ClientID...)
 
@@ -186,7 +186,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 	}
 
 	oidcCtx := ctx
-	if providerType == "apple" {
+	if providerType == AppleProvider {
 		oidcCtx = oidc.InsecureIssuerURLContext(ctx, issuer)
 	}
 
@@ -244,7 +244,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	var oidcConfig *oidc.Config
 
-	if providerType == "apple" {
+	if providerType == AppleProvider {
 		oidcConfig = &oidc.Config{
 			SkipClientIDCheck: true,
 			SkipIssuerCheck:   true,

@@ -92,7 +92,7 @@ type CreateSSOProviderParams struct {
 }
 
 func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
-	if !forUpdate && p.Type != "saml" {
+	if !forUpdate && p.Type != SAMLProvider {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only 'saml' supported for SSO provider type")
 	} else if p.MetadataURL != "" && p.MetadataXML != "" {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only one of metadata_xml or metadata_url needs to be set")

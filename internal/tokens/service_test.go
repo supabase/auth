@@ -15,9 +15,11 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -61,7 +63,7 @@ func (ts *RefreshTokenV2Suite) SetupTest() {
 }
 
 func (ts *RefreshTokenV2Suite) config() *conf.GlobalConfiguration {
-	config, err := conf.LoadGlobal("../../hack/test.env")
+	config, err := confload.LoadGlobal("../../hack/test.env")
 	if err != nil {
 		panic("failed to load config")
 	}
@@ -149,6 +151,104 @@ func (ts *RefreshTokenV2Suite) TestNormalUse() {
 
 		refreshTokenToUse = nrt.RefreshToken
 	}
+}
+
+func (ts *RefreshTokenV2Suite) TestUpdatesLastSignInAt() {
+	config := ts.config()
+	require.Equal(ts.T(), 2, config.Security.RefreshTokenAlgorithmVersion)
+
+	require.Nil(ts.T(), ts.User.LastSignInAt)
+
+	clock := time.Now()
+
+	srv := NewService(config, &panicHookManager{})
+	srv.SetTimeFunc(func() time.Time {
+		return clock
+	})
+
+	req, err := http.NewRequest("POST", "https://example.com/", nil)
+	require.NoError(ts.T(), err)
+
+	req = req.WithContext(context.Background())
+	responseHeaders := make(http.Header)
+
+	_, err = srv.IssueRefreshToken(
+		req,
+		responseHeaders,
+		ts.Conn,
+		ts.User,
+		models.PasswordGrant,
+		models.GrantParams{},
+	)
+	require.NoError(ts.T(), err)
+
+	dbUser, err := models.FindUserByID(ts.Conn, ts.User.ID)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), dbUser.LastSignInAt)
+	require.WithinDuration(ts.T(), clock, *dbUser.LastSignInAt, time.Second)
+}
+
+func (ts *RefreshTokenV2Suite) TestOAuthServerRefreshRecordsAdditiveLoginMetric() {
+	config := ts.config()
+
+	oauthClient := &models.OAuthServerClient{
+		ID:                      uuid.Must(uuid.NewV4()),
+		ClientSecretHash:        "test-hash",
+		RegistrationType:        "dynamic",
+		ClientType:              models.OAuthServerClientTypeConfidential,
+		TokenEndpointAuthMethod: "client_secret_basic",
+		RedirectURIs:            "https://example.com/callback",
+		GrantTypes:              "authorization_code,refresh_token",
+	}
+	require.NoError(ts.T(), models.CreateOAuthServerClient(ts.Conn, oauthClient))
+	clientID := oauthClient.ID
+
+	srv := NewService(config, &panicHookManager{})
+
+	req, err := http.NewRequest("POST", "https://example.com/", nil)
+	require.NoError(ts.T(), err)
+	req = req.WithContext(context.Background())
+	responseHeaders := make(http.Header)
+
+	at, err := srv.IssueRefreshToken(
+		req,
+		responseHeaders,
+		ts.Conn,
+		ts.User,
+		models.OAuthProviderAuthorizationCode,
+		models.GrantParams{OAuthClientID: &clientID},
+	)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), at)
+
+	hook := logrustest.NewGlobal()
+	defer hook.Reset()
+
+	responseHeaders = make(http.Header)
+	nrt, err := srv.RefreshTokenGrant(context.Background(), ts.Conn, req, responseHeaders, RefreshTokenGrantParams{
+		RefreshToken: at.RefreshToken,
+		ClientID:     &clientID,
+	})
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), nrt)
+
+	var sawGenericToken, sawOAuthServerRefresh bool
+	for _, entry := range hook.AllEntries() {
+		if entry.Data["action"] != "login" {
+			continue
+		}
+		switch entry.Data["login_method"] {
+		case "token":
+			sawGenericToken = true
+			require.NotContains(ts.T(), entry.Data, "client_id")
+		case "oauth_server":
+			sawOAuthServerRefresh = true
+			require.Equal(ts.T(), clientID.String(), entry.Data["client_id"])
+			require.Equal(ts.T(), "refresh_token", entry.Data["grant_type"])
+		}
+	}
+	require.True(ts.T(), sawGenericToken, "existing generic token refresh login event must still fire")
+	require.True(ts.T(), sawOAuthServerRefresh, "additive oauth_server login event must fire with client_id and grant_type=refresh_token")
 }
 
 func (ts *RefreshTokenV2Suite) TestMaliciousReuse() {
@@ -779,7 +879,7 @@ func parseIDTokenClaims(idToken string, config *conf.GlobalConfiguration) (jwt.M
 		if kid, ok := token.Header["kid"]; ok {
 			if kidStr, ok := kid.(string); ok {
 				// Find the public key by kid for asymmetric verification
-				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				key, err := conf.FindPublicKeyByKid(context.Background(), kidStr, &config.JWT)
 				if err != nil {
 					return nil, err
 				}
@@ -806,7 +906,7 @@ type IDTokenTestSuite struct {
 func TestIDTokenGeneration(t *testing.T) {
 	ts := &IDTokenTestSuite{}
 
-	config, err := conf.LoadGlobal("../../hack/test_asymmetric.env")
+	config, err := confload.LoadGlobal("../../hack/test_asymmetric.env")
 	require.NoError(t, err)
 
 	conn, err := test.SetupDBConnection(config)
@@ -851,7 +951,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithAllScopes() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail, models.ScopeProfile, models.ScopePhone},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -882,7 +982,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithOnlyOpenIDScope() {
 		Scopes:   []string{models.ScopeOpenID},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -915,7 +1015,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithEmailScope() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -945,7 +1045,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithProfileScope() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeProfile},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -975,7 +1075,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithPhoneScope() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopePhone},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -1005,7 +1105,7 @@ func (ts *IDTokenTestSuite) TestIDTokenWithMultipleScopes() {
 		Scopes:   []string{models.ScopeOpenID, models.ScopeEmail, models.ScopeProfile},
 	}
 
-	idToken, err := srv.GenerateIDToken(params)
+	idToken, err := srv.GenerateIDToken(context.Background(), params)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), idToken)
 
@@ -1191,4 +1291,115 @@ func TestAsRedirectURL(t *testing.T) {
 	// Verify Supabase Auth identifier is present
 	require.Contains(t, fragment, "sb", "Fragment should contain Supabase Auth identifier 'sb'")
 	require.Equal(t, "", fragment.Get("sb"), "Supabase Auth identifier should have empty value")
+}
+
+func TestGenerateAccessTokenAllowLowAAL(t *testing.T) {
+	config, err := confload.LoadGlobal("../../hack/test.env")
+	require.NoError(t, err)
+
+	conn, err := test.SetupDBConnection(config)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	allowLowAAL := 5 * time.Minute
+
+	req, err := http.NewRequest("POST", "https://example.com/", nil)
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Truncate(time.Second)
+
+	t.Run("AAL1 session for MFA user uses AllowLowAAL expiry", func(t *testing.T) {
+		models.TruncateAll(conn)
+
+		u, err := models.NewUser("", "test@example.com", "password", "authenticated", nil)
+		require.NoError(t, err)
+		require.NoError(t, conn.Create(u))
+
+		// Add a verified TOTP factor so HighestPossibleAAL() returns AAL2
+		factor := models.NewFactor(u, "my-totp", models.TOTP, models.FactorStateVerified)
+		require.NoError(t, conn.Create(factor))
+		require.NoError(t, conn.Eager().Find(u, u.ID))
+
+		session, err := models.NewSession(u.ID, nil)
+		require.NoError(t, err)
+		// Session stays at AAL1 (default)
+		require.NoError(t, conn.Create(session))
+
+		cfg := *config
+		cfg.Sessions.AllowLowAAL = &allowLowAAL
+
+		srv := NewService(&cfg, &panicHookManager{})
+		srv.SetTimeFunc(func() time.Time { return now })
+
+		_, expiresAt, err := srv.GenerateAccessToken(req, conn, GenerateAccessTokenParams{
+			User:                 u,
+			SessionID:            &session.ID,
+			AuthenticationMethod: models.PasswordGrant,
+		})
+		require.NoError(t, err)
+		require.Equal(t, session.CreatedAt.UTC().Add(allowLowAAL).Unix(), expiresAt)
+	})
+
+	t.Run("AAL2 session for MFA user uses standard JWT expiry", func(t *testing.T) {
+		models.TruncateAll(conn)
+
+		u, err := models.NewUser("", "test2@example.com", "password", "authenticated", nil)
+		require.NoError(t, err)
+		require.NoError(t, conn.Create(u))
+
+		factor := models.NewFactor(u, "my-totp", models.TOTP, models.FactorStateVerified)
+		require.NoError(t, conn.Create(factor))
+		require.NoError(t, conn.Eager().Find(u, u.ID))
+
+		session, err := models.NewSession(u.ID, &factor.ID)
+		require.NoError(t, err)
+		aal2 := models.AAL2.String()
+		session.AAL = &aal2
+		require.NoError(t, conn.Create(session))
+		require.NoError(t, models.AddClaimToSession(conn, session.ID, models.TOTPSignIn))
+
+		cfg := *config
+		cfg.Sessions.AllowLowAAL = &allowLowAAL
+
+		srv := NewService(&cfg, &panicHookManager{})
+		srv.SetTimeFunc(func() time.Time { return now })
+
+		_, expiresAt, err := srv.GenerateAccessToken(req, conn, GenerateAccessTokenParams{
+			User:                 u,
+			SessionID:            &session.ID,
+			AuthenticationMethod: models.PasswordGrant,
+		})
+		require.NoError(t, err)
+		require.Equal(t, now.Add(time.Second*time.Duration(config.JWT.Exp)).Unix(), expiresAt)
+	})
+
+	t.Run("AAL1 session without AllowLowAAL uses standard JWT expiry", func(t *testing.T) {
+		models.TruncateAll(conn)
+
+		u, err := models.NewUser("", "test3@example.com", "password", "authenticated", nil)
+		require.NoError(t, err)
+		require.NoError(t, conn.Create(u))
+
+		factor := models.NewFactor(u, "my-totp", models.TOTP, models.FactorStateVerified)
+		require.NoError(t, conn.Create(factor))
+		require.NoError(t, conn.Eager().Find(u, u.ID))
+
+		session, err := models.NewSession(u.ID, nil)
+		require.NoError(t, err)
+		require.NoError(t, conn.Create(session))
+
+		cfg := *config
+		cfg.Sessions.AllowLowAAL = nil
+
+		srv := NewService(&cfg, &panicHookManager{})
+		srv.SetTimeFunc(func() time.Time { return now })
+
+		_, expiresAt, err := srv.GenerateAccessToken(req, conn, GenerateAccessTokenParams{
+			User:                 u,
+			SessionID:            &session.ID,
+			AuthenticationMethod: models.PasswordGrant,
+		})
+		require.NoError(t, err)
+		require.Equal(t, now.Add(time.Second*time.Duration(config.JWT.Exp)).Unix(), expiresAt)
+	})
 }

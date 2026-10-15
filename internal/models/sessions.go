@@ -105,6 +105,21 @@ func (Session) TableName() string {
 	return tableName
 }
 
+func (s *Session) IsRecovery() bool {
+	for _, claim := range s.AMRClaims {
+		amStr := claim.GetAuthenticationMethod()
+		am, err := ParseAuthenticationMethod(amStr)
+		if err != nil {
+			// We want to assert this is a recovery session, skip invalid.
+			continue
+		}
+		if am.IsRecovery() {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Session) GetRefreshTokenHmacKey(dbEncryption conf.DatabaseEncryptionConfiguration) ([]byte, bool, error) {
 	if s.RefreshTokenHmacKey == nil {
 		return nil, false, nil
@@ -336,7 +351,7 @@ func updateFactorAssociatedSessions(tx *storage.Connection, userID, factorID uui
 }
 
 func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level string) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND aal < ?", userID, level).Exec()
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND (aal IS NULL OR aal < ?)", userID, level).Exec()
 }
 
 // Logout deletes all sessions for a user.

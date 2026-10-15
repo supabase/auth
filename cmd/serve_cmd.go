@@ -17,6 +17,7 @@ import (
 	"github.com/supabase/auth/internal/api/apilimiter"
 	"github.com/supabase/auth/internal/api/apiworker"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/reloader"
 	"github.com/supabase/auth/internal/storage"
@@ -32,15 +33,9 @@ var serveCmd = cobra.Command{
 }
 
 func serve(ctx context.Context) {
-	if err := conf.LoadFile(configFile); err != nil {
-		logrus.WithError(err).Fatal("unable to load config")
-	}
+	configLoader := confload.NewLoader()
 
-	if err := conf.LoadDirectory(watchDir); err != nil {
-		logrus.WithError(err).Error("unable to load config from watch dir")
-	}
-
-	config, err := conf.LoadGlobalFromEnv()
+	config, err := configLoader.Startup(configFile, watchDir)
 	if err != nil {
 		logrus.WithError(err).Fatal("unable to load config")
 	}
@@ -93,11 +88,11 @@ func serve(ctx context.Context) {
 
 		var err error
 		defer func() {
-			logFn := wrkLog.Info
-			if err != nil {
-				logFn = wrkLog.WithError(err).Error
+			exitFn := wrkLog.Info
+			if err != nil && !errors.Is(err, context.Canceled) {
+				exitFn = wrkLog.WithError(err).Error
 			}
-			logFn("background apiworker is exiting")
+			exitFn("background apiworker is exiting")
 		}()
 
 		// Work exits when ctx is done as in-flight requests do not depend
@@ -125,7 +120,7 @@ func serve(ctx context.Context) {
 			var err error
 			defer func() {
 				exitFn := le.Info
-				if err != nil {
+				if err != nil && !errors.Is(err, context.Canceled) {
 					exitFn = le.WithError(err).Error
 				}
 				exitFn("config reloader is exiting")
@@ -161,10 +156,11 @@ func serve(ctx context.Context) {
 				previousLim = latestLim
 			}
 
-			rl := reloader.NewReloader(rc, watchDir)
-			if err = rl.Watch(ctx, fn); err != nil {
-				log.WithError(err).Error("config reloader is exiting")
+			rlFunc := func(dir string) (*conf.GlobalConfiguration, error) {
+				return configLoader.Reload(dir)
 			}
+			rl := reloader.NewReloaderFunc(rc, watchDir, rlFunc)
+			err = rl.Watch(ctx, fn)
 		}()
 	}
 

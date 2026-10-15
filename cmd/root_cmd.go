@@ -6,6 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/observability"
 )
 
@@ -27,6 +28,7 @@ func RootCommand() *cobra.Command {
 	rootCmd.AddCommand(&serveCmd, &migrateCmd, &versionCmd, adminCmd())
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "base configuration file to load")
 	rootCmd.PersistentFlags().StringVarP(&watchDir, "config-dir", "d", "", "directory containing a sorted list of config files to watch for changes")
+	migrateCmd.Flags().BoolVarP(&migrateVerbose, "verbose", "v", false, "print the name of each migration as it is applied")
 	return &rootCmd
 }
 
@@ -35,7 +37,9 @@ func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
 		panic("context must not be nil")
 	}
 
-	config, err := conf.LoadGlobal(configFile)
+	configLoader := confload.NewLoader()
+
+	config, err := configLoader.Startup(configFile, watchDir)
 	if err != nil {
 		logrus.Fatalf("Failed to load configuration: %+v", err)
 	}

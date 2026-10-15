@@ -96,8 +96,9 @@ type IdentityLinkedMailCall struct {
 }
 
 type IdentityUnlinkedMailCall struct {
-	User     *models.User
-	Provider string
+	User           *models.User
+	Provider       string
+	RecipientEmail string
 }
 
 type MFAFactorEnrolledMailCall struct {
@@ -213,10 +214,11 @@ func (m *MockMailer) IdentityLinkedNotificationMail(r *http.Request, user *model
 	return nil
 }
 
-func (m *MockMailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
+func (m *MockMailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider, recipientEmail string) error {
 	m.IdentityUnlinkedMailCalls = append(m.IdentityUnlinkedMailCalls, IdentityUnlinkedMailCall{
-		User:     user,
-		Provider: provider,
+		User:           user,
+		Provider:       provider,
+		RecipientEmail: recipientEmail,
 	})
 	return nil
 }

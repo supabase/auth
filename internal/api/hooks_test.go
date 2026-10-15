@@ -369,7 +369,7 @@ func (ts *HooksTestSuite) TestAccountChangesNotificationsHookPayload() {
 				externalHost, err := url.Parse("http://example.com")
 				require.NoError(ts.T(), err)
 				req = req.WithContext(withExternalHost(req.Context(), externalHost))
-				return ts.API.sendIdentityUnlinkedNotification(req, ts.API.db, ts.TestUser, "github")
+				return ts.API.sendIdentityUnlinkedNotification(req, ts.API.db, ts.TestUser, "github", "notification@example.com")
 			},
 		},
 		{

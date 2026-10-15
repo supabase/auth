@@ -165,25 +165,6 @@ type emailValidator struct {
 	blockedMXRecords map[string]bool
 }
 
-func (m *emailValidator) MailNew(
-	ctx context.Context,
-	to, subject, body string,
-	headers map[string][]string,
-	typ string,
-) error {
-	return nil
-}
-
-func (m *emailValidator) Mail(
-	ctx context.Context,
-	to, subjectTemplate, templateURL, defaultTemplate string,
-	templateData map[string]any,
-	headers map[string][]string,
-	typ string,
-) error {
-	return nil
-}
-
 func newEmailValidator(mc conf.MailerConfiguration) *emailValidator {
 	return &emailValidator{
 		extended:         mc.EmailValidationExtended,

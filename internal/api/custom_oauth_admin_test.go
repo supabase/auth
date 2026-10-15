@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,8 +11,8 @@ import (
 	"testing"
 
 	popslices "github.com/gobuffalo/pop/v6/slices"
-	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/gofrs/uuid"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -596,6 +597,56 @@ func (ts *CustomOAuthAdminTestSuite) TestUpdateProvider() {
 	assert.Equal(ts.T(), popslices.String{"openid", "profile", "email"}, updated.Scopes)
 }
 
+func (ts *CustomOAuthAdminTestSuite) TestCustomClaimsAllowlistCreateUpdateGet() {
+	payload := ts.createTestOAuth2Payload("allowlist-provider")
+	payload["custom_claims_allowlist"] = []string{"groups", "org_id"}
+
+	w := ts.createProvider(payload, http.StatusCreated)
+
+	var created models.CustomOAuthProvider
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&created))
+	assert.Equal(ts.T(), popslices.String{"groups", "org_id"}, created.CustomClaimsAllowlist)
+
+	// PUT replaces the allowlist.
+	updatePayload := map[string]interface{}{
+		"custom_claims_allowlist": []string{"mail", "sn", "nlEduPersonProfileId"},
+	}
+	var body bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&body).Encode(updatePayload))
+
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/custom-providers/%s", created.Identifier), &body)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var updated models.CustomOAuthProvider
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&updated))
+	assert.Equal(ts.T(), popslices.String{"mail", "sn", "nlEduPersonProfileId"}, updated.CustomClaimsAllowlist)
+
+	// GET returns the persisted allowlist.
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/custom-providers/%s", created.Identifier), nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var fetched models.CustomOAuthProvider
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&fetched))
+	assert.Equal(ts.T(), popslices.String{"mail", "sn", "nlEduPersonProfileId"}, fetched.CustomClaimsAllowlist)
+}
+
+func (ts *CustomOAuthAdminTestSuite) TestCustomClaimsAllowlistRejectsEmptyEntries() {
+	payload := ts.createTestOAuth2Payload("allowlist-bad")
+	payload["custom_claims_allowlist"] = []string{"groups", ""}
+
+	w := ts.createProvider(payload, http.StatusBadRequest)
+
+	var apiErr apierrors.HTTPError
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&apiErr))
+	assert.Equal(ts.T(), apierrors.ErrorCodeValidationFailed, apiErr.ErrorCode)
+}
+
 // Test DELETE /admin/custom-providers/:id (Delete)
 
 func (ts *CustomOAuthAdminTestSuite) TestDeleteProvider() {
@@ -623,6 +674,40 @@ func (ts *CustomOAuthAdminTestSuite) TestDeleteProvider() {
 	ts.API.handler.ServeHTTP(w, req)
 
 	require.Equal(ts.T(), http.StatusNotFound, w.Code)
+}
+
+// TestLoadCustomProviderRedirectURLFallsBackToAPIExternalURL verifies that,
+// absent a CustomOAuth.ExternalURL override, the redirect URI is built from
+// config.API.ExternalURL exactly as before this feature existed.
+func (ts *CustomOAuthAdminTestSuite) TestLoadCustomProviderRedirectURLFallsBackToAPIExternalURL() {
+	ts.Config.CustomOAuth.ExternalURL = ""
+
+	w := ts.createProvider(ts.createTestOAuth2Payload("redirect-fallback"), http.StatusCreated)
+	var created models.CustomOAuthProvider
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&created))
+
+	_, pConfig, err := ts.API.loadCustomProvider(context.Background(), ts.API.db, created.Identifier, "")
+	require.NoError(ts.T(), err)
+
+	expected := strings.TrimRight(ts.Config.API.ExternalURL, "/") + "/callback"
+	require.Equal(ts.T(), expected, pConfig.RedirectURI)
+}
+
+// TestLoadCustomProviderRedirectURLUsesOverride verifies that, when
+// CustomOAuth.ExternalURL is set, it takes precedence over
+// config.API.ExternalURL when building the redirect URI.
+func (ts *CustomOAuthAdminTestSuite) TestLoadCustomProviderRedirectURLUsesOverride() {
+	ts.Config.CustomOAuth.ExternalURL = "https://custom.example.com/"
+	defer func() { ts.Config.CustomOAuth.ExternalURL = "" }()
+
+	w := ts.createProvider(ts.createTestOAuth2Payload("redirect-override"), http.StatusCreated)
+	var created models.CustomOAuthProvider
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&created))
+
+	_, pConfig, err := ts.API.loadCustomProvider(context.Background(), ts.API.db, created.Identifier, "")
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), "https://custom.example.com/callback", pConfig.RedirectURI)
 }
 
 // Helper methods

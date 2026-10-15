@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -272,8 +274,9 @@ func (u *User) UpdateAppMetaDataProviders(tx *storage.Connection) error {
 }
 
 // UpdateUserEmail updates the user's email to one of the identity's email
-// if the current email used doesn't match any of the identities email
-func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
+// if the current email used doesn't match any of the identities email.
+// Unverified identity emails remain confirmed when mailer autoconfirm is enabled.
+func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection, mailerAutoconfirm bool) error {
 	identities, terr := FindIdentitiesByUserID(tx, u.ID)
 	if terr != nil {
 		return terr
@@ -285,6 +288,31 @@ func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 			return nil
 		}
 	}
+
+	// We select identities in the following order of priority:
+	// 	1. identities whose email was verified by the identity provider
+	// 	2. identities with an unverified email
+	// 	3. identities without an email (e.g. phone)
+	identityRank := func(i *Identity) int {
+		switch {
+		case i.GetEmail() == "":
+			return 2
+		case !i.IsEmailVerified():
+			return 1
+		default:
+			return 0
+		}
+	}
+	sort.SliceStable(identities, func(a, b int) bool {
+		ia, ib := identities[a], identities[b]
+		if ra, rb := identityRank(ia), identityRank(ib); ra != rb {
+			return ra < rb
+		}
+		if !ia.CreatedAt.Equal(ib.CreatedAt) {
+			return ia.CreatedAt.Before(ib.CreatedAt)
+		}
+		return ia.ID.String() < ib.ID.String()
+	})
 
 	var primaryIdentity *Identity
 	for _, i := range identities {
@@ -305,13 +333,65 @@ func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 	if terr := u.SetEmail(tx, primaryIdentity.GetEmail()); terr != nil {
 		return terr
 	}
-	if primaryIdentity.GetEmail() == "" {
+	// outstanding tokens and pending account changes were issued before the
+	// primary email transition so they can't be trusted anymore
+	if terr := u.ClearAllPendingTokens(tx); terr != nil {
+		return terr
+	}
+	if primaryIdentity.GetEmail() == "" || (!primaryIdentity.IsEmailVerified() && !mailerAutoconfirm) {
+		// the promoted email was neither verified by the IdP nor covered by
+		// the project's autoconfirm policy, so it can't remain confirmed
 		u.EmailConfirmedAt = nil
 		if terr := tx.UpdateOnly(u, "email_confirmed_at"); terr != nil {
 			return terr
 		}
+		if terr := u.UpdateUserMetaData(tx, map[string]any{
+			"email_verified": false,
+		}); terr != nil {
+			return terr
+		}
 	}
 	return nil
+}
+
+// ClearAllPendingTokens revokes all outstanding confirmation, recovery,
+// email change, phone change and reauthentication tokens issued for the
+// user, together with their one-time token rows.
+func (u *User) ClearAllPendingTokens(tx *storage.Connection) error {
+	u.ConfirmationToken = ""
+	u.ConfirmationSentAt = nil
+	u.RecoveryToken = ""
+	u.RecoverySentAt = nil
+	u.EmailChange = ""
+	u.EmailChangeTokenCurrent = ""
+	u.EmailChangeTokenNew = ""
+	u.EmailChangeSentAt = nil
+	u.EmailChangeConfirmStatus = 0
+	u.PhoneChange = ""
+	u.PhoneChangeToken = ""
+	u.PhoneChangeSentAt = nil
+	u.ReauthenticationToken = ""
+	u.ReauthenticationSentAt = nil
+	if terr := tx.UpdateOnly(
+		u,
+		"confirmation_token",
+		"confirmation_sent_at",
+		"recovery_token",
+		"recovery_sent_at",
+		"email_change",
+		"email_change_token_current",
+		"email_change_token_new",
+		"email_change_sent_at",
+		"email_change_confirm_status",
+		"phone_change",
+		"phone_change_token",
+		"phone_change_sent_at",
+		"reauthentication_token",
+		"reauthentication_sent_at",
+	); terr != nil {
+		return terr
+	}
+	return ClearAllOneTimeTokensForUser(tx, u.ID)
 }
 
 // SetEmail sets the user's email
@@ -775,11 +855,76 @@ func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Paginat
 	return users, err
 }
 
+// FindUsersInAudienceKeyset finds users with the matching audience using
+// keyset (cursor-based) pagination. Unlike FindUsersInAudience it issues no
+// COUNT(*) and no OFFSET: it resumes from the cursor in p.After (if any) and
+// fetches p.Limit+1 rows so the caller can detect whether another page exists.
+//
+// Ordering is (created_at, id) in the direction of the first sort field
+// (default DESC). The id tiebreaker is required because created_at is not
+// unique; without it a page boundary inside a same-timestamp group would skip
+// or duplicate rows.
+func FindUsersInAudienceKeyset(tx *storage.Connection, aud string, p *KeysetPagination, sortParams *SortParams, filter string) ([]*User, error) {
+	users := []*User{}
+	q := tx.Q().Where("instance_id = ? and aud = ?", uuid.Nil, aud)
+
+	if filter != "" {
+		lf := "%" + filter + "%"
+		// we must specify the collation in order to get case insensitive search for the JSON column
+		q = q.Where("(email LIKE ? OR raw_user_meta_data->>'full_name' ILIKE ?)", lf, lf)
+	}
+
+	dir := Descending
+	if sortParams != nil && len(sortParams.Fields) > 0 {
+		// Keyset pagination is only valid over created_at, which is exactly
+		// what the cursor encodes; ordering by any other column would compare
+		// rows against the cursor's timestamp value, which is meaningless.
+		// Restricting the sort field is the caller's responsibility (e.g. the
+		// admin handler's sort allowlist) — this guard makes misuse fail loudly
+		// instead of silently mis-sorting.
+		if sortParams.Fields[0].Name != CreatedAt {
+			return nil, errors.Errorf("keyset pagination only supports ordering by %q", CreatedAt)
+		}
+		dir = sortParams.Fields[0].Dir
+	}
+
+	if p != nil && p.After != nil {
+		// Row-value comparison, NOT the equivalent
+		// (created_at <dir> ? OR (created_at = ? AND id <dir> ?)) form. Postgres
+		// can push a row comparison's leading column into the btree as a range
+		// bound (Index Cond: created_at <= ?) and seek straight to the cursor.
+		// The OR form forces a full index scan + filter
+		if dir == Ascending {
+			q = q.Where("(created_at, id) > (?, ?)", p.After.CreatedAt, p.After.ID)
+		} else {
+			q = q.Where("(created_at, id) < (?, ?)", p.After.CreatedAt, p.After.ID)
+		}
+	}
+
+	q = q.Order("created_at " + string(dir)).Order("id " + string(dir))
+
+	if p != nil {
+		limit := p.Limit
+		// callers cap the page size well below this; the guard keeps the +1
+		// below from overflowing if one ever doesn't
+		if limit > math.MaxInt-1 {
+			limit = math.MaxInt - 1
+		}
+		q = q.Limit(int(limit + 1)) // #nosec G115 -- bounded above
+	}
+
+	if err := q.All(&users); err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
 // IsDuplicatedEmail returns whether a user exists with a matching email and
 // audience importantly in the *default* identity linking domain (meaning SSO
 // accounts and similar are not considered).
 // If a currentUser is provided, we will need to filter out any identities that belong to the current user.
-func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *User, ownDomainProviders []string) (*User, error) {
+func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *User, linkingDomains map[string]string) (*User, error) {
 	var identities []Identity
 
 	if err := tx.Eager().Q().Where("email = ?", strings.ToLower(email)).All(&identities); err != nil {
@@ -793,7 +938,7 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 	userIDs := make(map[string]uuid.UUID)
 	for _, identity := range identities {
 		if _, ok := userIDs[identity.UserID.String()]; !ok {
-			if GetAccountLinkingDomain(identity.Provider, ownDomainProviders) == "default" {
+			if GetAccountLinkingDomain(identity.Provider, linkingDomains) == "default" {
 				userIDs[identity.UserID.String()] = identity.UserID
 			}
 		}

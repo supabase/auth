@@ -1,10 +1,12 @@
 .env*
 vendor/
+tools/bin/
 gotrue
 gotrue-arm64
 gotrue.exe
 auth
 auth-arm64
+auth-amd64
 auth-arm64-strip
 auth-darwin-arm64
 auth.exe
@@ -19,3 +21,4 @@ www/.DS_Store
 www/node_modules
 npm-debug.log
 .data
+tmp

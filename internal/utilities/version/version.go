@@ -80,6 +80,9 @@ func parseSemver(ver string) (*versionInfo, error) {
 	vi := &versionInfo{
 		Original: ver,
 	}
+	if ver == "" {
+		ver = "0.0.0-unknown"
+	}
 
 	ver = normalizeVersion(ver)
 	sv, err := semver.NewVersion(ver)

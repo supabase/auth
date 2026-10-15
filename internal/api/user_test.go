@@ -435,10 +435,16 @@ func (ts *UserTestSuite) TestUserUpdatePasswordViaRecovery() {
 			expected:     expected{code: http.StatusOK, isAuthenticated: true},
 		},
 		{
+			desc:         "Current password not required in PKCE recovery flow",
+			newPassword:  "newpassword789",
+			recoveryType: models.Recovery,
+			expected:     expected{code: http.StatusOK, isAuthenticated: true},
+		},
+		{
 			desc:         "Current password required for any other claim",
 			newPassword:  "newpassword456",
 			recoveryType: models.EmailChange,
-			expected:     expected{code: http.StatusBadRequest, isAuthenticated: true},
+			expected:     expected{code: http.StatusBadRequest, isAuthenticated: false},
 		},
 	}
 
