@@ -20,17 +20,13 @@ type Resource struct {
 	location   string
 }
 
-func NewResource(resourceType string, schemas core.Schemas, location string, inverses map[string]string) Resource {
+func NewResource(schemas core.Schemas, location string) Resource {
 	return Resource{
-		Type:       resourceType,
+		Type:       string(schemas.Base().Name),
 		schemas:    schemas,
-		references: referencesOf(schemas, inverses),
+		references: referencesOf(schemas),
 		location:   location,
 	}
-}
-
-func (r Resource) Location() string {
-	return r.location
 }
 
 func (r Resource) References() []Reference {
@@ -49,7 +45,7 @@ func (r Resource) Search(request *protocol.SearchRequest) (Search, error) {
 func (r Resource) Select(requested protocol.Projection) string {
 	parts := []string{}
 	for _, ref := range r.references {
-		if requested.Returns(ref.Name()) {
+		if requested.Returns(ref.Name) {
 			parts = append(parts, ref.selection())
 		}
 	}
@@ -63,26 +59,13 @@ func (r Resource) where(expression string) (Clause, error) {
 	return protocol.Filter(r.schemas, expression, evaluator(r))
 }
 
-func referencesOf(schemas core.Schemas, inverses map[string]string) []Reference {
+func referencesOf(schemas core.Schemas) []Reference {
 	references := []Reference{}
-	for _, attribute := range schemas.Base().Attributes {
-		targets := resourceTypes(attribute)
-		if len(targets) == 0 {
-			continue
+	for _, attribute := range (core.Schemas{schemas.Base()}).ReferenceAttributes() {
+		ref := Reference{attribute}
+		if ref.Inverse() || attribute.MultiValued {
+			references = append(references, ref)
 		}
-		ref := Reference{attribute: attribute, targets: targets}
-		via, inverted := inverses[ref.Name()]
-		switch {
-		case inverted:
-			ref.kind, ref.via = inverse, via
-		case attribute.Mutability == core.MutabilityReadOnly:
-			continue
-		case attribute.MultiValued:
-			ref.kind = multi
-		default:
-			continue
-		}
-		references = append(references, ref)
 	}
 	return references
 }

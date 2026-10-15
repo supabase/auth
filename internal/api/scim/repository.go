@@ -38,7 +38,7 @@ func (r *repository[T]) List(ctx context.Context, request *protocol.SearchReques
 	if err != nil {
 		return nil, 0, err
 	}
-	items, err := store.Decode[T](rows, r.query.Location())
+	items, err := store.Decode[T](rows)
 	return items, total, err
 }
 
@@ -56,7 +56,7 @@ func (r *repository[T]) Read(ctx context.Context, id string) (T, error) {
 	if err != nil {
 		return zero, err
 	}
-	return row.Into[T](r.query.Location())
+	return row.Into[T]()
 }
 
 func (r *repository[T]) Create(ctx context.Context, item T) (T, error) {
@@ -98,7 +98,7 @@ func (r *repository[T]) save(ctx context.Context, item T, persist func(store.Sco
 	if err != nil {
 		return zero, err
 	}
-	return row.Into[T](r.query.Location())
+	return row.Into[T]()
 }
 
 func (r *repository[T]) scope(ctx context.Context) (store.Scope, error) {

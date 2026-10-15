@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"time"
 	"uuid"
 
@@ -12,7 +11,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/pkg/errors"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
-	"github.com/supabase/auth/internal/api/scim/query"
+	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -22,7 +21,7 @@ const (
 )
 
 const (
-	resourceColumns = "id, resource_type, resource, created_at, updated_at"
+	resourceColumns = "id, resource, created_at, updated_at"
 	scopeWhere      = "sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL"
 )
 
@@ -167,7 +166,7 @@ func (s Scope) create(tx *storage.Connection, id uuid.UUID, document string) err
 func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version string) error {
 	count, err := tx.RawQuery(
 		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND "+scopeWhere+" AND updated_at = COALESCE(?, updated_at)",
-		document, id, s.providerID, s.resourceType, query.VersionTime(version),
+		document, id, s.providerID, s.resourceType, versionTime(version),
 	).ExecWithCount()
 	if err != nil {
 		return err
@@ -181,7 +180,7 @@ func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version st
 func (s Scope) remove(ctx context.Context, id uuid.UUID, version string) error {
 	count, err := s.db.WithContext(ctx).RawQuery(
 		"UPDATE scim_resources SET deleted_at = now() WHERE id = ? AND "+scopeWhere+" AND updated_at = COALESCE(?, updated_at)",
-		id, s.providerID, s.resourceType, query.VersionTime(version),
+		id, s.providerID, s.resourceType, versionTime(version),
 	).ExecWithCount()
 	if err != nil {
 		return errors.Wrap(err, "error deleting SCIM resource")
@@ -201,7 +200,15 @@ func conflict(err error) error {
 	case pgerrcode.UniqueViolation:
 		return scimerrors.ErrUniqueness("resource must be unique")
 	case pgerrcode.DeadlockDetected:
-		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
+		return scimerrors.ErrChanged()
 	}
 	return err
+}
+
+func versionTime(version string) *time.Time {
+	t, ok := server.ParseWeakETag(version)
+	if !ok {
+		return nil
+	}
+	return &t
 }

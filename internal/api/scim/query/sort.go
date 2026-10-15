@@ -5,14 +5,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
-
-var sortKeyPaths = map[string]string{
-	"User":  "userName",
-	"Group": "displayName",
-}
 
 func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) {
 	if request.SortBy == "" {
@@ -22,30 +18,29 @@ func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) 
 	if err != nil {
 		return "", nil, err
 	}
-	if evaluator(r).lookup(attribute.Root()) != nil {
+	keys, root := attribute.Keys(), attribute.Root()
+	if evaluator(r).lookup(root) != nil {
 		return "", nil, scimerrors.ErrInvalidValue(strconv.Quote(request.SortBy) + " cannot be sorted")
 	}
 	direction := " ASC"
 	if request.Descending() {
 		direction = " DESC"
 	}
-	path := strings.Join(attribute.Keys(), ".")
+	path := strings.Join(keys, ".")
 	if path == "meta.created" {
 		return "id" + direction, nil, nil
 	}
 	if column, ok := columns[path]; ok {
 		return column + direction + ", id", nil, nil
 	}
-	if sortKeyPaths[r.Type] == path && !attribute.Definition.CaseExact {
+	if sortKeys[r.schemas.Base().ID] == path && !attribute.Definition.CaseExact {
 		return "sort_key" + direction + ", id", nil, nil
 	}
-	value, args := r.sortValue(attribute)
+	value, args := r.sortValue(attribute, keys, root)
 	return value + ` COLLATE "C"` + direction + ", id", args, nil
 }
 
-func (r Resource) sortValue(attribute *protocol.Attribute) (string, []any) {
-	keys := attribute.Keys()
-	root := attribute.Root()
+func (r Resource) sortValue(attribute *protocol.Attribute, keys []string, root *core.Attribute) (string, []any) {
 	if root.MultiValued {
 		keys = slices.Insert(keys, len(keys)-1, "0")
 	}

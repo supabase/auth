@@ -12,7 +12,7 @@ type Row struct {
 	References json.RawMessage `db:"refs"`
 }
 
-func (r Row) Into[T core.Resource](endpoint string) (T, error) {
+func (r Row) Into[T core.Resource]() (T, error) {
 	var item T
 	if err := json.Unmarshal(r.Resource.Resource, &item); err != nil {
 		return item, err
@@ -32,10 +32,8 @@ func (r Row) Into[T core.Resource](endpoint string) (T, error) {
 	common := item.Common()
 	common.ID = r.ID.String()
 	common.Meta = core.Meta{
-		ResourceType: core.ResourceTypeName(r.ResourceType),
 		Created:      r.CreatedAt.UTC(),
 		LastModified: r.UpdatedAt.UTC(),
-		Location:     endpoint + "/" + common.ID,
 		Version:      server.WeakETag(r.UpdatedAt),
 	}
 	return item, nil

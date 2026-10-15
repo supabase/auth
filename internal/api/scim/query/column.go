@@ -24,6 +24,11 @@ var indexes = map[core.SchemaURI][]string{
 	core.SchemaUser: {"userName"},
 }
 
+var sortKeys = map[core.SchemaURI]string{
+	core.SchemaUser:  "userName",
+	core.SchemaGroup: "displayName",
+}
+
 var comparisons = map[filter.Operator]string{
 	filter.OpEquals:            " = ",
 	filter.OpNotEquals:         " <> ",

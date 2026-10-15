@@ -18,23 +18,23 @@ func Encode[T core.Resource](item T, references []query.Reference) (string, []Li
 	}
 	links := []Link{}
 	for _, reference := range references {
-		if types := reference.Targets(); types != nil {
+		if !reference.Inverse() {
 			links = append(links, Link{
-				Attribute: reference.Name(),
-				Types:     types,
-				Values:    document.Get(reference.Name()),
+				Attribute: reference.Name,
+				Types:     reference.Types(),
+				Values:    document.Get(reference.Name),
 			})
 		}
-		document.Remove(reference.Name())
+		document.Remove(reference.Name)
 	}
 	raw, err := json.Marshal(document)
 	return string(raw), links, err
 }
 
-func Decode[T core.Resource](rows []Row, endpoint string) ([]T, error) {
+func Decode[T core.Resource](rows []Row) ([]T, error) {
 	items := make([]T, len(rows))
 	for i, row := range rows {
-		item, err := row.Into[T](endpoint)
+		item, err := row.Into[T]()
 		if err != nil {
 			return nil, err
 		}

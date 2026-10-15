@@ -6,6 +6,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
+	"github.com/supabase-community/scim-go/pkg/server"
 )
 
 var narrowing = map[filter.Operator]bool{
@@ -37,11 +38,11 @@ func (f field) columnMatch(op filter.Operator, value any) (Clause, error) {
 	case "id", metaLocation:
 		return uuidPredicate("id", op, text), nil
 	case "meta.version":
-		at := VersionTime(text)
-		if at == nil {
+		at, ok := server.ParseWeakETag(text)
+		if !ok {
 			return boolean(op == filter.OpNotEquals), nil
 		}
-		return predicate{"updated_at" + sign + "?", []any{*at}}, nil
+		return predicate{"updated_at" + sign + "?", []any{at}}, nil
 	}
 	return predicate{columns[f.name] + sign + "?", []any{value}}, nil
 }

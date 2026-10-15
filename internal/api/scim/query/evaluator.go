@@ -94,47 +94,18 @@ func (e evaluator) relativeLocation(value any) string {
 }
 
 func (e evaluator) field(attribute *protocol.Attribute) field {
-	return field{attribute: attribute, name: e.name(attribute), path: e.path(attribute), ref: e.reference(attribute)}
-}
-
-func (e evaluator) reference(attribute *protocol.Attribute) *Reference {
-	if attribute.Parent != nil {
-		return e.lookup(attribute.Parent)
+	keys := attribute.Keys()
+	f := field{attribute: attribute, path: path{"@", keys}, ref: e.lookup(attribute.Root())}
+	if attribute.Parent == nil {
+		f.name, f.path.root = strings.Join(keys, "."), "$"
 	}
-	top, _ := e.schemas.Resolve(core.SchemaURI(attribute.Path.URI), attribute.Path.Name, "")
-	return e.lookup(top)
+	return f
 }
 
 func (e evaluator) lookup(top *core.Attribute) *Reference {
-	index := slices.IndexFunc(e.references, func(ref Reference) bool { return ref.attribute == top })
+	index := slices.IndexFunc(e.references, func(ref Reference) bool { return ref.Attribute == top })
 	if index < 0 {
 		return nil
 	}
 	return &e.references[index]
-}
-
-func (e evaluator) path(attribute *protocol.Attribute) path {
-	if attribute.Parent != nil {
-		return path{"@", []string{attribute.Definition.Name}}
-	}
-	keys := e.keys(attribute)
-	schema := e.schemas.Lookup(core.SchemaURI(attribute.Path.URI))
-	if e.schemas.IsExtension(schema) {
-		return path{"$", append([]string{string(schema.ID)}, keys...)}
-	}
-	return path{"$", keys}
-}
-
-func (e evaluator) name(attribute *protocol.Attribute) string {
-	if attribute.Parent != nil || e.schemas.IsExtension(e.schemas.Lookup(core.SchemaURI(attribute.Path.URI))) {
-		return ""
-	}
-	return strings.Join(e.keys(attribute), ".")
-}
-
-func (e evaluator) keys(attribute *protocol.Attribute) []string {
-	if top, ok := e.schemas.Resolve(core.SchemaURI(attribute.Path.URI), attribute.Path.Name, ""); ok && top != attribute.Definition {
-		return []string{top.Name, attribute.Definition.Name}
-	}
-	return []string{attribute.Definition.Name}
 }

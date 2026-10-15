@@ -44,25 +44,11 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Ha
 		server.WithResource(
 			server.NewResource[*core.User](userType, usersPath, core.SchemaUser, core.UserAttributes()...).
 				WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...).
-				WithRepositoryFunc(func(r *server.Resource[*core.User]) server.Repository[*core.User] {
-					return newRepository[*core.User](db, query.NewResource(
-						userType,
-						r.Schemas(),
-						r.Location(),
-						map[string]string{"groups": "members"},
-					))
-				}),
+				WithRepositoryFunc(repositoryFunc[*core.User](db)),
 		),
 		server.WithResource(
 			server.NewResource[*core.Group](groupType, groupsPath, core.SchemaGroup, core.GroupAttributes()...).
-				WithRepositoryFunc(func(r *server.Resource[*core.Group]) server.Repository[*core.Group] {
-					return newRepository[*core.Group](db, query.NewResource(
-						groupType,
-						r.Schemas(),
-						r.Location(),
-						nil,
-					))
-				}),
+				WithRepositoryFunc(repositoryFunc[*core.Group](db)),
 		),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), authenticate(db)),
 	)
@@ -70,6 +56,12 @@ func NewServer(config *conf.GlobalConfiguration, db *storage.Connection) http.Ha
 
 func SendTooManyRequests(w http.ResponseWriter) error {
 	return protocol.SendError(w, scimerrors.NewError(http.StatusTooManyRequests, "", "Request rate limit reached"))
+}
+
+func repositoryFunc[T core.Resource](db *storage.Connection) func(*server.Resource[T]) server.Repository[T] {
+	return func(r *server.Resource[T]) server.Repository[T] {
+		return newRepository[T](db, query.NewResource(r.Schemas(), r.Location()))
+	}
 }
 
 func authenticate(db *storage.Connection) func(http.Handler) http.Handler {

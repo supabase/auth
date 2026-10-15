@@ -6,41 +6,18 @@ import (
 
 const ValueAttribute = "value"
 
-type kind int
-
-const (
-	multi kind = iota
-	inverse
-)
-
 type Reference struct {
-	attribute *core.Attribute
-	kind      kind
-	targets   []string
-	via       string
+	core.ReferenceAttribute
 }
 
-func (r Reference) Name() string {
-	return r.attribute.Name
+func (r Reference) Inverse() bool {
+	return r.InverseOf != ""
 }
 
-func (r Reference) Targets() []string {
-	if r.kind != multi {
-		return nil
-	}
-	return r.targets
-}
-
-func resourceTypes(attribute *core.Attribute) []string {
-	ref := attribute.SubAttribute("$ref")
-	if attribute.Type != core.TypeComplex || ref == nil {
-		return nil
-	}
-	types := []string{}
-	for _, t := range ref.ReferenceTypes {
-		if t != core.ReferenceExternal && t != core.ReferenceURI {
-			types = append(types, string(t))
-		}
+func (r Reference) Types() []string {
+	types := make([]string, len(r.Targets))
+	for i, t := range r.Targets {
+		types[i] = string(t)
 	}
 	return types
 }
