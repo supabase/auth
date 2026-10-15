@@ -45,3 +45,22 @@ create table if not exists {{ index .Options "Namespace" }}.scim_resource_refere
 /* auth_migration: 20261005000000 */
 create index if not exists scim_resource_references_target_idx
     on {{ index .Options "Namespace" }}.scim_resource_references (target_id, attribute);
+
+/* auth_migration: 20261005000000 */
+create or replace function {{ index .Options "Namespace" }}.scim_resources_delete_references()
+returns trigger
+language plpgsql
+as $$
+begin
+  delete from {{ index .Options "Namespace" }}.scim_resource_references
+  where source_id = new.id or target_id = new.id;
+  return null;
+end;
+$$;
+
+/* auth_migration: 20261005000000 */
+create or replace trigger scim_resources_soft_delete
+    after update of deleted_at on {{ index .Options "Namespace" }}.scim_resources
+    for each row
+    when (old.deleted_at is null and new.deleted_at is not null)
+    execute function {{ index .Options "Namespace" }}.scim_resources_delete_references();

@@ -23,7 +23,7 @@ func (r Reference) leaf(definition *core.Attribute, op filter.Operator, value an
 
 func (r Reference) exists(inner Clause) Clause {
 	text, args := inner.SQL()
-	return predicate{"EXISTS (SELECT 1 FROM scim_resource_references edge JOIN scim_resources target ON target.id = edge.target_id AND target.deleted_at IS NULL WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + text + ")", append([]any{r.Name()}, args...)}
+	return predicate{"EXISTS (SELECT 1 FROM scim_resource_references edge WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + text + ")", append([]any{r.Name()}, args...)}
 }
 
 func (r Reference) match(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {

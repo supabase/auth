@@ -68,12 +68,7 @@ func (s Scope) Update(ctx context.Context, id uuid.UUID, document, version strin
 }
 
 func (s Scope) Delete(ctx context.Context, id uuid.UUID, version string) error {
-	err := s.db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		if err := s.remove(tx, id, version); err != nil {
-			return err
-		}
-		return s.deleteReferences(tx, id)
-	})
+	err := s.remove(ctx, id, version)
 	if models.IsNotFoundError(err) {
 		return s.missing(ctx, id)
 	}
@@ -183,8 +178,8 @@ func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version st
 	return nil
 }
 
-func (s Scope) remove(tx *storage.Connection, id uuid.UUID, version string) error {
-	count, err := tx.RawQuery(
+func (s Scope) remove(ctx context.Context, id uuid.UUID, version string) error {
+	count, err := s.db.WithContext(ctx).RawQuery(
 		"UPDATE scim_resources SET deleted_at = now() WHERE id = ? AND "+scopeWhere+" AND updated_at = COALESCE(?, updated_at)",
 		id, s.providerID, s.resourceType, query.VersionTime(version),
 	).ExecWithCount()

@@ -1072,6 +1072,20 @@ func TestSCIMGroups(t *testing.T) {
 			require.Equal(t, []core.Member{scimMember(other)}, c.group(t, group.ID).Members)
 		})
 
+		t.Run("a soft delete outside the API removes its links", func(t *testing.T) {
+			user, other := createUser(t), createUser(t)
+			group := create(t, user, other)
+			softDelete := func(id string) {
+				require.NoError(t, c.inst.Conn.RawQuery("UPDATE scim_resources SET deleted_at = now() WHERE id = ?", id).Exec())
+			}
+
+			softDelete(other.ID)
+			require.Equal(t, []core.Member{scimMember(user)}, c.group(t, group.ID).Members)
+
+			softDelete(group.ID)
+			require.Empty(t, c.user(t, user.ID).Groups)
+		})
+
 		t.Run("DELETE repeats as not found", func(t *testing.T) {
 			group := create(t)
 

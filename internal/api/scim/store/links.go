@@ -40,11 +40,6 @@ func (s Scope) findTargets(tx *storage.Connection, source uuid.UUID, attribute s
 	return targets, errors.Wrap(err, "error finding SCIM targets")
 }
 
-func (s Scope) deleteReferences(tx *storage.Connection, id uuid.UUID) error {
-	err := tx.RawQuery("DELETE FROM scim_resource_references WHERE source_id = ? OR target_id = ?", id, id).Exec()
-	return errors.Wrap(err, "error deleting SCIM references")
-}
-
 func (s Scope) link(tx *storage.Connection, source uuid.UUID, l Link) error {
 	attribute := l.Attribute
 	wanted, err := linkTargets(attribute, l.Values)
