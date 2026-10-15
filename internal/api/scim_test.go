@@ -1105,6 +1105,17 @@ func TestSCIMGroups(t *testing.T) {
 			require.Equal(t, members, scimList[core.Group](t, c, scimGroupsPath, url.Values{"filter": {`id eq "` + parent.ID + `"`}}).Resources[0].Members)
 		})
 
+		t.Run("rejects a cycle", func(t *testing.T) {
+			top, middle, bottom := create(t), create(t), create(t)
+			require.Equal(t, http.StatusNoContent, c.addMembers(t, top.ID, middle.ID).StatusCode)
+			require.Equal(t, http.StatusNoContent, c.addMembers(t, middle.ID, bottom.ID).StatusCode)
+
+			for _, id := range []string{top.ID, middle.ID, bottom.ID} {
+				requireSCIMError(t, c.addMembers(t, bottom.ID, id), http.StatusBadRequest, scimerrors.InvalidValue)
+			}
+			require.Empty(t, c.group(t, bottom.ID).Members)
+		})
+
 		t.Run("derives only direct user groups", func(t *testing.T) {
 			user := createUser(t)
 			child := create(t, user)
