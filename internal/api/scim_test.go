@@ -1116,24 +1116,40 @@ func TestSCIMGroups(t *testing.T) {
 			require.Empty(t, c.group(t, bottom.ID).Members)
 		})
 
-		t.Run("derives only direct user groups", func(t *testing.T) {
+		t.Run("derives direct and indirect user groups", func(t *testing.T) {
 			user := createUser(t)
 			child := create(t, user)
 			parent := create(t)
+			grandparent := create(t)
 			require.Equal(t, http.StatusNoContent, c.addMembers(t, parent.ID, child.ID).StatusCode)
+			require.Equal(t, http.StatusNoContent, c.addMembers(t, grandparent.ID, parent.ID).StatusCode)
 			groups := []core.GroupMembership{
-				{Value: child.ID},
+				{Value: child.ID, Type: "direct"},
+				{Value: parent.ID, Type: "indirect"},
+				{Value: grandparent.ID, Type: "indirect"},
 			}
 
-			require.Equal(t, groups, c.user(t, user.ID).Groups)
+			require.ElementsMatch(t, groups, c.user(t, user.ID).Groups)
 			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "displayName", "value": "Babs"}))
 			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, groups, scimDecode[core.User](t, res).Groups)
+			require.ElementsMatch(t, groups, scimDecode[core.User](t, res).Groups)
 			list := scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {`userName eq "` + user.UserName + `"`}})
-			require.Equal(t, groups, list.Resources[0].Groups)
+			require.ElementsMatch(t, groups, list.Resources[0].Groups)
 
 			require.Equal(t, http.StatusNoContent, c.delete(t, scimGroupsPath+"/"+child.ID).StatusCode)
 			require.Empty(t, c.user(t, user.ID).Groups)
+		})
+
+		t.Run("lists a group once as direct when it is also indirect", func(t *testing.T) {
+			user := createUser(t)
+			child := create(t, user)
+			parent := create(t, user)
+			require.Equal(t, http.StatusNoContent, c.addMembers(t, parent.ID, child.ID).StatusCode)
+
+			require.ElementsMatch(t, []core.GroupMembership{
+				{Value: child.ID, Type: "direct"},
+				{Value: parent.ID, Type: "direct"},
+			}, c.user(t, user.ID).Groups)
 		})
 	})
 }
@@ -1905,7 +1921,7 @@ func TestSCIMTenancy(t *testing.T) {
 		require.Zero(t, scimSearch(t, other, scimGroupsPath, map[string]any{"filter": `displayName eq "` + group.DisplayName + `"`}).TotalResults)
 		twin := other.createUser(t, user.UserName)
 		require.Equal(t, []core.User{twin}, scimList[core.User](t, other, scimUsersPath, url.Values{"filter": {`userName eq "` + user.UserName + `"`}}).Resources)
-		user.Groups = []core.GroupMembership{{Value: group.ID}}
+		user.Groups = []core.GroupMembership{{Value: group.ID, Type: "direct"}}
 		require.Equal(t, user, c.user(t, user.ID))
 		require.Equal(t, group, c.group(t, group.ID))
 	})
