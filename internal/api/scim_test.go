@@ -189,6 +189,17 @@ func TestSCIMService(t *testing.T) {
 			}
 		})
 
+		t.Run("revoking an unknown token is not found", func(t *testing.T) {
+			bodies := []string{}
+			for _, id := range []string{"unknown", scimMissingID} {
+				res := c.admin(t, http.MethodDelete, "/admin/sso/providers/"+c.provider.ID.String()+"/scim/tokens/"+id, nil)
+				require.Equal(t, http.StatusNotFound, res.StatusCode)
+				bodies = append(bodies, string(scimBody(t, res)))
+			}
+			require.Contains(t, bodies[0], `"error_code":"sso_provider_not_found"`)
+			require.Equal(t, bodies[0], bodies[1])
+		})
+
 		t.Run("rejects a token after SCIM is disabled for the provider", func(t *testing.T) {
 			other := newSCIMClient(t, nil)
 			require.Equal(t, http.StatusOK, other.get(t, scimUsersPath).StatusCode)
