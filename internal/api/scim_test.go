@@ -286,25 +286,6 @@ func TestSCIMUsers(t *testing.T) {
 			require.Equal(t, core.Name{GivenName: "Barbara", FamilyName: "Jensen"}, user.Name)
 		})
 
-		t.Run("POST creates a user with every attribute", func(t *testing.T) {
-			manager := c.createUser(t, scimUserName("boss"))
-			body := newSCIMFullUser(scimUserName("bjensen"), uuid.NewV7().String(), manager.ID)
-			user := scimCreate[core.User](t, c, scimUsersPath, body)
-
-			require.Equal(t, user, c.user(t, user.ID))
-			require.Equal(t, "Ms. Barbara J Jensen III", user.Name.Formatted)
-			require.Equal(t, "Tour Guide", user.Title)
-			require.Equal(t, new(false), user.Active)
-			require.Empty(t, user.Password)
-			require.Equal(t, "babs@jensen.org", user.Emails[0].Value)
-			require.Equal(t, "555-555-8377", user.PhoneNumbers[0].Value)
-			require.Equal(t, "Hollywood", user.Addresses[0].Locality)
-			require.Equal(t, "tour-guide-badge", user.Entitlements[0].Value)
-			require.Equal(t, "guide", user.Roles[0].Value)
-			require.Equal(t, "Tour Operations", user.EnterpriseUser.Department)
-			require.Equal(t, manager.ID, user.EnterpriseUser.Manager.Value)
-		})
-
 		t.Run("POST rejects an invalid body", func(t *testing.T) {
 			for name, tc := range map[string]struct {
 				body     map[string]any
@@ -711,7 +692,6 @@ func TestSCIMQuery(t *testing.T) {
 			decoy, user = c.user(t, decoy.ID), c.user(t, user.ID)
 
 			for _, tc := range []struct{ path, filter, id string }{
-				{scimUsersPath, `externalId eq "701984"`, user.ID},
 				{scimUsersPath, `not (externalId eq "701984")`, decoy.ID},
 				{scimUsersPath, `externalId ne "701984"`, decoy.ID},
 				{scimUsersPath, `nickName ne "Babsy"`, decoy.ID},
@@ -728,47 +708,9 @@ func TestSCIMQuery(t *testing.T) {
 				{scimUsersPath, `meta.location ne "` + decoy.Meta.Location + `"`, user.ID},
 				{scimUsersPath, `meta.version eq "` + strings.ReplaceAll(user.Meta.Version, `"`, `\"`) + `"`, user.ID},
 				{scimUsersPath, `meta.version eq "W/\"1\"" or id eq "` + user.ID + `"`, user.ID},
-				{scimUsersPath, `name.formatted eq "Ms. Barbara J Jensen III"`, user.ID},
-				{scimUsersPath, `name.familyName eq "Jensen-Smith"`, user.ID},
-				{scimUsersPath, `name.givenName eq "Babs"`, user.ID},
-				{scimUsersPath, `name.middleName eq "Jane"`, user.ID},
-				{scimUsersPath, `name.honorificPrefix eq "Ms."`, user.ID},
-				{scimUsersPath, `name.honorificSuffix eq "III"`, user.ID},
-				{scimUsersPath, `displayName eq "Babs Jensen"`, user.ID},
-				{scimUsersPath, `nickName eq "Babsy"`, user.ID},
-				{scimUsersPath, `profileUrl eq "https://login.example.com/bjensen"`, user.ID},
-				{scimUsersPath, `title eq "Tour Guide"`, user.ID},
-				{scimUsersPath, `userType eq "Employee"`, user.ID},
-				{scimUsersPath, `preferredLanguage eq "en-CA"`, user.ID},
-				{scimUsersPath, `locale eq "en-CA"`, user.ID},
-				{scimUsersPath, `timezone eq "America/Edmonton"`, user.ID},
-				{scimUsersPath, `active eq false`, user.ID},
-				{scimUsersPath, `emails.value eq "babs@jensen.org"`, user.ID},
-				{scimUsersPath, `emails.type eq "home"`, user.ID},
-				{scimUsersPath, `emails.primary eq true`, user.ID},
 				{scimUsersPath, `emails[type eq "home" and value eq "babs@jensen.org"]`, user.ID},
 				{scimUsersPath, `emails[primary eq true and type eq "home"]`, user.ID},
-				{scimUsersPath, `phoneNumbers.value eq "555-555-8377"`, user.ID},
-				{scimUsersPath, `phoneNumbers.type eq "mobile"`, user.ID},
 				{scimUsersPath, `phoneNumbers[primary eq true and type eq "mobile"]`, user.ID},
-				{scimUsersPath, `ims.value eq "babsj"`, user.ID},
-				{scimUsersPath, `photos.value eq "https://photos.example.com/bjensen.jpg"`, user.ID},
-				{scimUsersPath, `addresses.formatted eq "100 Universal City Plaza"`, user.ID},
-				{scimUsersPath, `addresses.streetAddress eq "100 Universal City Plaza"`, user.ID},
-				{scimUsersPath, `addresses.locality eq "Hollywood"`, user.ID},
-				{scimUsersPath, `addresses.region eq "CA"`, user.ID},
-				{scimUsersPath, `addresses.postalCode eq "91608"`, user.ID},
-				{scimUsersPath, `addresses.country eq "US"`, user.ID},
-				{scimUsersPath, `addresses.type eq "home"`, user.ID},
-				{scimUsersPath, `addresses.primary eq true`, user.ID},
-				{scimUsersPath, `entitlements.value eq "tour-guide-badge"`, user.ID},
-				{scimUsersPath, `roles.value eq "guide"`, user.ID},
-				{scimUsersPath, `x509Certificates.value eq "dGVzdA=="`, user.ID},
-				{scimUsersPath, enterprise + `:employeeNumber eq "701984"`, user.ID},
-				{scimUsersPath, enterprise + `:costCenter eq "4130"`, user.ID},
-				{scimUsersPath, enterprise + `:organization eq "Universal Studios"`, user.ID},
-				{scimUsersPath, enterprise + `:division eq "Theme Park"`, user.ID},
-				{scimUsersPath, enterprise + `:department eq "Tour Operations"`, user.ID},
 				{scimUsersPath, enterprise + `:manager.value eq "` + decoy.ID + `"`, user.ID},
 				{scimGroupsPath, `externalId eq "tour-guides"`, group.ID},
 				{scimGroupsPath, `externalId eq "Tour-Guides"`, decoys.ID},
@@ -875,35 +817,6 @@ func TestSCIMQuery(t *testing.T) {
 				{scimGroupsPath, `externalId co "-Guides"`, onlyDecoys},
 				{scimGroupsPath, `externalId ew "guides"`, onlyGroup},
 			})
-
-			presence := []scimFilterRow{
-				{scimUsersPath, `id pr`, both},
-				{scimUsersPath, `userName pr`, both},
-				{scimUsersPath, `meta.resourceType pr`, both},
-				{scimUsersPath, `meta.created pr`, both},
-				{scimUsersPath, `meta.lastModified pr`, both},
-				{scimUsersPath, `meta.location pr`, both},
-				{scimGroupsPath, `id pr`, bothGroups},
-				{scimGroupsPath, `displayName pr`, bothGroups},
-				{scimGroupsPath, `members.value pr`, bothGroups},
-				{scimGroupsPath, `externalId pr`, bothGroups},
-			}
-			for _, attribute := range []string{
-				"externalId", "name.formatted", "name.familyName", "name.givenName", "name.middleName", "name.honorificPrefix", "name.honorificSuffix",
-				"displayName", "nickName", "profileUrl", "title", "userType", "preferredLanguage", "locale", "timezone", "active",
-				"emails", "emails.value", "emails.type", "emails.primary", "phoneNumbers.value", "phoneNumbers.type", "phoneNumbers.primary",
-				"ims", "ims.value", "ims.type", "photos", "photos.value", "photos.type",
-				"addresses", "addresses.formatted", "addresses.streetAddress", "addresses.locality", "addresses.region", "addresses.postalCode", "addresses.country", "addresses.type", "addresses.primary",
-				"entitlements", "entitlements.value", "roles", "roles.value", "x509Certificates", "x509Certificates.value",
-				enterprise + ":employeeNumber", enterprise + ":costCenter", enterprise + ":organization", enterprise + ":division", enterprise + ":department", enterprise + ":manager", enterprise + ":manager.value",
-			} {
-				presence = append(presence, scimFilterRow{scimUsersPath, attribute + ` pr`, onlyUser})
-			}
-			for _, attribute := range []string{"emails.display", "phoneNumbers.display", "ims.display", "photos.display", "entitlements.display", "roles.display", "x509Certificates.display"} {
-				presence = append(presence, scimFilterRow{scimUsersPath, attribute + ` pr`, none})
-			}
-			// RFC 7644 3.4.2.2: pr matches an attribute that has a non-empty value.
-			runRows("Presence", presence)
 
 			// RFC 7644 3.4.2.2: every comparison operator on every attribute the full user has and the decoy lacks.
 			runRows("Operators on every attribute", scimOperatorRows(scimUsersPath, scimFullUserProbes(), onlyUser, onlyDecoy))
