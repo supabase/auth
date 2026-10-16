@@ -73,6 +73,14 @@ func referencesOf(schemas core.Schemas) []Reference {
 	return references
 }
 
+func lowerNameOf(schema *core.Schema) *core.Attribute {
+	name := schema.Attributes.Lookup(lowerNameSources[schema.ID])
+	if name == nil || name.CaseExact {
+		return nil
+	}
+	return name
+}
+
 func (r Resource) lookup(top *core.Attribute) *Reference {
 	index := slices.IndexFunc(r.references, func(ref Reference) bool { return ref.Attribute == top })
 	if index < 0 {
