@@ -1,0 +1,157 @@
+[
+  {
+    "step": "push group",
+    "requests": [
+      {
+        "method": "POST",
+        "path": "/scim/v2/Groups",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "displayName": "Tour Guides",
+          "members": [
+            {
+              "value": "c75ad752-64ae-4823-840d-ffa80929976c",
+              "display": "jsmith@example.com"
+            },
+            {
+              "value": "2819c223-7f76-453a-919d-413861904646",
+              "display": "bjensen@example.com"
+            }
+          ]
+        }
+      },
+      {
+        "method": "PATCH",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "add",
+              "path": "members",
+              "value": [
+                {
+                  "value": "c75ad752-64ae-4823-840d-ffa80929976c",
+                  "display": "jsmith@example.com"
+                },
+                {
+                  "value": "2819c223-7f76-453a-919d-413861904646",
+                  "display": "bjensen@example.com"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "step": "remove jsmith",
+    "requests": [
+      {
+        "method": "PATCH",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "replace",
+              "value": {
+                "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+                "displayName": "Tour Guides"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "method": "PATCH",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "remove",
+              "path": "members[value eq \"c75ad752-64ae-4823-840d-ffa80929976c\"]"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "step": "add babs",
+    "requests": [
+      {
+        "method": "PATCH",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "replace",
+              "value": {
+                "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+                "displayName": "Tour Guides"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "method": "PATCH",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "add",
+              "path": "members",
+              "value": [
+                {
+                  "value": "6c5bb468-14b2-4183-baf2-06d523e03bd3",
+                  "display": "babs@jensen.org"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "step": "rename",
+    "requests": [
+      {
+        "method": "PATCH",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "replace",
+              "value": {
+                "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+                "displayName": "Group B"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

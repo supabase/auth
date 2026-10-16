@@ -1,0 +1,375 @@
+[
+  {
+    "step": "push group",
+    "requests": [
+      {
+        "method": "POST",
+        "path": "/scim/v2/Groups",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "displayName": "Tour Guides",
+          "members": []
+        }
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Tour Guides",
+          "members": []
+        }
+      }
+    ]
+  },
+  {
+    "step": "add bjensen (sent twice)",
+    "requests": [
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Tour Guides",
+          "members": [
+            {
+              "value": "2819c223-7f76-453a-919d-413861904646",
+              "display": "bjensen@example.com"
+            }
+          ]
+        }
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Tour Guides",
+          "members": [
+            {
+              "value": "2819c223-7f76-453a-919d-413861904646",
+              "display": "bjensen@example.com"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "step": "retry: bjensen and jsmith",
+    "requests": [
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Tour Guides",
+          "members": [
+            {
+              "value": "2819c223-7f76-453a-919d-413861904646",
+              "display": null
+            },
+            {
+              "value": "c75ad752-64ae-4823-840d-ffa80929976c",
+              "display": "jsmith@example.com"
+            }
+          ]
+        }
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Tour Guides",
+          "members": [
+            {
+              "value": "2819c223-7f76-453a-919d-413861904646",
+              "display": "bjensen@example.com"
+            },
+            {
+              "value": "c75ad752-64ae-4823-840d-ffa80929976c",
+              "display": "jsmith@example.com"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "step": "remove bjensen",
+    "requests": [
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Tour Guides",
+          "members": [
+            {
+              "value": "2819c223-7f76-453a-919d-413861904646",
+              "display": null
+            },
+            {
+              "value": "c75ad752-64ae-4823-840d-ffa80929976c",
+              "display": null
+            }
+          ]
+        }
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Tour Guides",
+          "members": [
+            {
+              "value": "c75ad752-64ae-4823-840d-ffa80929976c",
+              "display": null
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "step": "remove jsmith",
+    "requests": [
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Tour Guides",
+          "members": [
+            {
+              "value": "c75ad752-64ae-4823-840d-ffa80929976c",
+              "display": null
+            }
+          ]
+        }
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Tour Guides",
+          "members": []
+        }
+      }
+    ]
+  },
+  {
+    "step": "rename",
+    "requests": [
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Group A",
+          "members": []
+        }
+      }
+    ]
+  },
+  {
+    "step": "re-add bjensen (sent twice)",
+    "requests": [
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Group A",
+          "members": [
+            {
+              "value": "2819c223-7f76-453a-919d-413861904646",
+              "display": "bjensen@example.com"
+            }
+          ]
+        }
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+          "displayName": "Group A",
+          "members": [
+            {
+              "value": "2819c223-7f76-453a-919d-413861904646",
+              "display": "bjensen@example.com"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "step": "deactivate bjensen",
+    "requests": [
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+        "body": {
+          "active": false,
+          "displayName": "Babs Jensen",
+          "emails": [
+            {
+              "primary": true,
+              "type": "work",
+              "value": "bjensen@example.com"
+            }
+          ],
+          "externalId": "bjensen",
+          "groups": [
+            {
+              "$ref": "http://localhost:9999/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+              "display": "Group A",
+              "type": "direct",
+              "value": "e9e30dba-f08f-4109-8486-d5c6a331660a"
+            }
+          ],
+          "id": "2819c223-7f76-453a-919d-413861904646",
+          "locale": "en-US",
+          "meta": {
+            "created": "2026-09-28T17:52:36.295891Z",
+            "lastModified": "2026-09-28T17:52:36.295891Z",
+            "location": "http://localhost:9999/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+            "resourceType": "User",
+            "version": "W/\"1790617956295891\""
+          },
+          "name": {
+            "familyName": "Jensen",
+            "givenName": "Barbara"
+          },
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "userName": "bjensen@example.com"
+        }
+      }
+    ]
+  },
+  {
+    "step": "reactivate bjensen and reassign app",
+    "requests": [
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+        "body": {
+          "active": true,
+          "displayName": "Babs Jensen",
+          "emails": [
+            {
+              "primary": true,
+              "type": "work",
+              "value": "bjensen@example.com"
+            }
+          ],
+          "externalId": "bjensen",
+          "groups": [],
+          "id": "2819c223-7f76-453a-919d-413861904646",
+          "locale": "en-US",
+          "meta": {
+            "created": "2026-09-28T17:52:36.295891Z",
+            "lastModified": "2026-09-28T18:15:25.689427Z",
+            "location": "http://localhost:9999/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+            "resourceType": "User",
+            "version": "W/\"1790619325689427\""
+          },
+          "name": {
+            "familyName": "Jensen",
+            "givenName": "Barbara"
+          },
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "userName": "bjensen@example.com"
+        }
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+        "body": {
+          "active": true,
+          "displayName": "Babs Jensen",
+          "emails": [
+            {
+              "primary": true,
+              "type": "work",
+              "value": "bjensen@example.com"
+            }
+          ],
+          "externalId": "bjensen",
+          "groups": [
+            {
+              "$ref": "http://localhost:9999/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+              "display": "Group A",
+              "type": "direct",
+              "value": "e9e30dba-f08f-4109-8486-d5c6a331660a"
+            }
+          ],
+          "id": "2819c223-7f76-453a-919d-413861904646",
+          "locale": "en-US",
+          "meta": {
+            "created": "2026-09-28T17:52:36.295891Z",
+            "lastModified": "2026-09-28T18:13:23.777587Z",
+            "location": "http://localhost:9999/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+            "resourceType": "User",
+            "version": "W/\"1790619203777587\""
+          },
+          "name": {
+            "familyName": "Jensen",
+            "givenName": "Barbara"
+          },
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "userName": "bjensen@example.com"
+        }
+      }
+    ]
+  }
+]

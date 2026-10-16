@@ -427,7 +427,7 @@ func (a *API) requirePasskeyEnabled(w http.ResponseWriter, req *http.Request) (c
 
 func (a *API) requireScimServerEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
-	if !a.config.Experimental.ScimEnabled {
+	if !a.config.SSO.SCIM.Enabled {
 		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeFeatureDisabled, "SCIM server is disabled")
 	}
 	return ctx, nil

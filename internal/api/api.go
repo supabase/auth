@@ -47,7 +47,7 @@ type API struct {
 	hooksMgr     *v0hooks.Manager
 	hibpClient   *hibp.PwnedClient
 	oauthServer  *oauthserver.Server
-	scim         *scim.Server
+	scim         http.Handler
 	tokenService *tokens.Service
 	mailer       mailer.Mailer
 	oidcCache    *provider.OIDCProviderCache
@@ -138,7 +138,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
 	}
 
-	api.scim = scim.NewServer(globalConfig)
+	api.scim = scim.NewServer(globalConfig, db)
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -404,6 +404,20 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Get("/", api.adminSSOProvidersGet)
 						r.Put("/", api.adminSSOProvidersUpdate)
 						r.Delete("/", api.adminSSOProvidersDelete)
+
+						r.Route("/scim", func(r *router) {
+							r.Use(api.requireScimServerEnabled)
+
+							r.Get("/", api.adminSCIMGet)
+							r.Post("/", api.adminSCIMEnable)
+							r.Delete("/", api.adminSCIMDisable)
+
+							r.Route("/tokens", func(r *router) {
+								r.Get("/", api.adminSCIMTokensList)
+								r.Post("/", api.adminSCIMTokensCreate)
+								r.Delete("/{token_id}", api.adminSCIMTokensRevoke)
+							})
+						})
 					})
 				})
 			})
@@ -463,11 +477,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Route(scim.BasePath, func(r *router) {
 			r.Use(api.requireScimServerEnabled)
-			r.NotFound(api.scim.NotFound)
-
-			r.Get("/ServiceProviderConfig", api.scim.ServiceProviderConfig)
-			r.Get("/ResourceTypes", api.scim.ResourceTypes)
-			r.Get("/Schemas", api.scim.Schemas)
+			r.UseBypass(api.limitSCIMByIP(api.limiterOpts.SCIM))
+			r.chi.Handle("/*", api.scim)
 		})
 	})
 

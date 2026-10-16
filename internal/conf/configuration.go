@@ -409,11 +409,6 @@ type ExperimentalConfiguration struct {
 	// Env: GOTRUE_EXPERIMENTAL_CURSOR_PAGINATION_ENABLED=true
 	CursorPaginationEnabled bool `split_words:"true" default:"false"`
 
-	// ScimEnabled gates the /scim/v2 router. Ships dark: no per-provider
-	// enablement yet, just a kill switch for internal verification.
-	// Env: GOTRUE_EXPERIMENTAL_SCIM_ENABLED=true
-	ScimEnabled bool `split_words:"true" default:"false"`
-
 	// CreateEmailIdentityOnPasswordSetEnabled creates the missing email provider
 	// identity for a user when a password is added to an account that didn't have
 	// one (e.g. a user who signed up with an external provider and later sets a password).
@@ -487,6 +482,7 @@ type GlobalConfiguration struct {
 	RateLimitVerify                     float64 `split_words:"true" default:"30"`
 	RateLimitTokenRefresh               float64 `split_words:"true" default:"150"`
 	RateLimitSso                        float64 `split_words:"true" default:"30"`
+	RateLimitScim                       float64 `split_words:"true" default:"3000"`
 	RateLimitAnonymousUsers             float64 `split_words:"true" default:"30"`
 	RateLimitOtp                        float64 `split_words:"true" default:"30"`
 	RateLimitWeb3                       float64 `split_words:"true" default:"30"`
@@ -506,6 +502,7 @@ type GlobalConfiguration struct {
 	Sessions        SessionsConfiguration    `json:"sessions"`
 	MFA             MFAConfiguration         `json:"MFA"`
 	SAML            SAMLConfiguration        `json:"saml"`
+	SSO             SSOConfiguration         `json:"sso"`
 	WebAuthn        WebAuthnConfiguration    `json:"webauthn"`
 	Passkey         PasskeyConfiguration     `json:"passkey"`
 	CORS            CORSConfiguration        `json:"cors"`
@@ -513,6 +510,14 @@ type GlobalConfiguration struct {
 
 	Experimental ExperimentalConfiguration `json:"experimental"`
 	Reloading    ReloadingConfiguration    `json:"reloading"`
+}
+
+type SSOConfiguration struct {
+	SCIM SCIMConfiguration `json:"scim"`
+}
+
+type SCIMConfiguration struct {
+	Enabled bool `json:"enabled" default:"false"`
 }
 
 type CORSConfiguration struct {

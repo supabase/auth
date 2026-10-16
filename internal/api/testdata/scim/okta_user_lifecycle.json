@@ -1,0 +1,207 @@
+[
+  {
+    "step": "assign new user",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/scim/v2/Users?filter=userName%20eq%20%22jsmith%40example.com%22&startIndex=1&count=100"
+      },
+      {
+        "method": "POST",
+        "path": "/scim/v2/Users",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "userName": "jsmith@example.com",
+          "name": {
+            "givenName": "John",
+            "familyName": "Smith"
+          },
+          "emails": [
+            {
+              "primary": true,
+              "value": "jsmith@example.com",
+              "type": "work"
+            }
+          ],
+          "displayName": "John Smith",
+          "locale": "en-US",
+          "externalId": "701984",
+          "groups": [],
+          "password": "okta-generated-password",
+          "active": true
+        }
+      }
+    ]
+  },
+  {
+    "step": "edit last name",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646"
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+        "body": {
+          "active": true,
+          "displayName": "John Jensen",
+          "emails": [
+            {
+              "primary": true,
+              "type": "work",
+              "value": "jsmith@example.com"
+            }
+          ],
+          "externalId": "701984",
+          "id": "2819c223-7f76-453a-919d-413861904646",
+          "locale": "en-US",
+          "meta": {
+            "created": "2026-09-28T19:13:58.892385Z",
+            "lastModified": "2026-09-28T19:13:58.892385Z",
+            "location": "http://localhost:9999/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+            "resourceType": "User",
+            "version": "W/\"1790622838892385\""
+          },
+          "name": {
+            "familyName": "Jensen",
+            "givenName": "John"
+          },
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "userName": "jsmith@example.com",
+          "groups": []
+        }
+      }
+    ]
+  },
+  {
+    "step": "unassign",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646"
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+        "body": {
+          "active": false,
+          "displayName": "John Jensen",
+          "emails": [
+            {
+              "primary": true,
+              "type": "work",
+              "value": "jsmith@example.com"
+            }
+          ],
+          "externalId": "701984",
+          "id": "2819c223-7f76-453a-919d-413861904646",
+          "locale": "en-US",
+          "meta": {
+            "created": "2026-09-28T19:13:58.892385Z",
+            "lastModified": "2026-09-28T19:14:54.181071Z",
+            "location": "http://localhost:9999/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+            "resourceType": "User",
+            "version": "W/\"1790622894181071\""
+          },
+          "name": {
+            "familyName": "Jensen",
+            "givenName": "John"
+          },
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "userName": "jsmith@example.com"
+        }
+      }
+    ]
+  },
+  {
+    "step": "reassign (PUT sent twice)",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/scim/v2/Users?filter=userName%20eq%20%22jsmith%40example.com%22&startIndex=1&count=100"
+      },
+      {
+        "method": "GET",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646"
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+        "body": {
+          "active": true,
+          "displayName": "John Jensen",
+          "emails": [
+            {
+              "primary": true,
+              "type": "work",
+              "value": "jsmith@example.com"
+            }
+          ],
+          "externalId": "701984",
+          "id": "2819c223-7f76-453a-919d-413861904646",
+          "locale": "en-US",
+          "meta": {
+            "created": "2026-09-28T19:13:58.892385Z",
+            "lastModified": "2026-09-28T19:15:39.083683Z",
+            "location": "http://localhost:9999/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+            "resourceType": "User",
+            "version": "W/\"1790622939083683\""
+          },
+          "name": {
+            "familyName": "Jensen",
+            "givenName": "John"
+          },
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "userName": "jsmith@example.com"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646"
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+        "body": {
+          "active": true,
+          "displayName": "John Jensen",
+          "emails": [
+            {
+              "primary": true,
+              "type": "work",
+              "value": "jsmith@example.com"
+            }
+          ],
+          "externalId": "701984",
+          "id": "2819c223-7f76-453a-919d-413861904646",
+          "locale": "en-US",
+          "meta": {
+            "created": "2026-09-28T19:13:58.892385Z",
+            "lastModified": "2026-09-28T19:16:02.349821Z",
+            "location": "http://localhost:9999/scim/v2/Users/2819c223-7f76-453a-919d-413861904646",
+            "resourceType": "User",
+            "version": "W/\"1790622962349821\""
+          },
+          "name": {
+            "familyName": "Jensen",
+            "givenName": "John"
+          },
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "userName": "jsmith@example.com",
+          "groups": []
+        }
+      }
+    ]
+  }
+]
