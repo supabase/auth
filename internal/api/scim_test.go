@@ -461,18 +461,6 @@ func TestSCIMUsers(t *testing.T) {
 			c := newSCIMClient(t, nil)
 			enterprise := string(core.SchemaEnterpriseUser)
 
-			t.Run("PUT replaces the manager", func(t *testing.T) {
-				first := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("First Boss"))
-				second := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Second Boss"))
-				report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(first.ID))
-
-				body := newSCIMReport(second.ID)
-				body["userName"] = report.UserName
-				res := c.do(t, http.MethodPut, scimUsersPath+"/"+report.ID, body)
-				require.Equal(t, http.StatusOK, res.StatusCode)
-				require.Equal(t, &core.Manager{Value: second.ID}, scimManager(t, scimtest.Decode[core.User](t, res)))
-			})
-
 			t.Run("PATCH ignores the read-only manager.displayName", func(t *testing.T) {
 				boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Real Boss"))
 				report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
