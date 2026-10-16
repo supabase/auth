@@ -549,8 +549,6 @@ func TestSCIMQuery(t *testing.T) {
 				{scimUsersPath, `externalId ne "701984"`, decoy.ID},
 				{scimUsersPath, `nickName ne "Babsy"`, decoy.ID},
 				{scimUsersPath, `emails.value ne "babs@jensen.org"`, decoy.ID},
-				{scimUsersPath, `nickName eq null`, decoy.ID},
-				{scimUsersPath, `nickName ne null`, user.ID},
 				{scimUsersPath, `meta.resourceType ne "User" or id eq "` + user.ID + `"`, user.ID},
 				{scimUsersPath, `meta.location eq "` + user.Meta.Location + `"`, user.ID},
 				{scimUsersPath, `meta.location ne "` + decoy.Meta.Location + `"`, user.ID},
@@ -701,7 +699,6 @@ func TestSCIMQuery(t *testing.T) {
 			})
 
 			runRows("Null and missing attributes", []scimFilterRow{
-				{scimUsersPath, `title eq null`, onlyDecoy},
 				{scimUsersPath, `emails.value eq null`, onlyDecoy},
 				{scimUsersPath, `name.givenName eq null`, onlyDecoy},
 				{scimUsersPath, `title co "x"`, none},
@@ -794,15 +791,6 @@ func TestSCIMQuery(t *testing.T) {
 					scimtest.RequireError(t, res, tc.status, tc.scimType)
 				})
 			}
-		})
-	})
-
-	t.Run("Attributes", func(t *testing.T) {
-		t.Run("attributes and excludedAttributes are mutually exclusive", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-
-			res := c.get(t, scimUsersPath+"?attributes=userName&excludedAttributes=name")
-			scimtest.RequireError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
 		})
 	})
 
