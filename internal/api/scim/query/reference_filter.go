@@ -3,12 +3,15 @@ package query
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/store"
 )
+
+const typeAttribute = "type"
 
 const edgeExists = `EXISTS (
   SELECT 1
@@ -40,11 +43,14 @@ func (r Reference) match(definition *core.Attribute, op filter.Operator, value a
 	if op != filter.OpEquals && op != filter.OpNotEquals {
 		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(r.Name+"."+definition.Name) + " supports only eq and ne")
 	}
-	if definition.Name != store.ValueAttribute {
-		return nil, r.unfilterable(definition)
-	}
 	text, _ := value.(string)
-	return uuidPredicate("edge.target_id", op, text), nil
+	switch definition.Name {
+	case store.ValueAttribute:
+		return uuidPredicate("edge.target_id", op, text), nil
+	case typeAttribute:
+		return predicate{"lower(edge.target_type)" + comparisons[op] + "?", []any{strings.ToLower(text)}}, nil
+	}
+	return nil, r.unfilterable(definition)
 }
 
 func (r Reference) unfilterable(definition *core.Attribute) error {
