@@ -1,6 +1,7 @@
 package query
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -56,7 +57,7 @@ func (r Resource) where(expression string) (Clause, error) {
 	if expression == "" {
 		return nil, nil
 	}
-	return protocol.Filter(r.schemas, expression, evaluator(r))
+	return protocol.Filter(r.schemas, expression, evaluator{r})
 }
 
 func referencesOf(schemas core.Schemas) []Reference {
@@ -68,4 +69,12 @@ func referencesOf(schemas core.Schemas) []Reference {
 		}
 	}
 	return references
+}
+
+func (r Resource) lookup(top *core.Attribute) *Reference {
+	index := slices.IndexFunc(r.references, func(ref Reference) bool { return ref.Attribute == top })
+	if index < 0 {
+		return nil
+	}
+	return &r.references[index]
 }

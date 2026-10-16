@@ -1,11 +1,9 @@
 package query
 
 import (
-	"slices"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -13,7 +11,9 @@ import (
 
 var _ protocol.Evaluator[Clause] = evaluator{}
 
-type evaluator Resource
+type evaluator struct {
+	Resource
+}
 
 func (e evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (Clause, error) {
 	f := e.field(attribute)
@@ -112,12 +112,4 @@ func (e evaluator) field(attribute *protocol.Attribute) field {
 		f.name, f.path.root = strings.Join(keys, "."), "$"
 	}
 	return f
-}
-
-func (e evaluator) lookup(top *core.Attribute) *Reference {
-	index := slices.IndexFunc(e.references, func(ref Reference) bool { return ref.Attribute == top })
-	if index < 0 {
-		return nil
-	}
-	return &e.references[index]
 }

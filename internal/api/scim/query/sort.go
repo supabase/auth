@@ -19,7 +19,7 @@ func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) 
 		return "", nil, err
 	}
 	keys, root := attribute.Keys(), attribute.Root()
-	if evaluator(r).lookup(root) != nil {
+	if r.lookup(root) != nil {
 		return "", nil, scimerrors.ErrInvalidValue(strconv.Quote(request.SortBy) + " cannot be sorted")
 	}
 	direction := " ASC"
