@@ -24,7 +24,7 @@ var indexes = map[core.SchemaURI][]string{
 	core.SchemaUser: {"userName"},
 }
 
-var sortKeys = map[core.SchemaURI]string{
+var lowerNames = map[core.SchemaURI]string{
 	core.SchemaUser:  "userName",
 	core.SchemaGroup: "displayName",
 }

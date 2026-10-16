@@ -5,7 +5,7 @@ create table if not exists {{ index .Options "Namespace" }}.scim_resources (
     resource_type text not null,
     resource jsonb not null,
     search jsonb not null generated always as (lower(resource::text)::jsonb) stored,
-    sort_key text collate "C" generated always as (lower(coalesce(resource->>'userName', resource->>'displayName'))) stored,
+    lower_name text collate "C" generated always as (lower(coalesce(resource->>'userName', resource->>'displayName'))) stored,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     deleted_at timestamptz,
@@ -24,8 +24,8 @@ create index if not exists scim_resources_type_id_idx
     where deleted_at is null;
 
 /* auth_migration: 20261005000000 */
-create index if not exists scim_resources_sort_key_idx
-    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, sort_key, id)
+create index if not exists scim_resources_lower_name_idx
+    on {{ index .Options "Namespace" }}.scim_resources (sso_provider_id, resource_type, lower_name, id)
     where deleted_at is null;
 
 /* auth_migration: 20261005000000 */
