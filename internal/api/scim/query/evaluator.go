@@ -89,9 +89,9 @@ func (e evaluator) indexed(op filter.Operator, text string) Clause {
 	case filter.OpStartsWith:
 		return predicate{lowerName + " >= ? AND " + lowerName + " < ?", []any{folded, folded + string(utf8.MaxRune)}}
 	case filter.OpContains:
-		return predicate{"strpos(" + lowerName + ", ?) > 0", []any{folded}}
+		return predicate{lowerName + " LIKE ?", []any{"%" + likeEscaper.Replace(folded) + "%"}}
 	case filter.OpEndsWith:
-		return predicate{"right(" + lowerName + ", char_length(?)) = ?", []any{folded, folded}}
+		return predicate{lowerName + " LIKE ?", []any{"%" + likeEscaper.Replace(folded)}}
 	}
 	return predicate{lowerName + " IS NOT NULL AND " + lowerName + comparisons[op] + "?", []any{folded}}
 }
