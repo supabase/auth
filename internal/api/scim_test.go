@@ -405,7 +405,9 @@ func TestSCIMQuery(t *testing.T) {
 		t.Run("Accepted", func(t *testing.T) {
 			c := newSCIMClient(t, nil)
 			decoy := c.createUser(t, "decoy@example.com")
-			user := c.createUser(t, scimUserName("bjensen"))
+			titled := newSCIMUser(scimUserName("bjensen"), "Barbara", "Jensen")
+			titled["title"] = "Tour Guide"
+			user := scimCreate[core.User](t, c, scimUsersPath, titled)
 
 			for _, filter := range []string{
 				`title co null or userName eq "decoy@example.com"`,
