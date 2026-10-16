@@ -77,23 +77,23 @@ func (e evaluator) assigned(f field, op filter.Operator, value any) (Clause, err
 		}
 		return f.columnMatch(op, value)
 	}
-	if text, ok := value.(string); ok {
-		if clause, ok := e.indexed(f, op, text); ok {
-			return clause, nil
-		}
+	if text, ok := value.(string); ok && e.usesLowerName(f.name) {
+		return e.indexed(op, text), nil
 	}
 	return f.match(op, value)
 }
 
-func (e evaluator) indexed(f field, op filter.Operator, text string) (Clause, bool) {
-	sign, ranged := comparisons[op]
-	if !usesLowerName(e.schemas.Base().ID, f.name, f.attribute.Definition.CaseExact) || op == filter.OpNotEquals || !ranged && op != filter.OpStartsWith {
-		return nil, false
+func (e evaluator) indexed(op filter.Operator, text string) Clause {
+	folded, _ := e.name.Fold(text).(string)
+	switch op {
+	case filter.OpStartsWith:
+		return predicate{lowerName + " >= ? AND " + lowerName + " < ?", []any{folded, folded + string(utf8.MaxRune)}}
+	case filter.OpContains:
+		return predicate{"strpos(" + lowerName + ", ?) > 0", []any{folded}}
+	case filter.OpEndsWith:
+		return predicate{"right(" + lowerName + ", char_length(?)) = ?", []any{folded, folded}}
 	}
-	if op == filter.OpStartsWith {
-		return predicate{lowerName + " >= lower(?) AND " + lowerName + " < (lower(?) || ?)", []any{text, text, string(utf8.MaxRune)}}, true
-	}
-	return predicate{lowerName + " IS NOT NULL AND " + lowerName + sign + "lower(?)", []any{text}}, true
+	return predicate{lowerName + " IS NOT NULL AND " + lowerName + comparisons[op] + "?", []any{folded}}
 }
 
 func (e evaluator) relativeLocation(value any) string {

@@ -3,15 +3,12 @@ package query
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/store"
 )
-
-const typeAttribute = "type"
 
 const edgeExists = `EXISTS (
   SELECT 1
@@ -47,8 +44,8 @@ func (r Reference) match(definition *core.Attribute, op filter.Operator, value a
 	switch definition.Name {
 	case store.ValueAttribute:
 		return uuidPredicate("edge.target_id", op, text), nil
-	case typeAttribute:
-		return predicate{"lower(edge.target_type)" + comparisons[op] + "?", []any{strings.ToLower(text)}}, nil
+	case "type":
+		return predicate{"lower(edge.target_type)" + comparisons[op] + "?", []any{definition.Fold(text)}}, nil
 	}
 	return nil, r.unfilterable(definition)
 }

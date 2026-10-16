@@ -5,7 +5,7 @@ create table if not exists {{ index .Options "Namespace" }}.scim_resources (
     resource_type text not null,
     resource jsonb not null,
     search jsonb not null generated always as (lower(resource::text)::jsonb) stored,
-    lower_name text collate "C" generated always as (lower(coalesce(resource->>'userName', resource->>'displayName'))) stored,
+    lower_name text collate "C",
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     deleted_at timestamptz,

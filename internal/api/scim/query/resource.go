@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/json"
 	"slices"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -19,6 +20,7 @@ type Resource struct {
 	schemas    core.Schemas
 	references []Reference
 	location   string
+	name       *core.Attribute
 }
 
 func NewResource(schemas core.Schemas, location string) Resource {
@@ -27,7 +29,19 @@ func NewResource(schemas core.Schemas, location string) Resource {
 		schemas:    schemas,
 		references: referencesOf(schemas),
 		location:   location,
+		name:       lowerNameOf(schemas.Base()),
 	}
+}
+
+func (r Resource) LowerName(body []byte) (any, error) {
+	if r.name == nil {
+		return nil, nil
+	}
+	var doc core.Object
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return nil, err
+	}
+	return r.name.Fold(doc.Get(r.name.Name)), nil
 }
 
 func (r Resource) Search(request *protocol.SearchRequest) (Search, error) {
