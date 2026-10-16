@@ -9,8 +9,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-var _ protocol.Evaluator[Clause] = evaluator{}
-
 type evaluator struct {
 	Resource
 }
