@@ -8,6 +8,19 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
+const enableSCIMSQL = `
+INSERT INTO %[1]q (sso_provider_id, enabled)
+VALUES (?, true)
+ON CONFLICT (sso_provider_id) DO UPDATE
+SET enabled = true, updated_at = now()
+WHERE %[1]q.enabled = false`
+
+const disableSCIMSQL = `
+UPDATE %q
+SET enabled = false, updated_at = now()
+WHERE sso_provider_id = ?
+  AND enabled`
+
 type SCIMSettings struct {
 	SSOProviderID uuid.UUID `db:"sso_provider_id"`
 	Enabled       bool      `db:"enabled"`
@@ -19,14 +32,14 @@ func (SCIMSettings) TableName() string {
 
 func EnableSCIM(tx *storage.Connection, providerID uuid.UUID) error {
 	return errors.Wrap(tx.RawQuery(
-		fmt.Sprintf("INSERT INTO %[1]q (sso_provider_id, enabled) VALUES (?, true) ON CONFLICT (sso_provider_id) DO UPDATE SET enabled = true, updated_at = now() WHERE %[1]q.enabled = false", SCIMSettings{}.TableName()),
+		fmt.Sprintf(enableSCIMSQL, SCIMSettings{}.TableName()),
 		providerID,
 	).Exec(), "error enabling SCIM")
 }
 
 func DisableSCIM(tx *storage.Connection, providerID uuid.UUID) error {
 	return errors.Wrap(tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET enabled = false, updated_at = now() WHERE sso_provider_id = ? AND enabled", SCIMSettings{}.TableName()),
+		fmt.Sprintf(disableSCIMSQL, SCIMSettings{}.TableName()),
 		providerID,
 	).Exec(), "error disabling SCIM")
 }

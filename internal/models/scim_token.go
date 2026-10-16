@@ -24,6 +24,42 @@ const (
 	activeSCIMClause = "revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())"
 )
 
+const scimInsertSQL = `
+INSERT INTO %q (id, sso_provider_id, token_hash, prefix, expires_at)
+VALUES (?, ?, ?, ?, ?)
+RETURNING *`
+
+const scimRevokeSQL = `
+UPDATE %q
+SET revoked_at = COALESCE(revoked_at, now())
+WHERE sso_provider_id = ?
+  AND id = ?
+RETURNING *`
+
+const scimAuthenticateSQL = `
+WITH authenticated AS (
+  SELECT t.*
+  FROM %[1]q AS t
+  JOIN %[2]q AS p ON p.id = t.sso_provider_id
+  JOIN %[3]q AS s ON s.sso_provider_id = t.sso_provider_id AND s.enabled
+  WHERE (p.disabled IS NULL OR p.disabled = false)
+    AND t.token_hash = ?
+    AND %[4]s
+), touched AS (
+  UPDATE %[1]q AS t
+  SET last_used_at = now()
+  FROM authenticated AS a
+  WHERE t.id = a.id
+    AND (t.last_used_at IS NULL OR t.last_used_at < now() - interval '1 minute')
+  RETURNING t.*
+)
+SELECT *
+FROM touched
+UNION ALL
+SELECT *
+FROM authenticated
+WHERE NOT EXISTS (SELECT 1 FROM touched)`
+
 type SCIMToken struct {
 	ID            uuid.UUID  `json:"id" db:"id"`
 	SSOProviderID uuid.UUID  `json:"-" db:"sso_provider_id"`
@@ -62,7 +98,7 @@ func CreateSCIMToken(tx *storage.Connection, providerID uuid.UUID, expiresAt *ti
 		ExpiresAt:     expiresAt,
 	}
 	if err := tx.RawQuery(
-		fmt.Sprintf("INSERT INTO %q (id, sso_provider_id, token_hash, prefix, expires_at) VALUES (?, ?, ?, ?, ?) RETURNING *", token.TableName()),
+		fmt.Sprintf(scimInsertSQL, token.TableName()),
 		token.ID, token.SSOProviderID, token.TokenHash, token.Prefix, token.ExpiresAt,
 	).First(token); err != nil {
 		if utilities.IsCheckViolation(err, "scim_tokens_expires_at_future") {
@@ -84,7 +120,7 @@ func FindActiveSCIMTokensBySSOProvider(tx *storage.Connection, providerID uuid.U
 func RevokeSCIMToken(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMToken, error) {
 	token := &SCIMToken{}
 	if err := tx.RawQuery(
-		fmt.Sprintf("UPDATE %q SET revoked_at = COALESCE(revoked_at, now()) WHERE sso_provider_id = ? AND id = ? RETURNING *", token.TableName()),
+		fmt.Sprintf(scimRevokeSQL, token.TableName()),
 		providerID, id,
 	).First(token); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -98,23 +134,7 @@ func RevokeSCIMToken(tx *storage.Connection, providerID, id uuid.UUID) (*SCIMTok
 func AuthenticateSCIMToken(tx *storage.Connection, plaintext string) (*SCIMToken, error) {
 	token := &SCIMToken{}
 	if err := tx.RawQuery(
-		fmt.Sprintf(`WITH authenticated AS (
-  SELECT t.* FROM %[1]q AS t
-  JOIN %[2]q AS p ON p.id = t.sso_provider_id
-  JOIN %[3]q AS s ON s.sso_provider_id = t.sso_provider_id AND s.enabled
-  WHERE (p.disabled IS NULL OR p.disabled = false)
-    AND t.token_hash = ?
-    AND %[4]s
-), touched AS (
-  UPDATE %[1]q AS t SET last_used_at = now()
-  FROM authenticated AS a
-  WHERE t.id = a.id
-    AND (t.last_used_at IS NULL OR t.last_used_at < now() - interval '1 minute')
-  RETURNING t.*
-)
-SELECT * FROM touched
-UNION ALL
-SELECT * FROM authenticated WHERE NOT EXISTS (SELECT 1 FROM touched)`, token.TableName(), SSOProvider{}.TableName(), SCIMSettings{}.TableName(), activeSCIMClause),
+		fmt.Sprintf(scimAuthenticateSQL, token.TableName(), SSOProvider{}.TableName(), SCIMSettings{}.TableName(), activeSCIMClause),
 		hashSCIMToken(plaintext),
 	).First(token); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

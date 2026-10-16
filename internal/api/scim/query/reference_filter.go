@@ -1,12 +1,21 @@
 package query
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
+
+const edgeExists = `EXISTS (
+  SELECT 1
+  FROM scim_resource_references edge
+  WHERE edge.source_id = scim_resources.id
+    AND edge.attribute = ?
+    AND %s
+)`
 
 func (r Reference) leaf(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {
 	if r.Inverse() {
@@ -23,7 +32,7 @@ func (r Reference) leaf(definition *core.Attribute, op filter.Operator, value an
 
 func (r Reference) exists(inner Clause) Clause {
 	text, args := inner.SQL()
-	return predicate{"EXISTS (SELECT 1 FROM scim_resource_references edge WHERE edge.source_id = scim_resources.id AND edge.attribute = ? AND " + text + ")", append([]any{r.Name}, args...)}
+	return predicate{fmt.Sprintf(edgeExists, text), append([]any{r.Name}, args...)}
 }
 
 func (r Reference) match(definition *core.Attribute, op filter.Operator, value any) (Clause, error) {

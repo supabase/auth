@@ -12,13 +12,48 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
+const insertReferences = `
+INSERT INTO scim_resource_references (sso_provider_id, source_id, attribute, target_id, target_type)
+SELECT sso_provider_id, ?, ?, id, resource_type
+FROM scim_resources
+WHERE sso_provider_id = ?
+  AND resource_type = any(?::text[])
+  AND deleted_at IS NULL
+  AND id = any(?::uuid[])
+RETURNING target_id`
+
+const deleteReferences = `
+DELETE FROM scim_resource_references
+WHERE source_id = ?
+  AND attribute = ?
+  AND target_id = any(?::uuid[])`
+
+const selectTargets = `
+SELECT target_id
+FROM scim_resource_references
+WHERE source_id = ?
+  AND attribute = ?`
+
+const selectCycle = `
+WITH RECURSIVE up (id) AS (
+  SELECT ?::uuid
+  UNION
+  SELECT r.source_id
+  FROM up u
+  JOIN scim_resource_references r ON r.target_id = u.id AND r.attribute = ?
+)
+SELECT id
+FROM up
+WHERE id = any(?::uuid[])
+LIMIT 1`
+
 func (s Scope) addReferences(tx *storage.Connection, source uuid.UUID, attribute string, types []string, targets []uuid.UUID) ([]uuid.UUID, error) {
 	added := []uuid.UUID{}
 	if len(targets) == 0 {
 		return added, nil
 	}
 	err := tx.RawQuery(
-		"INSERT INTO scim_resource_references (sso_provider_id, source_id, attribute, target_id, target_type) SELECT sso_provider_id, ?, ?, id, resource_type FROM scim_resources WHERE sso_provider_id = ? AND resource_type = any(?::text[]) AND deleted_at IS NULL AND id = any(?::uuid[]) RETURNING target_id",
+		insertReferences,
 		source, attribute, s.providerID, types, uuidStrings(targets),
 	).All(&added)
 	return added, errors.Wrap(err, "error adding SCIM references")
@@ -29,14 +64,14 @@ func (s Scope) removeReferences(tx *storage.Connection, source uuid.UUID, attrib
 		return nil
 	}
 	return errors.Wrap(tx.RawQuery(
-		"DELETE FROM scim_resource_references WHERE source_id = ? AND attribute = ? AND target_id = any(?::uuid[])",
+		deleteReferences,
 		source, attribute, uuidStrings(targets),
 	).Exec(), "error removing SCIM references")
 }
 
 func (s Scope) findTargets(tx *storage.Connection, source uuid.UUID, attribute string) ([]uuid.UUID, error) {
 	targets := []uuid.UUID{}
-	err := tx.RawQuery("SELECT target_id FROM scim_resource_references WHERE source_id = ? AND attribute = ?", source, attribute).All(&targets)
+	err := tx.RawQuery(selectTargets, source, attribute).All(&targets)
 	return targets, errors.Wrap(err, "error finding SCIM targets")
 }
 
@@ -46,7 +81,7 @@ func (s Scope) acyclic(tx *storage.Connection, source uuid.UUID, attribute strin
 	}
 	cyclic := []uuid.UUID{}
 	err := tx.RawQuery(
-		"WITH RECURSIVE up (id) AS (SELECT ?::uuid UNION SELECT r.source_id FROM up u JOIN scim_resource_references r ON r.target_id = u.id AND r.attribute = ?) SELECT id FROM up WHERE id = any(?::uuid[]) LIMIT 1",
+		selectCycle,
 		source, attribute, uuidStrings(targets),
 	).All(&cyclic)
 	if err != nil {

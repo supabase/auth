@@ -20,10 +20,37 @@ const (
 	queryTimeout = 5 * time.Second
 )
 
-const (
-	resourceColumns = "id, resource, created_at, updated_at"
-	scopeWhere      = "sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL"
-)
+const scopeWhere = "sso_provider_id = ? AND resource_type = ? AND deleted_at IS NULL"
+
+const selectResources = `
+SELECT id, resource, created_at, updated_at, %s AS refs
+FROM %s`
+
+const resourceByID = `scim_resources
+WHERE id = ?
+  AND ` + scopeWhere
+
+const pageOfResources = `unnest(array(%s LIMIT $%d OFFSET $%d)) WITH ORDINALITY page(id, n)
+JOIN scim_resources USING (id)
+ORDER BY page.n`
+
+const insertResource = `
+INSERT INTO scim_resources (id, sso_provider_id, resource_type, resource)
+VALUES (?, ?, ?, ?::jsonb)`
+
+const updateResource = `
+UPDATE scim_resources
+SET resource = ?::jsonb, updated_at = now()
+WHERE id = ?
+  AND ` + scopeWhere + `
+  AND updated_at = COALESCE(?, updated_at)`
+
+const softDeleteResource = `
+UPDATE scim_resources
+SET deleted_at = now()
+WHERE id = ?
+  AND ` + scopeWhere + `
+  AND updated_at = COALESCE(?, updated_at)`
 
 type Scope struct {
 	db           *storage.Connection
@@ -75,7 +102,7 @@ func (s Scope) Delete(ctx context.Context, id uuid.UUID, version string) error {
 }
 
 func (s Scope) find(tx *storage.Connection, id uuid.UUID) (Row, error) {
-	rows, err := s.fetch(tx, "scim_resources WHERE id = ? AND "+scopeWhere, id, s.providerID, s.resourceType)
+	rows, err := s.fetch(tx, resourceByID, id, s.providerID, s.resourceType)
 	if err != nil {
 		return Row{}, err
 	}
@@ -87,7 +114,7 @@ func (s Scope) find(tx *storage.Connection, id uuid.UUID) (Row, error) {
 
 func (s Scope) fetch(tx *storage.Connection, from string, args ...any) ([]Row, error) {
 	rows := []Row{}
-	err := tx.RawQuery("SELECT "+resourceColumns+", "+s.refs+" AS refs FROM "+from, args...).All(&rows)
+	err := tx.RawQuery(fmt.Sprintf(selectResources, s.refs, from), args...).All(&rows)
 	return rows, err
 }
 
@@ -104,7 +131,7 @@ func (s Scope) page(ctx context.Context, search Search) ([]Row, int, error) {
 	sql, values := q.Select("id").Order(search.Order, search.OrderArgs...).ToSQL(pop.NewModel(&Resource{}, ctx))
 	bounded, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
-	rows, err := s.fetch(s.db.WithContext(bounded), fmt.Sprintf("unnest(array(%s LIMIT $%d OFFSET $%d)) WITH ORDINALITY page(id, n) JOIN scim_resources USING (id) ORDER BY page.n", sql, len(values)+1, len(values)+2), append(values, search.Count, search.Offset)...)
+	rows, err := s.fetch(s.db.WithContext(bounded), fmt.Sprintf(pageOfResources, sql, len(values)+1, len(values)+2), append(values, search.Count, search.Offset)...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -158,14 +185,14 @@ func (s Scope) query(tx *storage.Connection) *pop.Query {
 
 func (s Scope) create(tx *storage.Connection, id uuid.UUID, document string) error {
 	return tx.RawQuery(
-		"INSERT INTO scim_resources (id, sso_provider_id, resource_type, resource) VALUES (?, ?, ?, ?::jsonb)",
+		insertResource,
 		id, s.providerID, s.resourceType, document,
 	).Exec()
 }
 
 func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version string) error {
 	count, err := tx.RawQuery(
-		"UPDATE scim_resources SET resource = ?::jsonb, updated_at = now() WHERE id = ? AND "+scopeWhere+" AND updated_at = COALESCE(?, updated_at)",
+		updateResource,
 		document, id, s.providerID, s.resourceType, versionTime(version),
 	).ExecWithCount()
 	if err != nil {
@@ -179,7 +206,7 @@ func (s Scope) update(tx *storage.Connection, id uuid.UUID, document, version st
 
 func (s Scope) remove(ctx context.Context, id uuid.UUID, version string) error {
 	count, err := s.db.WithContext(ctx).RawQuery(
-		"UPDATE scim_resources SET deleted_at = now() WHERE id = ? AND "+scopeWhere+" AND updated_at = COALESCE(?, updated_at)",
+		softDeleteResource,
 		id, s.providerID, s.resourceType, versionTime(version),
 	).ExecWithCount()
 	if err != nil {
