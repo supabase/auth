@@ -106,9 +106,5 @@ func (r *repository[T]) scope(ctx context.Context) (store.Scope, error) {
 	if token == nil {
 		return store.Scope{}, scimerrors.ErrInternal("missing SCIM token")
 	}
-	return store.NewScope(r.db, token.SSOProviderID, r.query.Type, r.projected(ctx)), nil
-}
-
-func (r *repository[T]) projected(ctx context.Context) string {
-	return r.query.Select(protocol.ProjectionFrom(ctx))
+	return store.NewScope(r.db, token.SSOProviderID, r.query.Type, r.query.Select(protocol.ProjectionFrom(ctx))), nil
 }
