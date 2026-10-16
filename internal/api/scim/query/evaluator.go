@@ -93,7 +93,7 @@ func (e evaluator) indexed(f field, op filter.Operator, text string) (Clause, bo
 	if op == filter.OpStartsWith {
 		return predicate{lowerName + " >= lower(?) AND " + lowerName + " < (lower(?) || ?)", []any{text, text, string(utf8.MaxRune)}}, true
 	}
-	return predicate{lowerName + sign + "lower(?)", []any{text}}, true
+	return predicate{lowerName + " IS NOT NULL AND " + lowerName + sign + "lower(?)", []any{text}}, true
 }
 
 func (e evaluator) relativeLocation(value any) string {
