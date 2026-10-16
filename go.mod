@@ -163,7 +163,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20240303152453-e0e82adf1721
 	github.com/stretchr/testify v1.12.1
-	github.com/supabase-community/scim-go v0.22.0
+	github.com/supabase-community/scim-go v0.22.1-0.20261016050140-078faece98ee
 	github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.64.0
@@ -195,5 +195,3 @@ go 1.27.2
 replace github.com/joho/godotenv => ./internal/forks/godotenv
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
-
-replace github.com/supabase-community/scim-go => /Users/xlgmokha/supabase/github.com/supabase-community/scim-go
