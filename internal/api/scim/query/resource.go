@@ -127,3 +127,7 @@ func (r Resource) sortValue(attribute *protocol.Attribute, keys []string, root *
 	}
 	return value, args
 }
+
+func (r Resource) usesLowerName(path string) bool {
+	return r.name != nil && r.name.Name == path
+}

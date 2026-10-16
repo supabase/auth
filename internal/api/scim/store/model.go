@@ -21,7 +21,13 @@ func (model) TableName() string {
 }
 
 func (m model) record() store.Record {
-	return store.Record{ID: m.ID.String(), Body: m.Resource, Created: m.CreatedAt, Updated: m.UpdatedAt, Version: server.WeakETag(m.UpdatedAt)}
+	return store.Record{
+		ID:      m.ID.String(),
+		Body:    m.Resource,
+		Created: m.CreatedAt,
+		Updated: m.UpdatedAt,
+		Version: server.WeakETag(m.UpdatedAt),
+	}
 }
 
 func records(rows []model) []store.Record {

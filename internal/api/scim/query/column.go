@@ -27,14 +27,6 @@ var lowerNameSources = map[core.SchemaURI]string{
 	core.SchemaGroup: "displayName",
 }
 
-func lowerNameOf(schema *core.Schema) *core.Attribute {
-	name := schema.Attributes.Lookup(lowerNameSources[schema.ID])
-	if name == nil || name.CaseExact {
-		return nil
-	}
-	return name
-}
-
 var comparisons = map[filter.Operator]string{
 	filter.OpEquals:            " = ",
 	filter.OpNotEquals:         " <> ",
@@ -44,14 +36,18 @@ var comparisons = map[filter.Operator]string{
 	filter.OpLessThanEquals:    " <= ",
 }
 
+func lowerNameOf(schema *core.Schema) *core.Attribute {
+	name := schema.Attributes.Lookup(lowerNameSources[schema.ID])
+	if name == nil || name.CaseExact {
+		return nil
+	}
+	return name
+}
+
 func uuidPredicate(column string, op filter.Operator, text string) Clause {
 	id, err := uuid.Parse(text)
 	if err != nil {
 		return boolean(op == filter.OpNotEquals)
 	}
 	return predicate{column + comparisons[op] + "?::uuid", []any{id.String()}}
-}
-
-func (r Resource) usesLowerName(path string) bool {
-	return r.name != nil && r.name.Name == path
 }
