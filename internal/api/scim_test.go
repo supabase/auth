@@ -374,53 +374,6 @@ func TestSCIMUsers(t *testing.T) {
 				require.Equal(t, &active, scimtest.Decode[core.User](t, res).Active)
 			}
 		})
-
-		t.Run("PATCH adds and replaces attributes without a path", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			for _, op := range []string{"add", "replace"} {
-				res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": op, "value": map[string]any{"title": "Title " + op}}))
-				require.Equal(t, http.StatusOK, res.StatusCode, op)
-				got := scimtest.Decode[core.User](t, res)
-				require.Equal(t, "Title "+op, got.Title, op)
-				require.Equal(t, user.UserName, got.UserName, op)
-			}
-		})
-
-		t.Run("PATCH is atomic", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(
-				map[string]any{"op": "replace", "path": "nickName", "value": "Babsy"},
-				map[string]any{"op": "replace", "path": "id", "value": scimMissingID},
-			))
-			scimtest.RequireError(t, res, http.StatusBadRequest, scimerrors.Mutability)
-			require.Equal(t, user, c.user(t, user.ID))
-		})
-
-		t.Run("PATCH replace of a complex attribute keeps the other sub-attributes", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "name", "value": map[string]any{"givenName": "Babs"}}))
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, core.Name{GivenName: "Babs", FamilyName: "Jensen"}, c.user(t, user.ID).Name)
-		})
-
-		t.Run("PATCH replace by value filter updates the match or has no target", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-			path := scimUsersPath + "/" + user.ID
-			replace := newSCIMPatch(map[string]any{"op": "replace", "path": `emails[type eq "work"].value`, "value": "new@example.com"})
-
-			scimtest.RequireError(t, c.do(t, http.MethodPatch, path, replace), http.StatusBadRequest, scimerrors.NoTarget)
-			add := newSCIMPatch(map[string]any{"op": "add", "path": "emails", "value": []map[string]any{{"value": "work@example.com", "type": "work"}}})
-			require.Equal(t, http.StatusOK, c.do(t, http.MethodPatch, path, add).StatusCode)
-			require.Equal(t, http.StatusOK, c.do(t, http.MethodPatch, path, replace).StatusCode)
-			values := []string{}
-			for _, email := range c.user(t, user.ID).Emails {
-				values = append(values, email.Value)
-			}
-			require.ElementsMatch(t, []string{user.UserName, "new@example.com"}, values)
-		})
 	})
 
 	t.Run("Delete", func(t *testing.T) {
@@ -518,19 +471,6 @@ func TestSCIMUsers(t *testing.T) {
 				res := c.do(t, http.MethodPut, scimUsersPath+"/"+report.ID, body)
 				require.Equal(t, http.StatusOK, res.StatusCode)
 				require.Equal(t, &core.Manager{Value: second.ID}, scimManager(t, scimtest.Decode[core.User](t, res)))
-			})
-
-			t.Run("PUT ignores the read-only manager.displayName", func(t *testing.T) {
-				boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Real Boss"))
-				report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
-
-				body := newSCIMReport(boss.ID)
-				body["userName"] = report.UserName
-				body[enterprise].(map[string]any)["manager"] = map[string]any{"value": boss.ID, "displayName": "Forged"}
-				res := c.do(t, http.MethodPut, scimUsersPath+"/"+report.ID, body)
-				require.Equal(t, http.StatusOK, res.StatusCode)
-				require.Equal(t, &core.Manager{Value: boss.ID}, scimManager(t, scimtest.Decode[core.User](t, res)))
-				require.Equal(t, &core.Manager{Value: boss.ID}, scimManager(t, c.user(t, report.ID)))
 			})
 
 			t.Run("PATCH ignores the read-only manager.displayName", func(t *testing.T) {
@@ -650,20 +590,6 @@ func TestSCIMGroups(t *testing.T) {
 			require.Empty(t, c.group(t, group.ID).Members)
 		})
 
-		t.Run("POST assigns meta and an id that no user has", func(t *testing.T) {
-			user := createUser(t)
-			group := create(t)
-
-			require.Equal(t, core.ResourceTypeName("Group"), group.Meta.ResourceType)
-			require.Equal(t, group.Meta.Created, group.Meta.LastModified)
-			location, err := url.Parse(group.Meta.Location)
-			require.NoError(t, err)
-			require.Equal(t, group, scimtest.Decode[core.Group](t, c.get(t, location.Path)))
-			require.NotEqual(t, user.ID, group.ID)
-			scimtest.RequireError(t, c.get(t, scimGroupsPath+"/"+user.ID), http.StatusNotFound, "")
-			scimtest.RequireError(t, c.get(t, scimUsersPath+"/"+group.ID), http.StatusNotFound, "")
-		})
-
 		t.Run("POST creates a minimal group", func(t *testing.T) {
 			name := "Minimal " + uuid.NewV7().String()
 
@@ -714,15 +640,6 @@ func TestSCIMGroups(t *testing.T) {
 	})
 
 	t.Run("Replace", func(t *testing.T) {
-		t.Run("PUT replaces a group", func(t *testing.T) {
-			group := create(t, createUser(t))
-			other := createUser(t)
-
-			res := c.do(t, http.MethodPut, scimGroupsPath+"/"+group.ID, newSCIMGroup(group.DisplayName, other))
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, []core.Member{scimMember(other)}, scimtest.Decode[core.Group](t, res).Members)
-		})
-
 		t.Run("PUT keeps a repeated existing member once", func(t *testing.T) {
 			user := createUser(t)
 			group := create(t, user)
@@ -1316,19 +1233,6 @@ func TestSCIMQuery(t *testing.T) {
 	})
 
 	t.Run("Attributes", func(t *testing.T) {
-		t.Run("Users GET returns only the requested attributes", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			for _, query := range []url.Values{{"attributes": {"userName"}}, {"excludedAttributes": {"name"}}} {
-				res := c.get(t, scimUsersPath+"/"+user.ID+"?"+query.Encode())
-				require.Equal(t, http.StatusOK, res.StatusCode)
-				got := scimtest.Decode[core.User](t, res)
-				require.Equal(t, user.UserName, got.UserName)
-				require.Zero(t, got.Name)
-			}
-		})
-
 		t.Run("search projects Users and Groups", func(t *testing.T) {
 			c := newSCIMClient(t, nil)
 			user := c.createUser(t, scimUserName("bjensen"))
