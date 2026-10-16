@@ -77,11 +77,22 @@ func (e evaluator) assigned(f field, op filter.Operator, value any) (Clause, err
 		return f.columnMatch(op, value)
 	}
 	if text, ok := value.(string); ok {
-		if clause, ok := indexed(e.schemas.Base().ID, f.name, op, text, f.attribute.Definition.CaseExact); ok {
+		if clause, ok := e.indexed(f, op, text); ok {
 			return clause, nil
 		}
 	}
 	return f.match(op, value)
+}
+
+func (e evaluator) indexed(f field, op filter.Operator, text string) (Clause, bool) {
+	sign, ranged := comparisons[op]
+	if !usesLowerName(e.schemas.Base().ID, f.name, f.attribute.Definition.CaseExact) || op == filter.OpNotEquals || !ranged && op != filter.OpStartsWith {
+		return nil, false
+	}
+	if op == filter.OpStartsWith {
+		return prefix{lowerName, "lower(?)", text}, true
+	}
+	return predicate{lowerName + sign + "lower(?)", []any{text}}, true
 }
 
 func (e evaluator) relativeLocation(value any) string {

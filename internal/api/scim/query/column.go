@@ -7,7 +7,10 @@ import (
 	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
-const metaLocation = "meta.location"
+const (
+	metaLocation = "meta.location"
+	lowerName    = "lower_name"
+)
 
 var columns = map[string]string{
 	"id":                "id",
@@ -19,7 +22,7 @@ var columns = map[string]string{
 	"meta.version":      "updated_at",
 }
 
-var lowerNames = map[core.SchemaURI]string{
+var lowerNameSources = map[core.SchemaURI]string{
 	core.SchemaUser:  "userName",
 	core.SchemaGroup: "displayName",
 }
@@ -41,13 +44,6 @@ func uuidPredicate(column string, op filter.Operator, text string) Clause {
 	return predicate{column + comparisons[op] + "?::uuid", []any{id.String()}}
 }
 
-func indexed(schema core.SchemaURI, name string, op filter.Operator, text string, caseExact bool) (Clause, bool) {
-	sign, ranged := comparisons[op]
-	if lowerNames[schema] != name || caseExact || op == filter.OpNotEquals || !ranged && op != filter.OpStartsWith {
-		return nil, false
-	}
-	if op == filter.OpStartsWith {
-		return prefix{"lower_name", "lower(?)", text}, true
-	}
-	return predicate{"lower_name" + sign + "lower(?)", []any{text}}, true
+func usesLowerName(schema core.SchemaURI, name string, caseExact bool) bool {
+	return lowerNameSources[schema] == name && !caseExact
 }

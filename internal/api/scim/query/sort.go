@@ -33,8 +33,8 @@ func (r Resource) order(request *protocol.SearchRequest) (string, []any, error) 
 	if column, ok := columns[path]; ok {
 		return column + direction + ", id", nil, nil
 	}
-	if lowerNames[r.schemas.Base().ID] == path && !attribute.Definition.CaseExact {
-		return "lower_name" + direction + ", id", nil, nil
+	if usesLowerName(r.schemas.Base().ID, path, attribute.Definition.CaseExact) {
+		return lowerName + direction + ", id", nil, nil
 	}
 	value, args := r.sortValue(attribute, keys, root)
 	return value + ` COLLATE "C"` + direction + ", id", args, nil
