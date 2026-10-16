@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -47,7 +46,7 @@ func TestSCIMSuite(t *testing.T) {
 		c.inst.APIServer.URL+"/scim/v2",
 		scimtest.WithHTTPClient(c.inst.APIClient),
 		scimtest.WithBearerToken(c.token),
-	)).Run(t)
+	), scimtest.Strict()).Run(t)
 }
 
 // RFC 7644 sections 2 and 4, RFC 7643 sections 5 to 7
@@ -101,37 +100,6 @@ func TestSCIMService(t *testing.T) {
 			}
 			require.NoError(t, json.Unmarshal(scimBody(t, res), &body))
 			require.Equal(t, "https://auth.example.com"+scimServiceProviderConfigPath, body.Meta.Location)
-		})
-
-		t.Run("Schemas/User advertises the RFC 7643 User attributes", func(t *testing.T) {
-			res := c.get(t, scimSchemasPath+"/"+string(core.SchemaUser))
-			require.Equal(t, http.StatusOK, res.StatusCode)
-
-			var schema struct {
-				Attributes []struct {
-					Name string `json:"name"`
-				} `json:"attributes"`
-			}
-			require.NoError(t, json.Unmarshal(scimBody(t, res), &schema))
-			names := []string{}
-			for _, attribute := range schema.Attributes {
-				names = append(names, attribute.Name)
-			}
-			for _, name := range []string{"userName", "name", "displayName", "title", "active", "emails", "phoneNumbers", "groups", "roles"} {
-				require.Contains(t, names, name)
-			}
-		})
-
-		for _, path := range []string{scimResourceTypesPath, scimSchemasPath} {
-			t.Run(path+" rejects the filter query parameter", func(t *testing.T) {
-				res := c.get(t, path+"?"+url.Values{"filter": {`name eq "User"`}}.Encode())
-				scimtest.RequireError(t, res, http.StatusForbidden, "")
-			})
-		}
-
-		t.Run("Unknown endpoint returns a SCIM 404", func(t *testing.T) {
-			res := c.get(t, "/scim/v2/Unknown")
-			scimtest.RequireError(t, res, http.StatusNotFound, "")
 		})
 
 		t.Run("Unsupported method returns a SCIM 405", func(t *testing.T) {
@@ -317,29 +285,6 @@ func TestSCIMUsers(t *testing.T) {
 			require.Equal(t, userName, user.UserName)
 			require.Equal(t, new(true), user.Active)
 			require.Equal(t, core.Name{GivenName: "Barbara", FamilyName: "Jensen"}, user.Name)
-			require.Equal(t, user.Meta.Location, res.Header.Get("Location"))
-		})
-
-		t.Run("POST ignores read-only groups", func(t *testing.T) {
-			group := c.createGroup(t, "readonly-"+uuid.NewV7().String())
-			body := newSCIMUser(scimUserName("bjensen"), "Barbara", "Jensen")
-			body["groups"] = []map[string]any{{"value": group.ID}}
-			user := scimCreate[core.User](t, c, scimUsersPath, body)
-			require.Empty(t, user.Groups)
-			require.Empty(t, c.user(t, user.ID).Groups)
-		})
-
-		t.Run("POST assigns meta and ignores the client's meta", func(t *testing.T) {
-			body := newSCIMUser(scimUserName("bjensen"), "Barbara", "Jensen")
-			body["meta"] = map[string]any{"resourceType": "Group", "created": "2000-01-01T00:00:00Z", "lastModified": "2000-01-01T00:00:00Z", "location": "https://evil.example.com/Users/1"}
-			user := scimCreate[core.User](t, c, scimUsersPath, body)
-
-			require.Equal(t, core.ResourceTypeName("User"), user.Meta.ResourceType)
-			require.Equal(t, user.Meta.Created, user.Meta.LastModified)
-			require.Greater(t, user.Meta.Created.Year(), 2000)
-			location, err := url.Parse(user.Meta.Location)
-			require.NoError(t, err)
-			require.Equal(t, user, scimtest.Decode[core.User](t, c.get(t, location.Path)))
 		})
 
 		t.Run("POST accepts schemas in any order", func(t *testing.T) {
@@ -396,7 +341,6 @@ func TestSCIMUsers(t *testing.T) {
 
 			res := c.get(t, scimUsersPath+"/"+user.ID)
 			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, user.Meta.Version, res.Header.Get("ETag"))
 			require.Equal(t, user, scimtest.Decode[core.User](t, res))
 		})
 	})
@@ -408,13 +352,6 @@ func TestSCIMUsers(t *testing.T) {
 			res := c.do(t, http.MethodPut, scimUsersPath+"/"+user.ID, newSCIMUser(user.UserName, "Babs", "Jensen"))
 			require.Equal(t, http.StatusOK, res.StatusCode)
 			require.Equal(t, core.Name{GivenName: "Babs", FamilyName: "Jensen"}, scimtest.Decode[core.User](t, res).Name)
-		})
-
-		t.Run("PUT rejects a stale If-Match", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.api.With(scimtest.WithHeader("If-Match", `W/"stale"`)).Put(t, scimUsersPath+"/"+user.ID, newSCIMUser(user.UserName, "Babs", "Jensen"))
-			scimtest.RequireError(t, res, http.StatusPreconditionFailed, "")
 		})
 
 		t.Run("PUT rejects an invalid body", func(t *testing.T) {
@@ -432,17 +369,6 @@ func TestSCIMUsers(t *testing.T) {
 					scimtest.RequireError(t, c.do(t, http.MethodPut, scimUsersPath+"/"+user.ID, tc.body), http.StatusBadRequest, tc.scimType)
 				})
 			}
-		})
-
-		t.Run("PUT ignores the read-only id in the body", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			body := newSCIMUser(user.UserName, "Babs", "Jensen")
-			body["id"] = scimMissingID
-			res := c.do(t, http.MethodPut, scimUsersPath+"/"+user.ID, body)
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, user.ID, scimtest.Decode[core.User](t, res).ID)
-			require.Equal(t, "Babs", c.user(t, user.ID).Name.GivenName)
 		})
 	})
 
@@ -465,20 +391,6 @@ func TestSCIMUsers(t *testing.T) {
 			}
 		})
 
-		t.Run("PATCH adds, replaces and removes an attribute by path", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			for _, step := range []struct{ op, value string }{{"add", "Babsy"}, {"replace", "Bee"}, {"remove", ""}} {
-				operation := map[string]any{"op": step.op, "path": "nickName"}
-				if step.op != "remove" {
-					operation["value"] = step.value
-				}
-				res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(operation))
-				require.Equal(t, http.StatusOK, res.StatusCode, step.op)
-				require.Equal(t, step.value, scimtest.Decode[core.User](t, res).NickName, step.op)
-			}
-		})
-
 		t.Run("PATCH adds and replaces attributes without a path", func(t *testing.T) {
 			user := c.createUser(t, scimUserName("bjensen"))
 
@@ -491,20 +403,6 @@ func TestSCIMUsers(t *testing.T) {
 			}
 		})
 
-		t.Run("PATCH adds and removes multi-valued values", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			add := newSCIMPatch(map[string]any{"op": "add", "path": "emails", "value": []map[string]any{{"value": "work@example.com", "type": "work"}}})
-			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, add)
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Len(t, scimtest.Decode[core.User](t, res).Emails, 2)
-
-			remove := newSCIMPatch(map[string]any{"op": "remove", "path": `emails[type eq "work"]`})
-			res = c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, remove)
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Len(t, scimtest.Decode[core.User](t, res).Emails, 1)
-		})
-
 		t.Run("PATCH is atomic", func(t *testing.T) {
 			user := c.createUser(t, scimUserName("bjensen"))
 
@@ -514,28 +412,6 @@ func TestSCIMUsers(t *testing.T) {
 			))
 			scimtest.RequireError(t, res, http.StatusBadRequest, scimerrors.Mutability)
 			require.Equal(t, user, c.user(t, user.ID))
-		})
-
-		t.Run("PATCH of a primary email clears the other primary", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": "add", "path": "emails", "value": []map[string]any{{"value": "work@example.com", "type": "work", "primary": true}}}))
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			primaries := []string{}
-			for _, email := range c.user(t, user.ID).Emails {
-				if email.Primary != nil && *email.Primary {
-					primaries = append(primaries, email.Value)
-				}
-			}
-			require.Equal(t, []string{"work@example.com"}, primaries)
-		})
-
-		t.Run("PATCH replace adds an unset attribute", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "title", "value": "Tour Guide"}))
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, "Tour Guide", c.user(t, user.ID).Title)
 		})
 
 		t.Run("PATCH replace of a complex attribute keeps the other sub-attributes", func(t *testing.T) {
@@ -561,47 +437,6 @@ func TestSCIMUsers(t *testing.T) {
 			}
 			require.ElementsMatch(t, []string{user.UserName, "new@example.com"}, values)
 		})
-
-		t.Run("PATCH remove of the last value unassigns the attribute", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": "remove", "path": `emails[value eq "` + user.UserName + `"]`}))
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Empty(t, c.user(t, user.ID).Emails)
-		})
-
-		t.Run("PATCH of an extension attribute adds the extension schema", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": "add", "path": scimEnterprise("department"), "value": "Tour Operations"}))
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.ElementsMatch(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, c.user(t, user.ID).Schemas)
-		})
-
-		t.Run("PATCH add of an existing value keeps meta.lastModified", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-			add := newSCIMPatch(map[string]any{"op": "add", "path": "title", "value": "Tour Guide"})
-
-			require.Equal(t, http.StatusOK, c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, add).StatusCode)
-			before := c.user(t, user.ID).Meta.LastModified
-			require.Equal(t, http.StatusOK, c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, add).StatusCode)
-			require.Equal(t, before, c.user(t, user.ID).Meta.LastModified)
-		})
-
-		t.Run("PATCH rejects the read-only id", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "id", "value": scimMissingID}))
-			scimtest.RequireError(t, res, http.StatusBadRequest, scimerrors.Mutability)
-		})
-
-		t.Run("PATCH rejects a body without the PatchOp schema or without operations", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			wrongSchema := map[string]any{"schemas": []string{"x"}, "Operations": []map[string]any{{"op": "replace", "path": "active", "value": true}}}
-			scimtest.RequireError(t, c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, wrongSchema), http.StatusBadRequest, scimerrors.InvalidSyntax)
-			scimtest.RequireError(t, c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch()), http.StatusBadRequest, scimerrors.InvalidSyntax)
-		})
 	})
 
 	t.Run("Delete", func(t *testing.T) {
@@ -612,13 +447,6 @@ func TestSCIMUsers(t *testing.T) {
 			require.Equal(t, http.StatusNotFound, c.get(t, scimUsersPath+"/"+user.ID).StatusCode)
 			filter := `userName eq "` + user.UserName + `"`
 			require.Zero(t, scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}}).TotalResults)
-		})
-
-		t.Run("DELETE repeats as not found", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+user.ID).StatusCode)
-			scimtest.RequireError(t, c.delete(t, scimUsersPath+"/"+user.ID), http.StatusNotFound, "")
 		})
 	})
 
@@ -927,13 +755,6 @@ func TestSCIMGroups(t *testing.T) {
 			scimtest.RequireError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
 		})
 
-		t.Run("PUT rejects a stale If-Match", func(t *testing.T) {
-			group := create(t)
-
-			res := c.api.With(scimtest.WithHeader("If-Match", `W/"stale"`)).Put(t, scimGroupsPath+"/"+group.ID, newSCIMGroup(group.DisplayName))
-			scimtest.RequireError(t, res, http.StatusPreconditionFailed, "")
-		})
-
 		t.Run("PUT accepts a displayName that another group has", func(t *testing.T) {
 			group, other := create(t), create(t)
 
@@ -943,24 +764,6 @@ func TestSCIMGroups(t *testing.T) {
 	})
 
 	t.Run("Patch", func(t *testing.T) {
-		t.Run("PATCH adds members", func(t *testing.T) {
-			user, other := createUser(t), createUser(t)
-			group := create(t, user)
-
-			require.Equal(t, http.StatusNoContent, c.addMembers(t, group.ID, other.ID).StatusCode)
-			require.ElementsMatch(t, []core.Member{scimMember(user), scimMember(other)}, c.group(t, group.ID).Members)
-			list := scimList[core.Group](t, c, scimGroupsPath, url.Values{"filter": {`id eq "` + group.ID + `"`}})
-			require.ElementsMatch(t, []core.Member{scimMember(user), scimMember(other)}, list.Resources[0].Members)
-		})
-
-		t.Run("PATCH removes a member by filter", func(t *testing.T) {
-			user, other := createUser(t), createUser(t)
-			group := create(t, user, other)
-
-			require.Equal(t, http.StatusNoContent, patch(t, group.ID, map[string]any{"op": "remove", "path": `members[value eq "` + user.ID + `"]`}).StatusCode)
-			require.Equal(t, []core.Member{scimMember(other)}, c.group(t, group.ID).Members)
-		})
-
 		t.Run("PATCH replaces displayName", func(t *testing.T) {
 			group := create(t)
 
@@ -994,50 +797,6 @@ func TestSCIMGroups(t *testing.T) {
 			c.requireGroup(t, group.ID, group.DisplayName, kept.ID, added.ID)
 		})
 
-		t.Run("PATCH rejects an unknown op and an unknown path", func(t *testing.T) {
-			group := create(t)
-
-			bogus := patch(t, group.ID, map[string]any{"op": "bogus", "path": "displayName", "value": "x"})
-			scimtest.RequireError(t, bogus, http.StatusBadRequest, scimerrors.InvalidSyntax)
-			unknown := patch(t, group.ID, map[string]any{"op": "replace", "path": "nope", "value": "x"})
-			scimtest.RequireError(t, unknown, http.StatusBadRequest, scimerrors.InvalidPath)
-		})
-
-		t.Run("PATCH removes every member without a filter", func(t *testing.T) {
-			group := create(t, createUser(t), createUser(t))
-
-			res := patch(t, group.ID, map[string]any{"op": "remove", "path": "members"})
-			require.Less(t, res.StatusCode, http.StatusMultipleChoices)
-			require.Empty(t, c.group(t, group.ID).Members)
-		})
-
-		t.Run("PATCH replaces members", func(t *testing.T) {
-			user, other := createUser(t), createUser(t)
-			group := create(t, user)
-
-			res := patch(t, group.ID, map[string]any{"op": "replace", "path": "members", "value": []core.Member{{Value: other.ID}}})
-			require.Less(t, res.StatusCode, http.StatusMultipleChoices)
-			c.requireGroup(t, group.ID, group.DisplayName, other.ID)
-		})
-
-		t.Run("PATCH rejects a change to the immutable members.value", func(t *testing.T) {
-			user, other := createUser(t), createUser(t)
-			group := create(t, user)
-
-			res := patch(t, group.ID, map[string]any{"op": "replace", "path": `members[value eq "` + user.ID + `"].value`, "value": other.ID})
-			scimtest.RequireError(t, res, http.StatusBadRequest, scimerrors.Mutability)
-			c.requireGroup(t, group.ID, group.DisplayName, user.ID)
-		})
-
-		t.Run("PATCH returns 200 when attributes is requested", func(t *testing.T) {
-			user := createUser(t)
-			group := create(t)
-
-			res := c.do(t, http.MethodPatch, scimGroupsPath+"/"+group.ID+"?attributes=displayName", newSCIMAddMembers(user.ID))
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, group.DisplayName, scimtest.Decode[core.Group](t, res).DisplayName)
-		})
-
 		t.Run("PATCH adds an attribute without a path", func(t *testing.T) {
 			group := create(t, createUser(t))
 			externalID := uuid.NewV7().String()
@@ -1049,14 +808,6 @@ func TestSCIMGroups(t *testing.T) {
 	})
 
 	t.Run("Delete", func(t *testing.T) {
-		t.Run("DELETE of a user removes it from its groups", func(t *testing.T) {
-			user, other := createUser(t), createUser(t)
-			group := create(t, user, other)
-
-			require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+user.ID).StatusCode)
-			require.Equal(t, []core.Member{scimMember(other)}, c.group(t, group.ID).Members)
-		})
-
 		t.Run("a soft delete outside the API removes its links", func(t *testing.T) {
 			user, other := createUser(t), createUser(t)
 			group := create(t, user, other)
@@ -1069,13 +820,6 @@ func TestSCIMGroups(t *testing.T) {
 
 			softDelete(group.ID)
 			require.Empty(t, c.user(t, user.ID).Groups)
-		})
-
-		t.Run("DELETE repeats as not found", func(t *testing.T) {
-			group := create(t)
-
-			require.Equal(t, http.StatusNoContent, c.delete(t, scimGroupsPath+"/"+group.ID).StatusCode)
-			scimtest.RequireError(t, c.delete(t, scimGroupsPath+"/"+group.ID), http.StatusNotFound, "")
 		})
 	})
 
@@ -1352,7 +1096,7 @@ func TestSCIMQuery(t *testing.T) {
 			runRows("Presence", presence)
 
 			// RFC 7644 3.4.2.2: every comparison operator on every attribute the full user has and the decoy lacks.
-			runRows("Operators on every attribute", scimOperatorRows(scimUsersPath, scimFullUserProbes(decoy.ID), onlyUser, onlyDecoy))
+			runRows("Operators on every attribute", scimOperatorRows(scimUsersPath, scimFullUserProbes(), onlyUser, onlyDecoy))
 
 			runRows("Operators on attributes every resource has", []scimFilterRow{
 				{scimUsersPath, `id ne "` + user.ID + `"`, onlyDecoy},
@@ -1476,17 +1220,6 @@ func TestSCIMQuery(t *testing.T) {
 			} {
 				require.Equal(t, tc.want, scimIDs(t, c, scimUsersPath, tc.query), tc.query.Encode())
 			}
-		})
-
-		t.Run("Value path matches within one value", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			tag := uuid.NewV7().String()
-			body := newSCIMUser(scimUserName("bjensen"), "Barbara", "Jensen")
-			body["emails"] = []map[string]any{{"value": "home+" + tag + "@example.com", "type": "home"}, {"value": "work+" + tag + "@example.com", "type": "work"}}
-			user := scimCreate[core.User](t, c, scimUsersPath, body)
-
-			require.Empty(t, scimIDs(t, c, scimUsersPath, url.Values{"filter": {`emails[type eq "home" and value eq "work+` + tag + `@example.com"]`}}))
-			require.Equal(t, []string{user.ID}, scimIDs(t, c, scimUsersPath, url.Values{"filter": {`emails[type eq "work" and value eq "work+` + tag + `@example.com"]`}}))
 		})
 
 		t.Run("Unset primary is false", func(t *testing.T) {
@@ -1664,17 +1397,6 @@ func TestSCIMQuery(t *testing.T) {
 			require.Empty(t, got.Members)
 		})
 
-		t.Run("excludedAttributes never removes id", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.get(t, scimUsersPath+"/"+user.ID+"?excludedAttributes=id")
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, user.ID, scimtest.Decode[core.User](t, res).ID)
-			list := scimSearch(t, c, scimUsersPath, map[string]any{"filter": `id eq "` + user.ID + `"`, "excludedAttributes": []string{"id"}})
-			require.Equal(t, user.ID, list.Resources[0]["id"])
-		})
-
 		t.Run("attributes and excludedAttributes are mutually exclusive", func(t *testing.T) {
 			c := newSCIMClient(t, nil)
 
@@ -1712,73 +1434,6 @@ func TestSCIMQuery(t *testing.T) {
 				})
 			}
 		}
-
-		for _, resource := range scimQueryResources {
-			for _, search := range []bool{false, true} {
-				name := resource.name + " " + scimTransport(search)
-				tagged := func(t *testing.T, extra url.Values) (string, string, []string, int) {
-					tag := uuid.NewV7().String()
-					second := resource.create(t, c, resource.nameOf("b", tag))
-					first := resource.create(t, c, resource.nameOf("a", tag))
-					query := url.Values{"filter": {resource.attribute + ` co "` + tag + `"`}}
-					maps.Copy(query, extra)
-					ids, total := scimListIDs(t, c, resource.path, query, search)
-					return first, second, ids, total
-				}
-
-				t.Run(name+" lists every resource without a filter", func(t *testing.T) {
-					own := newSCIMClient(t, nil)
-					tag := uuid.NewV7().String()
-					first := resource.create(t, own, resource.nameOf("a", tag))
-					second := resource.create(t, own, resource.nameOf("b", tag))
-
-					ids, total := scimListIDs(t, own, resource.path, url.Values{}, search)
-					require.Equal(t, 2, total)
-					require.ElementsMatch(t, []string{first, second}, ids)
-				})
-
-				t.Run(name+" sorts ascending by default", func(t *testing.T) {
-					first, second, ids, total := tagged(t, url.Values{"sortBy": {resource.attribute}})
-					require.Equal(t, 2, total)
-					require.Equal(t, []string{first, second}, ids)
-				})
-
-				t.Run(name+" sorts ascending when asked", func(t *testing.T) {
-					first, second, ids, _ := tagged(t, url.Values{"sortBy": {resource.attribute}, "sortOrder": {"ascending"}})
-					require.Equal(t, []string{first, second}, ids)
-				})
-
-				// RFC 7644 3.4.2.4: a startIndex value less than 1 is interpreted as 1.
-				t.Run(name+" treats a startIndex below 1 as 1", func(t *testing.T) {
-					for _, startIndex := range []string{"0", "-5"} {
-						first, second, ids, total := tagged(t, url.Values{"sortBy": {resource.attribute}, "startIndex": {startIndex}})
-						require.Equal(t, 2, total, startIndex)
-						require.Equal(t, []string{first, second}, ids, startIndex)
-					}
-				})
-
-				// RFC 7644 3.4.2.4: a count of 0 returns only totalResults, a negative count is 0.
-				t.Run(name+" returns only the total for a count of 0 or less", func(t *testing.T) {
-					for _, count := range []string{"0", "-1"} {
-						_, _, ids, total := tagged(t, url.Values{"count": {count}})
-						require.Equal(t, 2, total, count)
-						require.Empty(t, ids, count)
-					}
-				})
-
-				t.Run(name+" caps count at the advertised maxResults", func(t *testing.T) {
-					own := newSCIMClient(t, nil)
-					tag := uuid.NewV7().String()
-					for i := range 101 {
-						resource.create(t, own, resource.nameOf(strconv.Itoa(i), tag))
-					}
-
-					ids, total := scimListIDs(t, own, resource.path, url.Values{"count": {"1000"}}, search)
-					require.Equal(t, 101, total)
-					require.Len(t, ids, 100)
-				})
-			}
-		}
 	})
 
 	t.Run("Errors", func(t *testing.T) {
@@ -1792,23 +1447,6 @@ func TestSCIMQuery(t *testing.T) {
 				})
 			}
 		}
-
-		t.Run("deleted resources are not found", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("deleted"))
-			group := c.createGroup(t, "Deleted "+uuid.NewV7().String())
-			require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+user.ID).StatusCode)
-			require.Equal(t, http.StatusNoContent, c.delete(t, scimGroupsPath+"/"+group.ID).StatusCode)
-
-			for _, route := range scimItemRoutes(user.ID, group.ID) {
-				scimtest.RequireError(t, c.do(t, route.method, route.path, route.body), http.StatusNotFound, "")
-			}
-		})
-
-		t.Run("totalResults is present when nothing matches", func(t *testing.T) {
-			res := c.get(t, scimUsersPath+"?"+url.Values{"filter": {`userName eq "` + scimUserName("nobody") + `"`}}.Encode())
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.JSONEq(t, "0", string(scimtest.Decode[map[string]json.RawMessage](t, res)["totalResults"]))
-		})
 
 		for _, tc := range []struct {
 			name, method, path string
@@ -2221,47 +1859,13 @@ type scimProbe struct {
 	attribute, value, contains, prefix, suffix, below, above string
 }
 
-func scimFullUserProbes(managerID string) []scimProbe {
-	enterprise := string(core.SchemaEnterpriseUser) + ":"
+func scimFullUserProbes() []scimProbe {
 	return []scimProbe{
-		{"externalId", "701984", "0198", "7019", "984", "1", "9"},
-		{"name.formatted", "Ms. Barbara J Jensen III", "Barbara", "Ms.", "III", "A", "Z"},
-		{"name.familyName", "Jensen-Smith", "n-S", "Jens", "Smith", "A", "Z"},
-		{"name.givenName", "Babs", "ab", "Ba", "bs", "A", "Z"},
-		{"name.middleName", "Jane", "an", "Ja", "ne", "A", "Z"},
-		{"name.honorificPrefix", "Ms.", "s.", "M", ".", "A", "Z"},
-		{"name.honorificSuffix", "III", "II", "I", "II", "A", "Z"},
-		{"displayName", "Babs Jensen", "s J", "Babs", "Jensen", "A", "Z"},
-		{"nickName", "Babsy", "abs", "Ba", "sy", "A", "Z"},
-		{"profileUrl", "https://login.example.com/bjensen", "login", "https://", "bjensen", "a", "z"},
-		{"title", "Tour Guide", "r G", "Tour", "Guide", "A", "Z"},
-		{"userType", "Employee", "ploy", "Emp", "yee", "A", "Z"},
-		{"preferredLanguage", "en-CA", "n-C", "en", "CA", "a", "z"},
-		{"locale", "en-CA", "n-C", "en", "CA", "a", "z"},
-		{"timezone", "America/Edmonton", "ica/E", "Amer", "ton", "A", "Z"},
-		{"emails.value", "babs@jensen.org", "jensen", "babs", ".org", "a", "z"},
 		{"emails.type", "home", "om", "ho", "me", "a", "z"},
-		{"phoneNumbers.value", "555-555-8377", "5-8", "555", "377", "1", "9"},
 		{"phoneNumbers.type", "mobile", "ob", "mo", "ile", "a", "z"},
-		{"ims.value", "babsj", "abs", "ba", "sj", "a", "z"},
 		{"ims.type", "xmpp", "mp", "xm", "pp", "a", "z"},
-		{"photos.value", "https://photos.example.com/bjensen.jpg", "photos", "https", ".jpg", "a", "z"},
 		{"photos.type", "photo", "ot", "ph", "to", "a", "z"},
-		{"addresses.formatted", "100 Universal City Plaza", "City", "100", "Plaza", "0", "z"},
-		{"addresses.streetAddress", "100 Universal City Plaza", "City", "100", "Plaza", "0", "z"},
-		{"addresses.locality", "Hollywood", "llyw", "Holly", "wood", "a", "z"},
-		{"addresses.region", "CA", "A", "C", "A", "A", "Z"},
-		{"addresses.postalCode", "91608", "160", "916", "608", "1", "99"},
-		{"addresses.country", "US", "S", "U", "S", "A", "Z"},
 		{"addresses.type", "home", "om", "ho", "me", "a", "z"},
-		{"entitlements.value", "tour-guide-badge", "guide", "tour", "badge", "a", "z"},
-		{"roles.value", "guide", "ui", "gu", "de", "a", "z"},
-		{enterprise + "employeeNumber", "701984", "0198", "7019", "984", "1", "9"},
-		{enterprise + "costCenter", "4130", "13", "41", "30", "1", "9"},
-		{enterprise + "organization", "Universal Studios", "al S", "Univ", "dios", "A", "Z"},
-		{enterprise + "division", "Theme Park", "e P", "Theme", "Park", "A", "Z"},
-		{enterprise + "department", "Tour Operations", "r O", "Tour", "tions", "A", "Z"},
-		{enterprise + "manager.value", managerID, managerID[24:30], managerID[:8], managerID[30:], "0", "g"},
 	}
 }
 
