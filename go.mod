@@ -195,3 +195,5 @@ go 1.27.2
 replace github.com/joho/godotenv => ./internal/forks/godotenv
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
+
+replace github.com/supabase-community/scim-go => /Users/xlgmokha/supabase/github.com/supabase-community/scim-go

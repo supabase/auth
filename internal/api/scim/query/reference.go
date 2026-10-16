@@ -13,11 +13,3 @@ type Reference struct {
 func (r Reference) Inverse() bool {
 	return r.InverseOf != ""
 }
-
-func (r Reference) Types() []string {
-	types := make([]string, len(r.Targets))
-	for i, t := range r.Targets {
-		types[i] = string(t)
-	}
-	return types
-}

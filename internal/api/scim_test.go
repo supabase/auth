@@ -385,6 +385,20 @@ func TestSCIMUsers(t *testing.T) {
 			filter := `userName eq "` + user.UserName + `"`
 			require.Zero(t, scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}}).TotalResults)
 		})
+
+		t.Run("DELETE drops the manager and bumps linked versions", func(t *testing.T) {
+			boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Leaving Boss"))
+			report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
+			group := c.createGroup(t, "Bosses "+uuid.NewV7().String(), boss)
+			require.NotEqual(t, boss.Meta.Version, c.user(t, boss.ID).Meta.Version)
+
+			require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+boss.ID).StatusCode)
+			after := c.user(t, report.ID)
+			require.Nil(t, after.EnterpriseUser.Manager)
+			require.Equal(t, "Tour Operations", after.EnterpriseUser.Department)
+			require.NotEqual(t, report.Meta.Version, after.Meta.Version)
+			require.NotEqual(t, group.Meta.Version, c.group(t, group.ID).Meta.Version)
+		})
 	})
 
 	t.Run("Enterprise manager", func(t *testing.T) {
@@ -711,7 +725,7 @@ func TestSCIMGroups(t *testing.T) {
 			parent := create(t)
 
 			require.Equal(t, http.StatusNoContent, c.addMembers(t, parent.ID, child.ID).StatusCode)
-			members := []core.Member{{Value: child.ID}}
+			members := []core.Member{{Value: child.ID, Type: "Group"}}
 			require.Equal(t, members, c.group(t, parent.ID).Members)
 			require.Equal(t, members, scimList[core.Group](t, c, scimGroupsPath, url.Values{"filter": {`id eq "` + parent.ID + `"`}}).Resources[0].Members)
 		})
@@ -1731,7 +1745,7 @@ func newSCIMGroup(displayName string, members ...core.User) map[string]any {
 }
 
 func scimMember(user core.User) core.Member {
-	return core.Member{Value: user.ID}
+	return core.Member{Value: user.ID, Type: "User"}
 }
 
 func newSCIMPatch(operations ...map[string]any) map[string]any {

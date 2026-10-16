@@ -2,39 +2,32 @@ package store
 
 import (
 	"encoding/json"
+	"time"
+	"uuid"
 
-	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/server"
+	"github.com/supabase-community/scim-go/pkg/store"
 )
 
-type Row struct {
-	Resource
-	References json.RawMessage `db:"refs"`
+type model struct {
+	ID        uuid.UUID       `db:"id"`
+	Resource  json.RawMessage `db:"resource"`
+	CreatedAt time.Time       `db:"created_at"`
+	UpdatedAt time.Time       `db:"updated_at"`
 }
 
-func (r Row) Into[T core.Resource]() (T, error) {
-	var item T
-	if err := json.Unmarshal(r.Resource.Resource, &item); err != nil {
-		return item, err
+func (model) TableName() string {
+	return "scim_resources"
+}
+
+func (m model) record() store.Record {
+	return store.Record{ID: m.ID.String(), Body: m.Resource, Created: m.CreatedAt, Updated: m.UpdatedAt, Version: server.WeakETag(m.UpdatedAt)}
+}
+
+func records(rows []model) []store.Record {
+	out := make([]store.Record, len(rows))
+	for i, m := range rows {
+		out[i] = m.record()
 	}
-	var parts []json.RawMessage
-	if err := json.Unmarshal(r.References, &parts); err != nil {
-		return item, err
-	}
-	for _, part := range parts {
-		if string(part) == "null" {
-			continue
-		}
-		if err := json.Unmarshal(part, &item); err != nil {
-			return item, err
-		}
-	}
-	common := item.Common()
-	common.ID = r.ID.String()
-	common.Meta = core.Meta{
-		Created:      r.CreatedAt.UTC(),
-		LastModified: r.UpdatedAt.UTC(),
-		Version:      server.WeakETag(r.UpdatedAt),
-	}
-	return item, nil
+	return out
 }

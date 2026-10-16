@@ -3,7 +3,7 @@ package query
 import "fmt"
 
 const inverseSubquery = `(
-  SELECT json_agg(json_build_object('value', id, 'type', type) ORDER BY id)
+  SELECT jsonb_agg(jsonb_build_object('value', id, 'type', type) ORDER BY id)
   FROM (
     SELECT DISTINCT ON (id) id, type
     FROM (
@@ -24,19 +24,15 @@ const inverseSubquery = `(
 )`
 
 const memberSubquery = `(
-  SELECT json_agg(json_build_object('value', target_id) ORDER BY target_id)
+  SELECT jsonb_agg(jsonb_build_object('value', target_id, 'type', target_type) ORDER BY target_id)
   FROM scim_resource_references
   WHERE source_id = scim_resources.id
     AND attribute = %s
 )`
 
-func (r Reference) selection() string {
-	return "json_build_object(" + quoteLiteral(r.Name) + ", " + r.subquery() + ")"
-}
-
-func (r Reference) subquery() string {
+func (r Reference) Pair() string {
 	if r.Inverse() {
-		return fmt.Sprintf(inverseSubquery, quoteLiteral(r.InverseOf))
+		return quoteLiteral(r.Name) + ", " + fmt.Sprintf(inverseSubquery, quoteLiteral(r.InverseOf))
 	}
-	return fmt.Sprintf(memberSubquery, quoteLiteral(r.Name))
+	return quoteLiteral(r.Name) + ", " + fmt.Sprintf(memberSubquery, quoteLiteral(r.Name))
 }

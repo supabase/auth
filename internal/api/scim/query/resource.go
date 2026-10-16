@@ -2,7 +2,6 @@ package query
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -30,10 +29,6 @@ func NewResource(schemas core.Schemas, location string) Resource {
 	}
 }
 
-func (r Resource) References() []Reference {
-	return r.references
-}
-
 func (r Resource) Search(request *protocol.SearchRequest) (Search, error) {
 	where, err := r.where(request.Filter)
 	if err != nil {
@@ -41,16 +36,6 @@ func (r Resource) Search(request *protocol.SearchRequest) (Search, error) {
 	}
 	order, args, err := r.order(request)
 	return Search{Where: where, Order: order, OrderArgs: args}, err
-}
-
-func (r Resource) Select(requested protocol.Projection) string {
-	parts := []string{}
-	for _, ref := range r.references {
-		if requested.Returns(ref.Name) {
-			parts = append(parts, ref.selection())
-		}
-	}
-	return "json_build_array(" + strings.Join(parts, ", ") + ")"
 }
 
 func (r Resource) where(expression string) (Clause, error) {
