@@ -272,6 +272,27 @@ func TestSCIMService(t *testing.T) {
 func TestSCIMUsers(t *testing.T) {
 	c := newSCIMClient(t, nil)
 
+	// RFC 7643 Section 4.1.1: if a service provider holds the password locally, it SHOULD be hashed.
+	t.Run("never stores the password", func(t *testing.T) {
+		password := "t1meMa$heen"
+		body := newSCIMUser(scimUserName("bjensen"), "Barbara", "Jensen")
+		body["password"] = password
+		user := scimCreate[core.User](t, c, scimUsersPath, body)
+		stored := func(t *testing.T) string {
+			var row struct {
+				Resource string `db:"resource"`
+			}
+			require.NoError(t, c.inst.Conn.RawQuery("SELECT resource::text AS resource FROM scim_resources WHERE id = ?", user.ID).First(&row))
+			return row.Resource
+		}
+
+		require.NotContains(t, stored(t), password)
+		require.Equal(t, http.StatusOK, c.do(t, http.MethodPut, scimUsersPath+"/"+user.ID, body).StatusCode)
+		require.NotContains(t, stored(t), password)
+		require.Equal(t, http.StatusOK, c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "password", "value": password})).StatusCode)
+		require.NotContains(t, stored(t), password)
+	})
+
 	t.Run("Patch", func(t *testing.T) {
 		t.Run("PATCH toggles active", func(t *testing.T) {
 			user := c.createUser(t, scimUserName("bjensen"))
