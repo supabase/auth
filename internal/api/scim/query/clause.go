@@ -1,9 +1,6 @@
 package query
 
-import (
-	"slices"
-	"unicode/utf8"
-)
+import "slices"
 
 type Clause interface {
 	SQL() (string, []any)
@@ -61,12 +58,4 @@ type jsonpath string
 
 func (j jsonpath) SQL() (string, []any) {
 	return "search @@ lower(?)::jsonpath", []any{string(j)}
-}
-
-type prefix struct {
-	expression, param, text string
-}
-
-func (p prefix) SQL() (string, []any) {
-	return p.expression + " >= " + p.param + " AND " + p.expression + " < (" + p.param + " || ?)", []any{p.text, p.text, string(utf8.MaxRune)}
 }

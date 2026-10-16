@@ -3,6 +3,7 @@ package query
 import (
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
@@ -90,7 +91,7 @@ func (e evaluator) indexed(f field, op filter.Operator, text string) (Clause, bo
 		return nil, false
 	}
 	if op == filter.OpStartsWith {
-		return prefix{lowerName, "lower(?)", text}, true
+		return predicate{lowerName + " >= lower(?) AND " + lowerName + " < (lower(?) || ?)", []any{text, text, string(utf8.MaxRune)}}, true
 	}
 	return predicate{lowerName + sign + "lower(?)", []any{text}}, true
 }
