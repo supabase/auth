@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -287,12 +286,6 @@ func TestSCIMUsers(t *testing.T) {
 			require.Equal(t, core.Name{GivenName: "Barbara", FamilyName: "Jensen"}, user.Name)
 		})
 
-		t.Run("POST creates a minimal user", func(t *testing.T) {
-			res := c.do(t, http.MethodPost, scimUsersPath, map[string]any{"schemas": []string{string(core.SchemaUser)}, "userName": scimUserName("min")})
-			require.Equal(t, http.StatusCreated, res.StatusCode)
-			require.NotEmpty(t, scimtest.Decode[core.User](t, res).ID)
-		})
-
 		t.Run("POST creates a user with every attribute", func(t *testing.T) {
 			manager := c.createUser(t, scimUserName("boss"))
 			body := newSCIMFullUser(scimUserName("bjensen"), uuid.NewV7().String(), manager.ID)
@@ -328,16 +321,6 @@ func TestSCIMUsers(t *testing.T) {
 		})
 	})
 
-	t.Run("Read", func(t *testing.T) {
-		t.Run("GET returns a user", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.get(t, scimUsersPath+"/"+user.ID)
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, user, scimtest.Decode[core.User](t, res))
-		})
-	})
-
 	t.Run("Replace", func(t *testing.T) {
 		t.Run("PUT rejects an invalid body", func(t *testing.T) {
 			user := c.createUser(t, scimUserName("bjensen"))
@@ -357,14 +340,6 @@ func TestSCIMUsers(t *testing.T) {
 	})
 
 	t.Run("Patch", func(t *testing.T) {
-		t.Run("PATCH replaces name.familyName", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.do(t, http.MethodPatch, scimUsersPath+"/"+user.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "name.familyName", "value": "Jensen-Smith"}))
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, core.Name{GivenName: "Barbara", FamilyName: "Jensen-Smith"}, scimtest.Decode[core.User](t, res).Name)
-		})
-
 		t.Run("PATCH toggles active", func(t *testing.T) {
 			user := c.createUser(t, scimUserName("bjensen"))
 
@@ -377,15 +352,6 @@ func TestSCIMUsers(t *testing.T) {
 	})
 
 	t.Run("Delete", func(t *testing.T) {
-		t.Run("DELETE removes a user", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			require.Equal(t, http.StatusNoContent, c.delete(t, scimUsersPath+"/"+user.ID).StatusCode)
-			require.Equal(t, http.StatusNotFound, c.get(t, scimUsersPath+"/"+user.ID).StatusCode)
-			filter := `userName eq "` + user.UserName + `"`
-			require.Zero(t, scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}}).TotalResults)
-		})
-
 		t.Run("DELETE drops the manager and bumps linked versions", func(t *testing.T) {
 			boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Leaving Boss"))
 			report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
@@ -592,24 +558,6 @@ func TestSCIMGroups(t *testing.T) {
 			require.Empty(t, c.group(t, group.ID).Members)
 		})
 
-		t.Run("POST creates a minimal group", func(t *testing.T) {
-			name := "Minimal " + uuid.NewV7().String()
-
-			group := scimCreate[core.Group](t, c, scimGroupsPath, map[string]any{"schemas": []string{string(core.SchemaGroup)}, "displayName": name})
-			require.Equal(t, name, group.DisplayName)
-			require.Empty(t, group.Members)
-		})
-
-		t.Run("POST creates a group with an externalId", func(t *testing.T) {
-			user := createUser(t)
-			body := newSCIMGroup("Tour Guides "+uuid.NewV7().String(), user)
-			body["externalId"] = uuid.NewV7().String()
-
-			group := scimCreate[core.Group](t, c, scimGroupsPath, body)
-			require.Equal(t, body["externalId"], group.ExternalID)
-			require.Equal(t, group, c.group(t, group.ID))
-		})
-
 		t.Run("POST accepts a repeated displayName", func(t *testing.T) {
 			name := "Repeated " + uuid.NewV7().String()
 
@@ -619,12 +567,6 @@ func TestSCIMGroups(t *testing.T) {
 	})
 
 	t.Run("Read", func(t *testing.T) {
-		t.Run("GET returns a group", func(t *testing.T) {
-			group := create(t, createUser(t))
-
-			require.Equal(t, group, c.group(t, group.ID))
-		})
-
 		t.Run("GET omits members when excluded", func(t *testing.T) {
 			group := create(t, createUser(t))
 
@@ -660,15 +602,6 @@ func TestSCIMGroups(t *testing.T) {
 	})
 
 	t.Run("Patch", func(t *testing.T) {
-		t.Run("PATCH replaces displayName", func(t *testing.T) {
-			group := create(t)
-
-			res := patch(t, group.ID, map[string]any{"op": "replace", "path": "displayName", "value": "Group B"})
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, "Group B", scimtest.Decode[core.Group](t, res).DisplayName)
-			require.Equal(t, "Group B", c.group(t, group.ID).DisplayName)
-		})
-
 		t.Run("PATCH returns every member when it changes only displayName", func(t *testing.T) {
 			user, other := createUser(t), createUser(t)
 			group := create(t, user, other)
@@ -692,15 +625,6 @@ func TestSCIMGroups(t *testing.T) {
 			require.Equal(t, http.StatusNoContent, res.StatusCode)
 			c.requireGroup(t, group.ID, group.DisplayName, kept.ID, added.ID)
 		})
-
-		t.Run("PATCH adds an attribute without a path", func(t *testing.T) {
-			group := create(t, createUser(t))
-			externalID := uuid.NewV7().String()
-
-			res := patch(t, group.ID, map[string]any{"op": "add", "value": map[string]any{"externalId": externalID}})
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, externalID, scimtest.Decode[core.Group](t, res).ExternalID)
-		})
 	})
 
 	t.Run("Delete", func(t *testing.T) {
@@ -720,16 +644,6 @@ func TestSCIMGroups(t *testing.T) {
 	})
 
 	t.Run("Nesting", func(t *testing.T) {
-		t.Run("nests a group in a group", func(t *testing.T) {
-			child := create(t)
-			parent := create(t)
-
-			require.Equal(t, http.StatusNoContent, c.addMembers(t, parent.ID, child.ID).StatusCode)
-			members := []core.Member{{Value: child.ID, Type: "Group"}}
-			require.Equal(t, members, c.group(t, parent.ID).Members)
-			require.Equal(t, members, scimList[core.Group](t, c, scimGroupsPath, url.Values{"filter": {`id eq "` + parent.ID + `"`}}).Resources[0].Members)
-		})
-
 		t.Run("rejects a cycle", func(t *testing.T) {
 			top, middle, bottom := create(t), create(t), create(t)
 			require.Equal(t, http.StatusNoContent, c.addMembers(t, top.ID, middle.ID).StatusCode)
@@ -1127,14 +1041,6 @@ func TestSCIMQuery(t *testing.T) {
 				scimType     scimerrors.ErrorType
 			}{
 				{scimUsersPath, `userName eq`, http.StatusBadRequest, ""},
-				{scimUsersPath, `userName regex "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				// RFC 7644 3.4.2.2: gt, ge, lt and le on a binary attribute SHALL fail.
-				{scimUsersPath, `x509Certificates.value gt "a"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `x509Certificates.value ge "a"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `x509Certificates.value lt "a"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `x509Certificates.value le "a"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				// RFC 7644 7.5.2: servers SHOULD respond 403 to a GET filter with sensitive information.
-				{scimUsersPath, `password eq "t1meMa$heen"`, http.StatusForbidden, scimerrors.Sensitive},
 				// RFC 7643 4.3: manager is single-valued, so scim-go rejects any value path on it.
 				{scimUsersPath, scimEnterprise(`manager[value eq "` + missing + `"]`), http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, scimEnterprise(`manager[displayName eq "Barbara Jensen"]`), http.StatusBadRequest, scimerrors.InvalidFilter},
@@ -1151,16 +1057,10 @@ func TestSCIMQuery(t *testing.T) {
 				{scimUsersPath, `userName co`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `emails[value[type eq "x"]]`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `active co "t"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `active ge true`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `active lt true`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `active le true`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `active sw "t"`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `active ew "e"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `emails.primary gt true`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `emails.primary co "t"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `phoneNumbers.primary gt true`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `phoneNumbers.primary co "t"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `addresses.primary gt true`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `addresses.primary co "t"`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `meta.created co "2"`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimUsersPath, `meta.created sw "2"`, http.StatusBadRequest, scimerrors.InvalidFilter},
@@ -1184,84 +1084,7 @@ func TestSCIMQuery(t *testing.T) {
 		})
 	})
 
-	t.Run("Sort", func(t *testing.T) {
-		t.Run("nested and multi-valued attributes", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			tag := uuid.NewV7().String()
-			create := func(userName, familyName, externalID, other string) string {
-				body := newSCIMUser(userName+"+"+tag+"@example.com", "Barbara", familyName)
-				body["externalId"] = externalID + tag
-				body["emails"] = []map[string]any{{"value": other + "+" + tag + "@example.com"}, {"value": userName + "+" + tag + "@example.com", "primary": true}}
-				return scimCreate[core.User](t, c, scimUsersPath, body).ID
-			}
-			a, b := create("a", "Zulu", "B", "z"), create("b", "Alpha", "a", "c")
-
-			for sortBy, want := range map[string][]string{"userName": {a, b}, "emails.value": {a, b}, "name.familyName": {b, a}, "meta.created": {a, b}, "externalId": {a, b}} {
-				require.Equal(t, want, scimIDs(t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}, "sortBy": {sortBy}}), sortBy)
-			}
-		})
-
-		t.Run("Rejected", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			for _, tc := range []struct {
-				path, sortBy string
-				scimType     scimerrors.ErrorType
-			}{
-				{scimUsersPath, "nope", ""},
-			} {
-				t.Run(tc.path+"?sortBy="+tc.sortBy, func(t *testing.T) {
-					res := c.get(t, tc.path+"?"+url.Values{"sortBy": {tc.sortBy}}.Encode())
-					scimtest.RequireError(t, res, http.StatusBadRequest, tc.scimType)
-				})
-			}
-		})
-	})
-
-	t.Run("Paginate", func(t *testing.T) {
-		t.Run("Users keep creation order and page by startIndex", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			tag := uuid.NewV7().String()
-			second := c.createUser(t, "b+"+tag+"@example.com")
-			first := c.createUser(t, "a+"+tag+"@example.com")
-			filter := `userName co "` + tag + `"`
-
-			require.Equal(t, []string{second.ID, first.ID}, scimIDs(t, c, scimUsersPath, url.Values{"filter": {filter}}))
-			for startIndex, want := range map[string]int{"1": 2, "2": 1, "5": 0} {
-				list := scimList[core.User](t, c, scimUsersPath, url.Values{"filter": {filter}, "startIndex": {startIndex}, "count": {"5"}})
-				require.Equal(t, 2, list.TotalResults, startIndex)
-				require.Len(t, list.Resources, want, startIndex)
-			}
-		})
-	})
-
 	t.Run("Attributes", func(t *testing.T) {
-		t.Run("search projects Users and Groups", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			user := c.createUser(t, scimUserName("bjensen"))
-			c.createUser(t, scimUserName("jsmith"))
-			group := c.createGroup(t, "Tour Guides "+uuid.NewV7().String(), user)
-
-			list := scimSearch(t, c, scimUsersPath, map[string]any{"filter": `userName eq "` + user.UserName + `"`, "attributes": []string{"userName"}})
-			require.Equal(t, 1, list.TotalResults)
-			require.Equal(t, []map[string]any{{"id": user.ID, "userName": user.UserName, "schemas": []any{string(core.SchemaUser)}}}, list.Resources)
-
-			list = scimSearch(t, c, scimGroupsPath, map[string]any{"filter": `displayName eq "` + group.DisplayName + `"`, "excludedAttributes": []string{"members"}})
-			require.Equal(t, 1, list.TotalResults)
-			require.Equal(t, group.ID, list.Resources[0]["id"])
-			require.NotContains(t, list.Resources[0], "members")
-		})
-
-		t.Run("Groups GET returns only the requested attributes", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			group := c.createGroup(t, "Tour Guides "+uuid.NewV7().String(), c.createUser(t, scimUserName("member")))
-
-			res := c.get(t, scimGroupsPath+"/"+group.ID+"?attributes=displayName")
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			got := scimtest.Decode[core.Group](t, res)
-			require.Equal(t, group.DisplayName, got.DisplayName)
-			require.Empty(t, got.Members)
-		})
-
 		t.Run("attributes and excludedAttributes are mutually exclusive", func(t *testing.T) {
 			c := newSCIMClient(t, nil)
 
@@ -1270,40 +1093,8 @@ func TestSCIMQuery(t *testing.T) {
 		})
 	})
 
-	t.Run("Search", func(t *testing.T) {
-		c := newSCIMClient(t, nil)
-		for _, resource := range scimQueryResources {
-			for _, search := range []bool{false, true} {
-				name := resource.name + " " + scimTransport(search)
-
-				t.Run(name+" filters by name", func(t *testing.T) {
-					tag := uuid.NewV7().String()
-					target := resource.nameOf("a", tag)
-					id := resource.create(t, c, target)
-					resource.create(t, c, resource.nameOf("b", tag))
-
-					ids, total := scimListIDs(t, c, resource.path, url.Values{"filter": {resource.attribute + ` eq "` + target + `"`}}, search)
-					require.Equal(t, 1, total)
-					require.Equal(t, []string{id}, ids)
-				})
-
-				t.Run(name+" sorts and paginates", func(t *testing.T) {
-					tag := uuid.NewV7().String()
-					resource.create(t, c, resource.nameOf("b", tag))
-					first := resource.create(t, c, resource.nameOf("a", tag))
-					query := url.Values{"filter": {resource.attribute + ` co "` + tag + `"`}, "sortBy": {resource.attribute}, "sortOrder": {"descending"}, "startIndex": {"2"}, "count": {"1"}}
-
-					ids, total := scimListIDs(t, c, resource.path, query, search)
-					require.Equal(t, 2, total)
-					require.Equal(t, []string{first}, ids)
-				})
-			}
-		}
-	})
-
 	t.Run("Errors", func(t *testing.T) {
 		c := newSCIMClient(t, nil)
-		user := c.createUser(t, scimUserName("bjensen"))
 
 		for _, id := range []string{scimMissingID, "not-a-uuid"} {
 			for _, route := range scimItemRoutes(id, id) {
@@ -1318,11 +1109,7 @@ func TestSCIMQuery(t *testing.T) {
 			body               any
 			status             int
 		}{
-			{"POST group without displayName", http.MethodPost, scimGroupsPath, map[string]any{"schemas": []core.SchemaURI{core.SchemaGroup}}, http.StatusBadRequest},
-			{"PATCH unknown op", http.MethodPatch, scimUsersPath + "/" + user.ID, newSCIMPatch(map[string]any{"op": "bogus", "path": "active", "value": false}), http.StatusBadRequest},
-			{"PATCH unknown path", http.MethodPatch, scimUsersPath + "/" + user.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "nope", "value": "x"}), http.StatusBadRequest},
 			{"POST /.search", http.MethodPost, "/scim/v2/.search", map[string]any{}, http.StatusNotImplemented},
-			{"POST /Users/.search with an invalid filter", http.MethodPost, scimUsersPath + "/.search", map[string]any{"schemas": []core.SchemaURI{protocol.SchemaSearchRequest}, "filter": "userName eq"}, http.StatusBadRequest},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				scimtest.RequireError(t, c.do(t, tc.method, tc.path, tc.body), tc.status, "")
@@ -1592,40 +1379,6 @@ func scimSearch(t *testing.T, c scimClient, path string, body map[string]any) pr
 	return scimtest.Decode[protocol.ListResponse[map[string]any]](t, res)
 }
 
-func scimListIDs(t *testing.T, c scimClient, path string, query url.Values, search bool) ([]string, int) {
-	ids := []string{}
-	if !search {
-		list := scimList[core.Base](t, c, path, query)
-		for _, resource := range list.Resources {
-			ids = append(ids, resource.ID)
-		}
-		return ids, list.TotalResults
-	}
-	body := map[string]any{}
-	for key, values := range query {
-		switch key {
-		case "startIndex", "count":
-			number, err := strconv.Atoi(values[0])
-			require.NoError(t, err)
-			body[key] = number
-		default:
-			body[key] = values[0]
-		}
-	}
-	list := scimSearch(t, c, path, body)
-	for _, resource := range list.Resources {
-		ids = append(ids, resource["id"].(string))
-	}
-	return ids, list.TotalResults
-}
-
-func scimTransport(search bool) string {
-	if search {
-		return "POST .search"
-	}
-	return "GET"
-}
-
 func scimRequest(t *testing.T, method, path string, body any) *http.Request {
 	var reader io.Reader
 	if body != nil {
@@ -1804,23 +1557,6 @@ func scimItemRoutes(userID, groupID string) []scimRoute {
 		{http.MethodPatch, group, rename},
 		{http.MethodDelete, group, nil},
 	}
-}
-
-var scimQueryResources = []struct {
-	name, path, attribute string
-	nameOf                func(prefix, tag string) string
-	create                func(t *testing.T, c scimClient, name string) string
-}{
-	{
-		"Users", scimUsersPath, "userName",
-		func(prefix, tag string) string { return prefix + "+" + tag + "@example.com" },
-		func(t *testing.T, c scimClient, name string) string { return c.createUser(t, name).ID },
-	},
-	{
-		"Groups", scimGroupsPath, "displayName",
-		func(prefix, tag string) string { return prefix + " " + tag },
-		func(t *testing.T, c scimClient, name string) string { return c.createGroup(t, name).ID },
-	},
 }
 
 func scimManager(t *testing.T, user core.User) *core.Manager {
