@@ -3,7 +3,6 @@ package query
 import (
 	"uuid"
 
-	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
@@ -20,11 +19,6 @@ var columns = map[string]string{
 	metaLocation:        "id",
 	"meta.resourceType": "resource_type",
 	"meta.version":      "updated_at",
-}
-
-var lowerNameSources = map[core.SchemaURI]string{
-	core.SchemaUser:  "userName",
-	core.SchemaGroup: "displayName",
 }
 
 var comparisons = map[filter.Operator]string{

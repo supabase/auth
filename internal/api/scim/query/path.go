@@ -1,6 +1,8 @@
 package query
 
 import (
+	"encoding/json"
+	"regexp"
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/filter"
@@ -63,4 +65,14 @@ func (p path) exists(inner jsonpath) string {
 func (p path) primary() string {
 	last := len(p.keys) - 1
 	return path{p.root, p.keys[:last-1]}.String() + "[*] ? (@.primary == true)." + literal(p.keys[last])
+}
+
+func literal(value any) string {
+	raw, _ := json.Marshal(value)
+	return string(raw)
+}
+
+func pattern(value any, suffix string) string {
+	s, _ := value.(string)
+	return literal(regexp.QuoteMeta(s) + suffix)
 }

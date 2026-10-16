@@ -21,7 +21,7 @@ type Search struct {
 type Resource struct {
 	Type       string
 	schemas    core.Schemas
-	references []Reference
+	references []reference
 	location   string
 	name       *core.Attribute
 }
@@ -63,14 +63,19 @@ func (r Resource) where(expression string) (Clause, error) {
 	return protocol.Filter(r.schemas, expression, evaluator{r})
 }
 
-func referencesOf(schemas core.Schemas) []Reference {
-	references := []Reference{}
+func referencesOf(schemas core.Schemas) []reference {
+	references := []reference{}
 	for _, ref := range store.ReferencesOf(core.Schemas{schemas.Base()}) {
 		if !ref.Soft() {
-			references = append(references, Reference{ref})
+			references = append(references, reference{ref})
 		}
 	}
 	return references
+}
+
+var lowerNameSources = map[core.SchemaURI]string{
+	core.SchemaUser:  "userName",
+	core.SchemaGroup: "displayName",
 }
 
 func lowerNameOf(schema *core.Schema) *core.Attribute {
@@ -81,8 +86,8 @@ func lowerNameOf(schema *core.Schema) *core.Attribute {
 	return name
 }
 
-func (r Resource) lookup(top *core.Attribute) *Reference {
-	index := slices.IndexFunc(r.references, func(ref Reference) bool { return ref.Attribute == top })
+func (r Resource) lookup(top *core.Attribute) *reference {
+	index := slices.IndexFunc(r.references, func(ref reference) bool { return ref.Attribute == top })
 	if index < 0 {
 		return nil
 	}
@@ -124,9 +129,6 @@ func (r Resource) sortValue(attribute *protocol.Attribute, keys []string, root *
 		keys = slices.Insert(keys, len(keys)-1, "0")
 	}
 	value, args := `resource #>> ?::text[]`, []any{keys}
-	if len(keys) == 1 {
-		value, args = `resource ->> `+quoteLiteral(keys[0]), nil
-	}
 	if root.MultiValued {
 		value, args = `coalesce(jsonb_path_query_first(resource, ?::jsonpath) #>> '{}', `+value+`)`, []any{path{"$", keys}.primary(), keys}
 	}

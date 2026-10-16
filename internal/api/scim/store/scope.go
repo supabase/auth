@@ -17,7 +17,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/server"
 	"github.com/supabase-community/scim-go/pkg/store"
-	"github.com/supabase/auth/internal/api/scim/query"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -308,9 +307,20 @@ func selection(refs []store.Reference) string {
 	}
 	pairs := make([]string, len(refs))
 	for i, ref := range refs {
-		pairs[i] = query.Reference{Reference: ref}.Pair()
+		pairs[i] = quoteLiteral(ref.Name) + ", " + subquery(ref)
 	}
 	return "resource || jsonb_strip_nulls(jsonb_build_object(" + strings.Join(pairs, ", ") + "))"
+}
+
+func subquery(ref store.Reference) string {
+	if ref.Inverse() {
+		return fmt.Sprintf(inverseSubquery, quoteLiteral(ref.InverseOf))
+	}
+	return fmt.Sprintf(memberSubquery, quoteLiteral(ref.Name))
+}
+
+func quoteLiteral(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 func uuidStrings(ids []uuid.UUID) []string {

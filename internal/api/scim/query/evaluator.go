@@ -9,6 +9,8 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
 type evaluator struct {
 	Resource
 }

@@ -20,7 +20,7 @@ type field struct {
 	attribute *protocol.Attribute
 	name      string
 	path      path
-	ref       *Reference
+	ref       *reference
 }
 
 func (f field) isColumn() bool {
