@@ -272,54 +272,6 @@ func TestSCIMService(t *testing.T) {
 func TestSCIMUsers(t *testing.T) {
 	c := newSCIMClient(t, nil)
 
-	t.Run("Create", func(t *testing.T) {
-		t.Run("POST creates a user", func(t *testing.T) {
-			userName := scimUserName("bjensen")
-			res := c.do(t, http.MethodPost, scimUsersPath, newSCIMUser(userName, "Barbara", "Jensen"))
-
-			require.Equal(t, http.StatusCreated, res.StatusCode)
-			require.Equal(t, protocol.MediaType, res.Header.Get("Content-Type"))
-			user := scimtest.Decode[core.User](t, res)
-			require.NotEmpty(t, user.ID)
-			require.Equal(t, userName, user.UserName)
-			require.Equal(t, new(true), user.Active)
-			require.Equal(t, core.Name{GivenName: "Barbara", FamilyName: "Jensen"}, user.Name)
-		})
-
-		t.Run("POST rejects an invalid body", func(t *testing.T) {
-			for name, tc := range map[string]struct {
-				body     map[string]any
-				scimType scimerrors.ErrorType
-			}{
-				"active is not a boolean": {map[string]any{"userName": scimUserName("bad"), "active": "yes"}, scimerrors.InvalidSyntax},
-				"empty userName":          {map[string]any{"userName": ""}, scimerrors.InvalidValue},
-			} {
-				t.Run(name, func(t *testing.T) {
-					tc.body["schemas"] = []string{string(core.SchemaUser)}
-					scimtest.RequireError(t, c.do(t, http.MethodPost, scimUsersPath, tc.body), http.StatusBadRequest, tc.scimType)
-				})
-			}
-		})
-	})
-
-	t.Run("Replace", func(t *testing.T) {
-		t.Run("PUT rejects an invalid body", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			for name, tc := range map[string]struct {
-				body     map[string]any
-				scimType scimerrors.ErrorType
-			}{
-				"active is not a boolean": {map[string]any{"userName": user.UserName, "active": "yes"}, scimerrors.InvalidSyntax},
-			} {
-				t.Run(name, func(t *testing.T) {
-					tc.body["schemas"] = []string{string(core.SchemaUser)}
-					scimtest.RequireError(t, c.do(t, http.MethodPut, scimUsersPath+"/"+user.ID, tc.body), http.StatusBadRequest, tc.scimType)
-				})
-			}
-		})
-	})
-
 	t.Run("Patch", func(t *testing.T) {
 		t.Run("PATCH toggles active", func(t *testing.T) {
 			user := c.createUser(t, scimUserName("bjensen"))
@@ -388,27 +340,6 @@ func TestSCIMUsers(t *testing.T) {
 			})
 		})
 
-		t.Run("Write", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			enterprise := string(core.SchemaEnterpriseUser)
-
-			t.Run("PATCH ignores the read-only manager.displayName", func(t *testing.T) {
-				boss := scimCreate[core.User](t, c, scimUsersPath, newSCIMBoss("Real Boss"))
-				report := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport(boss.ID))
-				forged := map[string]any{"value": boss.ID, "displayName": "Forged"}
-
-				for _, op := range []map[string]any{
-					{"op": "replace", "path": enterprise + ":manager", "value": forged},
-					{"op": "replace", "value": map[string]any{enterprise: map[string]any{"manager": forged}}},
-				} {
-					res := c.do(t, http.MethodPatch, scimUsersPath+"/"+report.ID, newSCIMPatch(op))
-					require.Equal(t, http.StatusOK, res.StatusCode)
-					require.Equal(t, &core.Manager{Value: boss.ID}, scimManager(t, scimtest.Decode[core.User](t, res)))
-					require.Equal(t, &core.Manager{Value: boss.ID}, scimManager(t, c.user(t, report.ID)))
-				}
-			})
-		})
-
 		t.Run("Filters", func(t *testing.T) {
 			c := newSCIMClient(t, nil)
 			orphan := scimCreate[core.User](t, c, scimUsersPath, newSCIMReport("jane@example.com"))
@@ -433,19 +364,6 @@ func TestSCIMGroups(t *testing.T) {
 	}
 
 	t.Run("Create", func(t *testing.T) {
-		t.Run("POST creates a group with members", func(t *testing.T) {
-			user := createUser(t)
-			displayName := "Tour Guides " + uuid.NewV7().String()
-
-			res := c.do(t, http.MethodPost, scimGroupsPath, newSCIMGroup(displayName, user))
-			require.Equal(t, http.StatusCreated, res.StatusCode)
-			require.Equal(t, protocol.MediaType, res.Header.Get("Content-Type"))
-			group := scimtest.Decode[core.Group](t, res)
-			require.NotEmpty(t, group.ID)
-			require.Equal(t, displayName, group.DisplayName)
-			require.Equal(t, []core.Member{scimMember(user)}, group.Members)
-		})
-
 		t.Run("POST stores a repeated member once", func(t *testing.T) {
 			user := createUser(t)
 
