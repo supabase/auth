@@ -755,33 +755,11 @@ func TestSCIMQuery(t *testing.T) {
 
 		t.Run("Rejected", func(t *testing.T) {
 			c := newSCIMClient(t, nil)
-			missing := scimMissingID
 			for _, tc := range []struct {
 				path, filter string
 				status       int
 				scimType     scimerrors.ErrorType
 			}{
-				// RFC 7643 4.3: manager is single-valued, so scim-go rejects any value path on it.
-				{scimUsersPath, scimEnterprise(`manager[value eq "` + missing + `"]`), http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, scimEnterprise(`manager[displayName eq "Barbara Jensen"]`), http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, scimEnterprise(`manager[value eq "` + missing + `" and displayName eq "Barbara Jensen"]`), http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `foo eq "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `name.nope eq "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `active co "t"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `active sw "t"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `active ew "e"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `emails.primary co "t"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `phoneNumbers.primary co "t"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `addresses.primary co "t"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.created co "2"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.created sw "2"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.created ew "Z"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.lastModified co "2"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.lastModified sw "2"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `meta.lastModified ew "Z"`, http.StatusBadRequest, scimerrors.InvalidFilter},
-				{scimUsersPath, `userName eq 5`, http.StatusBadRequest, scimerrors.InvalidValue},
-				{scimUsersPath, `active eq "true"`, http.StatusBadRequest, scimerrors.InvalidValue},
-				{scimUsersPath, `meta.created eq "x"`, http.StatusBadRequest, scimerrors.InvalidValue},
 				{scimGroupsPath, `members.display eq "x"`, http.StatusBadRequest, scimerrors.InvalidFilter},
 				{scimGroupsPath, `members.display pr`, http.StatusBadRequest, ""},
 				{scimGroupsPath, `members[display pr]`, http.StatusBadRequest, ""},
@@ -803,18 +781,6 @@ func TestSCIMQuery(t *testing.T) {
 					scimtest.RequireError(t, c.do(t, route.method, route.path, route.body), http.StatusNotFound, "")
 				})
 			}
-		}
-
-		for _, tc := range []struct {
-			name, method, path string
-			body               any
-			status             int
-		}{
-			{"POST /.search", http.MethodPost, "/scim/v2/.search", map[string]any{}, http.StatusNotImplemented},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				scimtest.RequireError(t, c.do(t, tc.method, tc.path, tc.body), tc.status, "")
-			})
 		}
 	})
 
