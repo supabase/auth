@@ -43,7 +43,7 @@ func selection(refs []store.Reference) string {
 	}
 	pairs := make([]string, len(refs))
 	for i, ref := range refs {
-		pairs[i] = query.Reference{ReferenceAttribute: ref.ReferenceAttribute}.Pair()
+		pairs[i] = query.Reference{Reference: ref}.Pair()
 	}
 	return "resource || jsonb_strip_nulls(jsonb_build_object(" + strings.Join(pairs, ", ") + "))"
 }

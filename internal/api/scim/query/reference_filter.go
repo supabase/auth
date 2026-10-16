@@ -7,6 +7,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
+	"github.com/supabase-community/scim-go/pkg/store"
 )
 
 const edgeExists = `EXISTS (
@@ -24,7 +25,7 @@ func (r Reference) leaf(definition *core.Attribute, op filter.Operator, value an
 	if op != filter.OpPresent {
 		return r.match(definition, op, value)
 	}
-	if definition.Name != ValueAttribute && definition.Name != r.Name {
+	if definition.Name != store.ValueAttribute && definition.Name != r.Name {
 		return nil, r.unfilterable(definition)
 	}
 	return always, nil
@@ -39,7 +40,7 @@ func (r Reference) match(definition *core.Attribute, op filter.Operator, value a
 	if op != filter.OpEquals && op != filter.OpNotEquals {
 		return nil, scimerrors.ErrInvalidFilter(strconv.Quote(r.Name+"."+definition.Name) + " supports only eq and ne")
 	}
-	if definition.Name != ValueAttribute {
+	if definition.Name != store.ValueAttribute {
 		return nil, r.unfilterable(definition)
 	}
 	text, _ := value.(string)

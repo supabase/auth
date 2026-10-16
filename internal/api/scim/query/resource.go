@@ -5,6 +5,7 @@ import (
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/store"
 )
 
 type Search struct {
@@ -47,10 +48,9 @@ func (r Resource) where(expression string) (Clause, error) {
 
 func referencesOf(schemas core.Schemas) []Reference {
 	references := []Reference{}
-	for _, attribute := range (core.Schemas{schemas.Base()}).ReferenceAttributes() {
-		ref := Reference{attribute}
-		if ref.Inverse() || attribute.MultiValued {
-			references = append(references, ref)
+	for _, ref := range store.ReferencesOf(core.Schemas{schemas.Base()}) {
+		if !ref.Soft() {
+			references = append(references, Reference{ref})
 		}
 	}
 	return references

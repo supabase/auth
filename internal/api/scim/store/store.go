@@ -48,13 +48,9 @@ func (s *Store) List(ctx context.Context, request *protocol.SearchRequest, refs 
 }
 
 func (s *Store) Delete(ctx context.Context, id, version string) error {
-	sc, err := s.scope(ctx)
+	sc, key, err := s.target(ctx, id)
 	if err != nil {
 		return err
-	}
-	key, err := uuid.Parse(id)
-	if err != nil {
-		return store.ErrNoMatch
 	}
 	return conflict(s.db.conn.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
 		return sc.remove(tx, key, version)

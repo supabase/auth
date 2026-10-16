@@ -58,7 +58,8 @@ func (sc scope) link(tx *storage.Connection, source uuid.UUID, l store.Link) ([]
 	if err != nil {
 		return nil, err
 	}
-	if i := slices.IndexFunc(add, func(id string) bool { return !slices.Contains(added, id) }); i >= 0 && !l.Soft {
+	if !l.Soft && len(added) < len(add) {
+		i := slices.IndexFunc(add, func(id string) bool { return !slices.Contains(added, id) })
 		return nil, linkInvalid(l.Attribute, add[i])
 	}
 	return append(add, remove...), sc.removeReferences(tx, source, l.Attribute, remove)

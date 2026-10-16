@@ -39,7 +39,7 @@ func (s *Store) Update(ctx context.Context, doc store.Document, version string) 
 }
 
 func (s *Store) insert(ctx context.Context, doc store.Document) (store.Record, error) {
-	sc, id, err := s.target(ctx, doc)
+	sc, id, err := s.target(ctx, doc.ID)
 	if err != nil {
 		return store.Record{}, err
 	}
@@ -51,20 +51,20 @@ func (s *Store) insert(ctx context.Context, doc store.Document) (store.Record, e
 	return m.record(), conflict(err)
 }
 
-func (s *Store) target(ctx context.Context, doc store.Document) (scope, uuid.UUID, error) {
+func (s *Store) target(ctx context.Context, id string) (scope, uuid.UUID, error) {
 	sc, err := s.scope(ctx)
 	if err != nil {
 		return sc, uuid.UUID{}, err
 	}
-	id, err := uuid.Parse(doc.ID)
+	key, err := uuid.Parse(id)
 	if err != nil {
-		return sc, id, store.ErrNoMatch
+		return sc, key, store.ErrNoMatch
 	}
-	return sc, id, nil
+	return sc, key, nil
 }
 
 func (s *Store) write(ctx context.Context, doc store.Document, fresh bool, save func(scope, *storage.Connection, uuid.UUID) error) (store.Record, error) {
-	sc, id, err := s.target(ctx, doc)
+	sc, id, err := s.target(ctx, doc.ID)
 	if err != nil {
 		return store.Record{}, err
 	}

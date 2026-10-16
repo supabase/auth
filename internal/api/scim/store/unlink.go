@@ -2,7 +2,6 @@ package store
 
 import (
 	"encoding/json"
-	"slices"
 	"uuid"
 
 	"github.com/pkg/errors"
@@ -29,7 +28,7 @@ type body struct {
 // RFC 7643 Section 2.3.7: a soft link to a deleted resource leaves the source.
 func (sc scope) unlink(tx *storage.Connection, target uuid.UUID, edges []edge) error {
 	for _, e := range edges {
-		if e.Target != target {
+		if e.Target != target || !sc.db.soft[e.Attribute] {
 			continue
 		}
 		if err := sc.drop(tx, e); err != nil {
@@ -44,15 +43,11 @@ func (sc scope) drop(tx *storage.Connection, e edge) error {
 	if err := tx.RawQuery(selectBody, e.Source).First(&b); err != nil {
 		return errors.Wrap(err, "error finding SCIM source")
 	}
-	schemas := sc.db.owners[b.Kind]
-	if !slices.ContainsFunc(store.ReferencesOf(schemas), func(ref store.Reference) bool { return ref.Soft() && ref.Name == e.Attribute }) {
-		return nil
-	}
 	object := core.Object{}
 	if err := json.Unmarshal(b.Resource, &object); err != nil {
 		return err
 	}
-	store.Unlink(schemas, object, e.Attribute)
+	store.Unlink(sc.db.owners[b.Kind], object, e.Attribute)
 	raw, err := json.Marshal(object)
 	if err != nil {
 		return err

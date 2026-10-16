@@ -46,18 +46,11 @@ func others(id uuid.UUID, edges []edge) []string {
 
 // RFC 7232 Section 2.1: a weak entity tag changes when the representation changes.
 func (sc scope) bump(tx *storage.Connection, source uuid.UUID, ids []string) error {
-	ids = held(source, ids)
+	ids = slices.DeleteFunc(ids, func(id string) bool { return id == source.String() })
 	if len(ids) == 0 {
 		return nil
 	}
 	return errors.Wrap(tx.RawQuery(bumpResources, sc.providerID, ids).Exec(), "error bumping SCIM versions")
-}
-
-func held(source uuid.UUID, targets []string) []string {
-	return slices.DeleteFunc(slices.Clone(targets), func(id string) bool {
-		key, err := uuid.Parse(id)
-		return err != nil || key == source
-	})
 }
 
 func uuidStrings(ids []uuid.UUID) []string {
