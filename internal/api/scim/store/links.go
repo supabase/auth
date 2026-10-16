@@ -32,9 +32,17 @@ WHERE source_id = ?
   AND attribute = ?`
 
 func (sc scope) relink(tx *storage.Connection, source uuid.UUID, links []store.Link) error {
+	return sc.each(tx, source, links, sc.link)
+}
+
+func (sc scope) attach(tx *storage.Connection, source uuid.UUID, links []store.Link) error {
+	return sc.each(tx, source, links, sc.add)
+}
+
+func (sc scope) each(tx *storage.Connection, source uuid.UUID, links []store.Link, apply func(*storage.Connection, uuid.UUID, store.Link) ([]string, error)) error {
 	changed := []string{}
 	for _, l := range links {
-		touched, err := sc.link(tx, source, l)
+		touched, err := apply(tx, source, l)
 		if err != nil {
 			return err
 		}
@@ -54,15 +62,27 @@ func (sc scope) link(tx *storage.Connection, source uuid.UUID, l store.Link) ([]
 			return nil, err
 		}
 	}
+	if err := sc.connect(tx, source, l, add); err != nil {
+		return nil, err
+	}
+	return append(add, remove...), sc.removeReferences(tx, source, l.Attribute, remove)
+}
+
+func (sc scope) add(tx *storage.Connection, source uuid.UUID, l store.Link) ([]string, error) {
+	add, _ := store.LinkDiff(nil, l.Targets)
+	return add, sc.connect(tx, source, l, add)
+}
+
+func (sc scope) connect(tx *storage.Connection, source uuid.UUID, l store.Link, add []string) error {
 	added, err := sc.addReferences(tx, source, l.Attribute, l.Types, add)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !l.Soft && len(added) < len(add) {
 		i := slices.IndexFunc(add, func(id string) bool { return !slices.Contains(added, id) })
-		return nil, linkInvalid(l.Attribute, add[i])
+		return linkInvalid(l.Attribute, add[i])
 	}
-	return append(add, remove...), sc.removeReferences(tx, source, l.Attribute, remove)
+	return nil
 }
 
 func (sc scope) addReferences(tx *storage.Connection, source uuid.UUID, attribute string, types, targets []string) ([]string, error) {
@@ -88,9 +108,6 @@ func (sc scope) removeReferences(tx *storage.Connection, source uuid.UUID, attri
 }
 
 func (sc scope) findTargets(tx *storage.Connection, source uuid.UUID, attribute string) ([]string, error) {
-	if sc.fresh {
-		return nil, nil
-	}
 	targets := []uuid.UUID{}
 	err := tx.RawQuery(selectTargets, source, attribute).All(&targets)
 	return uuidStrings(targets), errors.Wrap(err, "error finding SCIM targets")

@@ -20,7 +20,6 @@ type Store struct {
 type scope struct {
 	*Store
 	providerID uuid.UUID
-	fresh      bool
 }
 
 func (s *Store) Find(ctx context.Context, id string, refs []store.Reference) (store.Record, error) {

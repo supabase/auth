@@ -27,23 +27,25 @@ func (s *Store) Create(ctx context.Context, doc store.Document) (store.Record, e
 	if !slices.ContainsFunc(doc.Links, func(l store.Link) bool { return len(l.Targets) > 0 }) {
 		return s.insert(ctx, doc)
 	}
-	return s.write(ctx, doc, true, func(sc scope, tx *storage.Connection, id uuid.UUID, name any) error {
-		return sc.create(tx, id, doc.Body, name)
+	return s.write(ctx, doc, func(sc scope, tx *storage.Connection, id uuid.UUID, name any) error {
+		if err := sc.create(tx, id, doc.Body, name); err != nil {
+			return err
+		}
+		return sc.attach(tx, id, doc.Links)
 	})
 }
 
 func (s *Store) Update(ctx context.Context, doc store.Document, version string) (store.Record, error) {
-	return s.write(ctx, doc, false, func(sc scope, tx *storage.Connection, id uuid.UUID, name any) error {
-		return sc.update(tx, id, doc.Body, name, version)
+	return s.write(ctx, doc, func(sc scope, tx *storage.Connection, id uuid.UUID, name any) error {
+		if err := sc.update(tx, id, doc.Body, name, version); err != nil {
+			return err
+		}
+		return sc.relink(tx, id, doc.Links)
 	})
 }
 
 func (s *Store) insert(ctx context.Context, doc store.Document) (store.Record, error) {
-	sc, id, err := s.target(ctx, doc.ID)
-	if err != nil {
-		return store.Record{}, err
-	}
-	name, err := sc.LowerName(doc.Body)
+	sc, id, name, err := s.prepare(ctx, doc)
 	if err != nil {
 		return store.Record{}, err
 	}
@@ -67,22 +69,23 @@ func (s *Store) target(ctx context.Context, id string) (scope, uuid.UUID, error)
 	return sc, key, nil
 }
 
-func (s *Store) write(ctx context.Context, doc store.Document, fresh bool, save func(scope, *storage.Connection, uuid.UUID, any) error) (store.Record, error) {
+func (s *Store) prepare(ctx context.Context, doc store.Document) (scope, uuid.UUID, any, error) {
 	sc, id, err := s.target(ctx, doc.ID)
 	if err != nil {
-		return store.Record{}, err
+		return sc, id, nil, err
 	}
 	name, err := sc.LowerName(doc.Body)
+	return sc, id, name, err
+}
+
+func (s *Store) write(ctx context.Context, doc store.Document, save func(scope, *storage.Connection, uuid.UUID, any) error) (store.Record, error) {
+	sc, id, name, err := s.prepare(ctx, doc)
 	if err != nil {
 		return store.Record{}, err
 	}
-	sc.fresh = fresh
 	var record store.Record
 	err = s.db.conn.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
 		if err := save(sc, tx, id, name); err != nil {
-			return err
-		}
-		if err := sc.relink(tx, id, doc.Links); err != nil {
 			return err
 		}
 		record, err = sc.find(tx, id, doc.References)

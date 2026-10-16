@@ -23,7 +23,7 @@ WHERE id = any(?::uuid[])
 LIMIT 1`
 
 func (sc scope) acyclic(tx *storage.Connection, source uuid.UUID, attribute string, targets []string) error {
-	if len(targets) == 0 || sc.fresh {
+	if len(targets) == 0 {
 		return nil
 	}
 	cyclic := []uuid.UUID{}
