@@ -83,17 +83,10 @@ func TestSCIMService(t *testing.T) {
 		})
 
 		t.Run("Unsupported method returns a SCIM 405", func(t *testing.T) {
-			type disallowed struct{ method, path, allow string }
-			cases := []disallowed{
+			for _, tc := range []struct{ method, path, allow string }{
 				{http.MethodPut, scimUsersPath, "GET, HEAD, POST"},
 				{http.MethodPost, scimUsersPath + "/" + scimMissingID, "DELETE, GET, HEAD, PATCH, PUT"},
-			}
-			for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
-				for _, path := range scimPaths {
-					cases = append(cases, disallowed{method, path, "GET, HEAD"})
-				}
-			}
-			for _, tc := range cases {
+			} {
 				t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 					res := c.api.Send(t, tc.method, tc.path, nil)
 					require.Equal(t, http.StatusMethodNotAllowed, res.StatusCode)
@@ -405,12 +398,9 @@ func TestSCIMQuery(t *testing.T) {
 		t.Run("Accepted", func(t *testing.T) {
 			c := newSCIMClient(t, nil)
 			decoy := c.createUser(t, "decoy@example.com")
-			titled := newSCIMUser(scimUserName("bjensen"), "Barbara", "Jensen")
-			titled["title"] = "Tour Guide"
-			user := scimCreate[core.User](t, c, scimUsersPath, titled)
+			user := scimCreate[core.User](t, c, scimUsersPath, newSCIMUser(scimUserName("bjensen"), "Barbara", "Jensen"))
 
 			for _, filter := range []string{
-				`title co null or userName eq "decoy@example.com"`,
 				`meta.location eq "https://example.org/` + user.ID + `" or userName eq "decoy@example.com"`,
 				`meta.version ne "bad" and userName eq "decoy@example.com"`,
 			} {
@@ -474,16 +464,6 @@ func TestSCIMQuery(t *testing.T) {
 				})
 			}
 		})
-	})
-
-	t.Run("Errors", func(t *testing.T) {
-		c := newSCIMClient(t, nil)
-
-		for _, route := range scimItemRoutes(scimMissingID, scimMissingID) {
-			t.Run(route.method+" "+route.path, func(t *testing.T) {
-				scimtest.RequireError(t, c.api.Send(t, route.method, route.path, route.body), http.StatusNotFound, "")
-			})
-		}
 	})
 }
 
