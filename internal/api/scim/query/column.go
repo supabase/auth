@@ -1,7 +1,6 @@
 package query
 
 import (
-	"slices"
 	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -18,10 +17,6 @@ var columns = map[string]string{
 	metaLocation:        "id",
 	"meta.resourceType": "resource_type",
 	"meta.version":      "updated_at",
-}
-
-var indexes = map[core.SchemaURI][]string{
-	core.SchemaUser: {"userName"},
 }
 
 var lowerNames = map[core.SchemaURI]string{
@@ -48,20 +43,11 @@ func uuidPredicate(column string, op filter.Operator, text string) Clause {
 
 func indexed(schema core.SchemaURI, name string, op filter.Operator, text string, caseExact bool) (Clause, bool) {
 	sign, ranged := comparisons[op]
-	if !slices.Contains(indexes[schema], name) || op == filter.OpNotEquals || !ranged && op != filter.OpStartsWith {
+	if lowerNames[schema] != name || caseExact || op == filter.OpNotEquals || !ranged && op != filter.OpStartsWith {
 		return nil, false
 	}
-	expression, param := expression(name, caseExact)
 	if op == filter.OpStartsWith {
-		return prefix{expression, param, text}, true
+		return prefix{"lower_name", "lower(?)", text}, true
 	}
-	return predicate{"(" + expression + ") IS NOT NULL AND " + expression + sign + param, []any{text}}, true
-}
-
-func expression(name string, caseExact bool) (string, string) {
-	value := "resource ->> " + quoteLiteral(name)
-	if caseExact {
-		return "(" + value + `) COLLATE "C"`, "?"
-	}
-	return "lower(" + value + `) COLLATE "C"`, "lower(?)"
+	return predicate{"lower_name" + sign + "lower(?)", []any{text}}, true
 }
