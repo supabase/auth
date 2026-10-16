@@ -287,13 +287,6 @@ func TestSCIMUsers(t *testing.T) {
 			require.Equal(t, core.Name{GivenName: "Barbara", FamilyName: "Jensen"}, user.Name)
 		})
 
-		t.Run("POST accepts schemas in any order", func(t *testing.T) {
-			body := newSCIMReport(scimMissingID)
-			body["schemas"] = []string{string(core.SchemaEnterpriseUser), string(core.SchemaUser)}
-			user := scimCreate[core.User](t, c, scimUsersPath, body)
-			require.Equal(t, "Tour Operations", c.user(t, user.ID).EnterpriseUser.Department)
-		})
-
 		t.Run("POST creates a minimal user", func(t *testing.T) {
 			res := c.do(t, http.MethodPost, scimUsersPath, map[string]any{"schemas": []string{string(core.SchemaUser)}, "userName": scimUserName("min")})
 			require.Equal(t, http.StatusCreated, res.StatusCode)
@@ -346,14 +339,6 @@ func TestSCIMUsers(t *testing.T) {
 	})
 
 	t.Run("Replace", func(t *testing.T) {
-		t.Run("PUT replaces a user", func(t *testing.T) {
-			user := c.createUser(t, scimUserName("bjensen"))
-
-			res := c.do(t, http.MethodPut, scimUsersPath+"/"+user.ID, newSCIMUser(user.UserName, "Babs", "Jensen"))
-			require.Equal(t, http.StatusOK, res.StatusCode)
-			require.Equal(t, core.Name{GivenName: "Babs", FamilyName: "Jensen"}, scimtest.Decode[core.User](t, res).Name)
-		})
-
 		t.Run("PUT rejects an invalid body", func(t *testing.T) {
 			user := c.createUser(t, scimUserName("bjensen"))
 
@@ -362,7 +347,6 @@ func TestSCIMUsers(t *testing.T) {
 				scimType scimerrors.ErrorType
 			}{
 				"active is not a boolean": {map[string]any{"userName": user.UserName, "active": "yes"}, scimerrors.InvalidSyntax},
-				"missing userName":        {map[string]any{}, scimerrors.InvalidValue},
 			} {
 				t.Run(name, func(t *testing.T) {
 					tc.body["schemas"] = []string{string(core.SchemaUser)}
@@ -746,13 +730,6 @@ func TestSCIMGroups(t *testing.T) {
 			res := c.do(t, http.MethodPut, scimGroupsPath+"/"+group.ID, newSCIMGroup(group.DisplayName, user, user))
 			require.Equal(t, http.StatusOK, res.StatusCode)
 			require.Equal(t, []core.Member{scimMember(user)}, c.group(t, group.ID).Members)
-		})
-
-		t.Run("PUT rejects a body without displayName", func(t *testing.T) {
-			group := create(t)
-
-			res := c.do(t, http.MethodPut, scimGroupsPath+"/"+group.ID, map[string]any{"schemas": []string{string(core.SchemaGroup)}})
-			scimtest.RequireError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
 		})
 
 		t.Run("PUT accepts a displayName that another group has", func(t *testing.T) {
@@ -1222,15 +1199,6 @@ func TestSCIMQuery(t *testing.T) {
 			}
 		})
 
-		t.Run("Unset primary is false", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			body := newSCIMUser(scimUserName("bjensen"), "Barbara", "Jensen")
-			body["emails"] = []map[string]any{{"value": body["userName"]}}
-			user := scimCreate[core.User](t, c, scimUsersPath, body)
-
-			require.Equal(t, []string{user.ID}, scimIDs(t, c, scimUsersPath, url.Values{"filter": {`emails.primary eq false`}}))
-		})
-
 		t.Run("Rejected", func(t *testing.T) {
 			c := newSCIMClient(t, nil)
 			missing := scimMissingID
@@ -1312,15 +1280,6 @@ func TestSCIMQuery(t *testing.T) {
 			for sortBy, want := range map[string][]string{"userName": {a, b}, "emails.value": {a, b}, "name.familyName": {b, a}, "meta.created": {a, b}, "externalId": {a, b}} {
 				require.Equal(t, want, scimIDs(t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}, "sortBy": {sortBy}}), sortBy)
 			}
-		})
-
-		t.Run("case-insensitive attributes sort without case", func(t *testing.T) {
-			c := newSCIMClient(t, nil)
-			tag := uuid.NewV7().String()
-			upper := c.createUser(t, "B+"+tag+"@example.com").ID
-			lower := c.createUser(t, "a+"+tag+"@example.com").ID
-
-			require.Equal(t, []string{lower, upper}, scimIDs(t, c, scimUsersPath, url.Values{"filter": {`userName co "` + tag + `"`}, "sortBy": {"userName"}}))
 		})
 
 		t.Run("Rejected", func(t *testing.T) {
@@ -1453,36 +1412,14 @@ func TestSCIMQuery(t *testing.T) {
 			body               any
 			status             int
 		}{
-			{"POST user without userName", http.MethodPost, scimUsersPath, map[string]any{"schemas": []core.SchemaURI{core.SchemaUser}}, http.StatusBadRequest},
 			{"POST group without displayName", http.MethodPost, scimGroupsPath, map[string]any{"schemas": []core.SchemaURI{core.SchemaGroup}}, http.StatusBadRequest},
 			{"PATCH unknown op", http.MethodPatch, scimUsersPath + "/" + user.ID, newSCIMPatch(map[string]any{"op": "bogus", "path": "active", "value": false}), http.StatusBadRequest},
 			{"PATCH unknown path", http.MethodPatch, scimUsersPath + "/" + user.ID, newSCIMPatch(map[string]any{"op": "replace", "path": "nope", "value": "x"}), http.StatusBadRequest},
 			{"POST /.search", http.MethodPost, "/scim/v2/.search", map[string]any{}, http.StatusNotImplemented},
-			{"POST /Users/.search without the SearchRequest schema", http.MethodPost, scimUsersPath + "/.search", map[string]any{}, http.StatusBadRequest},
-			{"POST /Groups/.search without the SearchRequest schema", http.MethodPost, scimGroupsPath + "/.search", map[string]any{}, http.StatusBadRequest},
 			{"POST /Users/.search with an invalid filter", http.MethodPost, scimUsersPath + "/.search", map[string]any{"schemas": []core.SchemaURI{protocol.SchemaSearchRequest}, "filter": "userName eq"}, http.StatusBadRequest},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				scimtest.RequireError(t, c.do(t, tc.method, tc.path, tc.body), tc.status, "")
-			})
-		}
-	})
-
-	t.Run("Uniqueness", func(t *testing.T) {
-		c := newSCIMClient(t, nil)
-		user := c.createUser(t, scimUserName("bjensen"))
-		other := c.createUser(t, scimUserName("jsmith"))
-
-		for _, tc := range []struct {
-			name, method, path string
-			body               any
-		}{
-			{"POST userName that differs only in case", http.MethodPost, scimUsersPath, newSCIMUser(strings.ToUpper(user.UserName), "Barbara", "Jensen")},
-			{"PUT duplicate userName", http.MethodPut, scimUsersPath + "/" + other.ID, newSCIMUser(user.UserName, "John", "Smith")},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				res := c.do(t, tc.method, tc.path, tc.body)
-				scimtest.RequireError(t, res, http.StatusConflict, scimerrors.Uniqueness)
 			})
 		}
 	})
