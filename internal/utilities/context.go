@@ -3,17 +3,13 @@ package utilities
 import (
 	"context"
 	"sync"
+
+	"github.com/supabase/auth/internal/ctxkey"
 )
 
-type contextKey string
-
-func (c contextKey) String() string {
-	return "gotrue api context key " + string(c)
-}
-
-const (
-	requestIDKey = contextKey("request_id")
-	hookDataKey  = contextKey("hook_data")
+var (
+	requestIDKey = ctxkey.New[string]("request_id")
+	hookDataKey  = ctxkey.New[string]("hook_data")
 )
 
 // MaxHookDataLength is the largest hook_data value accepted on any endpoint.
@@ -25,17 +21,12 @@ const MaxHookDataLength = 4096
 
 // WithRequestID adds the provided request ID to the context.
 func WithRequestID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, requestIDKey, id)
+	return requestIDKey.WithValue(ctx, id)
 }
 
 // GetRequestID reads the request ID from the context.
 func GetRequestID(ctx context.Context) string {
-	obj := ctx.Value(requestIDKey)
-	if obj == nil {
-		return ""
-	}
-
-	return obj.(string)
+	return requestIDKey.Value(ctx)
 }
 
 // WithHookData adds the caller-supplied hook data to the context.
@@ -45,18 +36,13 @@ func GetRequestID(ctx context.Context) string {
 // the user record. It originates with the client, so a hook that acts on it
 // must validate it.
 func WithHookData(ctx context.Context, data string) context.Context {
-	return context.WithValue(ctx, hookDataKey, data)
+	return hookDataKey.WithValue(ctx, data)
 }
 
 // GetHookData reads the caller-supplied hook data from the context, returning
 // an empty string when the request carried none.
 func GetHookData(ctx context.Context) string {
-	obj := ctx.Value(hookDataKey)
-	if obj == nil {
-		return ""
-	}
-
-	return obj.(string)
+	return hookDataKey.Value(ctx)
 }
 
 // WaitForCleanup waits until all long-running goroutines shut

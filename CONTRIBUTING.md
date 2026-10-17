@@ -95,6 +95,16 @@ If you are on macOS Catalina you may [run into issues installing Soda with Brew]
 git clone https://github.com/supabase/auth
 ```
 
+- (Optional, but recommended) Install [lefthook](https://github.com/evilmartians/lefthook) and activate the repo's git hooks. This mirrors CI's checks locally before each commit, so a mistake is caught early instead of failing CI. See `lefthook.yml` for the current list.
+
+```zsh
+# See https://github.com/evilmartians/lefthook/blob/master/docs/install.md for all install methods
+brew install lefthook
+
+# From the repo root, activate the hooks defined in lefthook.yml
+make hooks
+```
+
 ### Install Auth
 
 To begin installation, be sure to start from the root directory.
@@ -405,6 +415,9 @@ If you need to run any new migrations:
 ```zsh
 make migrate_test
 ```
+
+This passes `--verbose` to the `migrate` command, which logs the name of each
+migration as it is applied.
 
 ## Testing
 

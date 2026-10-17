@@ -90,11 +90,16 @@ func (ts *UserTestSuite) TestUpdateUserMetadata() {
 func (ts *UserTestSuite) TestFindUserByConfirmationToken() {
 	u := ts.createUser()
 	tokenHash := "test_confirmation_token"
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, ConfirmationToken))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, ConfirmationToken, ts.config.Mailer.OtpExpAsDuration(), true))
 
-	n, err := FindUserByConfirmationToken(ts.db, tokenHash)
+	n, err := FindUserByOneTimeToken(ts.db, tokenHash, ConfirmationToken)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), u.ID, n.ID)
+
+	// the token type filters the lookup
+	_, err = FindUserByOneTimeToken(ts.db, tokenHash, RecoveryToken)
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err))
 }
 
 func (ts *UserTestSuite) TestFindUserByEmailAndAudience() {
@@ -270,11 +275,25 @@ func (ts *UserTestSuite) TestFindUserByID() {
 func (ts *UserTestSuite) TestFindUserByRecoveryToken() {
 	u := ts.createUser()
 	tokenHash := "test_recovery_token"
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, RecoveryToken))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, RecoveryToken, ts.config.Mailer.OtpExpAsDuration(), true))
 
-	n, err := FindUserByRecoveryToken(ts.db, tokenHash)
+	n, err := FindUserByOneTimeToken(ts.db, tokenHash, RecoveryToken)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), u.ID, n.ID)
+}
+
+func (ts *UserTestSuite) TestFindUserByOneTimeTokenMultipleTypes() {
+	u := ts.createUser()
+	tokenHash := "test_confirmation_or_recovery_token"
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, RecoveryToken, time.Minute, true))
+
+	n, err := FindUserByOneTimeToken(ts.db, tokenHash, ConfirmationToken, RecoveryToken)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), u.ID, n.ID)
+
+	_, err = FindUserByOneTimeToken(ts.db, tokenHash, EmailChangeTokenCurrent, EmailChangeTokenNew)
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err))
 }
 
 func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
@@ -677,7 +696,7 @@ func (ts *UserTestSuite) TestUpdateUserEmailClearsStaleTokens() {
 		"reauthentication_token",
 		"reauthentication_sent_at",
 	))
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, userA.ID, userA.GetEmail(), userA.ConfirmationToken, ConfirmationToken))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, userA.ID, userA.GetEmail(), userA.ConfirmationToken, ConfirmationToken, ts.config.Mailer.OtpExpAsDuration(), true))
 
 	// promoting another identity's email must revoke every outstanding
 	// token addressed to the previous email
@@ -702,7 +721,7 @@ func (ts *UserTestSuite) TestUpdateUserEmailClearsStaleTokens() {
 	require.Nil(ts.T(), userA.ReauthenticationSentAt)
 
 	// the one-time token must no longer be redeemable
-	_, err = FindUserByConfirmationToken(ts.db, "confirmation-token-hash")
+	_, err = FindUserByOneTimeToken(ts.db, "confirmation-token-hash", ConfirmationToken)
 	require.Error(ts.T(), err)
 }
 
@@ -731,7 +750,7 @@ func (ts *UserTestSuite) TestUpdateUserEmailFromEmptyClearsStaleTokens() {
 		"phone_change_token",
 		"phone_change_sent_at",
 	))
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, userA.ID, userA.PhoneChange, userA.PhoneChangeToken, PhoneChangeToken))
+	require.NoError(ts.T(), CreateOneTimeToken(ts.db, userA.ID, userA.PhoneChange, userA.PhoneChangeToken, PhoneChangeToken, ts.config.Sms.OtpExpAsDuration(), true))
 
 	// promoting an identity's email over an empty one is still a primary
 	// email transition, so outstanding tokens must be revoked

@@ -35,9 +35,10 @@ func TestFactor(t *testing.T) {
 // TestAMRMethodForFactorType pins the factor-type -> AMR method mapping.
 func TestAMRMethodForFactorType(t *testing.T) {
 	for factorType, want := range map[string]AuthenticationMethod{
-		TOTP:     TOTPSignIn,
-		Phone:    MFAPhone,
-		WebAuthn: MFAWebAuthn,
+		TOTP:         TOTPSignIn,
+		Phone:        MFAPhone,
+		WebAuthn:     MFAWebAuthn,
+		RecoveryCode: MFARecoveryCode,
 	} {
 		got, err := amrMethodForFactorType(factorType)
 		require.NoError(t, err, "factor type %q must map", factorType)
@@ -50,7 +51,7 @@ func TestAMRMethodForFactorType(t *testing.T) {
 
 // TestAuthenticationMethodRoundTrip guards the String() <-> ParseAuthenticationMethod symmetry.
 func TestAuthenticationMethodRoundTrip(t *testing.T) {
-	for _, m := range []AuthenticationMethod{TOTPSignIn, MFAPhone, MFAWebAuthn} {
+	for _, m := range []AuthenticationMethod{TOTPSignIn, MFAPhone, MFAWebAuthn, MFARecoveryCode} {
 		parsed, err := ParseAuthenticationMethod(m.String())
 		require.NoError(t, err, "method %q must round-trip", m.String())
 		require.Equal(t, m, parsed)
@@ -76,6 +77,41 @@ func (ts *FactorTestSuite) TestFindFactorByFactorID() {
 
 	_, err = FindFactorByFactorID(ts.db, uuid.Nil)
 	require.EqualError(ts.T(), err, FactorNotFoundError{}.Error())
+}
+
+func (ts *FactorTestSuite) TestNewRecoveryCodeFactor() {
+	user, err := NewUser("", "recoveryfactor@example.com", "secret", "test", nil)
+	require.NoError(ts.T(), err)
+
+	factor := NewRecoveryCodeFactor(user, "my recovery codes")
+	require.Equal(ts.T(), RecoveryCode, factor.FactorType)
+	require.Equal(ts.T(), FactorStateVerified.String(), factor.Status)
+	require.True(ts.T(), factor.IsVerified())
+	require.Equal(ts.T(), "my recovery codes", factor.FriendlyName)
+	require.True(ts.T(), factor.IsRecoveryCodeFactor())
+	require.False(ts.T(), ts.TestFactor.IsRecoveryCodeFactor())
+
+	// blank names fall back to the default
+	require.Equal(ts.T(), DefaultRecoveryCodeFriendlyName, NewRecoveryCodeFactor(user, "").FriendlyName)
+	require.Equal(ts.T(), DefaultRecoveryCodeFriendlyName, NewRecoveryCodeFactor(user, "   ").FriendlyName)
+}
+
+func (ts *FactorTestSuite) TestFindRecoveryCodeFactorByUser() {
+	// the fixture user has only a TOTP factor
+	_, err := FindRecoveryCodeFactorByUser(ts.db, ts.TestFactor.UserID)
+	require.EqualError(ts.T(), err, FactorNotFoundError{}.Error())
+
+	user, err := NewUser("", "findrecovery@example.com", "secret", "test", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
+
+	factor := NewRecoveryCodeFactor(user, "")
+	require.NoError(ts.T(), ts.db.Create(factor))
+
+	found, err := FindRecoveryCodeFactorByUser(ts.db, user.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), factor.ID, found.ID)
+	require.True(ts.T(), found.IsRecoveryCodeFactor())
 }
 
 func (ts *FactorTestSuite) TestUpdateStatus() {
@@ -121,6 +157,11 @@ func (ts *FactorTestSuite) TestDowngradeSessionsToAAL1RemovesAMRClaim() {
 			desc:       "totp",
 			newFactor:  func(u *User) *Factor { return NewTOTPFactor(u, "totpfactor") },
 			authMethod: TOTPSignIn,
+		},
+		{
+			desc:       "recovery_code",
+			newFactor:  func(u *User) *Factor { return NewRecoveryCodeFactor(u, "") },
+			authMethod: MFARecoveryCode,
 		},
 	}
 

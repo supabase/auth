@@ -436,11 +436,12 @@ func validateProviderParams(params *AdminCustomOAuthProviderParams, providerType
 	}
 
 	// Type-specific validations
-	if providerType == models.ProviderTypeOIDC {
+	switch providerType {
+	case models.ProviderTypeOIDC:
 		if params.Issuer == "" {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "issuer is required for OIDC providers")
 		}
-	} else if providerType == models.ProviderTypeOAuth2 {
+	case models.ProviderTypeOAuth2:
 		if params.AuthorizationURL == "" {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "authorization_url is required for OAuth2 providers")
 		}
@@ -459,12 +460,13 @@ func validateProviderParams(params *AdminCustomOAuthProviderParams, providerType
 func validateProviderURLs(params *AdminCustomOAuthProviderParams, providerType models.ProviderType) error {
 	var urls []string
 
-	if providerType == models.ProviderTypeOIDC {
+	switch providerType {
+	case models.ProviderTypeOIDC:
 		urls = append(urls, params.Issuer)
 		if params.DiscoveryURL != nil && *params.DiscoveryURL != "" {
 			urls = append(urls, *params.DiscoveryURL)
 		}
-	} else if providerType == models.ProviderTypeOAuth2 {
+	case models.ProviderTypeOAuth2:
 		urls = []string{
 			params.AuthorizationURL,
 			params.TokenURL,

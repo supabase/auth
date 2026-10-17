@@ -95,6 +95,10 @@ const (
 	ErrorCodeMFAWebAuthnEnrollDisabled         ErrorCode = "mfa_webauthn_enroll_not_enabled"
 	ErrorCodeMFAWebAuthnVerifyDisabled         ErrorCode = "mfa_webauthn_verify_not_enabled"
 	ErrorCodeMFAVerifiedFactorExists           ErrorCode = "mfa_verified_factor_exists"
+	ErrorCodeMFARecoveryCodesEnrollDisabled    ErrorCode = "mfa_recovery_codes_enroll_not_enabled"
+	ErrorCodeMFARecoveryCodesVerifyDisabled    ErrorCode = "mfa_recovery_codes_verify_not_enabled"
+	ErrorCodeMFARecoveryCodesLocked            ErrorCode = "mfa_recovery_codes_locked"
+	ErrorCodeMFARecoveryCodesSoleFactor        ErrorCode = "mfa_recovery_codes_sole_factor"
 	//#nosec G101 -- Not a secret value.
 	ErrorCodeInvalidCredentials                     ErrorCode = "invalid_credentials"
 	ErrorCodeEmailAddressNotAuthorized              ErrorCode = "email_address_not_authorized"

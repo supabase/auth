@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/base64"
 	"errors"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -1019,6 +1020,153 @@ func TestWebAuthnConfigurationValidate(t *testing.T) {
 	}
 }
 
+func TestRecoveryCodesConfigurationValidate(t *testing.T) {
+	validConfig := func() RecoveryCodesFactorTypeConfiguration {
+		return RecoveryCodesFactorTypeConfiguration{
+			EnrollEnabled:     true,
+			VerifyEnabled:     true,
+			Count:             10,
+			CodeLength:        16,
+			MaxVerifyAttempts: 5,
+			LockoutDuration:   15 * time.Minute,
+		}
+	}
+
+	cases := []struct {
+		desc   string
+		mutate func(c *RecoveryCodesFactorTypeConfiguration)
+		errs   []string
+	}{
+		{
+			desc: "valid baseline",
+		},
+		{
+			desc:   "count at lower bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.Count = 4 },
+		},
+		{
+			desc:   "count at upper bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.Count = 16 },
+		},
+		{
+			desc:   "count below lower bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.Count = 3 },
+			errs:   []string{"GOTRUE_MFA_RECOVERY_CODES_COUNT must be between 4 and 16, got 3"},
+		},
+		{
+			desc:   "count above upper bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.Count = 17 },
+			errs:   []string{"GOTRUE_MFA_RECOVERY_CODES_COUNT must be between 4 and 16, got 17"},
+		},
+		{
+			desc:   "code length at lower bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.CodeLength = 13 },
+		},
+		{
+			desc:   "code length at upper bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.CodeLength = 32 },
+		},
+		{
+			desc:   "code length below lower bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.CodeLength = 12 },
+			errs:   []string{"GOTRUE_MFA_RECOVERY_CODES_CODE_LENGTH must be between 13 and 32, got 12"},
+		},
+		{
+			desc:   "code length above upper bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.CodeLength = 33 },
+			errs:   []string{"GOTRUE_MFA_RECOVERY_CODES_CODE_LENGTH must be between 13 and 32, got 33"},
+		},
+		{
+			desc:   "max verify attempts at lower bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.MaxVerifyAttempts = 3 },
+		},
+		{
+			desc:   "max verify attempts at upper bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.MaxVerifyAttempts = 15 },
+		},
+		{
+			desc:   "max verify attempts below lower bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.MaxVerifyAttempts = 2 },
+			errs:   []string{"GOTRUE_MFA_RECOVERY_CODES_MAX_VERIFY_ATTEMPTS must be between 3 and 15, got 2"},
+		},
+		{
+			desc:   "max verify attempts above upper bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.MaxVerifyAttempts = 16 },
+			errs:   []string{"GOTRUE_MFA_RECOVERY_CODES_MAX_VERIFY_ATTEMPTS must be between 3 and 15, got 16"},
+		},
+		{
+			desc:   "lockout duration at lower bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.LockoutDuration = time.Minute },
+		},
+		{
+			desc:   "lockout duration at upper bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.LockoutDuration = 24 * time.Hour },
+		},
+		{
+			desc:   "lockout duration below lower bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.LockoutDuration = 59 * time.Second },
+			errs:   []string{"GOTRUE_MFA_RECOVERY_CODES_LOCKOUT_DURATION must be between 1m and 24h, got 59s"},
+		},
+		{
+			desc:   "lockout duration above upper bound",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) { c.LockoutDuration = 24*time.Hour + time.Second },
+			errs:   []string{"GOTRUE_MFA_RECOVERY_CODES_LOCKOUT_DURATION must be between 1m and 24h, got 24h0m1s"},
+		},
+		{
+			desc: "multiple invalid settings reported together",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) {
+				c.Count = 0
+				c.LockoutDuration = 0
+			},
+			errs: []string{
+				"GOTRUE_MFA_RECOVERY_CODES_COUNT must be between 4 and 16, got 0",
+				"GOTRUE_MFA_RECOVERY_CODES_LOCKOUT_DURATION must be between 1m and 24h, got 0s",
+			},
+		},
+		{
+			desc: "enroll enabled alone triggers validation",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) {
+				c.VerifyEnabled = false
+				c.Count = 3
+			},
+			errs: []string{"GOTRUE_MFA_RECOVERY_CODES_COUNT must be between 4 and 16, got 3"},
+		},
+		{
+			desc: "verify enabled alone triggers validation",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) {
+				c.EnrollEnabled = false
+				c.Count = 3
+			},
+			errs: []string{"GOTRUE_MFA_RECOVERY_CODES_COUNT must be between 4 and 16, got 3"},
+		},
+		{
+			desc: "validation skipped when both flags disabled",
+			mutate: func(c *RecoveryCodesFactorTypeConfiguration) {
+				*c = RecoveryCodesFactorTypeConfiguration{}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			c := validConfig()
+			if tc.mutate != nil {
+				tc.mutate(&c)
+			}
+
+			err := c.Validate()
+			if len(tc.errs) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			for _, msg := range tc.errs {
+				require.Contains(t, err.Error(), msg)
+			}
+		})
+	}
+}
+
 func toPtr[T any](v T) *T {
 	return &(&([1]T{T(v)}))[0]
 }
@@ -1102,5 +1250,67 @@ func TestProviderLinkingDomainsDecode(t *testing.T) {
 	{
 		var d ProviderLinkingDomains
 		require.Error(t, d.Decode("custom:github="))
+	}
+}
+
+func TestApplyDefaultsClampsOtpExp(t *testing.T) {
+	baseConfig := func() *GlobalConfiguration {
+		c := &GlobalConfiguration{}
+		c.JWT.Secret = "secret"
+		return c
+	}
+
+	cases := []struct {
+		desc       string
+		mailerExp  uint
+		smsExp     uint
+		wantMailer uint
+		wantSms    uint
+	}{
+		{
+			desc:       "zero takes the per-channel default",
+			mailerExp:  0,
+			smsExp:     0,
+			wantMailer: 86400,
+			wantSms:    60,
+		},
+		{
+			desc:       "in-range values pass through untouched",
+			mailerExp:  3600,
+			smsExp:     120,
+			wantMailer: 3600,
+			wantSms:    120,
+		},
+		{
+			desc:       "the ceiling itself is not clamped",
+			mailerExp:  maxOtpExp,
+			smsExp:     maxOtpExp,
+			wantMailer: maxOtpExp,
+			wantSms:    maxOtpExp,
+		},
+		{
+			desc:       "values above the ceiling clamp down to it",
+			mailerExp:  maxOtpExp + 1,
+			smsExp:     math.MaxUint,
+			wantMailer: maxOtpExp,
+			wantSms:    maxOtpExp,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			cfg := baseConfig()
+			cfg.Mailer.OtpExp = c.mailerExp
+			cfg.Sms.OtpExp = c.smsExp
+			require.NoError(t, cfg.ApplyDefaults())
+
+			require.Equal(t, c.wantMailer, cfg.Mailer.OtpExp)
+			require.Equal(t, c.wantSms, cfg.Sms.OtpExp)
+
+			// the clamp exists so that this conversion cannot overflow into a
+			// negative duration, which would expire every token at creation
+			require.Positive(t, time.Duration(cfg.Mailer.OtpExp)*time.Second) // #nosec G115
+			require.Positive(t, time.Duration(cfg.Sms.OtpExp)*time.Second)    // #nosec G115
+		})
 	}
 }
