@@ -272,17 +272,18 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Post("/", api.Verify)
 		})
 
-		r.With(api.requireAuthentication).Post("/logout", api.Logout)
+		r.With(api.requireAuthentication).With(api.requireNotOAuthClient).Post("/logout", api.Logout)
 
-		r.With(api.requireAuthentication).Route("/reauthenticate", func(r *router) {
+		r.With(api.requireAuthentication).With(api.requireNotOAuthClient).Route("/reauthenticate", func(r *router) {
 			r.Get("/", api.Reauthenticate)
 		})
 
 		r.With(api.requireAuthentication).Route("/user", func(r *router) {
 			r.Get("/", api.UserGet)
-			r.With(api.limitHandler(api.limiterOpts.User)).Put("/", api.UserUpdate)
+			r.With(api.requireNotOAuthClient).With(api.limitHandler(api.limiterOpts.User)).Put("/", api.UserUpdate)
 
 			r.Route("/identities", func(r *router) {
+				r.Use(api.requireNotOAuthClient)
 				r.Use(api.requireManualLinkingEnabled)
 				r.Get("/authorize", api.LinkIdentity)
 				r.Delete("/{identity_id}", api.DeleteIdentity)
@@ -290,13 +291,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 			// OAuth grant management endpoints
 			r.Route("/oauth/grants", func(r *router) {
+				r.Use(api.requireNotOAuthClient)
 				r.Use(api.requireOAuthServerEnabled)
 				r.Get("/", api.oauthServer.UserListOAuthGrants)
 				r.Delete("/", api.oauthServer.UserRevokeOAuthGrant)
 			})
 		})
 
-		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
+		r.With(api.requireAuthentication).With(api.requireNotOAuthClient).Route("/factors", func(r *router) {
 			r.Use(api.requireNotAnonymous)
 			r.Post("/", api.EnrollFactor)
 
@@ -331,13 +333,13 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.Post("/verify", api.PasskeyAuthenticationVerify)
 			})
 
-			r.With(api.requireAuthentication).With(api.requireNotAnonymous).Route("/registration", func(r *router) {
+			r.With(api.requireAuthentication).With(api.requireNotOAuthClient).With(api.requireNotAnonymous).Route("/registration", func(r *router) {
 				r.Post("/options", api.PasskeyRegistrationOptions)
 				r.Post("/verify", api.PasskeyRegistrationVerify)
 			})
 
-			r.With(api.requireAuthentication).Get("/", api.PasskeyList)
-			r.With(api.requireAuthentication).Route("/{passkey_id}", func(r *router) {
+			r.With(api.requireAuthentication).With(api.requireNotOAuthClient).Get("/", api.PasskeyList)
+			r.With(api.requireAuthentication).With(api.requireNotOAuthClient).Route("/{passkey_id}", func(r *router) {
 				r.Patch("/", api.PasskeyUpdate)
 				r.Delete("/", api.PasskeyDelete)
 			})
@@ -457,8 +459,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			// OAuth 2.1 Authorization endpoints
 			// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider
 			r.Get("/authorize", api.oauthServer.OAuthServerAuthorize)
-			r.With(api.requireAuthentication).Get("/authorizations/{authorization_id}", api.oauthServer.OAuthServerGetAuthorization)
-			r.With(api.requireAuthentication).Post("/authorizations/{authorization_id}/consent", api.oauthServer.OAuthServerConsent)
+			r.With(api.requireAuthentication).With(api.requireNotOAuthClient).Get("/authorizations/{authorization_id}", api.oauthServer.OAuthServerGetAuthorization)
+			r.With(api.requireAuthentication).With(api.requireNotOAuthClient).Post("/authorizations/{authorization_id}/consent", api.oauthServer.OAuthServerConsent)
 		})
 
 		r.Route(scim.BasePath, func(r *router) {

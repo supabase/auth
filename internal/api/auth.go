@@ -50,6 +50,42 @@ func (a *API) requireNotAnonymous(w http.ResponseWriter, r *http.Request) (conte
 	return ctx, nil
 }
 
+// isOAuthClientRequest checks whether the authenticated request originates from an OAuth 2.1 client token or session.
+func (a *API) isOAuthClientRequest(ctx context.Context) bool {
+	claims := getClaims(ctx)
+	if claims != nil && claims.ClientID != "" {
+		return true
+	}
+	session := getSession(ctx)
+	if session != nil && session.IsOAuth() {
+		return true
+	}
+	return false
+}
+
+// getOAuthScopes returns the slice of granted OAuth scopes from session or token claims.
+func (a *API) getOAuthScopes(ctx context.Context) []string {
+	session := getSession(ctx)
+	if session != nil && session.Scopes != nil {
+		return session.GetScopeList()
+	}
+	claims := getClaims(ctx)
+	if claims != nil && claims.Scope != "" {
+		return strings.Fields(claims.Scope)
+	}
+	return []string{}
+}
+
+// requireNotOAuthClient ensures that the authenticated request does not originate
+// from a third-party OAuth 2.1 client session or access token.
+func (a *API) requireNotOAuthClient(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+	if a.isOAuthClientRequest(ctx) {
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens are not authorized to perform this action")
+	}
+	return ctx, nil
+}
+
 func (a *API) requireAdmin(ctx context.Context) (context.Context, error) {
 	// Find the administrative user
 	claims := getClaims(ctx)
