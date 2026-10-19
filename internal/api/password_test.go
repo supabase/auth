@@ -87,6 +87,17 @@ func TestPasswordStrengthChecks(t *testing.T) {
 			Reasons:  nil,
 		},
 		{
+			// 3 runes but 9 bytes: must still be too short
+			MinLength: 6,
+			Password:  "密码短",
+			Reasons:   []string{"length"},
+		},
+		{
+			MinLength: 6,
+			Password:  "密码密码密码",
+			Reasons:   nil,
+		},
+		{
 			MinLength:          6,
 			RequiredCharacters: []string{},
 			Password:           "zZgXb5gzyCNrV36qwbOSbKVQsVJd28mC1TwRpeB0y6sFNICJyjD6bILKJMsjyKDzBdaY5tmi8zY9BWJYmt3vULLmyafjIDLYjy8qhETu0mS2jj1uQBgSAzJn9Zjm8EFa",
