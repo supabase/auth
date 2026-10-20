@@ -35,7 +35,7 @@ Disclosure won't be counted against you, but undisclosed AI usage may result in 
 
 ## Volume
 
-Do not open many pull requests at once. Open one, get it reviewed, learn from the feedback, and then open the next (following the standard process of Discussion->Issue->PR). We may close pull requests from an author who opens many at the same time.
+Do not open many pull requests at once. Open one, get it reviewed, learn from the feedback, and then open the next (following the standard process in [CONTRIBUTING.md](CONTRIBUTING.md)). We may close pull requests from an author who opens many at the same time.
 
 ## Why
 

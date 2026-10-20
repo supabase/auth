@@ -1,7 +1,7 @@
 <!--
 Read CONTRIBUTING.md before you open this pull request.
-All changes start as a Discussion. A maintainer opens an issue with the
-`open-for-contribution` label when the change is accepted. Link that issue below.
+Bug fixes start as an issue. Features start as a Discussion. When the change is
+accepted, the issue has the `open-for-contribution` label. Link that issue below.
 Supabase maintainers working from Linear tickets are exempt.
 -->
 
