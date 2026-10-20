@@ -9,11 +9,11 @@ Read this guide before you write code. It covers which changes we accept, how to
 Before you open a pull request:
 
 1. **Search first.** Search open issues, discussions, and pull requests. If one exists, add to that work instead of opening a duplicate.
-2. **Start a [Discussion](https://github.com/supabase/auth/discussions).** Do this for all changes, including bug fixes.
-3. **Wait for maintainer triage.** The team must agree on the approach in the Discussion. Then a maintainer opens an issue with the `open-for-contribution` label.
+2. **Open an [issue](https://github.com/supabase/auth/issues) for a bug fix, or start a [Discussion](https://github.com/supabase/auth/discussions) for a feature.**
+3. **Wait for maintainer triage.** The team must agree on the approach. Then a maintainer adds the `open-for-contribution` label to the bug issue, or opens an issue with that label for the feature.
 4. **Open a pull request only after the issue has the `open-for-contribution` label.** Link the issue with a closing keyword, for example `Closes #123`.
 
-Until a maintainer opens an issue with the `open-for-contribution` label, the change is still in triage, so work should not start and a pull request should not be opened.
+Until the issue has the `open-for-contribution` label, the change is still in triage, so work should not start and a pull request should not be opened.
 
 Pull requests from external contributors that do not follow this workflow are commented on and closed. Supabase maintainers are exempt, because they can work from Linear tickets that are not public on GitHub.
 
