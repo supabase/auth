@@ -710,7 +710,9 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 	switch params.Type {
 	case phoneChangeVerification:
-		user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
+		// phone_change is not unique across users, so the token has to
+		// participate in the lookup to find the right user.
+		user, err = models.FindUserForPhoneChange(conn, params.Phone, tokenHash, aud)
 	case smsVerification:
 		user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
 	case mail.EmailChangeVerification:
