@@ -1174,7 +1174,10 @@ func (user *User) WebAuthnCredentials() []webauthn.Credential {
 	var credentials []webauthn.Credential
 
 	for _, factor := range user.Factors {
-		if factor.IsVerified() && factor.FactorType == WebAuthn {
+		// web_authn_credential is a nullable column, so guard the pointer before
+		// dereferencing it; skip a verified WebAuthn factor that has no stored
+		// credential rather than panicking.
+		if factor.IsVerified() && factor.FactorType == WebAuthn && factor.WebAuthnCredential != nil {
 			credential := factor.WebAuthnCredential.Credential
 			credentials = append(credentials, credential)
 		}
