@@ -543,6 +543,10 @@ func (s *Server) UserListOAuthGrants(w http.ResponseWriter, r *http.Request) err
 	if user == nil {
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "authentication required")
 	}
+	session := shared.GetSession(ctx)
+	if session != nil && session.IsOAuth() {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens cannot list OAuth grants")
+	}
 
 	db := s.db.WithContext(ctx)
 
@@ -591,6 +595,10 @@ func (s *Server) UserRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) er
 
 	if user == nil {
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "authentication required")
+	}
+	session := shared.GetSession(ctx)
+	if session != nil && session.IsOAuth() {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens cannot revoke OAuth grants")
 	}
 
 	clientIDStr := r.URL.Query().Get("client_id")

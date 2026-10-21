@@ -20,6 +20,9 @@ const (
 // Logout is the endpoint for logging out a user and thereby revoking any refresh tokens
 func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	if a.isOAuthClientRequest(ctx) {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens are not authorized to use the logout endpoint")
+	}
 	config := a.config
 	db := a.db.WithContext(ctx)
 	scope := LogoutGlobal

@@ -16,6 +16,9 @@ const InvalidNonceMessage = "Nonce has expired or is invalid"
 // Reauthenticate sends a reauthentication otp to either the user's email or phone
 func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	if a.isOAuthClientRequest(ctx) {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens are not authorized to trigger reauthentication")
+	}
 	config := a.config
 	db := a.db.WithContext(ctx)
 
