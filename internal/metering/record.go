@@ -26,6 +26,10 @@ const (
 	// LoginTypeOAuthServer is for the OAuth 2.1 authorization server (this app acting as the
 	// OAuth server, not a third-party provider)
 	LoginTypeOAuthServer LoginType = "oauth_server"
+
+	// LoginTypeTokenExchange is the token-exchange grant, where sign-in relies
+	// on a provider-issued access token rather than an OAuth authorization flow.
+	LoginTypeTokenExchange LoginType = "token_exchange"
 )
 
 // Provider constants for consistent login analytics

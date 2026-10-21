@@ -148,6 +148,14 @@ type OAuthProvider interface {
 	RequiresPKCE() bool
 }
 
+// AccessTokenVerifier is implemented by OAuth providers that can verify a
+// client-provided access token was issued for this app before it is exchanged
+// for a session through the token-exchange grant. It returns the provider's
+// subject identifier (the user id) encoded in the token.
+type AccessTokenVerifier interface {
+	VerifyAccessToken(ctx context.Context, accessToken string) (subject string, err error)
+}
+
 func chooseHost(base, defaultHost string) string {
 	if base == "" {
 		return "https://" + defaultHost
