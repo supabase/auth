@@ -11,6 +11,12 @@ const (
 	discordUser           string = `{"id":"discordTestId","avatar":"abc","email":"discord@example.com","username":"Discord Test","verified":true,"discriminator":"0001"}}`
 	discordUserWrongEmail string = `{"id":"discordTestId","avatar":"abc","email":"other@example.com","username":"Discord Test","verified":true}}`
 	discordUserNoEmail    string = `{"id":"discordTestId","avatar":"abc","username":"Discord Test","verified":true}}`
+	// New username system: discriminator "0", no custom avatar. The default
+	// avatar index is (id >> 22) % 6; for this id that is 5.
+	discordUserNewDefaultAvatar string = `{"id":"80351110224678912","email":"discord@example.com","username":"Discord Test","verified":true,"discriminator":"0"}`
+	// Legacy user without a custom avatar: default avatar index is
+	// discriminator % 5; for "0002" that is 2.
+	discordUserLegacyDefaultAvatar string = `{"id":"discordTestId","email":"discord@example.com","username":"Discord Test","verified":true,"discriminator":"0002"}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalDiscord() {
@@ -65,6 +71,32 @@ func (ts *ExternalTestSuite) TestSignupExternalDiscord_AuthorizationCode() {
 	u := performAuthorization(ts, "discord", code, "")
 
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "discord@example.com", "Discord Test", "discordTestId", "https://cdn.discordapp.com/avatars/discordTestId/abc.png")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalDiscord_NewUsernameDefaultAvatar() {
+	ts.Config.DisableSignup = false
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := DiscordTestSignupSetup(ts, &tokenCount, &userCount, code, discordUserNewDefaultAvatar)
+	defer server.Close()
+
+	u := performAuthorization(ts, "discord", code, "")
+
+	// (80351110224678912 >> 22) % 6 == 5, not discriminator("0") % 5 == 0.
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "discord@example.com", "Discord Test", "80351110224678912", "https://cdn.discordapp.com/embed/avatars/5.png")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalDiscord_LegacyDefaultAvatar() {
+	ts.Config.DisableSignup = false
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := DiscordTestSignupSetup(ts, &tokenCount, &userCount, code, discordUserLegacyDefaultAvatar)
+	defer server.Close()
+
+	u := performAuthorization(ts, "discord", code, "")
+
+	// Legacy discriminator "0002" % 5 == 2.
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "discord@example.com", "Discord Test", "discordTestId", "https://cdn.discordapp.com/embed/avatars/2.png")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalDiscordDisableSignupErrorWhenNoUser() {
