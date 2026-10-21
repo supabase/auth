@@ -177,7 +177,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 
 		// Reload user model from db.
 		// This is important for refreshing the data in any generated columns like IsAnonymous.
-		if terr := tx.Reload(user); err != nil {
+		if terr := tx.Reload(user); terr != nil {
 			return terr
 		}
 
