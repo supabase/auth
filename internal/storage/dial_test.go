@@ -135,6 +135,64 @@ func TestConnection(t *testing.T) {
 	})
 }
 
+func TestApplyConfigDefaultIdlePoolReusesConnection(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	config := mustConfig(t)
+	// reset pool limits to defaults
+	config.DB = conf.DBConfiguration{
+		Driver:    config.DB.Driver,
+		URL:       config.DB.URL,
+		Namespace: config.DB.Namespace,
+	}
+
+	db, err := DialContext(ctx, config)
+	require.NoError(t, err)
+	defer db.Close()
+	require.NotNil(t, db.sqldb)
+
+	backendPID := func() int {
+		t.Helper()
+		var pid int
+		err := db.sqldb.QueryRowContext(ctx, "SELECT pg_backend_pid()").Scan(&pid)
+		require.NoError(t, err)
+		return pid
+	}
+
+	pid := backendPID()
+	require.Equal(t, pid, backendPID(), "connections should be reused before applying configuration")
+
+	le := observability.GetLogEntryFromContext(ctx).Entry
+	require.NoError(t, db.ApplyConfig(ctx, config, le))
+
+	require.Equal(t, pid, backendPID(), "applying the default pool configuration should preserve connection reuse")
+}
+
+func TestNewConnLimitsFromConfigIdlePool(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured int
+		expected   int
+	}{
+		{name: "default", configured: 0, expected: 2},
+		{name: "explicit", configured: 20, expected: 20},
+		{name: "disabled", configured: -1, expected: -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := conf.DBConfiguration{
+				MaxIdlePoolSize: tt.configured,
+			}
+
+			limits := newConnLimitsFromConfig(&cfg)
+
+			require.Equal(t, tt.expected, limits.MaxIdleConns)
+		})
+	}
+}
+
 func TestConnLimits(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
