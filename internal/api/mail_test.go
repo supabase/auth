@@ -255,3 +255,77 @@ func (ts *MailTestSuite) setURIAllowListMap(uris ...string) {
 		ts.Config.URIAllowListMap[uri] = g
 	}
 }
+
+func (ts *MailTestSuite) TestGenerateLinkWithOptionsRedirectTo() {
+	// create admin jwt
+	claims := &AccessTokenClaims{
+		Role: "supabase_admin",
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+	require.NoError(ts.T(), err, "Error generating admin jwt")
+
+	ts.setURIAllowListMap("http://localhost:8000/**")
+
+	customDomainUrl, err := url.ParseRequestURI("https://example.gotrue.com")
+	require.NoError(ts.T(), err)
+
+	cases := []struct {
+		desc          string
+		body          string
+		expectedCode  int
+		expectedRedir string
+		expectedMeta  map[string]interface{}
+	}{
+		{
+			desc:          "nested options.redirect_to is honored",
+			body:          `{"type":"magiclink","email":"test@example.com","options":{"redirect_to":"http://localhost:8000/auth/callback"}}`,
+			expectedCode:  http.StatusOK,
+			expectedRedir: "http://localhost:8000/auth/callback",
+		},
+		{
+			desc:          "nested options.data is honored (signup)",
+			body:          `{"type":"signup","email":"options_data_user@example.com","password":"secret123","options":{"data":{"foo":"bar"}}}`,
+			expectedCode:  http.StatusOK,
+			expectedRedir: ts.Config.SiteURL,
+			expectedMeta:  map[string]interface{}{"foo": "bar"},
+		},
+		{
+			desc:          "top-level redirect_to takes precedence over nested",
+			body:          `{"type":"magiclink","email":"test@example.com","redirect_to":"http://localhost:8000/top","options":{"redirect_to":"http://localhost:8000/nested"}}`,
+			expectedCode:  http.StatusOK,
+			expectedRedir: "http://localhost:8000/top",
+		},
+		{
+			desc:          "disallowed nested redirect_to falls back to site url",
+			body:          `{"type":"magiclink","email":"test@example.com","options":{"redirect_to":"http://evil.example.com/callback"}}`,
+			expectedCode:  http.StatusOK,
+			expectedRedir: ts.Config.SiteURL,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			req := httptest.NewRequest(http.MethodPost, customDomainUrl.String()+"/admin/generate_link", bytes.NewBufferString(c.body))
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			w := httptest.NewRecorder()
+
+			ts.API.handler.ServeHTTP(w, req)
+
+			require.Equal(ts.T(), c.expectedCode, w.Code)
+
+			data := make(map[string]interface{})
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			require.Equal(ts.T(), c.expectedRedir, data["redirect_to"])
+
+			if c.expectedMeta != nil {
+				require.Equal(ts.T(), c.expectedMeta, data["user_metadata"])
+			}
+
+			// action_link must embed the same redirect_to value
+			u, err := url.ParseRequestURI(data["action_link"].(string))
+			require.NoError(ts.T(), err)
+			q := u.Query()
+			require.Equal(ts.T(), c.expectedRedir, q.Get("redirect_to"))
+		})
+	}
+}

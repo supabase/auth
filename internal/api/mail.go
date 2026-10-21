@@ -31,6 +31,11 @@ var (
 	emailErrorsCounter           = observability.ObtainMetricCounter("global_auth_email_send_errors_total", "Number of email send errors")
 )
 
+type GenerateLinkOptions struct {
+	Data       map[string]interface{} `json:"data"`
+	RedirectTo string                 `json:"redirect_to"`
+}
+
 type GenerateLinkParams struct {
 	Type       string                 `json:"type"`
 	Email      string                 `json:"email"`
@@ -38,6 +43,24 @@ type GenerateLinkParams struct {
 	Password   string                 `json:"password"`
 	Data       map[string]interface{} `json:"data"`
 	RedirectTo string                 `json:"redirect_to"`
+	// Options mirrors the nested shape used by the client libraries and the
+	// management API, e.g. {"options": {"redirect_to": "...", "data": {...}}}.
+	// Values set at the top level take precedence for backward compatibility.
+	Options *GenerateLinkOptions `json:"options"`
+}
+
+// normalize resolves values provided under the nested "options" object into
+// the top-level fields, without overriding anything set at the top level.
+func (p *GenerateLinkParams) normalize() {
+	if p.Options == nil {
+		return
+	}
+	if p.RedirectTo == "" {
+		p.RedirectTo = p.Options.RedirectTo
+	}
+	if p.Data == nil {
+		p.Data = p.Options.Data
+	}
 }
 
 type GenerateLinkResponse struct {
@@ -59,6 +82,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
+	params.normalize()
 
 	var err error
 	params.Email, err = a.validateEmail(params.Email)
