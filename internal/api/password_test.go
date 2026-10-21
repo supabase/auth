@@ -14,8 +14,9 @@ func TestPasswordStrengthChecks(t *testing.T) {
 		MinLength          int
 		RequiredCharacters []string
 
-		Password string
-		Reasons  []string
+		Password  string
+		Reasons   []string
+		ErrorCode apierrors.ErrorCode
 	}{
 		{
 			MinLength: 6,
@@ -102,6 +103,7 @@ func TestPasswordStrengthChecks(t *testing.T) {
 			RequiredCharacters: []string{},
 			Password:           "zZgXb5gzyCNrV36qwbOSbKVQsVJd28mC1TwRpeB0y6sFNICJyjD6bILKJMsjyKDzBdaY5tmi8zY9BWJYmt3vULLmyafjIDLYjy8qhETu0mS2jj1uQBgSAzJn9Zjm8EFa",
 			Reasons:            nil,
+			ErrorCode:          apierrors.ErrorCodeValidationFailed,
 		},
 	}
 
@@ -117,11 +119,15 @@ func TestPasswordStrengthChecks(t *testing.T) {
 
 		err := api.checkPasswordStrength(context.Background(), example.Password)
 
-		switch e := err.(type) {
-		case *WeakPasswordError:
-			require.Equal(t, e.Reasons, example.Reasons, "Example %d failed with wrong reasons", i)
-		case *HTTPError:
-			require.Equal(t, e.ErrorCode, apierrors.ErrorCodeValidationFailed, "Example %d failed with wrong error code", i)
+		switch {
+		case len(example.Reasons) > 0:
+			var e *WeakPasswordError
+			require.ErrorAs(t, err, &e, "Example %d should fail password strength checks", i)
+			require.Equal(t, example.Reasons, e.Reasons, "Example %d failed with wrong reasons", i)
+		case example.ErrorCode != "":
+			var e *HTTPError
+			require.ErrorAs(t, err, &e, "Example %d should fail validation", i)
+			require.Equal(t, example.ErrorCode, e.ErrorCode, "Example %d failed with wrong error code", i)
 		default:
 			require.NoError(t, err, "Example %d failed with error", i)
 		}
