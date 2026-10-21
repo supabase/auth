@@ -594,6 +594,8 @@ func (ts *Web3TestSuite) TestValidationRules_ValidatedBeforeNotBefore() {
 }
 
 func (ts *Web3TestSuite) TestValidationRules_Expired() {
+	ts.Config.External.Web3Solana.Enabled = true
+	ts.Config.External.Web3Ethereum.Enabled = true
 	defer func() {
 		ts.API.overrideTime = nil
 	}()
@@ -617,6 +619,12 @@ func (ts *Web3TestSuite) TestValidationRules_Expired() {
 			chain:     ChainEthereum,
 			message:   "supabase.com wants you to sign in with your Ethereum account:\n0xDAEaF48CC1736705388Bb0cB2A22559d751FCBaC\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nExpiration Time: 2025-03-29T00:10:00Z\nNot Before: 2025-03-29T00:00:00Z",
 			signature: "0x3c1d21a56fcb057cc43f8a59a1de903022b30a31ff7bcf8e33387ba08d5f450337df6dfdd48dc941caf925e51c2e8d9987683822c9c413d16ef0ce03c6d1e12f1c"},
+		{
+			// Expiration Time without Not Before — common SIWE shape. Ethereum used
+			// to skip the expiry check unless Not Before was also present.
+			chain:     ChainEthereum,
+			message:   "supabase.com wants you to sign in with your Ethereum account:\n0xFCAd0B19bB29D4674531d6f115237E16AfCE377c\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00.000Z\nExpiration Time: 2025-03-29T00:10:00.000Z",
+			signature: "0xc851b7461f05073b2f5b5670f8e37a1376878eaf384383c23336d9d1e20f2e3a31bb1e779bf73f7ea04f4db6ad318ba5c231176063964f76346aa318c30c9f7c1b"},
 	}
 
 	for _, example := range examples {
