@@ -132,6 +132,10 @@ func (va *virtualAuthenticator) createCredential(options *protocol.PublicKeyCred
 // authentication options. It picks the first stored credential (discoverable flow) and signs
 // the authenticator data + client data hash.
 func (va *virtualAuthenticator) getAssertion(options *protocol.PublicKeyCredentialRequestOptions) (*virtualAssertionResponse, error) {
+	return va.getAssertionWithFlags(options, 0x05)
+}
+
+func (va *virtualAuthenticator) getAssertionWithFlags(options *protocol.PublicKeyCredentialRequestOptions, flags byte) (*virtualAssertionResponse, error) {
 	if len(va.credentials) == 0 {
 		return nil, fmt.Errorf("no stored credentials")
 	}
@@ -156,8 +160,6 @@ func (va *virtualAuthenticator) getAssertion(options *protocol.PublicKeyCredenti
 
 	// Build authenticator data for assertion (no attested credential data)
 	rpIDHash := sha256.Sum256([]byte(va.rpID))
-	// flags: UP (bit 0) | UV (bit 2) = 0x05
-	flags := byte(0x05)
 	var authData []byte
 	authData = append(authData, rpIDHash[:]...)
 	authData = append(authData, flags)

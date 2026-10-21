@@ -137,7 +137,7 @@ func (a *API) PasskeyAuthenticationVerify(w http.ResponseWriter, r *http.Request
 			return nil, models.WebAuthnCredentialNotFoundError{}
 		}
 
-		return newWebAuthnUser(u, creds), nil
+		return newWebAuthnUserWithAssertion(u, creds, parsedResponse), nil
 	}
 
 	webauthnUser, credential, err := webAuthn.ValidatePasskeyLogin(handler, sessionData, parsedResponse)
@@ -179,7 +179,7 @@ func (a *API) PasskeyAuthenticationVerify(w http.ResponseWriter, r *http.Request
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
-		if terr = passkeyCredential.UpdateLastUsedWithSignCount(tx, credential.Authenticator.SignCount); terr != nil {
+		if terr = passkeyCredential.UpdateLastUsedWithSignCountAndFlags(tx, credential.Authenticator.SignCount, credential.Flags.BackupEligible, credential.Flags.BackupState); terr != nil {
 			return terr
 		}
 
