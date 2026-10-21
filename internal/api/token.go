@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/gofrs/uuid"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/crypto"
@@ -35,6 +37,19 @@ type PKCEGrantParams struct {
 
 const useCookieHeader = "x-use-cookie"
 const InvalidLoginMessage = "Invalid login credentials"
+
+func (a *API) compareDummyPasswordHash(ctx context.Context, password string) error {
+	if a.dummyPasswordHash == "" {
+		return nil
+	}
+
+	err := crypto.CompareHashAndPassword(ctx, a.dummyPasswordHash, password)
+	if err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+		return apierrors.NewInternalServerError("Error checking password").WithInternalError(err)
+	}
+
+	return nil
+}
 
 // Token is the endpoint for OAuth access token requests
 func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
@@ -108,12 +123,18 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
+			if err := a.compareDummyPasswordHash(ctx, params.Password); err != nil {
+				return err
+			}
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
 		}
 		return apierrors.NewInternalServerError("Database error querying schema").WithInternalError(err)
 	}
 
 	if !user.HasPassword() {
+		if err := a.compareDummyPasswordHash(ctx, params.Password); err != nil {
+			return err
+		}
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
 	}
 
