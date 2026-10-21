@@ -167,7 +167,7 @@ func (a *API) RecoveryCodesGenerate(w http.ResponseWriter, r *http.Request) erro
 			return apierrors.NewInternalServerError("Database error creating recovery codes").WithInternalError(terr)
 		}
 
-		return models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesGeneratedAction, utilities.GetIPAddress(r), map[string]any{
+		return models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesGeneratedAction, map[string]any{
 			"factor_id": factor.ID,
 			"count":     len(codes),
 		})
@@ -244,7 +244,7 @@ func (a *API) RecoveryCodesRegenerate(w http.ResponseWriter, r *http.Request) er
 			return apierrors.NewInternalServerError("Database error replacing recovery codes").WithInternalError(terr)
 		}
 
-		return models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesRegeneratedAction, utilities.GetIPAddress(r), map[string]any{
+		return models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesRegeneratedAction, map[string]any{
 			"factor_id": factor.ID,
 			"count":     len(codes),
 		})
@@ -415,7 +415,7 @@ func (a *API) RecoveryCodesVerify(w http.ResponseWriter, r *http.Request) error 
 			return apierrors.NewInternalServerError("Database error counting recovery codes").WithInternalError(terr)
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesVerifiedAction, utilities.GetIPAddress(r), map[string]any{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesVerifiedAction, map[string]any{
 			"factor_id": factor.ID,
 			"remaining": remaining,
 		}); terr != nil {
@@ -481,7 +481,7 @@ func (a *API) RecoveryCodesDelete(w http.ResponseWriter, r *http.Request) error 
 			return apierrors.NewInternalServerError("Database error deleting recovery code factor").WithInternalError(terr)
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesDeletedAction, utilities.GetIPAddress(r), map[string]any{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.RecoveryCodesDeletedAction, map[string]any{
 			"factor_id": factor.ID,
 		}); terr != nil {
 			return terr
