@@ -20,4 +20,9 @@ func TestAMRClaimIsAAL2(t *testing.T) {
 		claim := AMRClaim{AuthenticationMethod: &methodString}
 		require.Equal(t, want, claim.IsAAL2Claim(), "method %q", methodString)
 	}
+
+	// authentication_method is nullable; a nil method must not panic.
+	require.NotPanics(t, func() {
+		require.False(t, (&AMRClaim{AuthenticationMethod: nil}).IsAAL2Claim())
+	})
 }
