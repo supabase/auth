@@ -1,6 +1,7 @@
 package oauthserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -247,7 +248,7 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 		}
 
 		if shouldAutoApprove {
-			if err := auth.Approve(tx); err != nil {
+			if err := auth.Approve(tx, sessionIDFromContext(ctx)); err != nil {
 				return apierrors.NewInternalServerError("Error auto-approving authorization").WithInternalError(err)
 			}
 		}
@@ -295,6 +296,13 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 	}
 
 	return shared.SendJSON(w, http.StatusOK, response)
+}
+
+func sessionIDFromContext(ctx context.Context) *uuid.UUID {
+	if session := shared.GetSession(ctx); session != nil {
+		return &session.ID
+	}
+	return nil
 }
 
 // OAuthServerConsent handles POST /oauth/authorizations/{authorization_id}/consent
@@ -364,7 +372,7 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 
 		if body.Action == OAuthServerConsentActionApprove {
 			// Approve authorization
-			if err := authorization.Approve(tx); err != nil {
+			if err := authorization.Approve(tx, sessionIDFromContext(ctx)); err != nil {
 				return apierrors.NewInternalServerError("error approving authorization").WithInternalError(err)
 			}
 
