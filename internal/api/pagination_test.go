@@ -129,3 +129,33 @@ func TestAddKeysetPaginationHeaders(t *testing.T) {
 		require.NotContains(t, link, "page=")
 	}
 }
+
+func TestPaginate(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		p, err := paginate(httptest.NewRequest("GET", "/admin/users", nil))
+		require.NoError(t, err)
+		require.Equal(t, uint64(1), p.Page)
+		require.Equal(t, uint64(defaultPerPage), p.PerPage)
+	})
+
+	t.Run("explicit values", func(t *testing.T) {
+		p, err := paginate(httptest.NewRequest("GET", "/admin/users?page=3&per_page=25", nil))
+		require.NoError(t, err)
+		require.Equal(t, uint64(3), p.Page)
+		require.Equal(t, uint64(25), p.PerPage)
+	})
+
+	t.Run("per_page of zero is rejected", func(t *testing.T) {
+		// A zero page size would divide by zero when the pagination
+		// headers are computed.
+		_, err := paginate(httptest.NewRequest("GET", "/admin/users?per_page=0", nil))
+		require.Error(t, err)
+	})
+
+	t.Run("non-numeric values are rejected", func(t *testing.T) {
+		_, err := paginate(httptest.NewRequest("GET", "/admin/users?per_page=abc", nil))
+		require.Error(t, err)
+		_, err = paginate(httptest.NewRequest("GET", "/admin/users?page=-1", nil))
+		require.Error(t, err)
+	})
+}
