@@ -100,6 +100,34 @@ func (ts *ExternalTestSuite) TestSignupExternalKakao_AuthorizationCode() {
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "kakao@example.com", "Kakao Test", "123", "http://example.com/avatar")
 }
 
+func (ts *ExternalTestSuite) TestSignupExternalKakao_AuthorizationCode_NoEmailWithEmailOptional() {
+	ts.Config.DisableSignup = false
+	ts.Config.External.Kakao.EmailOptional = true
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"primary": true, "verified": true}]`
+	server := KakaoTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "kakao", code, "")
+
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "", "Kakao Test", "123", "http://example.com/avatar")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalKakao_AuthorizationCode_NoEmailWithoutEmailOptional() {
+	ts.Config.DisableSignup = false
+	ts.Config.External.Kakao.EmailOptional = false
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"primary": true, "verified": true}]`
+	server := KakaoTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "kakao", code, "")
+
+	assertAuthorizationFailure(ts, u, "Error getting user email from external provider", "server_error", "")
+}
+
 func (ts *ExternalTestSuite) TestSignupExternalKakaoDisableSignupErrorWhenNoUser() {
 	ts.Config.DisableSignup = true
 	tokenCount, userCount := 0, 0

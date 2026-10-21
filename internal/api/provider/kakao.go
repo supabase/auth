@@ -85,9 +85,11 @@ func NewKakaoProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	apiHost := chooseHost(ext.URL, defaultKakaoAPIBase)
 
 	oauthScopes := []string{
-		"account_email",
 		"profile_image",
 		"profile_nickname",
+	}
+	if !ext.EmailOptional {
+		oauthScopes = append([]string{"account_email"}, oauthScopes...)
 	}
 
 	if scopes != "" {
