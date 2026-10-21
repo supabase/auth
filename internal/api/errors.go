@@ -28,11 +28,11 @@ var (
 const InvalidChannelError = "Invalid channel, supported values are 'sms' or 'whatsapp'. 'whatsapp' is only supported if Twilio or Twilio Verify is used as the provider."
 
 var oauthErrorMap = map[int]string{
-	http.StatusBadRequest:          "invalid_request",
-	http.StatusUnauthorized:        "unauthorized_client",
-	http.StatusForbidden:           "access_denied",
-	http.StatusInternalServerError: "server_error",
-	http.StatusServiceUnavailable:  "temporarily_unavailable",
+	http.StatusBadRequest:          apierrors.OAuthErrorCodeInvalidRequest,
+	http.StatusUnauthorized:        apierrors.OAuthErrorCodeUnauthorizedClient,
+	http.StatusForbidden:           apierrors.OAuthErrorCodeAccessDenied,
+	http.StatusInternalServerError: apierrors.OAuthErrorCodeServerError,
+	http.StatusServiceUnavailable:  apierrors.OAuthErrorCodeTemporarilyUnavailable,
 }
 
 // Type aliases while we slowly refactor api errors.
