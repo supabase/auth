@@ -191,7 +191,7 @@ require (
 	gopkg.in/h2non/gock.v1 v1.1.2
 )
 
-go 1.27.0
+go 1.27.3
 
 replace github.com/joho/godotenv => ./internal/forks/godotenv
 
