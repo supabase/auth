@@ -168,3 +168,22 @@ func (ts *TokenOIDCTestSuite) TestGetProviderAppleWithNonAppleIssuerInToken() {
 	require.Error(ts.T(), err)
 	require.Contains(ts.T(), err.Error(), "not an Apple ID token issuer")
 }
+
+func (ts *TokenOIDCTestSuite) TestGetProviderFacebookDoesNotMutateSharedConfig() {
+	ts.Config.External.Facebook.Enabled = false
+	ts.Config.External.Facebook.SkipNonceCheck = false
+
+	params := &IdTokenGrantParams{
+		Provider: FacebookProvider,
+		IdToken:  "test-id-token",
+	}
+	req := httptest.NewRequest(http.MethodPost, "http://localhost", nil)
+
+	// Facebook is disabled, so getProvider returns before any OIDC discovery.
+	// The Facebook branch runs first though, and must not mutate the shared,
+	// process-wide config while overriding SkipNonceCheck for this request.
+	_, _, _, _, _, err := params.getProvider(context.Background(), ts.API.db, ts.Config, req, ts.API.oidcCache)
+	require.Error(ts.T(), err)
+	require.False(ts.T(), ts.Config.External.Facebook.SkipNonceCheck,
+		"Facebook branch must not mutate the shared config's SkipNonceCheck")
+}
