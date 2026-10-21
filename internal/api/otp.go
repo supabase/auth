@@ -12,6 +12,7 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // OtpParams contains the request body params for the otp endpoint
@@ -20,6 +21,7 @@ type OtpParams struct {
 	Phone               string                 `json:"phone"`
 	CreateUser          bool                   `json:"create_user"`
 	Data                map[string]interface{} `json:"data"`
+	HookData            string                 `json:"hook_data"`
 	Channel             string                 `json:"channel"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
@@ -75,8 +77,17 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if err := params.Validate(); err != nil {
 		return err
 	}
+	if err := validateHookData(params.HookData); err != nil {
+		return err
+	}
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
+	}
+
+	// This endpoint creates a user when create_user is set, so the hooks that
+	// run then need to see what the caller sent.
+	if params.HookData != "" {
+		r = r.WithContext(utilities.WithHookData(r.Context(), params.HookData))
 	}
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
