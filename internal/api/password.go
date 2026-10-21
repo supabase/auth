@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -38,7 +39,7 @@ func (a *API) checkPasswordStrength(ctx context.Context, password string) error 
 
 	var messages, reasons []string
 
-	if len(password) < config.Password.MinLength {
+	if utf8.RuneCountInString(password) < config.Password.MinLength {
 		reasons = append(reasons, "length")
 		messages = append(messages, fmt.Sprintf("Password should be at least %d characters.", config.Password.MinLength))
 	}
