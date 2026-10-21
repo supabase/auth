@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 )
 
@@ -105,6 +106,10 @@ func (ts *ExternalTestSuite) TestSignupExternalGoogleDisableSignupErrorWhenEmpty
 	u := performAuthorization(ts, "google", code, "")
 
 	assertAuthorizationFailure(ts, u, "Error getting user email from external provider", "server_error", "google@example.com")
+
+	q, err := url.ParseQuery(u.RawQuery)
+	ts.Require().NoError(err)
+	ts.Require().Equal(apierrors.ErrorCodeEmailAddressNotProvided, q.Get("error_code"))
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGoogleDisableSignupSuccessWithPrimaryEmail() {
