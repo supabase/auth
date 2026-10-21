@@ -1584,3 +1584,42 @@ func (ts *VerifyTestSuite) TestVerifyPhoneChangeSendsNotificationEmailDisabled()
 	// Assert that phone change notification email was not sent
 	require.Len(ts.T(), mockMailer.PhoneChangedMailCalls, 0, "Expected 0 phone change notification email(s) to be sent")
 }
+
+func TestIsOtpExpired(t *testing.T) {
+	now := time.Now()
+	recent := now.Add(-30 * time.Second)
+	old := now.Add(-2 * time.Hour)
+
+	// A nil sent-at must be treated as expired rather than panicking.
+	require.True(t, isOtpExpired(nil, 3600))
+	require.True(t, isOtpExpired(&old, 3600))
+	require.False(t, isOtpExpired(&recent, 3600))
+}
+
+func TestIsOtpValid(t *testing.T) {
+	now := time.Now()
+	recent := now.Add(-30 * time.Second)
+	old := now.Add(-2 * time.Hour)
+	const token = "abc123tokenhash"
+
+	cases := []struct {
+		desc     string
+		actual   string
+		expected string
+		sentAt   *time.Time
+		want     bool
+	}{
+		{"matching token within window", token, token, &recent, true},
+		{"matching pkce token within window", token, "pkce_" + token, &recent, true},
+		{"non-matching token", "wrong", token, &recent, false},
+		{"empty expected", token, "", &recent, false},
+		{"nil sentAt", token, token, nil, false},
+		{"expired token", token, token, &old, false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			require.Equal(t, c.want, isOtpValid(c.actual, c.expected, c.sentAt, 3600))
+		})
+	}
+}
