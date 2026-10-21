@@ -49,6 +49,25 @@ func (ts *IdentityTestSuite) TestNewIdentity() {
 		require.NoError(ts.T(), err)
 		require.Equal(ts.T(), u.ID, identity.UserID)
 	})
+
+	ts.Run("Test create identity with string email", func() {
+		identityData := map[string]interface{}{"sub": uuid.Nil.String(), "email": "test@supabase.io"}
+		identity, err := NewIdentity(u, "email", identityData)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "test@supabase.io", identity.GetEmail())
+	})
+
+	// A phone signup omits the (empty) email claim, so a user-supplied
+	// `data.email` can reach identityData as a non-string value. NewIdentity
+	// must not panic on it. Regression test for supabase/auth#2268.
+	ts.Run("Test create identity with non-string email does not panic", func() {
+		for _, email := range []interface{}{nil, 123, true, map[string]interface{}{}} {
+			identityData := map[string]interface{}{"sub": uuid.Nil.String(), "email": email}
+			identity, err := NewIdentity(u, "phone", identityData)
+			require.NoError(ts.T(), err)
+			require.Empty(ts.T(), identity.GetEmail(), "email should be unset for non-string value %#v", email)
+		}
+	})
 }
 
 func (ts *IdentityTestSuite) TestFindUserIdentities() {
