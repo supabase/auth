@@ -666,3 +666,86 @@ func (ts *OAuthAuthorizeTestSuite) TestConsent_InvalidActionRejected() {
 	err := ts.Server.OAuthServerConsent(w, req)
 	ts.assertHTTPError(err, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
 }
+
+// TestValidatePKCEParams_OAuth21 verifies that the plain PKCE method is rejected
+// per OAuth 2.1 (draft-ietf-oauth-v2-1-12, Section 4.1.1) and that S256 is accepted.
+func TestValidatePKCEParams_OAuth21(t *testing.T) {
+	globalConfig, err := confload.LoadGlobal(oauthServerTestConfig)
+	require.NoError(t, err)
+
+	conn, err := test.SetupDBConnection(globalConfig)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	hooksMgr := &v0hooks.Manager{}
+	tokenService := tokens.NewService(globalConfig, hooksMgr)
+	server := NewServer(globalConfig, conn, tokenService)
+
+	tests := []struct {
+		name                string
+		codeChallengeMethod string
+		codeChallenge       string
+		wantErr             bool
+		errContains         string
+	}{
+		{
+			name:                "S256 accepted",
+			codeChallengeMethod: "S256",
+			codeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+			wantErr:             false,
+		},
+		{
+			name:                "s256 lowercase accepted",
+			codeChallengeMethod: "s256",
+			codeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+			wantErr:             false,
+		},
+		{
+			name:                "plain rejected",
+			codeChallengeMethod: "plain",
+			codeChallenge:       "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+			wantErr:             true,
+			errContains:         "S256",
+		},
+		{
+			name:                "PLAIN rejected case-insensitively",
+			codeChallengeMethod: "PLAIN",
+			codeChallenge:       "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+			wantErr:             true,
+			errContains:         "S256",
+		},
+		{
+			name:                "unknown method rejected",
+			codeChallengeMethod: "rs256",
+			codeChallenge:       "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+			wantErr:             true,
+			errContains:         "S256",
+		},
+		{
+			name:                "missing method rejected",
+			codeChallengeMethod: "",
+			codeChallenge:       "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+			wantErr:             true,
+			errContains:         "requires both",
+		},
+		{
+			name:                "missing challenge rejected",
+			codeChallengeMethod: "S256",
+			codeChallenge:       "",
+			wantErr:             true,
+			errContains:         "requires both",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := server.validatePKCEParams(tt.codeChallengeMethod, tt.codeChallenge)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
