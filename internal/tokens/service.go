@@ -57,9 +57,11 @@ func (a *AMRClaim) UnmarshalJSON(data []byte) error {
 	for _, item := range rawItems {
 		var method string
 		if err := json.Unmarshal(item, &method); err == nil {
+			// The string form carries no time of authentication. Leave the
+			// timestamp unset (0) rather than inventing one, so it is never
+			// mistaken for a recent authentication.
 			entries = append(entries, models.AMREntry{
-				Method:    method,
-				Timestamp: time.Now().Unix(),
+				Method: method,
 			})
 			continue
 		}
