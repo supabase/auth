@@ -533,14 +533,45 @@ func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowT
 }
 
 func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
-	u, err := url.Parse(rurl)
-	if err != nil {
-		return "", err
+	if u, err := url.Parse(rurl); err == nil {
+		q := u.Query()
+		q.Set("code", code)
+		u.RawQuery = q.Encode()
+		return u.String(), nil
 	}
-	q := u.Query()
-	q.Set("code", code)
-	u.RawQuery = q.Encode()
-	return u.String(), nil
+
+	// Custom mobile deep-link schemes containing an underscore (e.g.
+	// com.my_cool_app.example://callback) are rejected by url.Parse because an
+	// underscore is not a valid URI scheme character per RFC 3986. The redirect
+	// URL has already passed IsRedirectURLValid (i.e. it is on the allow list),
+	// so append the PKCE code manually, keeping it in the query component ahead
+	// of any fragment.
+	beforeFragment, fragment, hasFragment := strings.Cut(rurl, "#")
+	base, rawQuery, hasQuery := strings.Cut(beforeFragment, "?")
+
+	// Mirror the overwrite semantics of the url.Parse path above (q.Set): drop
+	// any "code" already present in the redirect URL so the client always
+	// receives the server-issued code, never a duplicate an attacker placed on
+	// an allow-listed deep link.
+	newQuery := "code=" + url.QueryEscape(code)
+	if hasQuery {
+		if q, err := url.ParseQuery(rawQuery); err == nil {
+			q.Del("code")
+			if existing := q.Encode(); existing != "" {
+				newQuery = existing + "&" + newQuery
+			}
+		}
+		// If rawQuery cannot be parsed it is discarded rather than preserved
+		// verbatim, so a malformed, attacker-controlled query on an allow-listed
+		// deep link cannot carry a duplicate "code" ahead of the server-issued
+		// one.
+	}
+
+	result := base + "?" + newQuery
+	if hasFragment {
+		result += "#" + fragment
+	}
+	return result, nil
 }
 
 func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
