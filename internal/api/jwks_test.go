@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -76,4 +77,48 @@ func TestJwks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWellKnownOpenIDIssuerFallbackToExternalURL(t *testing.T) {
+	mockAPI, _, err := setupAPIForTest()
+	require.NoError(t, err)
+
+	mockAPI.config.JWT.Issuer = ""
+	mockAPI.config.API.ExternalURL = "https://auth.example.com"
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil)
+	w := httptest.NewRecorder()
+	mockAPI.handler.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp OpenIDConfigurationResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+
+	require.Equal(t, "https://auth.example.com", resp.Issuer)
+	require.True(t, strings.HasPrefix(resp.AuthorizationEndpoint, "https://auth.example.com/"), "authorization_endpoint should be absolute, got %q", resp.AuthorizationEndpoint)
+	require.True(t, strings.HasPrefix(resp.TokenEndpoint, "https://auth.example.com/"), "token_endpoint should be absolute, got %q", resp.TokenEndpoint)
+	require.True(t, strings.HasPrefix(resp.JWKSURL, "https://auth.example.com/"), "jwks_uri should be absolute, got %q", resp.JWKSURL)
+	require.True(t, strings.HasPrefix(resp.UserInfoEndpoint, "https://auth.example.com/"), "userinfo_endpoint should be absolute, got %q", resp.UserInfoEndpoint)
+}
+
+func TestWellKnownOpenIDIssuerStripsTrailingSlash(t *testing.T) {
+	mockAPI, _, err := setupAPIForTest()
+	require.NoError(t, err)
+
+	mockAPI.config.JWT.Issuer = "https://auth.example.com/"
+	mockAPI.config.API.ExternalURL = "https://something-else.example.com"
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil)
+	w := httptest.NewRecorder()
+	mockAPI.handler.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp OpenIDConfigurationResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+
+	require.Equal(t, "https://auth.example.com", resp.Issuer)
+	require.Equal(t, "https://auth.example.com/oauth/authorize", resp.AuthorizationEndpoint)
+	require.Equal(t, "https://auth.example.com/oauth/token", resp.TokenEndpoint)
+	require.Equal(t, "https://auth.example.com/.well-known/jwks.json", resp.JWKSURL)
+	require.Equal(t, "https://auth.example.com/oauth/userinfo", resp.UserInfoEndpoint)
 }
