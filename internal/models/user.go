@@ -552,6 +552,24 @@ func (u *User) ConfirmPhone(tx *storage.Connection) error {
 		return err
 	}
 
+	if err := u.UpdateUserMetaData(tx, map[string]any{
+		"phone_verified": true,
+	}); err != nil {
+		return err
+	}
+
+	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "phone")
+	if err != nil {
+		if !IsNotFoundError(err) {
+			return err
+		}
+	} else if err := identity.UpdateIdentityData(tx, map[string]interface{}{
+		"phone":          u.GetPhone(),
+		"phone_verified": true,
+	}); err != nil {
+		return err
+	}
+
 	return ClearAllOneTimeTokensForUser(tx, u.ID)
 }
 
@@ -631,6 +649,12 @@ func (u *User) ConfirmPhoneChange(tx *storage.Connection) error {
 	}
 
 	if err := ClearAllOneTimeTokensForUser(tx, u.ID); err != nil {
+		return err
+	}
+
+	if err := u.UpdateUserMetaData(tx, map[string]interface{}{
+		"phone_verified": true,
+	}); err != nil {
 		return err
 	}
 
