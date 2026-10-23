@@ -2,10 +2,12 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/crewjam/saml"
@@ -178,6 +180,16 @@ func parseSAMLMetadata(rawMetadata []byte) (*saml.EntityDescriptor, error) {
 	return metadata, nil
 }
 
+// samlMetadataFetchTimeout bounds a single metadata fetch. It matches the
+// timeout used for OIDC discovery fetches in
+// utilities.FetchURLWithTimeout.
+var samlMetadataFetchTimeout = 10 * time.Second
+
+// maxSAMLMetadataSize caps the metadata document size. Real single-IdP
+// metadata is far smaller; the cap only stops unbounded reads from a slow
+// or hostile metadata endpoint.
+const maxSAMLMetadataSize = 5 * 1024 * 1024 // 5 MiB
+
 func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -189,7 +201,11 @@ func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 	req.Header.Set("Accept", "application/xml;charset=UTF-8")
 	req.Header.Set("Accept-Charset", "UTF-8")
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{
+		Timeout: samlMetadataFetchTimeout,
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -199,9 +215,13 @@ func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeSAMLMetadataFetchFailed, "HTTP %v error fetching SAML Metadata from URL '%s'", resp.StatusCode, url)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxSAMLMetadataSize+1))
 	if err != nil {
 		return nil, err
+	}
+
+	if len(data) > maxSAMLMetadataSize {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeSAMLMetadataFetchFailed, "SAML Metadata from URL '%s' exceeds the maximum size of %d bytes", url, maxSAMLMetadataSize).WithInternalError(fmt.Errorf("metadata response larger than %d bytes", maxSAMLMetadataSize))
 	}
 
 	return data, nil
