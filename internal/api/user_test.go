@@ -13,6 +13,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/mailer"
@@ -266,6 +267,228 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 		})
 	}
 
+}
+
+// A user must not be able to find out whether an email address is already
+// registered to another account by requesting a change to it, see
+// supabase/supabase#19071.
+func (ts *UserTestSuite) TestUserUpdateEmailToRegisteredAddress() {
+	// the address that is registered to another account
+	other, err := models.NewUser("222222222", "other@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	require.NoError(ts.T(), ts.API.db.Create(other), "Error saving test user")
+	require.NoError(ts.T(), other.Confirm(ts.API.db), "Error confirming test user")
+
+	u, err := models.NewUser("333333333", "requester@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
+
+	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
+	require.True(ts.T(), ok, "Expected a mock mailer")
+	mockMailer.Reset()
+
+	token := ts.generateAccessTokenAndSession(u)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": "other@example.com",
+	}))
+
+	req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	// the address is not reported as being taken
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	data := models.User{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.Equal(ts.T(), "other@example.com", data.EmailChange)
+	require.Equal(ts.T(), "requester@example.com", data.GetEmail())
+
+	// no confirmation is sent to the address that belongs to the other
+	// account, but the current address still receives one
+	require.Len(ts.T(), mockMailer.EmailChangeMailCalls, 1)
+	require.Empty(ts.T(), mockMailer.EmailChangeMailCalls[0].OTPNew)
+	require.NotEmpty(ts.T(), mockMailer.EmailChangeMailCalls[0].OTPCurrent)
+
+	// the change is stored as pending, just like any other email change
+	stored, err := models.FindUserByID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err, "Error finding test user")
+	require.Equal(ts.T(), "other@example.com", stored.EmailChange)
+	require.Empty(ts.T(), stored.EmailChangeTokenNew)
+
+	// the other account still owns the address
+	stored, err = models.FindUserByID(ts.API.db, other.ID)
+	require.NoError(ts.T(), err, "Error finding test user")
+	require.Equal(ts.T(), "other@example.com", stored.GetEmail())
+}
+
+// The response of an email change must not tell the client whether the
+// requested address is registered to another account.
+func (ts *UserTestSuite) TestUserUpdateEmailResponseIsTheSameForRegisteredAddresses() {
+	other, err := models.NewUser("222222222", "other@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	require.NoError(ts.T(), ts.API.db.Create(other), "Error saving test user")
+	require.NoError(ts.T(), other.Confirm(ts.API.db), "Error confirming test user")
+
+	u, err := models.NewUser("333333333", "requester@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
+
+	token := ts.generateAccessTokenAndSession(u)
+
+	updateEmail := func(email string) map[string]interface{} {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email": email,
+		}))
+
+		req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		body := map[string]interface{}{}
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&body))
+
+		// the change is pending in both cases
+		require.Equal(ts.T(), email, body["new_email"])
+
+		// the timestamps are expected to differ
+		require.Contains(ts.T(), body, "email_change_sent_at")
+		delete(body, "email_change_sent_at")
+		delete(body, "updated_at")
+
+		// the requested address is expected to differ
+		delete(body, "new_email")
+
+		// allow the next request to be sent
+		stored, err := models.FindUserByID(ts.API.db, u.ID)
+		require.NoError(ts.T(), err, "Error finding test user")
+		stored.EmailChangeSentAt = nil
+		require.NoError(ts.T(), ts.API.db.Update(stored))
+
+		return body
+	}
+
+	free := updateEmail("free@example.com")
+	taken := updateEmail("other@example.com")
+
+	require.Equal(ts.T(), free, taken)
+}
+
+// The error can still be returned for projects that need to know whether an
+// address is taken.
+func (ts *UserTestSuite) TestUserUpdateEmailToRegisteredAddressWithErrorEnabled() {
+	ts.Config.Security.HideEmailExists = false
+	defer func() {
+		ts.Config.Security.HideEmailExists = true
+	}()
+
+	other, err := models.NewUser("222222222", "other@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	require.NoError(ts.T(), ts.API.db.Create(other), "Error saving test user")
+	require.NoError(ts.T(), other.Confirm(ts.API.db), "Error confirming test user")
+
+	u, err := models.NewUser("333333333", "requester@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
+
+	token := ts.generateAccessTokenAndSession(u)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": "other@example.com",
+	}))
+
+	req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+
+	errResponse := apierrors.HTTPError{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResponse))
+	require.Equal(ts.T(), string(apierrors.ErrorCodeEmailExists), errResponse.ErrorCode)
+}
+
+// An email change is rejected when the address has been registered by
+// another account after the change was requested. The confirmation is
+// reported as invalid so that it cannot be used to find out whether an
+// address is registered.
+func (ts *UserTestSuite) TestUserUpdateEmailConfirmationToRegisteredAddress() {
+	ts.Config.Mailer.SecureEmailChangeEnabled = false
+	defer func() {
+		ts.Config.Mailer.SecureEmailChangeEnabled = true
+	}()
+
+	u, err := models.NewUser("333333333", "requester@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
+
+	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
+	require.True(ts.T(), ok, "Expected a mock mailer")
+	mockMailer.Reset()
+
+	token := ts.generateAccessTokenAndSession(u)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": "free@example.com",
+	}))
+
+	req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	require.Len(ts.T(), mockMailer.EmailChangeMailCalls, 1)
+	otp := mockMailer.EmailChangeMailCalls[0].OTPNew
+	require.NotEmpty(ts.T(), otp)
+
+	// another account registers the address in the meantime
+	other, err := models.NewUser("222222222", "free@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	require.NoError(ts.T(), ts.API.db.Create(other), "Error saving test user")
+	require.NoError(ts.T(), other.Confirm(ts.API.db), "Error confirming test user")
+
+	// the confirmation is reported as invalid, so that it cannot be used to
+	// find out whether the address is registered
+	var buffer2 bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer2).Encode(map[string]interface{}{
+		"type":  mailer.EmailChangeVerification,
+		"token": otp,
+		"email": "free@example.com",
+	}))
+
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer2)
+	req.Header.Set("Content-Type", "application/json")
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusForbidden, w.Code)
+
+	errResponse := apierrors.HTTPError{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResponse))
+	require.Equal(ts.T(), string(apierrors.ErrorCodeOTPExpired), errResponse.ErrorCode)
+
+	// the address is not applied to the account
+	stored, err := models.FindUserByID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err, "Error finding test user")
+	require.Equal(ts.T(), "requester@example.com", stored.GetEmail())
 }
 
 func (ts *UserTestSuite) TestUserUpdatePassword() {

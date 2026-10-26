@@ -587,6 +587,17 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 	// one email is confirmed at this point if GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED is enabled
 	oldEmail := user.GetEmail()
 	err := conn.Transaction(func(tx *storage.Connection) error {
+		// The address may have been registered by another account after the
+		// change was requested. Report the confirmation as invalid instead of
+		// telling the caller that the address is taken, so that it cannot be
+		// used to find out whether an address is registered.
+		if duplicate, terr := models.IsDuplicatedEmail(tx, user.EmailChange, user.Aud, user, config.Experimental.ProviderLinkingDomains); terr != nil {
+			return apierrors.NewInternalServerError("Database error checking email").WithInternalError(terr)
+		} else if duplicate != nil {
+			logrus.WithField("user_id", user.ID).Warn("Email change rejected, the new email address is already registered")
+			return apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid")
+		}
+
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 			return terr
 		}

@@ -521,7 +521,13 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models.User, email string, flowType models.FlowType) error {
+//
+// When newEmailTaken is true the new email address is already registered to
+// another account. Nothing is sent to that address (it belongs to someone
+// else) and no token is created for it, so the change can never be
+// completed. The current address still receives its confirmation, which keeps
+// the request indistinguishable from a regular email change.
+func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models.User, email string, flowType models.FlowType, newEmailTaken bool) error {
 	config := a.config
 	otpLength := config.Mailer.OtpLength
 
@@ -545,6 +551,14 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
+
+	if newEmailTaken {
+		// The new address belongs to another account: don't send a
+		// confirmation to it and don't create a token that could be used to
+		// claim it.
+		otpNew = ""
+		u.EmailChangeTokenNew = ""
+	}
 
 	err := a.sendEmail(r, tx, u, sendEmailParams{
 		emailActionType:     mail.EmailChangeVerification,

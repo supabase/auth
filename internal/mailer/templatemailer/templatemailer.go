@@ -261,12 +261,16 @@ func (m *Mailer) EmailChangeMail(r *http.Request, user *models.User, otpNew, otp
 		Otp       string
 		TokenHash string
 	}
-	emails := []Email{
-		{
+	// The new address is left out when no OTP was generated for it, which
+	// happens when the address is already registered to another account: a
+	// confirmation must not be sent to an address the user doesn't own.
+	emails := []Email{}
+	if otpNew != "" {
+		emails = append(emails, Email{
 			Address:   user.EmailChange,
 			Otp:       otpNew,
 			TokenHash: user.EmailChangeTokenNew,
-		},
+		})
 	}
 
 	currentEmail := user.GetEmail()
