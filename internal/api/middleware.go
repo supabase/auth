@@ -449,7 +449,7 @@ func (a *API) databaseCleanup(cleanup models.Cleaner) func(http.Handler) http.Ha
 				return
 			}
 
-			db := a.db.WithContext(r.Context())
+			db := a.db.WithContext(context.WithoutCancel(r.Context()))
 			log := observability.GetLogEntry(r).Entry
 
 			affectedRows, err := cleanup.Clean(db)

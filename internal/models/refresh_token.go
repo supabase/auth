@@ -72,10 +72,11 @@ func GrantRefreshTokenSwap(config conf.AuditLogConfiguration, r *http.Request, t
 			return errors.Wrap(terr, "error creating audit log entry")
 		}
 
-		token.Revoked = true
-		if terr = tx.UpdateOnly(token, "revoked"); terr != nil {
+		tablename := (&pop.Model{Value: RefreshToken{}}).TableName()
+		if terr = tx.RawQuery(`update `+tablename+` set revoked = true, updated_at = now() where id = ?`, token.ID).Exec(); terr != nil {
 			return terr
 		}
+		token.Revoked = true
 
 		newToken, terr = createRefreshToken(rtx, user, token, &GrantParams{})
 		return terr
@@ -200,6 +201,13 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 
 	if err := tx.Create(token); err != nil {
 		return nil, errors.Wrap(err, "error creating refresh token")
+	}
+
+	if oldToken != nil && oldToken.Parent.String() != "" {
+		tablename := (&pop.Model{Value: RefreshToken{}}).TableName()
+		if err := tx.RawQuery(`delete from `+tablename+` where session_id = ? and token = ?;`, token.SessionId, oldToken.Parent.String()).Exec(); err != nil {
+			return nil, errors.Wrap(err, "error removing expired refresh_token parent")
+		}
 	}
 
 	if err := user.UpdateLastSignInAt(tx); err != nil {

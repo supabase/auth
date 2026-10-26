@@ -67,6 +67,25 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	require.Equal(ts.T(), u.ID, s.UserID)
 }
 
+func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwapTrimsParentToken() {
+	u := ts.createUser()
+	first, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
+	require.NoError(ts.T(), err)
+
+	second, err := GrantRefreshTokenSwap(ts.config.AuditLog, &http.Request{}, ts.db, u, first)
+	require.NoError(ts.T(), err)
+
+	third, err := GrantRefreshTokenSwap(ts.config.AuditLog, &http.Request{}, ts.db, u, second)
+	require.NoError(ts.T(), err)
+
+	var count int
+	require.NoError(ts.T(), ts.db.RawQuery(
+		`select count(*) from refresh_tokens where session_id = ?`,
+		third.SessionId,
+	).First(&count))
+	require.Equal(ts.T(), 2, count, "expected only the revoked parent and active refresh token")
+}
+
 func (ts *RefreshTokenTestSuite) TestFindTokenBySessionID() {
 	u := ts.createUser()
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
