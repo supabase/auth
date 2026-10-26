@@ -8,10 +8,6 @@ Please report suspected vulnerabilities through our HackerOne program:
 <https://hackerone.com/supabase>. Please do not open public GitHub issues or
 pull requests for security problems.
 
-The program-wide rules (out-of-scope categories, testing, disclosure) are
-repeated in full at the end of this file. They also live at
-<https://supabase.com/.well-known/security.txt>.
-
 This repository contains the Supabase Auth server, the service behind Supabase
 Auth: sign-up and sign-in, sessions and tokens, MFA, OAuth and SSO providers,
 and the email and phone flows that go with them. It runs on the hosted Supabase
@@ -155,8 +151,6 @@ you do not need to leave this repository to find them.
 - Dead links.
 - User enumeration.
 
-The sections above list what is *specific* to this repository.
-
 ## Known and documented behavior
 
 These are described in our public documentation. Please check them before
@@ -181,13 +175,11 @@ reporting.
 
 ## Hosted vs. self-hosted
 
-If your finding only applies when someone self-hosts Auth with an insecure
-setting (a wildcard redirect URL, no proxy in front of the rate limiter, a
-default secret that was never changed), label it "self-hosted, custom
-configuration" and list the settings you changed (see below). We accept
-self-hosted findings when shipped defaults or the documented setup lead to the
-problem, and we treat them as lower severity when the operator has to
-misconfigure the deployment first.
+We accept self-hosted findings when shipped defaults or the documented setup
+lead to the problem, and we treat them as lower severity when the operator has
+to misconfigure the deployment first, such as with a wildcard redirect URL, no
+proxy in front of the rate limiter, or a default secret that was never changed.
+Label your report as described in the next section.
 
 ## How to write a report that gets triaged quickly
 
@@ -206,6 +198,7 @@ misconfigure the deployment first.
   Reports that do not say which of the three they are about are slower to
   triage, and are often closed with a request to retest. A finding that works
   only on a custom configuration is not a finding against production.
+
 - **Test a real deployment.** Code reading alone is rarely enough. Static
   analysis findings need a working proof of concept against one of the targets
   above.
@@ -255,11 +248,6 @@ tools acting on your behalf.
 - Do not take advantage of a vulnerability you find, for example by downloading
   more data than necessary to demonstrate it, or by deleting or modifying other
   people's data.
-
-**Reporting**
-
-- File a report through our HackerOne program at <https://hackerone.com/supabase>.
-- Give enough information for us to reproduce the problem.
 
 **Disclosure**
 
