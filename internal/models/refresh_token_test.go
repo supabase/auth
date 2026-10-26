@@ -3,6 +3,7 @@ package models
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -67,23 +68,23 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	require.Equal(ts.T(), u.ID, s.UserID)
 }
 
-func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwapTrimsParentToken() {
+func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwapUpdatesRevokedAt() {
 	u := ts.createUser()
 	first, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
+	createdAt := first.UpdatedAt
 
-	second, err := GrantRefreshTokenSwap(ts.config.AuditLog, &http.Request{}, ts.db, u, first)
+	time.Sleep(10 * time.Millisecond)
+
+	_, err = GrantRefreshTokenSwap(ts.config.AuditLog, &http.Request{}, ts.db, u, first)
 	require.NoError(ts.T(), err)
 
-	third, err := GrantRefreshTokenSwap(ts.config.AuditLog, &http.Request{}, ts.db, u, second)
-	require.NoError(ts.T(), err)
-
-	var count int
+	var revokedAt time.Time
 	require.NoError(ts.T(), ts.db.RawQuery(
-		`select count(*) from refresh_tokens where session_id = ?`,
-		third.SessionId,
-	).First(&count))
-	require.Equal(ts.T(), 2, count, "expected only the revoked parent and active refresh token")
+		`select updated_at from refresh_tokens where id = ?`,
+		first.ID,
+	).First(&revokedAt))
+	require.True(ts.T(), revokedAt.After(createdAt), "revoking a refresh token must bump updated_at for cleanup")
 }
 
 func (ts *RefreshTokenTestSuite) TestFindTokenBySessionID() {

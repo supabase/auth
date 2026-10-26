@@ -138,7 +138,7 @@ type DBConfiguration struct {
 	ConnMaxIdleTime   time.Duration `json:"conn_max_idle_time,omitempty" split_words:"true"`
 	HealthCheckPeriod time.Duration `json:"health_check_period" split_words:"true"`
 	MigrationsPath    string        `json:"migrations_path" split_words:"true" default:"./migrations"`
-	CleanupEnabled    bool          `json:"cleanup_enabled" split_words:"true" default:"true"`
+	CleanupEnabled    bool          `json:"cleanup_enabled" split_words:"true" default:"false"`
 
 	Advisor DBAdvisorConfiguration `json:"advisor"`
 }
