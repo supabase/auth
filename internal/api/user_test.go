@@ -485,6 +485,11 @@ func (ts *UserTestSuite) TestUserUpdateEmailConfirmationToRegisteredAddress() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResponse))
 	require.Equal(ts.T(), string(apierrors.ErrorCodeOTPExpired), errResponse.ErrorCode)
 
+	// the error must not disclose that the address is registered to another
+	// account
+	require.NotContains(ts.T(), errResponse.Message, "already registered")
+	require.NotContains(ts.T(), errResponse.Message, DuplicateEmailMsg)
+
 	// the address is not applied to the account
 	stored, err := models.FindUserByID(ts.API.db, u.ID)
 	require.NoError(ts.T(), err, "Error finding test user")

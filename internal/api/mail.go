@@ -17,6 +17,7 @@ import (
 	"github.com/fatih/structs"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/crypto"
@@ -565,6 +566,7 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 		otp:                 otpCurrent,
 		otpNew:              otpNew,
 		tokenHashWithPrefix: u.EmailChangeTokenNew,
+		newEmailTaken:       newEmailTaken,
 	})
 	if err != nil {
 		if errors.Is(err, EmailRateLimitExceeded) {
@@ -771,6 +773,10 @@ type sendEmailParams struct {
 	provider            string
 	factorType          string
 	recipientEmail      string
+	// newEmailTaken is set when the new email address of an email change is
+	// already registered to another account. The address must not be used as
+	// a recipient and it has no token.
+	newEmailTaken bool
 }
 
 func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, params sendEmailParams) error {
@@ -884,13 +890,35 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			emailData.FactorType = params.factorType
 		}
 
+		hookUser := u
+		if params.newEmailTaken {
+			// The new address belongs to another account, so it must not be
+			// used as a recipient. The hook is given a user without a
+			// pending address, the same way the built-in mailer leaves the
+			// new address out.
+			userWithoutPendingEmail := *u
+			userWithoutPendingEmail.EmailChange = ""
+			hookUser = &userWithoutPendingEmail
+		}
+
 		input := v0hooks.NewSendEmailInput(
 			r,
-			u,
+			hookUser,
 			emailData,
 		)
 		output := v0hooks.SendEmailOutput{}
-		return a.hooksMgr.InvokeHook(tx, r, input, &output)
+		if err := a.hooksMgr.InvokeHook(tx, r, input, &output); err != nil {
+			if params.newEmailTaken {
+				// The request must not fail because the address is taken,
+				// otherwise the error would disclose it.
+				logrus.WithError(err).Warn("Unable to send email change email")
+				return nil
+			}
+
+			return err
+		}
+
+		return nil
 	}
 
 	// Increment email send operations here, since this metric is meant to count number of mail

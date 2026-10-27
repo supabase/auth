@@ -594,7 +594,7 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 		if duplicate, terr := models.IsDuplicatedEmail(tx, user.EmailChange, user.Aud, user, config.Experimental.ProviderLinkingDomains); terr != nil {
 			return apierrors.NewInternalServerError("Database error checking email").WithInternalError(terr)
 		} else if duplicate != nil {
-			logrus.WithField("user_id", user.ID).Warn("Email change rejected, the new email address is already registered")
+			observability.GetLogEntry(r).Entry.WithField("user_id", user.ID).Warn("Email change rejected, the new email address is already registered")
 			return apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid")
 		}
 
