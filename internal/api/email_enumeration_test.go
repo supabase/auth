@@ -209,9 +209,10 @@ func (ts *EmailEnumerationTestSuite) TestSendEmailHookFailureDoesNotDiscloseTake
 	require.Empty(ts.T(), stored.EmailChangeTokenNew)
 }
 
-// userSpecificResponseFields are the fields of the PUT /user response that
-// describe the user and the address that was requested. The caller knows
-// them, so they cannot disclose whether the address is registered.
+// userSpecificResponseFields are the fields of the response that describe
+// the user who made the request, the address that was requested, or the
+// request itself. The caller knows them, so they cannot disclose whether
+// the address is registered.
 var userSpecificResponseFields = map[string]bool{
 	"id":                   true,
 	"email":                true,
@@ -220,6 +221,8 @@ var userSpecificResponseFields = map[string]bool{
 	"updated_at":           true,
 	"email_change_sent_at": true,
 	"last_sign_in_at":      true,
+	// a random identifier of the request, only present in error responses
+	"error_id": true,
 }
 
 // A send email hook that fails must not make the response of the request
@@ -312,6 +315,62 @@ func (ts *EmailEnumerationTestSuite) TestSendEmailHookFailureOnMissingRecipientD
 	ts.T().Logf("hook failure on missing recipient, available address: status=%d body=%s", freeResponse.Code, freeResponse.Body.String())
 
 	ts.requireResponsesDoNotDisclose(takenResponse, freeResponse)
+}
+
+// POST /resend with type=email_change resends the confirmation of a pending
+// email change. It is not authenticated, so a failing hook must not make its
+// response depend on whether the pending address is registered either.
+func (ts *EmailEnumerationTestSuite) TestSendEmailHookFailureDoesNotDiscloseWhetherAddressIsRegisteredOnResend() {
+	// the address that is registered to another account
+	other := ts.createUser("hook-fail-resend-taken@example.com", false)
+	require.NoError(ts.T(), other.Confirm(ts.API.db), "Error confirming test user")
+
+	// hook server that always fails
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "hook failed", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	ts.Config.Hook.SendEmail.Enabled = true
+	ts.Config.Hook.SendEmail.URI = srv.URL
+	require.NoError(ts.T(), ts.Config.Hook.SendEmail.PopulateExtensibilityPoint())
+	defer func() {
+		ts.Config.Hook.SendEmail.Enabled = false
+	}()
+
+	// two users with a pending email change, one to an address that is
+	// registered to another account and one to an address that is available
+	takenUser := ts.createUser("hook-fail-resend-taken-requester@example.com", false)
+	takenUser.EmailChange = "hook-fail-resend-taken@example.com"
+	require.NoError(ts.T(), ts.API.db.Update(takenUser))
+
+	freeUser := ts.createUser("hook-fail-resend-free-requester@example.com", false)
+	freeUser.EmailChange = "hook-fail-resend-free@example.com"
+	require.NoError(ts.T(), ts.API.db.Update(freeUser))
+
+	takenResponse := ts.resendEmailChange(takenUser.GetEmail())
+	freeResponse := ts.resendEmailChange(freeUser.GetEmail())
+
+	ts.T().Logf("hook failure on resend, registered address: status=%d body=%s", takenResponse.Code, takenResponse.Body.String())
+	ts.T().Logf("hook failure on resend, available address: status=%d body=%s", freeResponse.Code, freeResponse.Body.String())
+
+	ts.requireResponsesDoNotDisclose(takenResponse, freeResponse)
+}
+
+// resendEmailChange asks for the confirmation of a pending email change to
+// be sent again.
+func (ts *EmailEnumerationTestSuite) resendEmailChange(email string) *httptest.ResponseRecorder {
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"type":  mail.EmailChangeVerification,
+		"email": email,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/resend", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	return w
 }
 
 // requireResponsesDoNotDisclose asserts that the response of a request for
