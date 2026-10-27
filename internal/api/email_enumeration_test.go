@@ -209,6 +209,163 @@ func (ts *EmailEnumerationTestSuite) TestSendEmailHookFailureDoesNotDiscloseTake
 	require.Empty(ts.T(), stored.EmailChangeTokenNew)
 }
 
+// userSpecificResponseFields are the fields of the PUT /user response that
+// describe the user and the address that was requested. The caller knows
+// them, so they cannot disclose whether the address is registered.
+var userSpecificResponseFields = map[string]bool{
+	"id":                   true,
+	"email":                true,
+	"new_email":            true,
+	"created_at":           true,
+	"updated_at":           true,
+	"email_change_sent_at": true,
+	"last_sign_in_at":      true,
+}
+
+// A send email hook that fails must not make the response of the request
+// depend on whether the new address is already registered.
+//
+// The hook is given a different payload for a taken address (no pending
+// address and no token for it), so a hook that fails on that payload fails
+// only the request for the taken address, while a hook that fails outright
+// fails only the request for an available address if the error is returned
+// for that case only. Either way the status code, and with it the body,
+// would disclose whether the address is registered.
+func (ts *EmailEnumerationTestSuite) TestSendEmailHookFailureDoesNotDiscloseWhetherAddressIsRegistered() {
+	// the address that is registered to another account
+	other := ts.createUser("hook-fail-taken@example.com", false)
+	require.NoError(ts.T(), other.Confirm(ts.API.db), "Error confirming test user")
+
+	// hook server that always fails
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "hook failed", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	ts.Config.Hook.SendEmail.Enabled = true
+	ts.Config.Hook.SendEmail.URI = srv.URL
+	require.NoError(ts.T(), ts.Config.Hook.SendEmail.PopulateExtensibilityPoint())
+	defer func() {
+		ts.Config.Hook.SendEmail.Enabled = false
+	}()
+
+	// a request for the address that is registered to another account
+	takenUser := ts.createUser("hook-fail-taken-requester@example.com", false)
+	takenResponse := ts.putUser(ts.generateToken(takenUser), "hook-fail-taken@example.com")
+
+	// a request for an address that is available
+	freeUser := ts.createUser("hook-fail-free-requester@example.com", false)
+	freeResponse := ts.putUser(ts.generateToken(freeUser), "hook-fail-free@example.com")
+
+	ts.T().Logf("hook failure, registered address: status=%d body=%s", takenResponse.Code, takenResponse.Body.String())
+	ts.T().Logf("hook failure, available address: status=%d body=%s", freeResponse.Code, freeResponse.Body.String())
+
+	ts.requireResponsesDoNotDisclose(takenResponse, freeResponse)
+}
+
+// A hook that fails only because the payload for a taken address has no
+// pending address (and therefore no recipient and no token for it) must not
+// disclose the address either: the request for the taken address and the
+// request for an available address must have the same status and the same
+// body.
+func (ts *EmailEnumerationTestSuite) TestSendEmailHookFailureOnMissingRecipientDoesNotDiscloseWhetherAddressIsRegistered() {
+	// the address that is registered to another account
+	other := ts.createUser("hook-no-recipient-taken@example.com", false)
+	require.NoError(ts.T(), other.Confirm(ts.API.db), "Error confirming test user")
+
+	// a hook that fails when it is given a user without a pending address,
+	// for example because it has no recipient to send the confirmation to
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		in := &v0hooks.SendEmailInput{}
+		if err := json.NewDecoder(r.Body).Decode(in); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if in.User.EmailChange == "" {
+			http.Error(w, "no recipient for the email change", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(v0hooks.SendEmailOutput{})
+	}))
+	defer srv.Close()
+
+	ts.Config.Hook.SendEmail.Enabled = true
+	ts.Config.Hook.SendEmail.URI = srv.URL
+	require.NoError(ts.T(), ts.Config.Hook.SendEmail.PopulateExtensibilityPoint())
+	defer func() {
+		ts.Config.Hook.SendEmail.Enabled = false
+	}()
+
+	// a request for the address that is registered to another account: the
+	// hook is given a user without a pending address and fails
+	takenUser := ts.createUser("hook-no-recipient-taken-requester@example.com", false)
+	takenResponse := ts.putUser(ts.generateToken(takenUser), "hook-no-recipient-taken@example.com")
+
+	// a request for an address that is available: the hook succeeds
+	freeUser := ts.createUser("hook-no-recipient-free-requester@example.com", false)
+	freeResponse := ts.putUser(ts.generateToken(freeUser), "hook-no-recipient-free@example.com")
+
+	ts.T().Logf("hook failure on missing recipient, registered address: status=%d body=%s", takenResponse.Code, takenResponse.Body.String())
+	ts.T().Logf("hook failure on missing recipient, available address: status=%d body=%s", freeResponse.Code, freeResponse.Body.String())
+
+	ts.requireResponsesDoNotDisclose(takenResponse, freeResponse)
+}
+
+// requireResponsesDoNotDisclose asserts that the response of a request for
+// an address that is registered to another account and the response of a
+// request for an address that is available cannot be told apart.
+func (ts *EmailEnumerationTestSuite) requireResponsesDoNotDisclose(taken, free *httptest.ResponseRecorder) {
+	// the status code must not disclose whether the address is registered
+	require.Equal(ts.T(), taken.Code, free.Code,
+		"the HTTP status must not depend on whether the address is registered")
+
+	// and neither body may disclose it
+	for name, response := range map[string]*httptest.ResponseRecorder{
+		"registered address": taken,
+		"available address":  free,
+	} {
+		body := response.Body.String()
+		require.NotContains(ts.T(), body, string(apierrors.ErrorCodeEmailExists),
+			"%s: the response must not report that the address is registered", name)
+		require.NotContains(ts.T(), body, DuplicateEmailMsg,
+			"%s: the response must not report that the address is registered", name)
+		require.NotContains(ts.T(), body, "already registered",
+			"%s: the response must not report that the address is registered", name)
+	}
+
+	// the two responses must be the same, apart from the fields that
+	// describe the user and the address that was requested
+	takenBody := map[string]any{}
+	require.NoError(ts.T(), json.NewDecoder(taken.Body).Decode(&takenBody))
+
+	freeBody := map[string]any{}
+	require.NoError(ts.T(), json.NewDecoder(free.Body).Decode(&freeBody))
+
+	require.ElementsMatch(ts.T(), ts.keysOf(takenBody), ts.keysOf(freeBody),
+		"the response must contain the same fields in both cases")
+
+	for key, freeValue := range freeBody {
+		if userSpecificResponseFields[key] {
+			continue
+		}
+
+		require.Equal(ts.T(), freeValue, takenBody[key],
+			"the response field %q must not depend on whether the address is registered", key)
+	}
+}
+
+// keysOf returns the keys of a JSON object.
+func (ts *EmailEnumerationTestSuite) keysOf(body map[string]any) []string {
+	keys := make([]string, 0, len(body))
+	for key := range body {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 // ---------------------------------------------------------------------------
 // 2 (see internal/mailer/templatemailer for the mailer unit test)
 // ---------------------------------------------------------------------------

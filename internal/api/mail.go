@@ -17,7 +17,6 @@ import (
 	"github.com/fatih/structs"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
-	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/crypto"
@@ -908,10 +907,17 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		)
 		output := v0hooks.SendEmailOutput{}
 		if err := a.hooksMgr.InvokeHook(tx, r, input, &output); err != nil {
-			if params.newEmailTaken {
-				// The request must not fail because the address is taken,
-				// otherwise the error would disclose it.
-				logrus.WithError(err).Warn("Unable to send email change email")
+			if params.emailActionType == mail.EmailChangeVerification {
+				// The response to an email change must not depend on the
+				// outcome of the hook. The hook is given a different payload
+				// when the new address is already registered (no pending
+				// address and no token for it), so a hook that fails on that
+				// payload fails only the request for the taken address.
+				// Failing the request for the taken case only, or for the
+				// available case only, would turn the status code into an
+				// oracle that discloses whether the address is registered.
+				// The failure is therefore only logged here.
+				observability.GetLogEntry(r).Entry.WithError(err).Warn("Unable to send email change email")
 				return nil
 			}
 
