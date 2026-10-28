@@ -171,6 +171,7 @@ type Factor struct {
 	Challenge                 []Challenge                `json:"-" has_many:"challenges"`
 	Phone                     storage.NullString         `json:"phone" db:"phone"`
 	LastChallengedAt          *time.Time                 `json:"last_challenged_at" db:"last_challenged_at"`
+	LastTOTPStep              *int64                     `json:"-" db:"last_totp_step"`
 	WebAuthnCredential        *MFAWebAuthnCredential     `json:"-" db:"web_authn_credential"`
 	WebAuthnAAGUID            *uuid.UUID                 `json:"web_authn_aaguid,omitempty" db:"web_authn_aaguid"`
 	LastWebAuthnChallengeData *LastWebAuthnChallengeData `json:"last_webauthn_challenge_data,omitempty" db:"last_webauthn_challenge_data"`
@@ -427,6 +428,29 @@ func (f *Factor) UpdatePhone(tx *storage.Connection, phone string) error {
 func (f *Factor) UpdateStatus(tx *storage.Connection, state FactorState) error {
 	f.Status = state.String()
 	return tx.UpdateOnly(f, "status", "updated_at")
+}
+
+// ConsumeTOTPTimeStep records that the code generated for the given time step was
+// accepted for this factor, and reports whether the step was fresh. RFC 6238
+// section 5.2 forbids accepting a one-time password a second time, so a step that
+// is not strictly greater than the previously consumed one is rejected. The update
+// is a compare-and-swap on the factor row, so concurrent verifications of the same
+// code share one winner even when the Auth instances are separate.
+func (f *Factor) ConsumeTOTPTimeStep(tx *storage.Connection, step int64) (bool, error) {
+	count, err := tx.RawQuery("UPDATE "+(&pop.Model{Value: Factor{}}).TableName()+
+		" SET last_totp_step = ?, updated_at = ? WHERE id = ? AND (last_totp_step IS NULL OR last_totp_step < ?)",
+		step, time.Now(), f.ID, step).ExecWithCount()
+	if err != nil {
+		return false, errors.Wrap(err, "Error consuming TOTP time step")
+	}
+
+	if count == 0 {
+		return false, nil
+	}
+
+	f.LastTOTPStep = &step
+
+	return true, nil
 }
 
 // amrMethodForFactorType returns the AMR authentication_method string stored in

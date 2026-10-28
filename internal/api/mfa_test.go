@@ -654,6 +654,62 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	}
 }
 
+// TestMFAVerifyFactorRejectsReplayedTOTPCode is the regression test for a code that
+// already completed a verification being accepted a second time against a fresh
+// challenge of the same factor within the same time step. RFC 6238 section 5.2
+// forbids that, and the response must stay indistinguishable from a wrong code.
+// The following time step must still verify, so an authenticator that drifts by the
+// allowed skew is never locked out.
+func (ts *MFATestSuite) TestMFAVerifyFactorRejectsReplayedTOTPCode() {
+	f := models.NewTOTPFactor(ts.TestUser, uuid.Must(uuid.NewV4()).String())
+	sharedSecret := ts.TestOTPKey.Secret()
+	f.Secret = sharedSecret
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new test factor")
+
+	// verify submits code against a brand new challenge of f on its own session,
+	// the way a client that captured an old code would.
+	verify := func(code string) *httptest.ResponseRecorder {
+		r, err := models.GrantAuthenticatedUser(ts.API.db, ts.TestUser, models.GrantParams{})
+		require.NoError(ts.T(), err)
+		token := ts.generateAAL1Token(ts.TestUser, r.SessionId)
+
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", f.ID), nil)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+		c := f.CreateChallenge(utilities.GetIPAddress(req))
+		require.NoError(ts.T(), ts.API.db.Create(c))
+
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"challenge_id": c.ID,
+			"code":         code,
+		}))
+
+		w := httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", f.ID), &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+		ts.API.handler.ServeHTTP(w, req)
+		return w
+	}
+
+	code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), http.StatusOK, verify(code).Code)
+
+	replayed := verify(code)
+	require.Equal(ts.T(), http.StatusUnprocessableEntity, replayed.Code)
+
+	var errorResponse HTTPError
+	require.NoError(ts.T(), json.NewDecoder(replayed.Body).Decode(&errorResponse))
+	require.Equal(ts.T(), apierrors.ErrorCodeMFAVerificationFailed, errorResponse.ErrorCode)
+
+	next, err := totp.GenerateCode(sharedSecret, time.Now().UTC().Add(30*time.Second))
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), http.StatusOK, verify(next).Code)
+}
+
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	cases := []struct {
 		desc             string

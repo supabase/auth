@@ -622,6 +622,30 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 }
 
+// totpTimeStep reports the time step whose code matches the submitted one, walking
+// the same window as totp.ValidateCustom: the step of now plus Skew steps in each
+// direction. It returns the matched step instead of only a boolean because replay
+// detection must record what the code actually covered. Keying on the current step
+// would lock out an authenticator that runs behind by a skew window: after one of
+// its older codes is accepted, the next legitimately newer code would compare
+// against a step that is already ahead of it.
+func totpTimeStep(code, secret string, now time.Time, opts totp.ValidateOpts) (int64, bool, error) {
+	step := now.Unix() / int64(opts.Period)
+	for offset := -int64(opts.Skew); offset <= int64(opts.Skew); offset++ {
+		at := now.Add(time.Duration(offset*int64(opts.Period)) * time.Second)
+		expected, err := totp.GenerateCodeCustom(secret, at, opts)
+		if err != nil {
+			return 0, false, err
+		}
+
+		if subtle.ConstantTimeCompare([]byte(expected), []byte(code)) == 1 {
+			return step + offset, true, nil
+		}
+	}
+
+	return 0, false, nil
+}
+
 func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *VerifyFactorParams) error {
 	var err error
 	ctx := r.Context()
@@ -640,12 +664,14 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 		return apierrors.NewInternalServerError("Database error verifying MFA TOTP secret").WithInternalError(err)
 	}
 
-	valid, verr := totp.ValidateCustom(params.Code, secret, time.Now().UTC(), totp.ValidateOpts{
+	verifiedAt := time.Now().UTC()
+	totpOpts := totp.ValidateOpts{
 		Period:    30,
 		Skew:      1,
 		Digits:    otp.DigitsSix,
 		Algorithm: otp.AlgorithmSHA1,
-	})
+	}
+	step, valid, verr := totpTimeStep(params.Code, secret, verifiedAt, totpOpts)
 
 	if config.Hook.MFAVerificationAttempt.Enabled {
 		input := v0hooks.NewMFAVerificationAttemptInput(
@@ -700,6 +726,17 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 		}
 		if terr = challenge.Verify(tx); terr != nil {
 			return terr
+		}
+		// A TOTP code can only be accepted once. Consuming the step it was generated
+		// for happens before any session is granted, so a code that already produced an
+		// AAL2 session is rejected like an invalid one, even when it arrives on a new
+		// challenge of the same factor inside the same time step.
+		fresh, terr := factor.ConsumeTOTPTimeStep(tx, step)
+		if terr != nil {
+			return apierrors.NewInternalServerError("Database error consuming MFA TOTP time step").WithInternalError(terr)
+		}
+		if !fresh {
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeMFAVerificationFailed, "Invalid TOTP code entered")
 		}
 		if !factor.IsVerified() {
 			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
