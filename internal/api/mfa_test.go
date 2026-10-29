@@ -710,6 +710,30 @@ func (ts *MFATestSuite) TestMFAVerifyFactorRejectsReplayedTOTPCode() {
 	require.Equal(ts.T(), http.StatusOK, verify(next).Code)
 }
 
+// TestTOTPTimeStepReturnsNewestMatch covers two adjacent counters that produce
+// the same six digits. Recording the older one would allow the captured code to
+// be replayed once that counter leaves the window while the newer one still
+// matches, so the newest match must be the one consumed.
+func TestTOTPTimeStepReturnsNewestMatch(t *testing.T) {
+	// This secret yields 377239 for both steps 1157580 and 1157581.
+	const secret = "NNSXSIDGN5ZCAVCPKRICA5DFON2GS3THEEQQ"
+	const code = "377239"
+	const newestStep = int64(1157581)
+
+	opts := totp.ValidateOpts{
+		Period:    30,
+		Skew:      1,
+		Digits:    otp.DigitsSix,
+		Algorithm: otp.AlgorithmSHA1,
+	}
+	now := time.Unix(newestStep*30, 0).UTC()
+
+	step, valid, err := totpTimeStep(code, secret, now, opts)
+	require.NoError(t, err)
+	require.True(t, valid)
+	require.Equal(t, newestStep, step)
+}
+
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	cases := []struct {
 		desc             string

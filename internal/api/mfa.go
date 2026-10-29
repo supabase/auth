@@ -625,13 +625,14 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 // totpTimeStep reports the time step whose code matches the submitted one, walking
 // the same window as totp.ValidateCustom: the step of now plus Skew steps in each
 // direction. It returns the matched step instead of only a boolean because replay
-// detection must record what the code actually covered. Keying on the current step
-// would lock out an authenticator that runs behind by a skew window: after one of
-// its older codes is accepted, the next legitimately newer code would compare
-// against a step that is already ahead of it.
+// detection must record what the code actually covered.
+//
+// The window is walked from newest to oldest. Two adjacent counters can produce
+// the same six digits, and recording the oldest match would let a captured code
+// be replayed once that counter leaves the window but the newer match remains.
 func totpTimeStep(code, secret string, now time.Time, opts totp.ValidateOpts) (int64, bool, error) {
 	step := now.Unix() / int64(opts.Period)
-	for offset := -int64(opts.Skew); offset <= int64(opts.Skew); offset++ {
+	for offset := int64(opts.Skew); offset >= -int64(opts.Skew); offset-- {
 		at := now.Add(time.Duration(offset*int64(opts.Period)) * time.Second)
 		expected, err := totp.GenerateCodeCustom(secret, at, opts)
 		if err != nil {
