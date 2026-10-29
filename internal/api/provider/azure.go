@@ -16,6 +16,11 @@ import (
 const IssuerAzureCommon = "https://login.microsoftonline.com/common/v2.0"
 const IssuerAzureOrganizations = "https://login.microsoftonline.com/organizations/v2.0"
 
+// IssuerAzureConsumers is the alias endpoint for personal Microsoft accounts.
+// Like common/organizations, Microsoft never issues ID tokens from it directly:
+// personal-account tokens carry IssuerAzureMicrosoft (the 9188040d-... tenant).
+const IssuerAzureConsumers = "https://login.microsoftonline.com/consumers/v2.0"
+
 // IssuerAzureMicrosoft is the OIDC issuer for microsoft.com accounts:
 // https://learn.microsoft.com/en-us/azure/active-directory/develop/id-token-claims-reference#payload-claims
 const IssuerAzureMicrosoft = "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0"
@@ -69,11 +74,11 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string, cache 
 	if ext.URL != "" {
 		expectedIssuer = authHost + "/v2.0"
 
-		if (!IsAzureIssuer(expectedIssuer) && !IsAzureCIAMIssuer(expectedIssuer)) || expectedIssuer == IssuerAzureCommon || expectedIssuer == IssuerAzureOrganizations {
+		if (!IsAzureIssuer(expectedIssuer) && !IsAzureCIAMIssuer(expectedIssuer)) || expectedIssuer == IssuerAzureCommon || expectedIssuer == IssuerAzureOrganizations || expectedIssuer == IssuerAzureConsumers {
 			// in tests, the URL is a local server which should not
 			// be the expected issuer
-			// also, IssuerAzure (common) never actually issues any
-			// ID tokens so it needs to be ignored
+			// also, IssuerAzure (common/organizations/consumers) never
+			// actually issues any ID tokens so it needs to be ignored
 			expectedIssuer = ""
 		}
 	}
