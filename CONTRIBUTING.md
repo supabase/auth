@@ -416,6 +416,9 @@ If you need to run any new migrations:
 make migrate_test
 ```
 
+This passes `--verbose` to the `migrate` command, which logs the name of each
+migration as it is applied.
+
 ## Testing
 
 Currently, we don't use a separate test database, so the same database created when installing Auth to run locally is used.

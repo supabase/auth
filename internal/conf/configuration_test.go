@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/base64"
 	"errors"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -1249,5 +1250,67 @@ func TestProviderLinkingDomainsDecode(t *testing.T) {
 	{
 		var d ProviderLinkingDomains
 		require.Error(t, d.Decode("custom:github="))
+	}
+}
+
+func TestApplyDefaultsClampsOtpExp(t *testing.T) {
+	baseConfig := func() *GlobalConfiguration {
+		c := &GlobalConfiguration{}
+		c.JWT.Secret = "secret"
+		return c
+	}
+
+	cases := []struct {
+		desc       string
+		mailerExp  uint
+		smsExp     uint
+		wantMailer uint
+		wantSms    uint
+	}{
+		{
+			desc:       "zero takes the per-channel default",
+			mailerExp:  0,
+			smsExp:     0,
+			wantMailer: 86400,
+			wantSms:    60,
+		},
+		{
+			desc:       "in-range values pass through untouched",
+			mailerExp:  3600,
+			smsExp:     120,
+			wantMailer: 3600,
+			wantSms:    120,
+		},
+		{
+			desc:       "the ceiling itself is not clamped",
+			mailerExp:  maxOtpExp,
+			smsExp:     maxOtpExp,
+			wantMailer: maxOtpExp,
+			wantSms:    maxOtpExp,
+		},
+		{
+			desc:       "values above the ceiling clamp down to it",
+			mailerExp:  maxOtpExp + 1,
+			smsExp:     math.MaxUint,
+			wantMailer: maxOtpExp,
+			wantSms:    maxOtpExp,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			cfg := baseConfig()
+			cfg.Mailer.OtpExp = c.mailerExp
+			cfg.Sms.OtpExp = c.smsExp
+			require.NoError(t, cfg.ApplyDefaults())
+
+			require.Equal(t, c.wantMailer, cfg.Mailer.OtpExp)
+			require.Equal(t, c.wantSms, cfg.Sms.OtpExp)
+
+			// the clamp exists so that this conversion cannot overflow into a
+			// negative duration, which would expire every token at creation
+			require.Positive(t, time.Duration(cfg.Mailer.OtpExp)*time.Second) // #nosec G115
+			require.Positive(t, time.Duration(cfg.Sms.OtpExp)*time.Second)    // #nosec G115
+		})
 	}
 }
