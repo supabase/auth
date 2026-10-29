@@ -92,6 +92,8 @@ func (t *OneTimeTokenType) Scan(src interface{}) error {
 	return nil
 }
 
+const PKCEPrefix = "pkce_"
+
 type OneTimeTokenNotFoundError struct {
 }
 
@@ -114,6 +116,13 @@ type OneTimeToken struct {
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+
+	ExpiresAt *time.Time `json:"expires_at" db:"expires_at"`
+}
+
+// IsExpired treats nil ExpiresAt as expired. This is a security measure to avoid accidentally treating a token with no expiration as valid.
+func (o OneTimeToken) IsExpired() bool {
+	return o.ExpiresAt == nil || time.Now().After(*o.ExpiresAt)
 }
 
 func (OneTimeToken) TableName() string {
@@ -132,7 +141,13 @@ func ClearOneTimeTokenForUser(tx *storage.Connection, userID uuid.UUID, tokenTyp
 	return nil
 }
 
-func CreateOneTimeToken(tx *storage.Connection, userID uuid.UUID, relatesTo, tokenHash string, tokenType OneTimeTokenType) error {
+func CreateOneTimeToken(
+	tx *storage.Connection,
+	userID uuid.UUID,
+	relatesTo, tokenHash string,
+	tokenType OneTimeTokenType,
+	validityDuration time.Duration,
+	writeExpiresAt bool) error {
 	if err := ClearOneTimeTokenForUser(tx, userID, tokenType); err != nil {
 		return err
 	}
@@ -145,6 +160,11 @@ func CreateOneTimeToken(tx *storage.Connection, userID uuid.UUID, relatesTo, tok
 		RelatesTo: strings.ToLower(relatesTo),
 	}
 
+	if writeExpiresAt {
+		expiresAt := time.Now().Add(validityDuration)
+		oneTimeToken.ExpiresAt = &expiresAt
+	}
+
 	if err := tx.Eager().Create(oneTimeToken); err != nil {
 		return err
 	}
@@ -153,19 +173,46 @@ func CreateOneTimeToken(tx *storage.Connection, userID uuid.UUID, relatesTo, tok
 }
 
 func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
+	return findOneTimeToken(tx, tokenHash, false, tokenTypes...)
+}
+
+// FindOneTimeTokenWithPKCEFallback finds the one time token of the given
+// types whose hash is either tokenHash or tokenHash with the "pkce_" prefix,
+// in a single query. An exact match is preferred over a prefixed one.
+// It returns OneTimeTokenNotFoundError when no row exists.
+func FindOneTimeTokenWithPKCEFallback(tx *storage.Connection, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
+	return findOneTimeToken(tx, tokenHash, true, tokenTypes...)
+}
+
+// findOneTimeToken finds the one time token of the given types by tokenHash.
+// With pkceFallback it also accepts PKCEPrefix+tokenHash and prefers the
+// exact match. It returns OneTimeTokenNotFoundError when no row exists.
+func findOneTimeToken(tx *storage.Connection, tokenHash string, pkceFallback bool, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {
 	oneTimeToken := &OneTimeToken{}
 
 	query := tx.Eager().Q()
 
+	hashClause, hashArgs := "token_hash = ?", []interface{}{tokenHash}
+	if pkceFallback {
+		hashClause, hashArgs = "token_hash in (?, ?)", []interface{}{tokenHash, PKCEPrefix + tokenHash}
+	}
+
 	switch len(tokenTypes) {
 	case 2:
-		query = query.Where("(token_type = ? or token_type = ?) and token_hash = ?", tokenTypes[0], tokenTypes[1], tokenHash) // #nosec G602
+		args := append([]interface{}{tokenTypes[0], tokenTypes[1]}, hashArgs...) // #nosec G602
+		query = query.Where("(token_type = ? or token_type = ?) and "+hashClause, args...)
 
 	case 1:
-		query = query.Where("token_type = ? and token_hash = ?", tokenTypes[0], tokenHash)
+		args := append([]interface{}{tokenTypes[0]}, hashArgs...)
+		query = query.Where("token_type = ? and "+hashClause, args...)
 
 	default:
 		panic("at most 2 token types are accepted")
+	}
+
+	if pkceFallback {
+		// true sorts before false in descending order, so this allows us to prefer an exact match
+		query = query.Order("token_hash = ? desc", tokenHash)
 	}
 
 	if err := query.First(oneTimeToken); err != nil {
@@ -176,6 +223,30 @@ func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...On
 		return nil, errors.Wrap(err, "error finding one time token")
 	}
 
+	return oneTimeToken, nil
+}
+
+// FindOneTimeTokenByRelatesTo finds the newest one time token of the given
+// token type by the relatesTo field.
+//
+// relates_to is not unique across users. For PhoneChangeToken in particular,
+// two users can hold rows for the same phone number, so the returned row does
+// not identify a user on its own. Callers must check the user against the
+// request before they trust the result.
+//
+// It returns OneTimeTokenNotFoundError when no row exists.
+func FindOneTimeTokenByRelatesTo(tx *storage.Connection, relatesTo string, tokenType OneTimeTokenType) (*OneTimeToken, error) {
+	oneTimeToken := &OneTimeToken{}
+
+	err := tx.Eager().Q().
+		Where("token_type = ? and relates_to = ?", tokenType, strings.ToLower(relatesTo)).
+		Order("created_at desc").
+		First(oneTimeToken)
+	if errors.Cause(err) == sql.ErrNoRows {
+		return nil, OneTimeTokenNotFoundError{}
+	} else if err != nil {
+		return nil, errors.Wrap(err, "error finding one time token")
+	}
 	return oneTimeToken, nil
 }
 
@@ -198,7 +269,7 @@ func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, toke
 	}
 
 	if ott == nil {
-		ott, err = FindOneTimeToken(tx, "pkce_"+token, EmailChangeTokenCurrent)
+		ott, err = FindOneTimeToken(tx, PKCEPrefix+token, EmailChangeTokenCurrent)
 		if err != nil {
 			return nil, err
 		}
@@ -227,7 +298,7 @@ func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, a
 	}
 
 	if ott == nil {
-		ott, err = FindOneTimeToken(tx, "pkce_"+token, EmailChangeTokenNew)
+		ott, err = FindOneTimeToken(tx, PKCEPrefix+token, EmailChangeTokenNew)
 		if err != nil && !IsNotFoundError(err) {
 			return nil, err
 		}
