@@ -409,7 +409,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 					}
 				}
 
-				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
+				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.TokenRefreshedAction, nil); terr != nil {
 					return terr
 				}
 
@@ -590,7 +590,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 
 				responseHeaders.Set("sb-auth-refresh-token-counter", strconv.FormatInt(*session.RefreshTokenCounter, 10))
 
-				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
+				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.TokenRefreshedAction, nil); terr != nil {
 					return terr
 				}
 			}

@@ -12,7 +12,6 @@ import (
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
@@ -55,7 +54,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	provider := identityToBeDeleted.Provider
 	recipientEmail := user.GetEmail()
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, utilities.GetIPAddress(r), map[string]any{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, map[string]any{
 			"identity_id": identityToBeDeleted.ID,
 			"provider":    identityToBeDeleted.Provider,
 			"provider_id": identityToBeDeleted.ProviderID,
@@ -188,7 +187,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 	if terr != nil {
 		return nil, terr
 	}
-	if terr := models.NewAuditLogEntry(a.config.AuditLog, r, tx, targetUser, models.IdentityLinkAction, utilities.GetIPAddress(r), map[string]any{
+	if terr := models.NewAuditLogEntry(a.config.AuditLog, r, tx, targetUser, models.IdentityLinkAction, map[string]any{
 		"identity_id": identity.ID,
 		"provider":    identity.Provider,
 		"provider_id": identity.ProviderID,
