@@ -1,6 +1,11 @@
 package models
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
+)
 
 // sentinel error for all not found errors.
 var errNotFound = errors.New("not found")
@@ -136,8 +141,18 @@ func (e FlowStateNotFoundError) Is(target error) bool {
 	return target == errNotFound
 }
 
+// IsUniqueConstraintViolatedError returns whether an error represents a
+// unique constraint violation. This covers this package's own hand-raised
+// conflict errors (e.g. UserEmailUniqueConflictError) as well as a real
+// Postgres unique_violation (SQLSTATE 23505) coming straight out of a
+// Create or Update call, which is not wrapped into a sentinel anywhere else.
 func IsUniqueConstraintViolatedError(err error) bool {
-	return errors.Is(err, errUniqueConstraintViolated)
+	if errors.Is(err, errUniqueConstraintViolated) {
+		return true
+	}
+
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
 type UserEmailUniqueConflictError struct{}
