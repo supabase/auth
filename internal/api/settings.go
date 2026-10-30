@@ -79,7 +79,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 		PhoneAutoconfirm:             config.Sms.Autoconfirm,
 		SmsProvider:                  config.Sms.Provider,
 		SAMLEnabled:                  config.SAML.Enabled,
-		SAMLPrivateKeyNextConfigured: config.SAML.CertificateNext != nil,
+		SAMLPrivateKeyNextConfigured: config.SAML.Enabled && config.SAML.CertificateNext != nil,
 		PasskeysEnabled:              config.Passkey.Enabled,
 	})
 }
