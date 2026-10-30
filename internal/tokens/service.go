@@ -142,6 +142,7 @@ type GenerateIDTokenParams struct {
 type RefreshTokenGrantParams struct {
 	RefreshToken string
 	ClientID     *uuid.UUID // OAuth2 server client ID if applicable
+	Resource     string     // RFC 8707 resource indicator requested on refresh, if any
 }
 
 // AsRedirectURL encodes the AccessTokenResponse as a redirect URL that
@@ -311,6 +312,12 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 					return apierrors.NewOAuthError("invalid_client", "Client authentication not allowed for non-OAuth session")
 				}
 				sessionClientID = nil
+			}
+
+			// Per RFC 8707 a refresh request can only ask for a resource
+			// that was granted for this session
+			if params.Resource != "" && params.Resource != utilities.StringValue(session.Resource) {
+				return apierrors.NewOAuthError("invalid_target", "Requested resource was not granted for this session")
 			}
 
 			if config.Sessions.SinglePerUser {
@@ -710,10 +717,18 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 		scopes = *session.Scopes
 	}
 
+	// Bind the token to the RFC 8707 resource granted for this session. The
+	// user's audience stays first since the API reads the request audience
+	// from aud[0], and it keeps the token usable with the Data API.
+	audience := jwt.ClaimStrings{params.User.Aud}
+	if resource := utilities.StringValue(session.Resource); resource != "" {
+		audience = append(audience, resource)
+	}
+
 	claims := &v0hooks.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   params.User.ID.String(),
-			Audience:  jwt.ClaimStrings{params.User.Aud},
+			Audience:  audience,
 			IssuedAt:  jwt.NewNumericDate(issuedAt),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			Issuer:    config.JWT.Issuer,
