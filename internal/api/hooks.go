@@ -10,6 +10,7 @@ import (
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 func (a *API) triggerAfterUserCreated(
@@ -30,6 +31,18 @@ func (a *API) triggerAfterUserCreated(
 	req := v0hooks.NewAfterUserCreatedInput(r, user)
 	res := new(v0hooks.AfterUserCreatedOutput)
 	return a.hooksMgr.InvokeHook(conn, r, req, res)
+}
+
+// validateHookData bounds the opaque value a caller may attach to a request for
+// the benefit of hooks. It is never parsed here, so the only thing to check is
+// that it cannot be used to bloat a flow state row or a hook payload.
+func validateHookData(data string) error {
+	if len(data) > utilities.MaxHookDataLength {
+		return apierrors.NewBadRequestError(
+			apierrors.ErrorCodeValidationFailed,
+			"hook_data exceeds %d bytes", utilities.MaxHookDataLength)
+	}
+	return nil
 }
 
 func (a *API) triggerBeforeUserCreated(
