@@ -16,6 +16,8 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/mailer/mockclient"
+	"github.com/supabase/auth/internal/mailer/validateclient"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -253,5 +255,51 @@ func (ts *MailTestSuite) setURIAllowListMap(uris ...string) {
 	for _, uri := range uris {
 		g := glob.MustCompile(uri, '.', '/')
 		ts.Config.URIAllowListMap[uri] = g
+	}
+}
+
+type invalidEmailChangeMailer struct {
+	mockclient.MockMailer
+}
+
+func (m *invalidEmailChangeMailer) EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error {
+	return validateclient.ErrInvalidEmailAddress
+}
+
+func (ts *MailTestSuite) TestSendEmailChangeInvalidAddressError() {
+	originalMailer := ts.API.mailer
+	ts.API.mailer = &invalidEmailChangeMailer{}
+	defer func() { ts.API.mailer = originalMailer }()
+
+	cases := []struct {
+		desc         string
+		currentEmail string
+		isAnonymous  bool
+	}{
+		{
+			desc:        "anonymous user without an email",
+			isAnonymous: true,
+		},
+		{
+			desc:         "user with an existing email",
+			currentEmail: "current@example.com",
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			u, err := models.NewUser("", c.currentEmail, "", ts.Config.JWT.Aud, nil)
+			require.NoError(ts.T(), err)
+			u.IsAnonymous = c.isAnonymous
+
+			req := httptest.NewRequest(http.MethodPut, "/user", nil)
+			err = ts.API.sendEmailChange(req, ts.API.db, u, "new@example.com", models.ImplicitFlow)
+
+			httpErr := &HTTPError{}
+			require.ErrorAs(ts.T(), err, &httpErr)
+			require.Equal(ts.T(), http.StatusBadRequest, httpErr.HTTPStatus)
+			require.Equal(ts.T(), apierrors.ErrorCodeEmailAddressInvalid, httpErr.ErrorCode)
+			require.Equal(ts.T(), `Email address "new@example.com" is invalid`, httpErr.Message)
+		})
 	}
 }
