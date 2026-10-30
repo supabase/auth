@@ -196,16 +196,13 @@ func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 		return nil, apierrors.NewInternalServerError("Unable to create a request to metadata_url").WithInternalError(err)
 	}
 
-	req = req.WithContext(ctx)
-
 	req.Header.Set("Accept", "application/xml;charset=UTF-8")
 	req.Header.Set("Accept-Charset", "UTF-8")
 
-	client := &http.Client{
-		Timeout: samlMetadataFetchTimeout,
-	}
+	fetchCtx, cancel := context.WithTimeout(ctx, samlMetadataFetchTimeout)
+	defer cancel()
 
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req.WithContext(fetchCtx))
 	if err != nil {
 		return nil, err
 	}
@@ -215,6 +212,14 @@ func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeSAMLMetadataFetchFailed, "HTTP %v error fetching SAML Metadata from URL '%s'", resp.StatusCode, url)
 	}
 
+	// Reject on the declared length before reading: a compressed body
+	// decompresses to far more than its Content-Length, so the
+	// LimitReader below is what bounds the decoded size, and the
+	// length check after the read catches a truncated body.
+	if resp.ContentLength > maxSAMLMetadataSize {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeSAMLMetadataFetchFailed, "SAML Metadata from URL '%s' exceeds the maximum size of %d bytes", url, maxSAMLMetadataSize).WithInternalError(fmt.Errorf("metadata Content-Length %d larger than %d bytes", resp.ContentLength, maxSAMLMetadataSize))
+	}
+
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxSAMLMetadataSize+1))
 	if err != nil {
 		return nil, err
@@ -222,6 +227,10 @@ func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 
 	if len(data) > maxSAMLMetadataSize {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeSAMLMetadataFetchFailed, "SAML Metadata from URL '%s' exceeds the maximum size of %d bytes", url, maxSAMLMetadataSize).WithInternalError(fmt.Errorf("metadata response larger than %d bytes", maxSAMLMetadataSize))
+	}
+
+	if !resp.Uncompressed && resp.ContentLength >= 0 && int64(len(data)) != resp.ContentLength {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeSAMLMetadataFetchFailed, "SAML Metadata from URL '%s' has mismatched Content-Length", url).WithInternalError(fmt.Errorf("metadata Content-Length %d but read %d bytes", resp.ContentLength, len(data)))
 	}
 
 	return data, nil
