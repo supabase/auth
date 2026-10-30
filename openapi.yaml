@@ -2131,6 +2131,10 @@ paths:
                     format: hostname
                 attribute_mapping:
                   $ref: "#/components/schemas/SAMLAttributeMappingSchema"
+                dedicated_scope:
+                  type: boolean
+                  description: >
+                    When `true`, this provider's SAML ACS URL and entity ID are scoped to its own provider ID instead of the ones shared by all SAML providers in this project. The same signing key is still used.
       responses:
         200:
           description: SSO provider was created.
@@ -2204,6 +2208,10 @@ paths:
                     pattern: "[a-z0-9-]+([.][a-z0-9-]+)*"
                 attribute_mapping:
                   $ref: "#/components/schemas/SAMLAttributeMappingSchema"
+                dedicated_scope:
+                  type: boolean
+                  description: >
+                    When `true`, this provider's SAML ACS URL and entity ID are scoped to its own provider ID instead of the ones shared by all SAML providers in this project. The same signing key is still used.
       responses:
         200:
           description: SSO provider details were updated.
@@ -3634,6 +3642,10 @@ components:
         id:
           type: string
           format: uuid
+        dedicated_scope:
+          type: boolean
+          description: >
+            When `true`, this provider's SAML ACS URL and entity ID are scoped to its own provider ID instead of the ones shared by all SAML providers in this project. The same signing key is still used.
         sso_domains:
           type: array
           items:
