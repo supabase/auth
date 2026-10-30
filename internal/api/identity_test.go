@@ -245,6 +245,7 @@ func (ts *IdentityTestSuite) TestUnlinkIdentity() {
 			case "phone":
 				require.Equal(ts.T(), "", u.GetPhone())
 				require.Nil(ts.T(), u.PhoneConfirmedAt)
+				require.Equal(ts.T(), false, u.UserMetaData["phone_verified"])
 			case "email":
 				require.Equal(ts.T(), "", u.GetEmail())
 				require.Nil(ts.T(), u.EmailConfirmedAt)
