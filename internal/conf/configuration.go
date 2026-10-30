@@ -934,6 +934,12 @@ type SecurityConfiguration struct {
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
 	SbForwardedForEnabled                 bool                 `json:"sb_forwarded_for_enabled" split_words:"true" default:"false"`
 
+	// HideEmailExists stops the API from telling the client that an email
+	// address is already registered to another account when a user requests
+	// an email change. Without it, anyone with an account can find out
+	// whether a given email address has one.
+	HideEmailExists bool `json:"hide_email_exists" split_words:"true" default:"true"`
+
 	DBEncryption DatabaseEncryptionConfiguration `json:"database_encryption" split_words:"true"`
 }
 
