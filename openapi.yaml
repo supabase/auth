@@ -3159,6 +3159,11 @@ paths:
                 client_secret:
                   type: string
                   description: OAuth client secret (for confidential clients)
+                resource:
+                  type: string
+                  format: uri
+                  description: >
+                    RFC 8707 resource indicator. Optional; when sent it must match the resource granted in the authorization request, otherwise an `invalid_target` error is returned.
       responses:
         200:
           description: Access token issued successfully
@@ -3240,6 +3245,13 @@ paths:
             enum:
               - S256
           description: PKCE code challenge method
+        - name: resource
+          in: query
+          schema:
+            type: string
+            format: uri
+          description: >
+            RFC 8707 resource indicator: the absolute URI (without fragment or query) of the resource server the token is for. When present, access tokens include it in the `aud` claim next to the user's audience. Invalid values redirect with an `invalid_target` error.
       responses:
         302:
           description: Redirect to login or authorization page
@@ -3305,6 +3317,10 @@ paths:
                         format: email
                   scope:
                     type: string
+                  resource:
+                    type: string
+                    format: uri
+                    description: RFC 8707 resource indicator requested by the client, if any
         404:
           description: Authorization not found
           content:

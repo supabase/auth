@@ -288,6 +288,13 @@ func (s *Server) OAuthToken(w http.ResponseWriter, r *http.Request) error {
 		params.ClientID = r.FormValue("client_id")
 		params.ClientSecret = r.FormValue("client_secret")
 		params.CodeVerifier = r.FormValue("code_verifier")
+
+		// RFC 8707 allows several resource parameters, but each grant is
+		// bound to a single resource
+		if len(r.Form["resource"]) > 1 {
+			return apierrors.NewOAuthError("invalid_target", "Only one resource parameter is supported")
+		}
+		params.Resource = r.FormValue("resource")
 	}
 
 	// Validate grant_type
@@ -355,7 +362,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 
 	// Validate that (if exists) the resource parameter matches the authorization code resource
 	if params.Resource != "" && params.Resource != utilities.StringValue(authorization.Resource) {
-		return apierrors.NewOAuthError("invalid_grant", "Authorization code resource does not match the resource parameter")
+		return apierrors.NewOAuthError("invalid_target", "Authorization code resource does not match the resource parameter")
 	}
 
 	// Validate redirect_uri if provided - must match the one used in authorization
@@ -394,6 +401,9 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	// Store scopes from authorization in session
 	scopes := authorization.Scope
 	grantParams.Scopes = &scopes
+
+	// Store the granted resource in session so access tokens are bound to it
+	grantParams.Resource = authorization.Resource
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if _, terr := models.FindOAuthServerAuthorizationByIDForUpdate(tx, authorization.AuthorizationID); terr != nil {
@@ -506,6 +516,7 @@ func (s *Server) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWri
 	tokenResponse, err := tokenService.RefreshTokenGrant(ctx, db, r, w.Header(), tokens.RefreshTokenGrantParams{
 		RefreshToken: params.RefreshToken,
 		ClientID:     clientID,
+		Resource:     params.Resource,
 	})
 	if err != nil {
 		return err
