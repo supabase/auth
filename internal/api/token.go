@@ -250,6 +250,11 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeBadCodeVerifier, "%s", err.Error())
 	}
 
+	// The user may have been banned after the auth code was issued.
+	if user.IsBanned() {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeUserBanned, "User is banned")
+	}
+
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
