@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.198.0](https://github.com/supabase/auth/compare/v2.197.0...v2.198.0) (2026-10-30)
+
+
+### Features
+
+* clear existing password on recover ([#2887](https://github.com/supabase/auth/issues/2887)) ([a7e97d6](https://github.com/supabase/auth/commit/a7e97d665b9ea03853edb66d014bcde323f7894b))
+* **mfa:** add recovery codes unenroll guards ([#2787](https://github.com/supabase/auth/issues/2787)) ([4b5069b](https://github.com/supabase/auth/commit/4b5069b3f0017b0819007f6f6f27d464bfa46a23))
+* **openapi:** document mfa recovery codes endpoints ([2773ca5](https://github.com/supabase/auth/commit/2773ca52abbe107a9628056414bee564a452fdf0))
+* **otp:** add link_token_hash column to one_time_tokens table ([#2800](https://github.com/supabase/auth/issues/2800)) ([4148d39](https://github.com/supabase/auth/commit/4148d39259a189d0f67830f814097dfd059e737a))
+* **otp:** add one_time_tokens query helpers ([#2797](https://github.com/supabase/auth/issues/2797)) ([f8520b4](https://github.com/supabase/auth/commit/f8520b4ade64e8fb31bc4be02e33e84a5125c082))
+* **otp:** handle test OTPs and Twilio Verify on the one_time_tokens path ([#2798](https://github.com/supabase/auth/issues/2798)) ([2e9ce6c](https://github.com/supabase/auth/commit/2e9ce6c8e46532879ced1c6f9a7acdcde3815ea6))
+* **otp:** switch one_time_tokens table to source of truth ([#2788](https://github.com/supabase/auth/issues/2788)) ([2c2acf6](https://github.com/supabase/auth/commit/2c2acf6fc9ab9ccdf4640ded5599187ad38ed845))
+* **otp:** write `expires_at` when creating `one_time_tokens` ([#2766](https://github.com/supabase/auth/issues/2766)) ([d7d6afd](https://github.com/supabase/auth/commit/d7d6afd8ad87ba5861347cdde1807ef2a8fe243e))
+
+
+### Bug Fixes
+
+* **deps:** bump go to 1.27.3 to distrust compromised x509 intermediates ([a8d7070](https://github.com/supabase/auth/commit/a8d7070e2726420f0b5ef8d589c7f6c9e463d7a7))
+* **deps:** bump google.golang.org/grpc to v1.83.1 for vulncheck ([#2818](https://github.com/supabase/auth/issues/2818)) ([8861440](https://github.com/supabase/auth/commit/8861440b97d1ef12de085e72fad1c104da20388b))
+* **deps:** bump otel to v1.45.0 for vulncheck ([946e3e3](https://github.com/supabase/auth/commit/946e3e3f52fa515960187447cc0a87c4df8cfc4a))
+* **deps:** bump x/net to v0.60.0 for http2 vulns ([c3348e8](https://github.com/supabase/auth/commit/c3348e8f1cb31454e9783e4eb9eab1e71ad9652f))
+* **linkedin:** avoid panic when the email response has no elements ([6311d50](https://github.com/supabase/auth/commit/6311d5050ee6cb2c6073e86c03e41bb14231b9cc))
+* **mfa:** ignore verify-disabled factors in recovery codes guard ([#2824](https://github.com/supabase/auth/issues/2824)) ([79ad7b2](https://github.com/supabase/auth/commit/79ad7b2c861f06bf05cd22168b7e460ef0207a87))
+* **mfa:** regenerate duplicate recovery codes ([#2793](https://github.com/supabase/auth/issues/2793)) ([8be2691](https://github.com/supabase/auth/commit/8be26910bc1830a2af4dd760bc2901cdec4575c2))
+* only trigger after-user-created hook on account creation ([#2656](https://github.com/supabase/auth/issues/2656)) ([64cfdf2](https://github.com/supabase/auth/commit/64cfdf22e15278eb7f4e7be541156e1cf94f4431))
+* **openapi:** use ErrorSchema for identity unlink 401/403 responses ([60d4bb6](https://github.com/supabase/auth/commit/60d4bb68055c74b66338ed3bc530e48b2cec5a3e))
+* **passkeys:** count friendly_name length by runes, not bytes ([ce9a8ee](https://github.com/supabase/auth/commit/ce9a8eee0cc042be8c7a42981a7ddae631e41d91))
+* **sessions:** invalidate legacy sessions with null aal ([#2792](https://github.com/supabase/auth/issues/2792)) ([8977629](https://github.com/supabase/auth/commit/89776292a4e1b94be10dd79b4215ae16e927a0fb))
+* **tools:** bump staticcheck to read go 1.27.3 export data ([9e4f25b](https://github.com/supabase/auth/commit/9e4f25b0cebe8568b62a9833c081952ac5d882b8))
+
 ## [2.197.0](https://github.com/supabase/auth/compare/v2.196.0...v2.197.0) (2026-09-03)
 
 
