@@ -120,6 +120,11 @@ func (s *Session) IsRecovery() bool {
 	return false
 }
 
+// IsOAuth reports whether the session was created for a third-party OAuth 2.1 client.
+func (s *Session) IsOAuth() bool {
+	return s != nil && s.OAuthClientID != nil && *s.OAuthClientID != uuid.Nil
+}
+
 func (s *Session) GetRefreshTokenHmacKey(dbEncryption conf.DatabaseEncryptionConfiguration) ([]byte, bool, error) {
 	if s.RefreshTokenHmacKey == nil {
 		return nil, false, nil

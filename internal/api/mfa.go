@@ -336,6 +336,9 @@ func (a *API) enrollTOTPFactor(w http.ResponseWriter, r *http.Request, params *E
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	if a.isOAuthClientRequest(ctx) {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens are not authorized to enroll MFA factors")
+	}
 	user := getUser(ctx)
 	session := getSession(ctx)
 	config := a.config

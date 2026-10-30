@@ -60,6 +60,43 @@ func (a *API) validateUserUpdateParams(ctx context.Context, p *UserUpdateParams)
 	return nil
 }
 
+// sanitizeUserForOAuth returns a sanitized copy of the user matching granted OAuth scopes.
+func (a *API) sanitizeUserForOAuth(ctx context.Context, user *models.User) *models.User {
+	if user == nil {
+		return nil
+	}
+
+	sanitized := *user
+
+	// Always strip internal metadata, identities, and factors from OAuth client view
+	sanitized.AppMetaData = nil
+	sanitized.Identities = nil
+	sanitized.Factors = nil
+
+	scopes := a.getOAuthScopes(ctx)
+
+	if !models.HasScope(scopes, models.ScopeEmail) {
+		sanitized.Email = storage.NullString("")
+		sanitized.EmailConfirmedAt = nil
+		sanitized.ConfirmedAt = nil
+		sanitized.EmailChange = ""
+		sanitized.EmailChangeSentAt = nil
+	}
+
+	if !models.HasScope(scopes, models.ScopePhone) {
+		sanitized.Phone = storage.NullString("")
+		sanitized.PhoneConfirmedAt = nil
+		sanitized.PhoneChange = ""
+		sanitized.PhoneChangeSentAt = nil
+	}
+
+	if !models.HasScope(scopes, models.ScopeProfile) {
+		sanitized.UserMetaData = nil
+	}
+
+	return &sanitized
+}
+
 // UserGet returns a user
 func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -75,12 +112,19 @@ func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	user := getUser(ctx)
+	if a.isOAuthClientRequest(ctx) {
+		user = a.sanitizeUserForOAuth(ctx, user)
+	}
 	return sendJSON(w, http.StatusOK, user)
 }
 
 // UserUpdate updates fields on a user
 func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	if a.isOAuthClientRequest(ctx) {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens are not authorized to update user account details")
+	}
+
 	db := a.db.WithContext(ctx)
 	config := a.config
 	aud := a.requestAud(ctx, r)

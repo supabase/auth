@@ -176,7 +176,6 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 // OAuthServerGetAuthorization handles GET /oauth/authorizations/{authorization_id}
 func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	db := s.db.WithContext(ctx)
 
 	// Validate request origin - the request must come from the site URL as we redirected there at the first place
 	if err := s.validateRequestOrigin(r); err != nil {
@@ -188,11 +187,17 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 	if user == nil {
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "authentication required")
 	}
+	session := shared.GetSession(ctx)
+	if session != nil && session.IsOAuth() {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens cannot view authorizations")
+	}
 
 	authorizationID := chi.URLParam(r, "authorization_id")
 	if authorizationID == "" {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "authorization_id is required")
 	}
+
+	db := s.db.WithContext(ctx)
 
 	var (
 		authorization     *models.OAuthServerAuthorization
@@ -300,7 +305,6 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 // OAuthServerConsent handles POST /oauth/authorizations/{authorization_id}/consent
 func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	db := s.db.WithContext(ctx)
 
 	// Validate request origin - the request must come from the site URL as we redirected there at the first place
 	if err := s.validateRequestOrigin(r); err != nil {
@@ -311,6 +315,10 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 	user := shared.GetUser(ctx)
 	if user == nil {
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "authentication required")
+	}
+	session := shared.GetSession(ctx)
+	if session != nil && session.IsOAuth() {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens cannot grant consent")
 	}
 
 	var body ConsentRequest
@@ -327,6 +335,8 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 	if authorizationID == "" {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "authorization_id is required")
 	}
+
+	db := s.db.WithContext(ctx)
 
 	// Row is locked FOR UPDATE SKIP LOCKED so concurrent approve/deny
 	// requests for the same authorization are serialised and the ownership

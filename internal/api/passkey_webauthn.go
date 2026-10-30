@@ -15,6 +15,9 @@ import (
 // assurance level is AAL1, so requiring AAL2 could never be satisfied. The
 // check fails closed, treating a missing session as not meeting AAL2.
 func requirePasskeyManagementAAL(user *models.User, session *models.Session) error {
+	if session != nil && session.IsOAuth() {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens are not authorized to manage passkeys")
+	}
 	if user.HasMFAEnabled() && (session == nil || !session.IsAAL2()) {
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeInsufficientAAL, "AAL2 session is required to manage passkeys when MFA is enabled")
 	}

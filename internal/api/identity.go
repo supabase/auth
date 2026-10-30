@@ -17,6 +17,9 @@ import (
 
 func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	if a.isOAuthClientRequest(ctx) {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens are not authorized to unlink identities")
+	}
 	db := a.db.WithContext(ctx)
 	config := a.config
 
@@ -155,6 +158,9 @@ func (a *API) ensureEmailIdentityForPassword(tx *storage.Connection, user *model
 
 func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	if a.isOAuthClientRequest(ctx) {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens are not authorized to link identities")
+	}
 	user := getUser(ctx)
 	rurl, err := a.GetExternalProviderRedirectURL(w, r, user)
 	if err != nil {
