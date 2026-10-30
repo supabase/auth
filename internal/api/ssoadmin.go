@@ -87,8 +87,9 @@ type CreateSSOProviderParams struct {
 	AttributeMapping models.SAMLAttributeMapping `json:"attribute_mapping"`
 	NameIDFormat     string                      `json:"name_id_format"`
 
-	ResourceID *string `json:"resource_id,omitempty"`
-	Disabled   *bool   `json:"disabled,omitempty"`
+	ResourceID     *string `json:"resource_id,omitempty"`
+	Disabled       *bool   `json:"disabled,omitempty"`
+	DedicatedScope *bool   `json:"dedicated_scope,omitempty"`
 }
 
 func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
@@ -248,6 +249,9 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 	}
 	if params.Disabled != nil {
 		provider.Disabled = params.Disabled
+	}
+	if params.DedicatedScope != nil {
+		provider.DedicatedScope = params.DedicatedScope
 	}
 	if params.MetadataURL != "" {
 		provider.SAMLProvider.MetadataURL = &params.MetadataURL
@@ -410,6 +414,14 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		disabled := *params.Disabled
 		if provider.Disabled == nil || *provider.Disabled != disabled {
 			provider.Disabled = &disabled
+			modified = true
+		}
+	}
+
+	if params.DedicatedScope != nil {
+		dedicatedScope := *params.DedicatedScope
+		if provider.DedicatedScope == nil || *provider.DedicatedScope != dedicatedScope {
+			provider.DedicatedScope = &dedicatedScope
 			modified = true
 		}
 	}

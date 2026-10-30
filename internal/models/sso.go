@@ -17,11 +17,12 @@ import (
 )
 
 type SSOProvider struct {
-	ID           uuid.UUID    `db:"id" json:"id"`
-	ResourceID   *string      `db:"resource_id" json:"resource_id,omitempty"`
-	Disabled     *bool        `db:"disabled" json:"disabled"`
-	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
-	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
+	ID             uuid.UUID    `db:"id" json:"id"`
+	ResourceID     *string      `db:"resource_id" json:"resource_id,omitempty"`
+	Disabled       *bool        `db:"disabled" json:"disabled"`
+	DedicatedScope *bool        `db:"dedicated_scope" json:"dedicated_scope"`
+	SAMLProvider   SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
+	SSODomains     []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
 
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
@@ -29,6 +30,13 @@ type SSOProvider struct {
 
 func (p SSOProvider) IsEnabled() bool {
 	return p.Disabled == nil || !*p.Disabled
+}
+
+// HasDedicatedScope reports whether this provider's SAML ACS URL and entity
+// ID are scoped to its own provider ID, instead of using the ones shared by
+// all SAML providers in this project. It still uses the same signing key.
+func (p SSOProvider) HasDedicatedScope() bool {
+	return p.DedicatedScope != nil && *p.DedicatedScope
 }
 
 func (p SSOProvider) TableName() string {

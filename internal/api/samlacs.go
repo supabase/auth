@@ -11,6 +11,7 @@ import (
 
 	"github.com/crewjam/saml"
 	"github.com/fatih/structs"
+	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
@@ -173,6 +174,15 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	var dedicatedScopeID *uuid.UUID
+	if ssoProvider.HasDedicatedScope() {
+		dedicatedScopeID = &ssoProvider.ID
+	}
+
+	if routeScopeID := chi.URLParam(r, "sso_provider_id"); (routeScopeID != "") != ssoProvider.HasDedicatedScope() || (routeScopeID != "" && routeScopeID != ssoProvider.ID.String()) {
+		return apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLIdPNotFound, "SSO Provider does not have a SAML connection at this ACS URL")
+	}
+
 	samlMetadataModified := false
 
 	if ssoProvider.SAMLProvider.MetadataURL == nil {
@@ -199,7 +209,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	serviceProvider := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKey, config.SAML.Certificate)
+	serviceProvider := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKey, config.SAML.Certificate, dedicatedScopeID)
 	spAssertion, err := serviceProvider.ParseResponse(r, requestIds)
 	if err != nil {
 		// During a key-rotation window the IdP may have cached the old (next)
@@ -210,7 +220,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		// If the retry also fails we return the original error so the operator
 		// sees a consistent diagnostic.
 		if config.SAML.AllowEncryptedAssertions && config.SAML.RSAPrivateKeyNext != nil {
-			fallbackSP := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKeyNext, config.SAML.CertificateNext)
+			fallbackSP := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKeyNext, config.SAML.CertificateNext, dedicatedScopeID)
 			if spAssertion2, retryErr := fallbackSP.ParseResponse(r, requestIds); retryErr == nil {
 				spAssertion = spAssertion2
 				err = nil
