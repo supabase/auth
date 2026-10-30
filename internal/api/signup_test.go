@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/supabase/auth/internal/crypto"
 	mail "github.com/supabase/auth/internal/mailer"
 
 	"github.com/stretchr/testify/assert"
@@ -168,4 +169,102 @@ func (ts *SignupTestSuite) TestSignupRequestBodyTooLarge() {
 	var data map[string]interface{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 	require.Equal(ts.T(), "request_entity_too_large", data["error_code"])
+}
+
+// Check that each new signup attempt updates the unregistered user's password.
+func (ts *SignupTestSuite) TestConsecutiveSignupAttempts() {
+	var attempt1Buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&attempt1Buffer).Encode(map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "password1",
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "/signup", &attempt1Buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var attempt2Buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&attempt2Buffer).Encode(map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "password2",
+	}))
+
+	// Setup request
+	req = httptest.NewRequest(http.MethodPost, "/signup", &attempt2Buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	err = crypto.CompareHashAndPassword(ts.T().Context(), *user.EncryptedPassword, "password1")
+	require.Error(ts.T(), err)
+
+	err = crypto.CompareHashAndPassword(ts.T().Context(), *user.EncryptedPassword, "password2")
+	require.NoError(ts.T(), err)
+}
+
+// Check an email signup attempt doesn't overwrite password of an email-confirmed user.
+func (ts *SignupTestSuite) TestEmailSignupForEmailConfirmedUser() {
+	user, err := models.NewUser("", "test@example.com", "password1", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(user))
+	require.NoError(ts.T(), user.Confirm(ts.API.db))
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "password2",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	user, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	err = crypto.CompareHashAndPassword(ts.T().Context(), *user.EncryptedPassword, "password1")
+	require.NoError(ts.T(), err)
+}
+
+// Check an email signup attempt doesn't overwrite password of an phone-confirmed user.
+func (ts *SignupTestSuite) TestEmailSignupForPhoneConfirmedUser() {
+	user, err := models.NewUser("123456789", "test@example.com", "password1", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(user))
+	require.NoError(ts.T(), user.ConfirmPhone(ts.API.db))
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "password2",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	user, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	err = crypto.CompareHashAndPassword(ts.T().Context(), *user.EncryptedPassword, "password1")
+	require.NoError(ts.T(), err)
 }
