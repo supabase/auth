@@ -92,9 +92,16 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Azure.ClientID...)
 
 	case p.Provider == FacebookProvider || p.Issuer == provider.IssuerFacebook:
-		cfg = &config.External.Facebook
+		// Copy the provider config into a local value: config is the long-lived
+		// process-wide *conf.GlobalConfiguration shared across all requests, so
+		// aliasing config.External.Facebook and writing SkipNonceCheck on it
+		// would mutate shared state on every Facebook login (a data race). The
+		// custom/default branches below already build a local config for the
+		// same reason.
+		facebookCfg := config.External.Facebook
 		// Facebook (Limited Login) nonce check is not supported
-		cfg.SkipNonceCheck = true
+		facebookCfg.SkipNonceCheck = true
+		cfg = &facebookCfg
 		providerType = FacebookProvider
 		issuer = provider.IssuerFacebook
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Facebook.ClientID...)
