@@ -476,15 +476,18 @@ func (s *Server) validateRemainingAuthorizeParams(params *AuthorizeParams) error
 }
 
 func (s *Server) validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
-	// PKCE is mandatory for the authorization code flow OAuth2.1
-	// Both code_challenge and code_challenge_method must be provided together
+	// PKCE is mandatory for the authorization code flow per OAuth 2.1.
+	// Both code_challenge and code_challenge_method must be provided together.
 	if codeChallenge == "" || codeChallengeMethod == "" {
 		return errors.New("PKCE flow requires both code_challenge and code_challenge_method")
 	}
 
-	// Validate code challenge method (case-insensitive)
-	if strings.ToLower(codeChallengeMethod) != "s256" && strings.ToLower(codeChallengeMethod) != "plain" {
-		return errors.New("code_challenge_method must be 'S256' or 'plain'")
+	// OAuth 2.1 (draft-ietf-oauth-v2-1-12, Section 4.1.1) permits only S256.
+	// The plain method is excluded: code_challenge is transmitted in the
+	// authorization request URL and may appear in server logs, browser history,
+	// or Referer headers — with plain, that directly exposes the code_verifier.
+	if strings.ToLower(codeChallengeMethod) != "s256" {
+		return errors.New("code_challenge_method must be 'S256'")
 	}
 
 	// Validate code challenge format and length (per OAuth2 spec)
