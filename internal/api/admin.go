@@ -120,6 +120,24 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	aud := a.requestAud(ctx, r)
 
+	email := r.URL.Query().Get("email")
+	if email != "" {
+		user, err := models.FindUserByEmailAndAudienceIncludingSSO(db, email, aud)
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return sendJSON(w, http.StatusOK, AdminListUsersResponse{
+					Users: []*models.User{},
+					Aud:   aud,
+				})
+			}
+			return apierrors.NewInternalServerError("Database error finding user by email").WithInternalError(err)
+		}
+		return sendJSON(w, http.StatusOK, AdminListUsersResponse{
+			Users: []*models.User{user},
+			Aud:   aud,
+		})
+	}
+
 	sortParams, err := sort(r, map[string]bool{models.CreatedAt: true}, []models.SortField{{Name: models.CreatedAt, Dir: models.Descending}})
 	if err != nil {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Bad Sort Parameters: %v", err)
