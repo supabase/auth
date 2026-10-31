@@ -87,6 +87,66 @@ func (ts *SessionsTestSuite) TestInvalidateSessionsWithAALLessThan() {
 	require.Equal(ts.T(), aal2Session.ID, found.ID)
 }
 
+// Regression test for #2801 — MFA step-up must not delete OAuth client sessions.
+// Covers four scenarios:
+//  1. aal1 OAuth client session survives (previously wiped — the user-visible bug)
+//  2. aal1 first-party session alongside it is still removed (MFA still enforces step-up)
+//  3. aal2 OAuth client session also survives (ownership is by oauth_client_id, not AAL)
+//  4. RevokeOAuthSessions remains the sole authoritative path to drop OAuth sessions
+func (ts *SessionsTestSuite) TestInvalidateSessionsWithAALLessThan_PreservesOAuthClientSessions() {
+	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	oauthClientID := uuid.Must(uuid.NewV4())
+
+	// (1) OAuth client session at aal1 — should SURVIVE the MFA sweep.
+	oauthAAL1 := &Session{
+		ID:            uuid.Must(uuid.NewV4()),
+		UserID:        u.ID,
+		AAL:           AAL1.PointerString(),
+		OAuthClientID: &oauthClientID,
+	}
+	require.NoError(ts.T(), ts.db.Create(oauthAAL1))
+
+	// (2) First-party aal1 session — should be removed.
+	firstPartyAAL1, err := NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(firstPartyAAL1))
+
+	// (3) OAuth client session with AAL already at aal2 — SURVIVES unconditionally.
+	oauthAAL2 := &Session{
+		ID:            uuid.Must(uuid.NewV4()),
+		UserID:        u.ID,
+		AAL:           AAL2.PointerString(),
+		OAuthClientID: &oauthClientID,
+	}
+	require.NoError(ts.T(), ts.db.Create(oauthAAL2))
+
+	require.NoError(ts.T(), InvalidateSessionsWithAALLessThan(ts.db, u.ID, AAL2.String()))
+
+	// (1) OAuth aal1 preserved.
+	foundOAuth1, err := FindSessionByID(ts.db, oauthAAL1.ID, false)
+	require.NoError(ts.T(), err, "OAuth client session at aal1 must survive MFA step-up (#2801)")
+	require.Equal(ts.T(), oauthAAL1.ID, foundOAuth1.ID)
+
+	// (2) First-party aal1 removed.
+	_, err = FindSessionByID(ts.db, firstPartyAAL1.ID, false)
+	require.ErrorIs(ts.T(), err, SessionNotFoundError{},
+		"first-party aal1 session must still be invalidated by MFA step-up")
+
+	// (3) OAuth aal2 preserved.
+	foundOAuth2, err := FindSessionByID(ts.db, oauthAAL2.ID, false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), oauthAAL2.ID, foundOAuth2.ID)
+
+	// (4) RevokeOAuthSessions remains the authoritative cleanup for OAuth sessions.
+	require.NoError(ts.T(), RevokeOAuthSessions(ts.db, u.ID, oauthClientID))
+	_, err = FindSessionByID(ts.db, oauthAAL1.ID, false)
+	require.ErrorIs(ts.T(), err, SessionNotFoundError{})
+	_, err = FindSessionByID(ts.db, oauthAAL2.ID, false)
+	require.ErrorIs(ts.T(), err, SessionNotFoundError{})
+}
+
 func (ts *SessionsTestSuite) AddClaimAndReloadSession(session *Session, claim AuthenticationMethod) *Session {
 	err := AddClaimToSession(ts.db, session.ID, claim)
 	require.NoError(ts.T(), err)
