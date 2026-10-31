@@ -9,7 +9,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 )
 
-// BCrypt hashed passwords have a 72 character limit
+// BCrypt hashed passwords have a 72-byte limit
 const MaxPasswordLength = 72
 
 // WeakPasswordError encodes an error that a password does not meet strength
@@ -31,7 +31,7 @@ func (a *API) checkPasswordStrength(ctx context.Context, password string) error 
 	if len(password) > MaxPasswordLength {
 		return apierrors.NewBadRequestError(
 			apierrors.ErrorCodeValidationFailed,
-			"Password cannot be longer than %v characters",
+			"Password cannot be longer than %v bytes",
 			MaxPasswordLength,
 		)
 	}
