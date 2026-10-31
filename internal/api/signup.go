@@ -27,6 +27,14 @@ type SignupParams struct {
 	Channel             string                 `json:"channel"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
+	CreateSession       *bool                  `json:"create_session,omitempty"`
+}
+
+func (p *SignupParams) ShouldCreateSession() bool {
+	if p.CreateSession == nil {
+		return true
+	}
+	return *p.CreateSession
 }
 
 func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
@@ -69,6 +77,11 @@ func (p *SignupParams) ConfigureDefaults() {
 	// For backwards compatibility, we default to SMS if params Channel is not specified
 	if p.Phone != "" && p.Channel == "" {
 		p.Channel = sms_provider.SMSProvider
+	}
+
+	if p.CreateSession == nil {
+		createSession := true
+		p.CreateSession = &createSession
 	}
 }
 
@@ -303,7 +316,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// handles case where Mailer.Autoconfirm is true or Phone.Autoconfirm is true
-	if user.IsConfirmed() || user.IsPhoneConfirmed() {
+	if (user.IsConfirmed() || user.IsPhoneConfirmed()) && params.ShouldCreateSession() {
 		var token *AccessTokenResponse
 		err = db.Transaction(func(tx *storage.Connection) error {
 			var terr error
