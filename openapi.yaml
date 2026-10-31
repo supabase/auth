@@ -3155,7 +3155,8 @@ paths:
                   description: Refresh token (required for refresh_token grant)
                 client_id:
                   type: string
-                  description: OAuth client identifier
+                  description: >
+                    OAuth client identifier: the client UUID, or the Client ID Metadata Document URL when `GOTRUE_OAUTH_SERVER_ALLOW_CLIENT_ID_METADATA_DOCUMENTS` is enabled.
                 client_secret:
                   type: string
                   description: OAuth client secret (for confidential clients)
@@ -3208,7 +3209,8 @@ paths:
           required: true
           schema:
             type: string
-          description: The client identifier
+          description: >
+            The client identifier: a registered client UUID, or, when `GOTRUE_OAUTH_SERVER_ALLOW_CLIENT_ID_METADATA_DOCUMENTS` is enabled, an HTTPS URL serving a Client ID Metadata Document (draft-ietf-oauth-client-id-metadata-document). The document is fetched and validated, and the client is created or updated from it.
         - name: redirect_uri
           in: query
           required: true
@@ -3294,6 +3296,10 @@ paths:
                       logo_uri:
                         type: string
                         format: uri
+                      client_id_url:
+                        type: string
+                        format: uri
+                        description: Client ID Metadata Document URL, for clients identified by one. Show its host on the consent screen.
                   user:
                     type: object
                     properties:
@@ -4073,7 +4079,12 @@ components:
           enum:
             - dynamic
             - manual
+            - metadata_document
           description: Registration type of the client
+        client_id_url:
+          type: string
+          format: uri
+          description: Client ID Metadata Document URL the client uses as its client_id (only for `metadata_document` clients)
         client_uri:
           type: string
           format: uri

@@ -390,6 +390,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 	grantParams.OAuthClientID = &client.ID
+	grantParams.OAuthClientIdentifier = client.Identifier()
 
 	// Store scopes from authorization in session
 	scopes := authorization.Scope
@@ -448,11 +449,12 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 		}
 
 		idToken, err := tokenService.GenerateIDToken(ctx, tokens.GenerateIDTokenParams{
-			User:     user,
-			ClientID: client.ID,
-			Nonce:    nonce,
-			AuthTime: user.LastSignInAt,
-			Scopes:   scopeList,
+			User:             user,
+			ClientID:         client.ID,
+			ClientIdentifier: client.Identifier(),
+			Nonce:            nonce,
+			AuthTime:         user.LastSignInAt,
+			Scopes:           scopeList,
 		})
 		if err != nil {
 			return apierrors.NewInternalServerError("Error generating ID token").WithInternalError(err)
@@ -498,14 +500,17 @@ func (s *Server) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWri
 
 	// Get OAuth client from context if present
 	var clientID *uuid.UUID
+	var clientIdentifier string
 	if oauthClient := shared.GetOAuthServerClient(ctx); oauthClient != nil {
 		clientID = &oauthClient.ID
+		clientIdentifier = oauthClient.Identifier()
 	}
 
 	db := s.db.WithContext(ctx)
 	tokenResponse, err := tokenService.RefreshTokenGrant(ctx, db, r, w.Header(), tokens.RefreshTokenGrantParams{
-		RefreshToken: params.RefreshToken,
-		ClientID:     clientID,
+		RefreshToken:     params.RefreshToken,
+		ClientID:         clientID,
+		ClientIdentifier: clientIdentifier,
 	})
 	if err != nil {
 		return err
