@@ -127,21 +127,24 @@ type GenerateAccessTokenParams struct {
 	SessionID            *uuid.UUID
 	AuthenticationMethod models.AuthenticationMethod
 	ClientID             *uuid.UUID // OAuth2 server client ID if applicable
+	ClientIdentifier     string     // client_id claim value if it differs from ClientID (Client ID Metadata Document URL)
 }
 
 // GenerateIDTokenParams contains parameters for generating OIDC ID tokens
 type GenerateIDTokenParams struct {
-	User     *models.User
-	ClientID uuid.UUID  // OAuth2 client ID (required for ID tokens)
-	Nonce    string     // OIDC nonce from authorization request (optional)
-	AuthTime *time.Time // Time when authentication occurred (optional, uses user.LastSignInAt if not provided)
-	Scopes   []string   // OAuth scopes granted (used to filter claims)
+	User             *models.User
+	ClientID         uuid.UUID  // OAuth2 client ID (required for ID tokens)
+	ClientIdentifier string     // aud and client_id value if it differs from ClientID (Client ID Metadata Document URL)
+	Nonce            string     // OIDC nonce from authorization request (optional)
+	AuthTime         *time.Time // Time when authentication occurred (optional, uses user.LastSignInAt if not provided)
+	Scopes           []string   // OAuth scopes granted (used to filter claims)
 }
 
 // RefreshTokenGrantParams contains parameters for refresh token grant
 type RefreshTokenGrantParams struct {
-	RefreshToken string
-	ClientID     *uuid.UUID // OAuth2 server client ID if applicable
+	RefreshToken     string
+	ClientID         *uuid.UUID // OAuth2 server client ID if applicable
+	ClientIdentifier string     // client_id claim value if it differs from ClientID (Client ID Metadata Document URL)
 }
 
 // AsRedirectURL encodes the AccessTokenResponse as a redirect URL that
@@ -600,6 +603,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 				SessionID:            &session.ID,
 				AuthenticationMethod: models.TokenRefresh,
 				ClientID:             sessionClientID,
+				ClientIdentifier:     params.ClientIdentifier,
 			})
 			if terr != nil {
 				httpErr, ok := terr.(*apierrors.HTTPError)
@@ -702,6 +706,9 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, p
 	var clientID string
 	if params.ClientID != nil && *params.ClientID != uuid.Nil {
 		clientID = params.ClientID.String()
+		if params.ClientIdentifier != "" {
+			clientID = params.ClientIdentifier
+		}
 	}
 
 	// Get scopes from session if this is an OAuth session
@@ -793,18 +800,24 @@ func (s *Service) GenerateIDToken(ctx context.Context, params GenerateIDTokenPar
 	// ID tokens typically expire in 1 hour (3600 seconds) per OIDC spec
 	expiresAt := issuedAt.Add(time.Hour)
 
+	// The audience is the client_id the client knows itself by
+	clientID := params.ClientID.String()
+	if params.ClientIdentifier != "" {
+		clientID = params.ClientIdentifier
+	}
+
 	// Build ID token claims per OIDC spec
 	// Base claims (always included)
 	claims := &IDTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   params.User.ID.String(),
-			Audience:  jwt.ClaimStrings{params.ClientID.String()},
+			Audience:  jwt.ClaimStrings{clientID},
 			IssuedAt:  jwt.NewNumericDate(issuedAt),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			Issuer:    config.JWT.Issuer,
 		},
 		AuthTime: authTime.Unix(),
-		ClientID: params.ClientID.String(),
+		ClientID: clientID,
 	}
 
 	// Add nonce if provided
@@ -946,6 +959,7 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 			SessionID:            &sessionID,
 			AuthenticationMethod: authenticationMethod,
 			ClientID:             oAuthClientID,
+			ClientIdentifier:     grantParams.OAuthClientIdentifier,
 		})
 		if terr != nil {
 			// Account for Hook Error

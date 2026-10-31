@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -153,16 +154,14 @@ func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (co
 		return ctx, nil
 	}
 
-	// Parse client_id as UUID
-	clientUUID, err := uuid.FromString(creds.ClientID)
-	if err != nil {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client_id format")
-	}
-
-	// Validate client credentials
+	// Validate client credentials. The client_id is a client UUID or a
+	// Client ID Metadata Document URL.
 	db := a.db.WithContext(ctx)
-	client, err := models.FindOAuthServerClientByID(db, clientUUID)
+	client, err := oauthserver.FindClientByClientID(db, &a.config.OAuthServer, creds.ClientID)
 	if err != nil {
+		if errors.Is(err, oauthserver.ErrInvalidClientIDFormat) {
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client_id format")
+		}
 		if models.IsNotFoundError(err) {
 			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials")
 		}

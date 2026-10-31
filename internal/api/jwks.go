@@ -55,6 +55,9 @@ type OpenIDConfigurationResponse struct {
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
 	ClaimsSupported                   []string `json:"claims_supported,omitempty"`       // OIDC-specific
 	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"` // OAuth 2.1/PKCE
+
+	// Client ID Metadata Document support (draft-ietf-oauth-client-id-metadata-document)
+	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported,omitempty"`
 }
 
 // WellKnownOpenID handles both OIDC Discovery and OAuth 2.0 Authorization Server Metadata endpoints
@@ -112,6 +115,10 @@ func (a *API) WellKnownOpenID(w http.ResponseWriter, r *http.Request) error {
 	// Include registration endpoint if dynamic registration is enabled
 	if config.OAuthServer.Enabled && config.OAuthServer.AllowDynamicRegistration {
 		response.RegistrationEndpoint = issuer + "/oauth/clients/register"
+	}
+
+	if config.OAuthServer.Enabled && config.OAuthServer.AllowClientIDMetadataDocuments {
+		response.ClientIDMetadataDocumentSupported = true
 	}
 
 	w.Header().Set("Cache-Control", "public, max-age=600")
