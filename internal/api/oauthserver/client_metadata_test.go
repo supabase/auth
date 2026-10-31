@@ -127,6 +127,7 @@ func TestIsSpecialUseAddr(t *testing.T) {
 		"100.64.0.1", "0.0.0.0", "192.0.2.10", "198.18.0.1", "224.0.0.1",
 		"255.255.255.255", "::1", "::", "fe80::1", "fc00::1", "2001:db8::1",
 		"::ffff:127.0.0.1", "::ffff:10.0.0.1", "64:ff9b::a00:1",
+		"fec0::1", "feff::1", "::7f00:1", "::a00:1",
 	}
 	for _, s := range special {
 		assert.True(t, isSpecialUseAddr(netip.MustParseAddr(s)), s)

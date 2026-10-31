@@ -295,7 +295,8 @@ func newClientMetadataHTTPClient() *http.Client {
 	}
 }
 
-// Special-use ranges from RFC 6890 not covered by the netip.Addr methods
+// Special-use ranges from RFC 6890 not covered by the netip.Addr methods,
+// plus deprecated IPv6 ranges that netip treats as global unicast
 var specialUsePrefixes = []netip.Prefix{
 	netip.MustParsePrefix("0.0.0.0/8"),
 	netip.MustParsePrefix("100.64.0.0/10"),
@@ -312,6 +313,8 @@ var specialUsePrefixes = []netip.Prefix{
 	netip.MustParsePrefix("2001::/23"),
 	netip.MustParsePrefix("2001:db8::/32"),
 	netip.MustParsePrefix("2002::/16"),
+	netip.MustParsePrefix("::/96"),     // IPv4-compatible addresses (deprecated, RFC 4291)
+	netip.MustParsePrefix("fec0::/10"), // Site-local addresses (deprecated, RFC 3879)
 }
 
 func isSpecialUseAddr(addr netip.Addr) bool {
