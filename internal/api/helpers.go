@@ -51,6 +51,7 @@ type RequestParams interface {
 		CreateSSOProviderParams |
 		EnrollFactorParams |
 		GenerateLinkParams |
+		TokenExchangeGrantParams |
 		IdTokenGrantParams |
 		InviteParams |
 		OtpParams |
