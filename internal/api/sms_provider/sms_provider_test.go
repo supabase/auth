@@ -166,8 +166,90 @@ func (ts *SmsProviderTestSuite) TestMessagebirdSendSms() {
 		},
 	})
 
-	_, err = messagebirdProvider.SendSms(phone, message)
+	_, err = messagebirdProvider.SendSms(phone, message, "123456")
 	require.NoError(ts.T(), err)
+}
+
+func (ts *SmsProviderTestSuite) TestMessagebirdSendSmsOnBirdPlatform() {
+	defer gock.Off()
+
+	ts.Run("A bk_ key routes to the platform and sends the template when no originator is set", func() {
+		provider, err := NewMessagebirdProvider(conf.MessagebirdProviderConfiguration{
+			AccessKey: "bk_eu1_test_api_key",
+		})
+		require.NoError(ts.T(), err)
+		birdProvider := provider.(*MessagebirdProvider)
+
+		// The region comes from the key, so no extra configuration is needed.
+		require.Equal(ts.T(), "https://eu1.platform.bird.com/v1/sms/messages", birdProvider.APIPath)
+
+		gock.New(birdProvider.APIPath).Post("").
+			MatchHeader("Authorization", "Bearer bk_eu1_test_api_key").
+			JSON(birdSmsRequest{
+				To:       "+123456789",
+				Template: &birdSmsTemplate{Name: "bird_otp_verification", Parameters: map[string]string{"code": "123456"}},
+			}).
+			Reply(202).JSON(birdSmsResponse{ID: "sms_abcdef"})
+
+		id, err := birdProvider.SendSms("123456789", "unused", "123456")
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "sms_abcdef", id)
+	})
+
+	ts.Run("An originator sends free text from that sender instead", func() {
+		provider, err := NewMessagebirdProvider(conf.MessagebirdProviderConfiguration{
+			AccessKey:  "bk_eu1_test_api_key",
+			Originator: "Acme",
+		})
+		require.NoError(ts.T(), err)
+		birdProvider := provider.(*MessagebirdProvider)
+
+		gock.New(birdProvider.APIPath).Post("").
+			JSON(birdSmsRequest{
+				To:       "+123456789",
+				From:     "Acme",
+				Text:     "This is the sms code: 123456",
+				Category: "authentication",
+			}).
+			Reply(202).JSON(birdSmsResponse{ID: "sms_abcdef"})
+
+		_, err = birdProvider.SendSms("123456789", "This is the sms code: 123456", "123456")
+		require.NoError(ts.T(), err)
+	})
+
+	ts.Run("Platform errors are nested under error and carry a remediation", func() {
+		provider, err := NewMessagebirdProvider(conf.MessagebirdProviderConfiguration{
+			AccessKey: "bk_eu1_test_api_key",
+		})
+		require.NoError(ts.T(), err)
+		birdProvider := provider.(*MessagebirdProvider)
+
+		gock.New(birdProvider.APIPath).Post("").
+			Reply(422).JSON(birdErrEnvelope{Error: BirdErrResponse{
+			Code:        "E12020",
+			Message:     "This destination country is not enabled for your workspace.",
+			Remediation: "Enable this destination country in your workspace's SMS destination settings, then send again.",
+			RequestID:   "req_01ky7q3hckecgv6d7jpq865532",
+		}})
+
+		_, err = birdProvider.SendSms("123456789", "unused", "123456")
+		require.Error(ts.T(), err)
+		require.Contains(ts.T(), err.Error(), "Enable this destination country")
+		require.Contains(ts.T(), err.Error(), "E12020")
+		require.Contains(ts.T(), err.Error(), "req_01ky7q3hckecgv6d7jpq865532")
+	})
+
+	ts.Run("A legacy access key keeps the legacy host and still requires an originator", func() {
+		provider, err := NewMessagebirdProvider(conf.MessagebirdProviderConfiguration{
+			AccessKey:  "legacy_access_key",
+			Originator: "Acme",
+		})
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), "https://rest.messagebird.com/messages", provider.(*MessagebirdProvider).APIPath)
+
+		_, err = NewMessagebirdProvider(conf.MessagebirdProviderConfiguration{AccessKey: "legacy_access_key"})
+		require.EqualError(ts.T(), err, "missing Messagebird originator")
+	})
 }
 
 func (ts *SmsProviderTestSuite) TestVonageSendSms() {
