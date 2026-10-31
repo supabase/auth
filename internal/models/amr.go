@@ -35,6 +35,19 @@ func AddClaimToSession(tx *storage.Connection, sessionId uuid.UUID, authenticati
 			DO UPDATE SET updated_at = ?;`, id, sessionId, currentTime, currentTime, authenticationMethod.String(), currentTime).Exec()
 }
 
+// CopyAMRClaimsToSession copies claims to sessionId, keeping when each method was last satisfied.
+func CopyAMRClaimsToSession(tx *storage.Connection, sessionId uuid.UUID, claims []AMRClaim) error {
+	for _, claim := range claims {
+		if err := tx.RawQuery("INSERT INTO "+(&pop.Model{Value: AMRClaim{}}).TableName()+
+			`(id, session_id, created_at, updated_at, authentication_method) values (?, ?, ?, ?, ?)
+			ON CONFLICT ON CONSTRAINT mfa_amr_claims_session_id_authentication_method_pkey DO NOTHING;`,
+			uuid.Must(uuid.NewV4()), sessionId, claim.CreatedAt, claim.UpdatedAt, claim.AuthenticationMethod).Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (a *AMRClaim) GetAuthenticationMethod() string {
 	if a.AuthenticationMethod == nil {
 		return ""
