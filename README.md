@@ -557,6 +557,14 @@ If you do not require email confirmation, you may set this to `true`. Defaults t
 
 Controls the duration an email link or OTP is valid for.
 
+`MAILER_TEST_OTP` - `string`
+
+Comma-separated `<email>:<otp>` pairs, for example `qa@example.com:123456`. Requests for a listed email use the fixed OTP and no email is sent, which is useful for app store review accounts and end-to-end tests. Emails are matched case-insensitively. Only the magic link / email OTP sign-in and signup confirmation flows honor test OTPs; password recovery, invites, reauthentication and email change always send a real email. Do not set this in production.
+
+`MAILER_TEST_OTP_VALID_UNTIL` - `string`
+
+ISO 8601 datetime (for example `2026-12-31T23:59:59Z`) after which `MAILER_TEST_OTP` is ignored. Defaults to no expiry.
+
 `MAILER_URLPATHS_INVITE` - `string`
 
 URL path to use in the user invite email. Defaults to `/verify`.
