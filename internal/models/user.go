@@ -431,6 +431,16 @@ func (u *User) SetPassword(ctx context.Context, password string, encrypt bool, e
 	return nil
 }
 
+// ClearUnconfirmedPassword removes a password that was set before the user's
+// email was confirmed, since whoever set it may not own the email address.
+func (u *User) ClearUnconfirmedPassword(tx *storage.Connection) error {
+	if u.IsConfirmed() || !u.HasPassword() {
+		return nil
+	}
+	u.EncryptedPassword = nil
+	return tx.UpdateOnly(u, "encrypted_password")
+}
+
 // UpdatePassword updates the user's password. Use SetPassword outside of a transaction first!
 func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) error {
 	// These need to be reset because password change may mean the user no longer trusts the actions performed by the previous password.

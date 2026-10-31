@@ -378,6 +378,26 @@ func (ts *UserTestSuite) createUserWithEmail(email string) *User {
 	return user
 }
 
+func (ts *UserTestSuite) TestClearUnconfirmedPassword() {
+	unconfirmed := ts.createUserWithEmail("unconfirmed@example.com")
+	require.True(ts.T(), unconfirmed.HasPassword())
+	require.NoError(ts.T(), unconfirmed.ClearUnconfirmedPassword(ts.db))
+	require.False(ts.T(), unconfirmed.HasPassword())
+
+	reloaded, err := FindUserByID(ts.db, unconfirmed.ID)
+	require.NoError(ts.T(), err)
+	require.False(ts.T(), reloaded.HasPassword())
+
+	confirmed := ts.createUserWithEmail("confirmed@example.com")
+	require.NoError(ts.T(), confirmed.Confirm(ts.db))
+	require.NoError(ts.T(), confirmed.ClearUnconfirmedPassword(ts.db))
+	require.True(ts.T(), confirmed.HasPassword())
+
+	reloaded, err = FindUserByID(ts.db, confirmed.ID)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), reloaded.HasPassword())
+}
+
 func (ts *UserTestSuite) TestRemoveUnconfirmedIdentities() {
 	user, err := NewUser("+29382983298", "someone@example.com", "abcdefgh", "authenticated", nil)
 	require.NoError(ts.T(), err)

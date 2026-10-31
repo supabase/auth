@@ -20,6 +20,14 @@ import (
 type AuditAction string
 type auditLogType string
 
+// AuditLogReason is a machine-readable explanation recorded in an audit log
+// entry's "reason" trait, giving more context for why an action occurred.
+type AuditLogReason string
+
+const (
+	UnconfirmedPasswordClearedReason AuditLogReason = "unconfirmed_password_cleared"
+)
+
 const (
 	LoginAction                     AuditAction = "login"
 	LogoutAction                    AuditAction = "logout"
