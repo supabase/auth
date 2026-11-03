@@ -267,7 +267,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 		if params.Provider == EmailProvider && !user.IsConfirmed() {
 			if config.Mailer.Autoconfirm {
-				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -276,7 +276,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return apierrors.NewInternalServerError("Database error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -293,7 +293,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 		} else if params.Provider == PhoneProvider && !user.IsPhoneConfirmed() {
 			if config.Sms.Autoconfirm {
-				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, map[string]interface{}{
 					"provider": params.Provider,
 					"channel":  params.Channel,
 				}); terr != nil {
@@ -303,7 +303,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return apierrors.NewInternalServerError("Database error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -320,7 +320,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		if errors.Is(err, UserExistsError) {
 			err = db.Transaction(func(tx *storage.Connection) error {
-				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
+				if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRepeatedSignUpAction, map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -347,7 +347,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		var token *AccessTokenResponse
 		err = db.Transaction(func(tx *storage.Connection) error {
 			var terr error
-			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
+			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr

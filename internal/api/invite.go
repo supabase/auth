@@ -83,7 +83,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 			user.Identities = []models.Identity{*identity}
 		}
 
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, adminUser, models.UserInvitedAction, map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 		}); terr != nil {

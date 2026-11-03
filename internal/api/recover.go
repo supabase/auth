@@ -63,7 +63,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRecoveryRequestedAction, nil); terr != nil {
 			return terr
 		}
 		return a.sendPasswordRecovery(r, tx, user, flowType)
