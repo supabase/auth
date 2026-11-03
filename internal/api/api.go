@@ -452,7 +452,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
 
 			// OIDC UserInfo endpoint (requires user authentication via Bearer token)
-			r.With(api.requireAuthentication).Get("/userinfo", api.oauthServer.OAuthUserInfo)
+			r.With(api.requireAuthenticationAllowOAuthClient).Get("/userinfo", api.oauthServer.OAuthUserInfo)
 
 			// OAuth 2.1 Authorization endpoints
 			// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider
