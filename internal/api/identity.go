@@ -96,7 +96,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	// the user before unlinking. Removing an identity may promote another
 	// identity's email onto the user record.
 	if config.Mailer.Notifications.IdentityUnlinkedEnabled && recipientEmail != "" {
-		if err := a.sendIdentityUnlinkedNotification(r, db, user, provider, recipientEmail); err != nil {
+		if err := a.sendIdentityUnlinkedNotification(a.notificationRequest(r), db, user, provider, recipientEmail); err != nil {
 			// Log the error but don't fail the unlinking
 			logrus.WithError(err).Warn("Unable to send identity unlinked notification email")
 		}

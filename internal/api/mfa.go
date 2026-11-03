@@ -743,7 +743,7 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 
 	// Send MFA factor enrolled notification email if enabled and the factor was just verified
 	if verified && config.Mailer.Notifications.MFAFactorEnrolledEnabled && user.GetEmail() != "" {
-		if err := a.sendMFAFactorEnrolledNotification(r, db, user, factor.FactorType); err != nil {
+		if err := a.sendMFAFactorEnrolledNotification(a.notificationRequest(r), db, user, factor.FactorType); err != nil {
 			// Log the error but don't fail the verification
 			logrus.WithError(err).Warn("Unable to send MFA factor enrolled notification email")
 		}
@@ -884,7 +884,7 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 
 	// Send MFA factor enrolled notification email if enabled and the factor was just verified
 	if verified && config.Mailer.Notifications.MFAFactorEnrolledEnabled && user.GetEmail() != "" {
-		if err := a.sendMFAFactorEnrolledNotification(r, db, user, factor.FactorType); err != nil {
+		if err := a.sendMFAFactorEnrolledNotification(a.notificationRequest(r), db, user, factor.FactorType); err != nil {
 			// Log the error but don't fail the verification
 			logrus.WithError(err).Warn("Unable to send MFA factor enrolled notification email")
 		}
@@ -1004,7 +1004,7 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 
 	// Send MFA factor enrolled notification email if enabled and the factor was just verified
 	if verified && config.Mailer.Notifications.MFAFactorEnrolledEnabled && user.GetEmail() != "" {
-		if err := a.sendMFAFactorEnrolledNotification(r, db, user, factor.FactorType); err != nil {
+		if err := a.sendMFAFactorEnrolledNotification(a.notificationRequest(r), db, user, factor.FactorType); err != nil {
 			// Log the error but don't fail the verification
 			logrus.WithError(err).Warn("Unable to send MFA factor enrolled notification email")
 		}
@@ -1118,7 +1118,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	// Send MFA factor unenrolled notification email if enabled
 	if config.Mailer.Notifications.MFAFactorUnenrolledEnabled && user.GetEmail() != "" {
-		if err := a.sendMFAFactorUnenrolledNotification(r, db, user, factorType); err != nil {
+		if err := a.sendMFAFactorUnenrolledNotification(a.notificationRequest(r), db, user, factorType); err != nil {
 			// Log the error but don't fail the unenrollment
 			logrus.WithError(err).Warn("Unable to send MFA factor unenrolled notification email")
 		}
