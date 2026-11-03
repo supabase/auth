@@ -105,6 +105,12 @@ func (Session) TableName() string {
 	return tableName
 }
 
+// IsOAuthClientSession reports whether the session was issued to a third-party
+// OAuth client through the OAuth 2.1 server.
+func (s *Session) IsOAuthClientSession() bool {
+	return s.OAuthClientID != nil && *s.OAuthClientID != uuid.Nil
+}
+
 func (s *Session) IsRecovery() bool {
 	for _, claim := range s.AMRClaims {
 		amStr := claim.GetAuthenticationMethod()
