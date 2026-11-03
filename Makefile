@@ -1,11 +1,11 @@
 .PHONY: all build deps image migrate test vet sec vulncheck format hooks lint unused release
-.PHONY: check-gosec check-govulncheck check-oapi-codegen check-staticcheck check-go-version check-format
+.PHONY: check-gosec check-govulncheck check-staticcheck check-go-version check-format
 CHECK_FILES ?= ./...
 
 ifdef RELEASE_VERSION
-	VERSION=v$(RELEASE_VERSION)
+	VERSION := v$(RELEASE_VERSION)
 else
-	VERSION=$(shell git describe --tags)
+	VERSION := $(shell git describe --tags 2>/dev/null)
 endif
 
 ifneq ($(shell docker compose version 2>/dev/null),)
@@ -153,12 +153,8 @@ unused: | $(TOOL_BIN_DIR)/staticcheck # Look for unused code
 static: | $(TOOL_BIN_DIR)/staticcheck
 	$(TOOL_BIN_DIR)/staticcheck ./...
 
-generate: | check-oapi-codegen
+generate:
 	go generate ./...
-
-check-oapi-codegen:
-	@command -v oapi-codegen >/dev/null 2>&1 \
-		|| go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
 
 dev: ## Run the development containers
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up

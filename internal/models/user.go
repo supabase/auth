@@ -73,6 +73,8 @@ type User struct {
 	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous"`
 
+	IsSuperAdmin bool `json:"-" db:"is_super_admin"`
+
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
 
@@ -186,7 +188,7 @@ func (u *User) BeforeSave(tx *pop.Connection) error {
 	return nil
 }
 
-// IsConfirmed checks if a user has already been
+// IsConfirmed checks if a user's email has already been
 // registered and confirmed.
 func (u *User) IsConfirmed() bool {
 	return u.EmailConfirmedAt != nil
@@ -429,6 +431,16 @@ func (u *User) SetPassword(ctx context.Context, password string, encrypt bool, e
 	}
 
 	return nil
+}
+
+// ClearUnconfirmedPassword removes a password that was set before the user's
+// email was confirmed, since whoever set it may not own the email address.
+func (u *User) ClearUnconfirmedPassword(tx *storage.Connection) error {
+	if u.IsConfirmed() || !u.HasPassword() {
+		return nil
+	}
+	u.EncryptedPassword = nil
+	return tx.UpdateOnly(u, "encrypted_password")
 }
 
 // UpdatePassword updates the user's password. Use SetPassword outside of a transaction first!
@@ -708,6 +720,19 @@ func FindUserByPhoneAndAudience(tx *storage.Connection, phone, aud string) (*Use
 // FindUserByID finds a user matching the provided ID.
 func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
+}
+
+func FindUserByIDForUpdate(tx *storage.Connection, id uuid.UUID) (*User, error) {
+	obj := &User{}
+	query := fmt.Sprintf(`SELECT * FROM %q WHERE id = ? FOR UPDATE`, obj.TableName())
+	if err := tx.RawQuery(query, id).First(obj); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, UserNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding user")
+	}
+
+	return obj, nil
 }
 
 // FindUserWithRefreshToken finds a user from the provided refresh token. If
