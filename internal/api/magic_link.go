@@ -81,6 +81,22 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	if user != nil {
 		isNewUser = !user.IsConfirmed()
 	}
+	if user != nil && isNewUser && user.HasPassword() {
+		// The unconfirmed user's password may have been set by someone who
+		// doesn't own the email. Remove it so it can't be used once the
+		// email owner confirms the account through this magic link.
+		err = db.Transaction(func(tx *storage.Connection) error {
+			if terr := user.ClearUnconfirmedPassword(tx); terr != nil {
+				return terr
+			}
+			return models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", map[string]interface{}{
+				"reason": models.UnconfirmedPasswordClearedReason,
+			})
+		})
+		if err != nil {
+			return apierrors.NewInternalServerError("Database error updating user").WithInternalError(err)
+		}
+	}
 	if isNewUser {
 		// User either doesn't exist or hasn't completed the signup process.
 		// Sign them up with temporary password.

@@ -87,6 +87,67 @@ func (ts *SessionsTestSuite) TestInvalidateSessionsWithAALLessThan() {
 	require.Equal(ts.T(), aal2Session.ID, found.ID)
 }
 
+func (ts *SessionsTestSuite) TestInvalidateSessionsWithAALLessThan_PreservesOAuthSessions() {
+	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	// Standard AAL1 browser session
+	browserSession, err := NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(browserSession))
+
+	// OAuth client session (also AAL1, but has oauth_client_id set)
+	clientName := "OAuth App"
+	client := &OAuthServerClient{
+		ID:                      uuid.Must(uuid.NewV4()),
+		ClientName:              &clientName,
+		RegistrationType:        "dynamic",
+		ClientType:              OAuthServerClientTypeConfidential,
+		ClientSecretHash:        "hash",
+		RedirectURIs:            "https://example.com/callback",
+		GrantTypes:              "authorization_code,refresh_token",
+		TokenEndpointAuthMethod: TokenEndpointAuthMethodClientSecretBasic,
+	}
+	require.NoError(ts.T(), CreateOAuthServerClient(ts.db, client))
+
+	oauthSession, err := NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	oauthSession.OAuthClientID = &client.ID
+	require.NoError(ts.T(), ts.db.Create(oauthSession))
+
+	// Legacy OAuth client session (AAL is nil, but oauth_client_id is set)
+	legacyOAuthSession := &Session{ID: uuid.Must(uuid.NewV4()), UserID: u.ID, AAL: nil, OAuthClientID: &client.ID}
+	require.NoError(ts.T(), ts.db.Create(legacyOAuthSession))
+
+	// Higher-assurance AAL2 session
+	aal2Session, err := NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	aal2Session.AAL = AAL2.PointerString()
+	require.NoError(ts.T(), ts.db.Create(aal2Session))
+
+	// Step-up verification invalidates lower-AAL sessions
+	require.NoError(ts.T(), InvalidateSessionsWithAALLessThan(ts.db, u.ID, AAL2.String()))
+
+	// Browser AAL1 session should be invalidated
+	_, err = FindSessionByID(ts.db, browserSession.ID, false)
+	require.ErrorIs(ts.T(), err, SessionNotFoundError{})
+
+	// OAuth client session must be preserved
+	foundOAuth, err := FindSessionByID(ts.db, oauthSession.ID, false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), oauthSession.ID, foundOAuth.ID)
+
+	// Legacy OAuth client session must also be preserved
+	foundLegacyOAuth, err := FindSessionByID(ts.db, legacyOAuthSession.ID, false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), legacyOAuthSession.ID, foundLegacyOAuth.ID)
+
+	// AAL2 session must be preserved
+	foundAAL2, err := FindSessionByID(ts.db, aal2Session.ID, false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), aal2Session.ID, foundAAL2.ID)
+}
+
 func (ts *SessionsTestSuite) AddClaimAndReloadSession(session *Session, claim AuthenticationMethod) *Session {
 	err := AddClaimToSession(ts.db, session.ID, claim)
 	require.NoError(ts.T(), err)

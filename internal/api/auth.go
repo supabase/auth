@@ -16,8 +16,30 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
-// requireAuthentication checks incoming requests for tokens presented using the Authorization header
+// requireAuthentication checks incoming requests for tokens presented using the Authorization header.
+// Access tokens issued to OAuth clients are not accepted; see requireAuthenticationAllowOAuthClient.
 func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx, err := a.authenticateBearerToken(r)
+	if err != nil {
+		return ctx, err
+	}
+
+	if session := getSession(ctx); session != nil && session.IsOAuthClientSession() {
+		return ctx, oauthClientTokenNotAllowedError()
+	}
+
+	return ctx, nil
+}
+
+// requireAuthenticationAllowOAuthClient is like requireAuthentication but also accepts access tokens
+// issued to OAuth clients. Only use it for endpoints intended for OAuth clients (e.g. /oauth/userinfo).
+func (a *API) requireAuthenticationAllowOAuthClient(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	return a.authenticateBearerToken(r)
+}
+
+// authenticateBearerToken verifies the bearer token, loads the user and session it
+// references and rejects banned users. It applies no OAuth client policy.
+func (a *API) authenticateBearerToken(r *http.Request) (context.Context, error) {
 	token, err := a.extractBearerToken(r)
 	if err != nil {
 		return nil, err
@@ -39,6 +61,10 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 	}
 
 	return ctx, nil
+}
+
+func oauthClientTokenNotAllowedError() *HTTPError {
+	return apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "OAuth client access tokens are not allowed to access this endpoint")
 }
 
 func (a *API) requireNotAnonymous(w http.ResponseWriter, r *http.Request) (context.Context, error) {
