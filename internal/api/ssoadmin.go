@@ -12,6 +12,7 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
@@ -421,6 +422,15 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 	if params.DedicatedScope != nil {
 		dedicatedScope := *params.DedicatedScope
 		if provider.DedicatedScope == nil || *provider.DedicatedScope != dedicatedScope {
+			// Toggling this immediately changes the ACS URL and entity ID
+			// this provider expects, breaking any in-flight SAML flow and
+			// any IdP still configured with the old URL.
+			observability.GetLogEntry(r).Entry.WithFields(logrus.Fields{
+				"sso_provider_id": provider.ID.String(),
+				"old_value":       provider.HasDedicatedScope(),
+				"new_value":       dedicatedScope,
+			}).Warn("SSO Provider dedicated_scope is being changed, this will change its expected ACS URL and entity ID")
+
 			provider.DedicatedScope = &dedicatedScope
 			modified = true
 		}
