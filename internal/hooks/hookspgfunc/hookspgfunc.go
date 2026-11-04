@@ -104,14 +104,16 @@ func (o *Dispatcher) runPostgresHook(
 		}
 		return nil
 	}
+	// `set local` only takes effect inside a transaction block. Reuse the
+	// caller's transaction when there is one (opening a second one can exhaust
+	// the pool), otherwise open one: callers may pass a connection that is not
+	// in a transaction (tx.TX == nil), and Transaction handles both cases.
+	conn := db
 	if tx != nil {
-		if err := invokeHookFunc(tx); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := db.Transaction(invokeHookFunc); err != nil {
-			return nil, err
-		}
+		conn = tx
+	}
+	if err := conn.Transaction(invokeHookFunc); err != nil {
+		return nil, err
 	}
 	if err := hookserrors.Check(response); err != nil {
 		return nil, err
