@@ -17,12 +17,11 @@ import (
 )
 
 type SSOProvider struct {
-	ID             uuid.UUID    `db:"id" json:"id"`
-	ResourceID     *string      `db:"resource_id" json:"resource_id,omitempty"`
-	Disabled       *bool        `db:"disabled" json:"disabled"`
-	DedicatedScope *bool        `db:"dedicated_scope" json:"dedicated_scope,omitempty"`
-	SAMLProvider   SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
-	SSODomains     []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
+	ID           uuid.UUID    `db:"id" json:"id"`
+	ResourceID   *string      `db:"resource_id" json:"resource_id,omitempty"`
+	Disabled     *bool        `db:"disabled" json:"disabled"`
+	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
+	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
 
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
@@ -36,7 +35,7 @@ func (p SSOProvider) IsEnabled() bool {
 // ID are scoped to its own provider ID, instead of using the ones shared by
 // all SAML providers in this project. It still uses the same signing key.
 func (p SSOProvider) HasDedicatedScope() bool {
-	return p.DedicatedScope != nil && *p.DedicatedScope
+	return p.SAMLProvider.HasDedicatedScope()
 }
 
 func (p SSOProvider) TableName() string {
@@ -137,8 +136,21 @@ type SAMLProvider struct {
 
 	NameIDFormat *string `db:"name_id_format" json:"name_id_format,omitempty"`
 
+	// DedicatedScope, once set, cannot be changed: flipping it changes the
+	// entity ID this SP presents to the IdP (it defaults to the SP metadata
+	// URL, which becomes scoped to the provider's ID), so toggling it after
+	// the IdP has been configured would break the connection.
+	DedicatedScope *bool `db:"dedicated_scope" json:"dedicated_scope,omitempty"`
+
 	CreatedAt time.Time `db:"created_at" json:"-"`
 	UpdatedAt time.Time `db:"updated_at" json:"-"`
+}
+
+// HasDedicatedScope reports whether this provider's SAML ACS URL and entity
+// ID are scoped to its own provider ID, instead of using the ones shared by
+// all SAML providers in this project. It still uses the same signing key.
+func (p SAMLProvider) HasDedicatedScope() bool {
+	return p.DedicatedScope != nil && *p.DedicatedScope
 }
 
 func (p SAMLProvider) TableName() string {

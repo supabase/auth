@@ -12,7 +12,6 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
@@ -126,6 +125,10 @@ func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
 			string(saml.TransientNameIDFormat),
 			string(saml.UnspecifiedNameIDFormat),
 		}, ", "))
+	}
+
+	if forUpdate && p.DedicatedScope != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "dedicated_scope cannot be changed after the SSO provider is created, as doing so changes the entity ID presented to the Identity Provider")
 	}
 
 	return nil
@@ -252,7 +255,7 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 		provider.Disabled = params.Disabled
 	}
 	if params.DedicatedScope != nil {
-		provider.DedicatedScope = params.DedicatedScope
+		provider.SAMLProvider.DedicatedScope = params.DedicatedScope
 	}
 	if params.MetadataURL != "" {
 		provider.SAMLProvider.MetadataURL = &params.MetadataURL
@@ -419,22 +422,8 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	if params.DedicatedScope != nil {
-		dedicatedScope := *params.DedicatedScope
-		if provider.DedicatedScope == nil || *provider.DedicatedScope != dedicatedScope {
-			// Toggling this immediately changes the ACS URL and entity ID
-			// this provider expects, breaking any in-flight SAML flow and
-			// any IdP still configured with the old URL.
-			observability.GetLogEntry(r).Entry.WithFields(logrus.Fields{
-				"sso_provider_id": provider.ID.String(),
-				"old_value":       provider.HasDedicatedScope(),
-				"new_value":       dedicatedScope,
-			}).Warn("SSO Provider dedicated_scope is being changed, this will change its expected ACS URL and entity ID")
-
-			provider.DedicatedScope = &dedicatedScope
-			modified = true
-		}
-	}
+	// dedicated_scope cannot be changed on update; validate() above already
+	// rejects the request if params.DedicatedScope is set.
 
 	if modified {
 		if err := db.Transaction(func(tx *storage.Connection) error {
