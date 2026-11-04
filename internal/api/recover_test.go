@@ -151,3 +151,44 @@ func (ts *RecoverTestSuite) TestRecover_NoSideChannelLeak() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 }
+
+func (ts *RecoverTestSuite) TestRecover_BannedUser() {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), u.Ban(ts.API.db, time.Hour))
+
+	doRecover := func() *httptest.ResponseRecorder {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email": "test@example.com",
+		}))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		return w
+	}
+
+	w := doRecover()
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+	assert.JSONEq(ts.T(), "{}", w.Body.String())
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), u.RecoveryToken)
+	assert.Nil(ts.T(), u.RecoverySentAt)
+
+	// once the ban has expired, the recovery email is sent again
+	pastBan := time.Now().Add(-time.Hour)
+	u.BannedUntil = &pastBan
+	require.NoError(ts.T(), ts.API.db.UpdateOnly(u, "banned_until"))
+
+	w = doRecover()
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	assert.NotEmpty(ts.T(), u.RecoveryToken)
+	require.NotNil(ts.T(), u.RecoverySentAt)
+	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
+}

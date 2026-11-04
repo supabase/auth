@@ -133,6 +133,11 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 		}
 	}
+	if user != nil && user.IsBanned() {
+		// A banned user can't redeem the OTP, so don't send one. Respond as
+		// if it was sent so the ban status isn't revealed.
+		return sendJSON(w, http.StatusOK, SmsOtpResponse{})
+	}
 	if user != nil {
 		isNewUser = !user.IsPhoneConfirmed()
 	}

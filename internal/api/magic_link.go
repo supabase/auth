@@ -78,6 +78,11 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 		}
 	}
+	if user != nil && user.IsBanned() {
+		// A banned user can't redeem the link, so don't send one. Respond as
+		// if it was sent so the ban status isn't revealed.
+		return sendJSON(w, http.StatusOK, make(map[string]string))
+	}
 	if user != nil {
 		isNewUser = !user.IsConfirmed()
 	}

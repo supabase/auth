@@ -96,6 +96,11 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 		}
 		return apierrors.NewInternalServerError("Unable to process request").WithInternalError(err)
 	}
+	if user.IsBanned() {
+		// A banned user can't redeem the token, so don't send one. Respond as
+		// for an unknown user so the ban status isn't revealed.
+		return sendJSON(w, http.StatusOK, map[string]string{})
+	}
 
 	switch params.Type {
 	case mail.SignupVerification:

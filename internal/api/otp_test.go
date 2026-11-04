@@ -442,3 +442,83 @@ func (ts *OtpTestSuite) TestOtpKeepsConfirmedPassword() {
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), user.HasPassword())
 }
+
+func (ts *OtpTestSuite) TestOtpBannedUser() {
+	ts.Config.SMTP.MaxFrequency = 0
+	ts.Config.Sms.MaxFrequency = 0
+	ts.Config.External.Phone.Enabled = true
+	ts.Config.Sms.TestOTP = map[string]string{"123456789": "000000"}
+	defer func() {
+		ts.Config.Sms.TestOTP = nil
+	}()
+
+	u, err := models.NewUser("123456789", "banned@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u))
+	require.NoError(ts.T(), u.Confirm(ts.API.db))
+	require.NoError(ts.T(), u.ConfirmPhone(ts.API.db))
+	require.NoError(ts.T(), u.Ban(ts.API.db, time.Hour))
+
+	cases := []struct {
+		desc string
+		path string
+		body map[string]interface{}
+	}{
+		{
+			desc: "Magic link via /otp",
+			path: "/otp",
+			body: map[string]interface{}{"email": u.GetEmail()},
+		},
+		{
+			desc: "Magic link via /magiclink",
+			path: "/magiclink",
+			body: map[string]interface{}{"email": u.GetEmail()},
+		},
+		{
+			desc: "SMS OTP via /otp",
+			path: "/otp",
+			body: map[string]interface{}{"phone": u.GetPhone()},
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+			req := httptest.NewRequest(http.MethodPost, c.path, &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+			require.JSONEq(ts.T(), "{}", w.Body.String())
+
+			dbUser, err := models.FindUserByID(ts.API.db, u.ID)
+			require.NoError(ts.T(), err)
+			require.Empty(ts.T(), dbUser.RecoveryToken)
+			require.Nil(ts.T(), dbUser.RecoverySentAt)
+			require.Empty(ts.T(), dbUser.ConfirmationToken)
+			require.Nil(ts.T(), dbUser.ConfirmationSentAt)
+		})
+	}
+
+	ts.Run("Expired ban sends magic link again", func() {
+		pastBan := time.Now().Add(-time.Hour)
+		u.BannedUntil = &pastBan
+		require.NoError(ts.T(), ts.API.db.UpdateOnly(u, "banned_until"))
+
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{"email": u.GetEmail()}))
+		req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		dbUser, err := models.FindUserByID(ts.API.db, u.ID)
+		require.NoError(ts.T(), err)
+		require.NotEmpty(ts.T(), dbUser.RecoveryToken)
+		require.NotNil(ts.T(), dbUser.RecoverySentAt)
+	})
+}
