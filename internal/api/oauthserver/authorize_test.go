@@ -732,6 +732,7 @@ func TestIsValidRedirectURILoopbackPort(t *testing.T) {
 		"http://localhost/callback",
 		"https://app.example.com/callback",
 		"http://127.0.0.1/with?state=keep",
+		"http://127.0.0.1/callback/admin",
 	})
 
 	tests := []struct {
@@ -746,6 +747,8 @@ func TestIsValidRedirectURILoopbackPort(t *testing.T) {
 		{"loopback IPv6 may drop the port", "http://[::1]/cb", true},
 		{"loopback keeps its query", "http://127.0.0.1:4000/with?state=keep", true},
 		{"loopback path must match", "http://127.0.0.1:51234/other", false},
+		{"loopback nested path matches", "http://127.0.0.1:51234/callback/admin", true},
+		{"an encoded slash is not a path separator", "http://127.0.0.1:51234/callback%2Fadmin", false},
 		{"loopback query must match", "http://127.0.0.1:51234/with?state=other", false},
 		{"loopback fragment is not registered", "http://127.0.0.1:51234/callback#frag", false},
 		{"loopback scheme must match", "https://127.0.0.1:51234/callback", false},

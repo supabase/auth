@@ -571,7 +571,8 @@ func (s *Server) isValidRedirectURI(client *models.OAuthServerClient, redirectUR
 // authorization request, so the port is the one component that may differ.
 // Everything else, scheme, host, path, query and fragment, must still match
 // exactly, and the host must be a loopback IP literal, as the specification
-// does not extend the exception to "localhost".
+// does not extend the exception to "localhost". Path and fragment are compared
+// in their escaped form, so an encoded "/" (%2F) cannot stand in for a real one.
 func isLoopbackRedirectMatch(registeredURI, redirectURI string) bool {
 	registered, err := url.Parse(registeredURI)
 	if err != nil {
@@ -587,9 +588,9 @@ func isLoopbackRedirectMatch(registeredURI, redirectURI string) bool {
 	if !isLoopbackIPLiteral(registered.Hostname()) || registered.Hostname() != requested.Hostname() {
 		return false
 	}
-	return registered.Path == requested.Path &&
+	return registered.EscapedPath() == requested.EscapedPath() &&
 		registered.RawQuery == requested.RawQuery &&
-		registered.Fragment == requested.Fragment &&
+		registered.EscapedFragment() == requested.EscapedFragment() &&
 		registered.User.String() == requested.User.String()
 }
 
