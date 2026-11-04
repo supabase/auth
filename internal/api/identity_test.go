@@ -17,6 +17,7 @@ import (
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/mailer/mockclient"
 	"github.com/supabase/auth/internal/models"
+	"gopkg.in/h2non/gock.v1"
 )
 
 type IdentityTestSuite struct {
@@ -589,4 +590,62 @@ func (ts *IdentityTestSuite) TestUnlinkIdentitySendsNotificationEmailDisabled() 
 
 	// Assert that identity unlinked notification email was not sent
 	require.Len(ts.T(), mockMailer.IdentityUnlinkedMailCalls, 0, "Expected 0 identity unlinked notification email(s) to be sent")
+}
+
+func (ts *IdentityTestSuite) TestUnlinkIdentityHookPreservesRecipientBeforeEmailPromotion() {
+	manualLinking := ts.Config.Security.ManualLinkingEnabled
+	notificationEnabled := ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled
+	hookConfig := ts.Config.Hook.SendEmail
+	ts.Config.Security.ManualLinkingEnabled = true
+	ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = true
+	ts.Config.Hook.SendEmail.Enabled = true
+	ts.Config.Hook.SendEmail.URI = "http://localhost:8888/send-email"
+	defer func() {
+		ts.Config.Security.ManualLinkingEnabled = manualLinking
+		ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = notificationEnabled
+		ts.Config.Hook.SendEmail = hookConfig
+		gock.OffAll()
+	}()
+
+	user, err := models.NewUser("", "primary@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(user))
+	require.NoError(ts.T(), user.Confirm(ts.API.db))
+	original, err := models.NewIdentity(user, "email", map[string]any{
+		"sub": user.ID.String(), "email": "primary@example.com", "email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(original))
+	remaining, err := models.NewIdentity(user, "google", map[string]any{
+		"sub": user.ID.String(), "email": "promoted@example.com", "email_verified": true,
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(remaining))
+
+	var captured struct {
+		User struct {
+			Email string `json:"email"`
+		} `json:"user"`
+		EmailData struct {
+			Action         string `json:"email_action_type"`
+			Provider       string `json:"provider"`
+			RecipientEmail string `json:"recipient_email"`
+		} `json:"email_data"`
+	}
+	gock.New(ts.Config.Hook.SendEmail.URI).Post("/").AddMatcher(func(req *http.Request, _ *gock.Request) (bool, error) {
+		err := json.NewDecoder(req.Body).Decode(&captured)
+		return err == nil, err
+	}).Reply(http.StatusOK).JSON(map[string]any{})
+
+	token := ts.generateAccessTokenAndSession(user)
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/user/identities/%s", original.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(response, req)
+	require.Equal(ts.T(), http.StatusOK, response.Code)
+	require.True(ts.T(), gock.IsDone(), "Send Email Hook should have been called")
+	require.Equal(ts.T(), mail.IdentityUnlinkedNotification, captured.EmailData.Action)
+	require.Equal(ts.T(), "email", captured.EmailData.Provider)
+	require.Equal(ts.T(), "promoted@example.com", captured.User.Email, "hook user must retain the post-unlink state")
+	require.Equal(ts.T(), "primary@example.com", captured.EmailData.RecipientEmail, "notification must target the address before unlinking")
 }
