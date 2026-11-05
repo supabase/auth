@@ -136,6 +136,9 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 			assert.True(ts.T(), u.IsConfirmed())
+			// the password was set before the email was confirmed, so it
+			// must not survive confirmation through recovery
+			assert.False(ts.T(), u.HasPassword())
 
 			if c.isPKCE {
 				rURL, _ := w.Result().Location()
