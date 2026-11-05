@@ -26,6 +26,8 @@ type PhoneTestSuite struct {
 	Config *conf.GlobalConfiguration
 }
 
+const testSmsProviderMessageID = "test-provider-message-id"
+
 type TestSmsProvider struct {
 	mock.Mock
 
@@ -34,7 +36,7 @@ type TestSmsProvider struct {
 
 func (t *TestSmsProvider) SendMessage(phone, message, channel, otp string) (string, error) {
 	t.SentMessages += 1
-	return "", nil
+	return testSmsProviderMessageID, nil
 }
 func (t *TestSmsProvider) VerifyOTP(phone, otp string) error {
 	return nil
@@ -117,7 +119,7 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 			provider := &TestSmsProvider{}
 			sms_provider.MockProvider = provider
 
-			_, err = ts.API.sendPhoneConfirmation(req, ts.API.db, u, "123456789", c.otpType, sms_provider.SMSProvider)
+			messageID, err := ts.API.sendPhoneConfirmation(req, ts.API.db, u, "123456789", c.otpType, sms_provider.SMSProvider)
 			require.Equal(ts.T(), c.expected, err)
 			u, err = models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
@@ -125,8 +127,10 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 			if c.expected == nil {
 				if useTestOTP {
 					require.Equal(ts.T(), provider.SentMessages, 0)
+					require.Equal(ts.T(), "test-otp", messageID)
 				} else {
 					require.Equal(ts.T(), provider.SentMessages, 1)
+					require.Equal(ts.T(), testSmsProviderMessageID, messageID)
 				}
 			}
 
