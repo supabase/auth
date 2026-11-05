@@ -362,6 +362,14 @@ paths:
         - auth
       security:
         - APIKeyAuth: []
+      parameters:
+        - name: redirect_to
+          in: query
+          description: >
+            (Optional) URL to redirect back into the app on after the user follows the link in the email and verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+          schema:
+            type: string
+            format: uri
       requestBody:
         content:
           application/json:
@@ -436,6 +444,14 @@ paths:
         - auth
       security:
         - APIKeyAuth: []
+      parameters:
+        - name: redirect_to
+          in: query
+          description: >
+            (Optional) URL to redirect back into the app on after the user follows the link in the email and verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+          schema:
+            type: string
+            format: uri
       requestBody:
         content:
           application/json:
@@ -483,6 +499,14 @@ paths:
         - auth
       security:
         - APIKeyAuth: []
+      parameters:
+        - name: redirect_to
+          in: query
+          description: >
+            (Optional) URL to redirect back into the app on after the user follows the link in the email and verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+          schema:
+            type: string
+            format: uri
       requestBody:
         content:
           application/json:
@@ -539,6 +563,14 @@ paths:
         - auth
       security:
         - APIKeyAuth: []
+      parameters:
+        - name: redirect_to
+          in: query
+          description: >
+            (Optional) URL to redirect back into the app on after the user follows the link in the email and verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+          schema:
+            type: string
+            format: uri
       requestBody:
         content:
           application/json:
@@ -579,6 +611,14 @@ paths:
         - auth
       security:
         - APIKeyAuth: []
+      parameters:
+        - name: redirect_to
+          in: query
+          description: >
+            (Optional) URL to redirect back into the app on after the user follows the link in the email and verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+          schema:
+            type: string
+            format: uri
       requestBody:
         content:
           application/json:
@@ -653,6 +693,14 @@ paths:
       security:
         - APIKeyAuth: []
           UserAuth: []
+      parameters:
+        - name: redirect_to
+          in: query
+          description: >
+            (Optional) URL to redirect back into the app on after the user follows the link in the email and verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+          schema:
+            type: string
+            format: uri
       requestBody:
         content:
           application/json:
