@@ -171,12 +171,17 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 					return err
 				}
 				if !isValidPassword {
-					observability.GetLogEntry(r).Entry.Warn("Rejected sign-in because the password changed during sign-in")
+					observability.GetLogEntry(r).Entry.Warn("Rejected sign-in because the password changed before re-encryption")
 				}
 			}
 		}
 	}
 
+	// A password changed during sign-in is reported to the hook differently
+	// depending on when it is detected: a failed re-verification above
+	// reports an invalid password, while the hash check in the session
+	// transaction below runs after the hook, which has already seen a valid
+	// password.
 	if config.Hook.PasswordVerificationAttempt.Enabled {
 		input := v0hooks.NewPasswordVerificationAttemptInput(
 			r,
@@ -226,7 +231,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return apierrors.NewInternalServerError("Database error querying schema").WithInternalError(terr)
 		}
 		if currentHash != verifiedHash {
-			observability.GetLogEntry(r).Entry.Warn("Rejected sign-in because the password changed during sign-in")
+			observability.GetLogEntry(r).Entry.Warn("Rejected sign-in because the password changed before session creation")
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
 		}
 

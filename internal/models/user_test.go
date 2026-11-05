@@ -1027,6 +1027,7 @@ func (ts *UserTestSuite) TestLockEncryptedPassword() {
 		TruncateAll(ts.db)
 		user := ts.createUser()
 
+		var lockerPID int
 		locked := make(chan struct{})
 		release := make(chan struct{})
 		done := make(chan error, 1)
@@ -1035,12 +1036,19 @@ func (ts *UserTestSuite) TestLockEncryptedPassword() {
 				if _, err := user.LockEncryptedPassword(tx); err != nil {
 					return err
 				}
+				if err := tx.Store.Get(&lockerPID, "SELECT pg_backend_pid()"); err != nil {
+					return err
+				}
 				close(locked)
 				<-release
 				return nil
 			})
 		}()
-		<-locked
+		select {
+		case <-locked:
+		case err := <-done:
+			ts.T().Fatalf("could not lock user row: %v", err)
+		}
 
 		changed := make(chan error, 1)
 		go func() {
@@ -1052,10 +1060,24 @@ func (ts *UserTestSuite) TestLockEncryptedPassword() {
 			changed <- ts.db.RawQuery("UPDATE "+u.TableName()+" SET encrypted_password = ? WHERE id = ?", "changed", u.ID).Exec()
 		}()
 
-		select {
-		case err := <-changed:
-			ts.T().Fatalf("password change finished while the row was locked (err: %v)", err)
-		case <-time.After(300 * time.Millisecond):
+		// Wait until Postgres reports the change blocked by the locking
+		// transaction, instead of waiting a fixed time.
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			select {
+			case err := <-changed:
+				ts.T().Fatalf("password change finished while the row was locked (err: %v)", err)
+			default:
+			}
+			var blocked int
+			require.NoError(ts.T(), ts.db.Store.Get(&blocked, "SELECT count(*) FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))", lockerPID))
+			if blocked > 0 {
+				break
+			}
+			if time.Now().After(deadline) {
+				ts.T().Fatal("timed out waiting for the password change to block on the row lock")
+			}
+			time.Sleep(5 * time.Millisecond)
 		}
 
 		close(release)
