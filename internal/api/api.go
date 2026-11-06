@@ -354,6 +354,15 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.With(api.limitHandler(api.limiterOpts.SAMLAssertion)).
 					Post("/acs", api.SamlAcs)
 			})
+
+			// Dedicated endpoints for SSO providers with an isolated scope,
+			// whose ACS URL and entity ID are scoped to their own ID.
+			r.Route("/{sso_provider_id}/saml", func(r *router) {
+				r.Get("/metadata", api.SAMLMetadata)
+
+				r.With(api.limitHandler(api.limiterOpts.SAMLAssertion)).
+					Post("/acs", api.SamlAcs)
+			})
 		})
 
 		r.Route("/admin", func(r *router) {

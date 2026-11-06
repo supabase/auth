@@ -12,12 +12,51 @@ import (
 
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
+	"github.com/go-chi/chi/v5"
+	"github.com/gofrs/uuid"
+	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/models"
 )
+
+// loadSAMLDedicatedScopeID reads the optional {sso_provider_id} route
+// parameter used by the per-provider SAML metadata and ACS endpoints. It
+// returns nil when the request was made against the shared, non-scoped
+// endpoint. When a provider ID is present, the provider must exist and have
+// dedicated scope enabled, otherwise it doesn't have a dedicated endpoint.
+func (a *API) loadSAMLDedicatedScopeID(r *http.Request) (*uuid.UUID, error) {
+	idParam := chi.URLParam(r, "sso_provider_id")
+	if idParam == "" {
+		return nil, nil
+	}
+
+	id, err := uuid.FromString(idParam)
+	if err != nil {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "No such SSO provider")
+	}
+
+	ssoProvider, err := models.FindSSOProviderByID(a.db.WithContext(r.Context()), id)
+	if models.IsNotFoundError(err) {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "No such SSO provider")
+	} else if err != nil {
+		return nil, err
+	}
+
+	if !ssoProvider.HasDedicatedScope() {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO provider does not use a dedicated scope")
+	}
+
+	return &ssoProvider.ID, nil
+}
 
 // newSAMLServiceProvider constructs a ServiceProvider for the given IdP
 // metadata, using the provided key/cert pair.  Callers are responsible for
 // passing the correct pair (primary or rotation fallback).
-func (a *API) newSAMLServiceProvider(identityProvider *saml.EntityDescriptor, idpInitiated bool, key *rsa.PrivateKey, cert *x509.Certificate) *saml.ServiceProvider {
+//
+// When dedicatedScopeID is not nil, the ACS URL (and, by extension, the
+// entity ID GoTrue presents to the IdP, which defaults to its metadata URL)
+// are scoped to that SSO provider's ID instead of using the URLs shared by
+// every SAML provider. The same key/cert pair is still used.
+func (a *API) newSAMLServiceProvider(identityProvider *saml.EntityDescriptor, idpInitiated bool, key *rsa.PrivateKey, cert *x509.Certificate, dedicatedScopeID *uuid.UUID) *saml.ServiceProvider {
 	raw := a.config.SAML.ExternalURL
 	if raw == "" {
 		raw = a.config.API.ExternalURL
@@ -30,6 +69,9 @@ func (a *API) newSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 		u.Path += "/"
 	}
 	u.Path += "sso/"
+	if dedicatedScopeID != nil {
+		u.Path += dedicatedScopeID.String() + "/"
+	}
 
 	provider := samlsp.DefaultServiceProvider(samlsp.Options{
 		URL:               *u,
@@ -47,7 +89,12 @@ func (a *API) newSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 
 // SAMLMetadata serves GoTrue's SAML Service Provider metadata file.
 func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
-	serviceProvider := a.newSAMLServiceProvider(nil, true, a.config.SAML.RSAPrivateKey, a.config.SAML.Certificate)
+	dedicatedScopeID, err := a.loadSAMLDedicatedScopeID(r)
+	if err != nil {
+		return err
+	}
+
+	serviceProvider := a.newSAMLServiceProvider(nil, true, a.config.SAML.RSAPrivateKey, a.config.SAML.Certificate, dedicatedScopeID)
 
 	metadata := serviceProvider.Metadata()
 
