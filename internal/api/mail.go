@@ -728,6 +728,15 @@ func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration
 	return nil
 }
 
+// validateSMSSentWithinFrequencyLimit is the SMS counterpart of
+// validateSentWithinFrequencyLimit.
+func validateSMSSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration) error {
+	if sentAt != nil && !sentAt.Add(frequency).Before(time.Now()) {
+		return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, "%s", generateFrequencyLimitErrorMessage(sentAt, frequency))
+	}
+	return nil
+}
+
 var emailLabelPattern = regexp.MustCompile("[+][^@]+@")
 
 func (a *API) checkEmailAddressAuthorization(email string) bool {
