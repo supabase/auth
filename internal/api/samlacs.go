@@ -219,10 +219,13 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 
 	serviceProvider := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKey, config.SAML.Certificate, dedicatedScopeID)
 
-	// SECURITY: ACS confusion check. An IdP-initiated SAML Response's
-	// Destination must explicitly declare the exact ACS URL of the endpoint
-	// it was actually POSTed to -- whether that's the global, shared ACS URL
-	// or a provider's dedicated-scope one. The global ACS endpoint is not a
+	// SECURITY: ACS confusion check. The SAML spec makes Destination
+	// optional on a Response (many real IdPs omit it, especially for
+	// IdP-initiated flows), so an empty Destination is not itself a
+	// violation and must not block the flow. But when an IdP does declare
+	// one, it must name the exact ACS URL of the endpoint this request was
+	// actually POSTed to -- whether that's the global, shared ACS URL or a
+	// provider's dedicated-scope one. The global ACS endpoint is not a
 	// catch-all for every provider's assertions: without this check, a
 	// Response built for (or replayed against) one endpoint could otherwise
 	// be accepted on another, relying solely on crewjam/saml's internal
@@ -231,11 +234,8 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 	// unconditional and would in fact already catch this once Recipient is
 	// present, but we assert the invariant explicitly and up front here, as
 	// our own first-class defense, rather than depending entirely on a
-	// third-party library's internal behavior. IdP-initiated responses may
-	// omit Destination entirely when unsigned, which would otherwise let an
-	// unauthenticated field pick which ACS URL's checks apply -- we require
-	// it to be explicitly present and correct here, for every endpoint.
-	if initiatedBy == "idp" && peekDestination != serviceProvider.AcsURL.String() {
+	// third-party library's internal behavior.
+	if initiatedBy == "idp" && peekDestination != "" && peekDestination != serviceProvider.AcsURL.String() {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Response Destination does not match this SSO Provider's ACS URL")
 	}
 
