@@ -522,3 +522,41 @@ func (ts *OtpTestSuite) TestOtpBannedUser() {
 		require.NotNil(ts.T(), dbUser.RecoverySentAt)
 	})
 }
+
+func (ts *OtpTestSuite) TestOtpBannedUserMaxFrequency() {
+	origSMTP, origSms := ts.Config.SMTP.MaxFrequency, ts.Config.Sms.MaxFrequency
+	ts.Config.SMTP.MaxFrequency = time.Minute
+	ts.Config.Sms.MaxFrequency = time.Minute
+	ts.Config.External.Phone.Enabled = true
+	defer func() {
+		ts.Config.SMTP.MaxFrequency = origSMTP
+		ts.Config.Sms.MaxFrequency = origSms
+	}()
+
+	sentAt := time.Now().Add(-10 * time.Second)
+	u, err := models.NewUser("987654321", "banned-freq@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	u.RecoverySentAt = &sentAt
+	u.ConfirmationSentAt = &sentAt
+	require.NoError(ts.T(), ts.API.db.Create(u))
+	require.NoError(ts.T(), u.Confirm(ts.API.db))
+	require.NoError(ts.T(), u.ConfirmPhone(ts.API.db))
+	require.NoError(ts.T(), u.Ban(ts.API.db, time.Hour))
+
+	for _, c := range []struct {
+		path string
+		body map[string]interface{}
+	}{
+		{"/otp", map[string]interface{}{"email": u.GetEmail()}},
+		{"/magiclink", map[string]interface{}{"email": u.GetEmail()}},
+		{"/otp", map[string]interface{}{"phone": u.GetPhone()}},
+	} {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+		req := httptest.NewRequest(http.MethodPost, c.path, &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusTooManyRequests, w.Code, c.path)
+	}
+}

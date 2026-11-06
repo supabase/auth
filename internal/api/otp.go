@@ -135,7 +135,13 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 	if user != nil && user.IsBanned() {
 		// A banned user can't redeem the OTP, so don't send one. Respond as
-		// if it was sent so the ban status isn't revealed.
+		// if it was sent so the ban status isn't revealed. Still apply the
+		// per-user max frequency check sendPhoneConfirmation would have
+		// applied (confirmed and unconfirmed users both use
+		// confirmation_sent_at).
+		if err := validateSMSSentWithinFrequencyLimit(user.ConfirmationSentAt, config.Sms.MaxFrequency); err != nil {
+			return err
+		}
 		return sendJSON(w, http.StatusOK, SmsOtpResponse{})
 	}
 	if user != nil {

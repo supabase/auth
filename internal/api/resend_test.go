@@ -417,3 +417,31 @@ func (ts *ResendTestSuite) TestResendBannedUser() {
 		require.WithinDuration(ts.T(), time.Now(), *dbUser.ConfirmationSentAt, time.Second)
 	})
 }
+
+func (ts *ResendTestSuite) TestResendBannedUserMaxFrequency() {
+	origFreq := ts.Config.SMTP.MaxFrequency
+	ts.Config.SMTP.MaxFrequency = time.Minute
+	defer func() { ts.Config.SMTP.MaxFrequency = origFreq }()
+
+	sentAt := time.Now().Add(-10 * time.Second)
+	u, err := models.NewUser("", "banned-freq@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	u.ConfirmationToken = "123456"
+	u.ConfirmationSentAt = &sentAt
+	require.NoError(ts.T(), ts.API.db.Create(u))
+
+	doResend := func() int {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{"type": "signup", "email": u.GetEmail()}))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/resend", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	require.Equal(ts.T(), http.StatusTooManyRequests, doResend())
+
+	require.NoError(ts.T(), u.Ban(ts.API.db, time.Hour))
+	require.Equal(ts.T(), http.StatusTooManyRequests, doResend())
+}

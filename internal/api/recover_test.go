@@ -192,3 +192,38 @@ func (ts *RecoverTestSuite) TestRecover_BannedUser() {
 	require.NotNil(ts.T(), u.RecoverySentAt)
 	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
 }
+
+func (ts *RecoverTestSuite) TestRecover_BannedUserMaxFrequency() {
+	origFreq := ts.Config.SMTP.MaxFrequency
+	ts.Config.SMTP.MaxFrequency = time.Minute
+	defer func() { ts.Config.SMTP.MaxFrequency = origFreq }()
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	sentAt := time.Now().Add(-10 * time.Second)
+	u.RecoverySentAt = &sentAt
+	require.NoError(ts.T(), ts.API.db.UpdateOnly(u, "recovery_sent_at"))
+
+	doRecover := func() int {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{"email": "test@example.com"}))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	// not banned: rate limited
+	assert.Equal(ts.T(), http.StatusTooManyRequests, doRecover())
+
+	// banned: indistinguishable from the not banned response
+	require.NoError(ts.T(), u.Ban(ts.API.db, time.Hour))
+	assert.Equal(ts.T(), http.StatusTooManyRequests, doRecover())
+
+	// banned, but outside of the max frequency window: 200
+	old := time.Now().Add(-2 * time.Minute)
+	u.RecoverySentAt = &old
+	require.NoError(ts.T(), ts.API.db.UpdateOnly(u, "recovery_sent_at"))
+	assert.Equal(ts.T(), http.StatusOK, doRecover())
+}
