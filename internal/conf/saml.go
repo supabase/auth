@@ -30,6 +30,8 @@ type SAMLConfiguration struct {
 	CertificateNext   *x509.Certificate `json:"-"`
 
 	ExternalURL string `json:"external_url,omitempty" split_words:"true"`
+	AcsURL      string `json:"acs_url,omitempty" split_words:"true"`
+	EntityID    string `json:"entity_id,omitempty" split_words:"true"`
 
 	RateLimitAssertion float64 `default:"15" split_words:"true"`
 }
@@ -88,6 +90,13 @@ func (c *SAMLConfiguration) Validate() error {
 
 		if c.ExternalURL != "" {
 			_, err := url.ParseRequestURI(c.ExternalURL)
+			if err != nil {
+				return err
+			}
+		}
+
+		if c.AcsURL != "" {
+			_, err := url.ParseRequestURI(c.AcsURL)
 			if err != nil {
 				return err
 			}

@@ -75,6 +75,7 @@ func (a *API) newSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 
 	provider := samlsp.DefaultServiceProvider(samlsp.Options{
 		URL:               *u,
+		EntityID:          a.config.SAML.EntityID,
 		Key:               key,
 		Certificate:       cert,
 		SignRequest:       true,
@@ -83,6 +84,14 @@ func (a *API) newSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 	})
 
 	provider.AuthnNameIDFormat = saml.PersistentNameIDFormat
+
+	if a.config.SAML.AcsURL != "" {
+		acsURL, err := url.ParseRequestURI(a.config.SAML.AcsURL)
+		if err != nil {
+			panic(err)
+		}
+		provider.AcsURL = *acsURL
+	}
 
 	return &provider
 }
