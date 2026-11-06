@@ -22,7 +22,13 @@ func (AMRClaim) TableName() string {
 }
 
 func (cl *AMRClaim) IsAAL2Claim() bool {
-	return *cl.AuthenticationMethod == TOTPSignIn.String() || *cl.AuthenticationMethod == MFAPhone.String() || *cl.AuthenticationMethod == MFAWebAuthn.String() || *cl.AuthenticationMethod == MFARecoveryCode.String()
+	return IsAAL2AuthenticationMethod(*cl.AuthenticationMethod)
+}
+
+// IsAAL2AuthenticationMethod reports whether the authentication method (as
+// found in an AMR claim) is a second factor that raises a session to AAL2.
+func IsAAL2AuthenticationMethod(method string) bool {
+	return method == TOTPSignIn.String() || method == MFAPhone.String() || method == MFAWebAuthn.String() || method == MFARecoveryCode.String()
 }
 
 func AddClaimToSession(tx *storage.Connection, sessionId uuid.UUID, authenticationMethod AuthenticationMethod) error {
