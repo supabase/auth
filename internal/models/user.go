@@ -73,6 +73,8 @@ type User struct {
 	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous"`
 
+	IsSuperAdmin bool `json:"-" db:"is_super_admin"`
+
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
 
@@ -186,7 +188,7 @@ func (u *User) BeforeSave(tx *pop.Connection) error {
 	return nil
 }
 
-// IsConfirmed checks if a user has already been
+// IsConfirmed checks if a user's email has already been
 // registered and confirmed.
 func (u *User) IsConfirmed() bool {
 	return u.EmailConfirmedAt != nil
@@ -429,6 +431,68 @@ func (u *User) SetPassword(ctx context.Context, password string, encrypt bool, e
 	}
 
 	return nil
+}
+
+// ReEncryptPassword stores the password hash set by SetPassword, but only if
+// encrypted_password still holds previousHash, the value read before the
+// password was verified. This keeps a re-encryption from overwriting a
+// password change that committed in the meantime. It returns false if the
+// row was not updated.
+func (u *User) ReEncryptPassword(tx *storage.Connection, previousHash string) (bool, error) {
+	if u.EncryptedPassword == nil || previousHash == "" {
+		return false, nil
+	}
+
+	now := time.Now().Truncate(time.Microsecond)
+	count, err := tx.RawQuery(
+		"UPDATE "+u.TableName()+" SET encrypted_password = ?, updated_at = ? WHERE id = ? AND encrypted_password = ?",
+		*u.EncryptedPassword, now, u.ID, previousHash,
+	).ExecWithCount()
+	if err != nil {
+		return false, errors.Wrap(err, "error re-encrypting password")
+	}
+
+	if count == 0 {
+		return false, nil
+	}
+
+	u.UpdatedAt = now
+	return true, nil
+}
+
+// LockEncryptedPassword locks the user's row until the transaction ends and
+// returns the stored encrypted_password ("" if the user has none). A password
+// change updates this row and signs the user out in one transaction, so a
+// sign-in that locks the row and finds the hash it verified is guaranteed
+// that any such change either committed before it or will run after its
+// session exists and sign that session out.
+func (u *User) LockEncryptedPassword(tx *storage.Connection) (string, error) {
+	var row struct {
+		EncryptedPassword *string `db:"encrypted_password"`
+	}
+	if err := tx.RawQuery(
+		"SELECT encrypted_password FROM "+u.TableName()+" WHERE id = ? FOR NO KEY UPDATE",
+		u.ID,
+	).First(&row); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return "", UserNotFoundError{}
+		}
+		return "", errors.Wrap(err, "error locking user")
+	}
+	if row.EncryptedPassword == nil {
+		return "", nil
+	}
+	return *row.EncryptedPassword, nil
+}
+
+// ClearUnconfirmedPassword removes a password that was set before the user's
+// email was confirmed, since whoever set it may not own the email address.
+func (u *User) ClearUnconfirmedPassword(tx *storage.Connection) error {
+	if u.IsConfirmed() || !u.HasPassword() {
+		return nil
+	}
+	u.EncryptedPassword = nil
+	return tx.UpdateOnly(u, "encrypted_password")
 }
 
 // UpdatePassword updates the user's password. Use SetPassword outside of a transaction first!
@@ -708,6 +772,19 @@ func FindUserByPhoneAndAudience(tx *storage.Connection, phone, aud string) (*Use
 // FindUserByID finds a user matching the provided ID.
 func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
+}
+
+func FindUserByIDForUpdate(tx *storage.Connection, id uuid.UUID) (*User, error) {
+	obj := &User{}
+	query := fmt.Sprintf(`SELECT * FROM %q WHERE id = ? FOR UPDATE`, obj.TableName())
+	if err := tx.RawQuery(query, id).First(obj); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, UserNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding user")
+	}
+
+	return obj, nil
 }
 
 // FindUserWithRefreshToken finds a user from the provided refresh token. If

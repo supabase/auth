@@ -2,16 +2,20 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -309,4 +313,132 @@ func (ts *OtpTestSuite) TestSubsequentOtp() {
 	require.Empty(ts.T(), user.RecoveryToken)
 	require.Empty(ts.T(), user.RecoverySentAt)
 	require.Empty(ts.T(), user.EmailConfirmedAt)
+}
+
+// requirePasswordRejected asserts that password no longer authenticates the
+// user. Signup now stores the magic link's temporary password on unconfirmed
+// users, so the invariant is that the attacker's password is gone, not that
+// the user has no password at all.
+func (ts *OtpTestSuite) requirePasswordRejected(user *models.User, password string) {
+	ok, _, err := user.Authenticate(context.Background(), ts.API.db, password, ts.Config.Security.DBEncryption.DecryptionKeys, false, "")
+	require.NoError(ts.T(), err)
+	require.False(ts.T(), ok)
+}
+
+func (ts *OtpTestSuite) TestOtpClearsUnconfirmedPassword() {
+	ts.Config.SMTP.MaxFrequency = 0
+	ts.Config.Mailer.Autoconfirm = false
+	defer func() { ts.Config.Mailer.Autoconfirm = false }()
+
+	userEmail := "victim@example.com"
+	attackerPassword := "attacker-password-123"
+
+	// attacker signs up with the victim's email and leaves it unconfirmed
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    userEmail,
+		"password": attackerPassword,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.False(ts.T(), user.IsConfirmed())
+	require.True(ts.T(), user.HasPassword())
+
+	// email owner requests a magic link
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": userEmail,
+	}))
+	req = httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	user, err = models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	ts.requirePasswordRejected(user, attackerPassword)
+	require.NotEmpty(ts.T(), user.ConfirmationToken)
+
+	// email owner confirms through the link
+	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.SignupVerification, user.ConfirmationToken)
+	req = httptest.NewRequest(http.MethodGet, reqURL, nil)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusSeeOther, w.Code)
+
+	user, err = models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), user.IsConfirmed())
+	ts.requirePasswordRejected(user, attackerPassword)
+
+	// attacker can no longer sign in with their password
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    userEmail,
+		"password": attackerPassword,
+	}))
+	req = httptest.NewRequest(http.MethodPost, "/token?grant_type=password", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
+func (ts *OtpTestSuite) TestOtpClearsUnconfirmedPasswordWithAutoconfirm() {
+	ts.Config.SMTP.MaxFrequency = 0
+	ts.Config.Mailer.Autoconfirm = true
+	defer func() { ts.Config.Mailer.Autoconfirm = false }()
+
+	userEmail := "victim@example.com"
+
+	// unconfirmed user created before autoconfirm was enabled
+	u, err := models.NewUser("", userEmail, "attacker-password-123", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u))
+	require.True(ts.T(), u.HasPassword())
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": userEmail,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), user.IsConfirmed())
+	ts.requirePasswordRejected(user, "attacker-password-123")
+}
+
+func (ts *OtpTestSuite) TestOtpKeepsConfirmedPassword() {
+	ts.Config.SMTP.MaxFrequency = 0
+
+	userEmail := "confirmed@example.com"
+	u, err := models.NewUser("", userEmail, "password-123", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	now := time.Now()
+	u.EmailConfirmedAt = &now
+	require.NoError(ts.T(), ts.API.db.Create(u))
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": userEmail,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), user.HasPassword())
 }
