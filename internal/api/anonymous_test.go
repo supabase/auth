@@ -86,7 +86,7 @@ func (ts *AnonymousTestSuite) TestAnonymousLogins() {
 
 func (ts *AnonymousTestSuite) TestConvertAnonymousUserToPermanent() {
 	ts.Config.External.AnonymousUsers.Enabled = true
-	ts.Config.Sms.TestOTP = map[string]string{"1234567890": "000000", "1234560000": "000000"}
+	ts.Config.Sms.TestOTP = conf.TestOTPMap{"1234567890": "000000", "1234560000": "000000"}
 	// test OTPs still require setting up an sms provider
 	ts.Config.Sms.Provider = "twilio"
 	ts.Config.Sms.Twilio.AccountSid = "fake-sid"
