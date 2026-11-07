@@ -3,6 +3,9 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"slices"
@@ -198,6 +201,18 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, cfg.EmailOptional, nil
 }
 
+// oidcNonceMatches checks the id_token nonce claim against the hex or base64url SHA-256 of the request nonce
+func oidcNonceMatches(nonce, tokenNonce string) bool {
+	if nonce == "" || tokenNonce == "" {
+		return false
+	}
+	hashedNonce := sha256.Sum256([]byte(nonce))
+	hexNonce := hex.EncodeToString(hashedNonce[:])
+	base64Nonce := base64.RawURLEncoding.EncodeToString(hashedNonce[:])
+	return subtle.ConstantTimeCompare([]byte(tokenNonce), []byte(hexNonce)) == 1 ||
+		subtle.ConstantTimeCompare([]byte(tokenNonce), []byte(base64Nonce)) == 1
+}
+
 // IdTokenGrant implements the id_token grant type flow
 func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	log := observability.GetLogEntry(r).Entry
@@ -299,8 +314,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			return apierrors.NewOAuthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
 		} else if tokenHasNonce && paramsHasNonce {
 			// verify nonce to mitigate replay attacks
-			hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
-			if hash != idToken.Nonce {
+			if !oidcNonceMatches(params.Nonce, idToken.Nonce) {
 				return apierrors.NewOAuthError("invalid nonce", "Nonces mismatch")
 			}
 		}
