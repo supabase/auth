@@ -184,6 +184,15 @@ func (pc *WebAuthnCredential) UpdateLastUsedWithSignCount(tx *storage.Connection
 	return tx.UpdateOnly(pc, "sign_count", "last_used_at", "updated_at")
 }
 
+func (pc *WebAuthnCredential) UpdateLastUsedWithSignCountAndFlags(tx *storage.Connection, signCount uint32, backupEligible, backedUp bool) error {
+	now := time.Now()
+	pc.SignCount = signCount
+	pc.BackupEligible = backupEligible
+	pc.BackedUp = backedUp
+	pc.LastUsedAt = &now
+	return tx.UpdateOnly(pc, "sign_count", "backup_eligible", "backed_up", "last_used_at", "updated_at")
+}
+
 func (pc *WebAuthnCredential) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	pc.FriendlyName = friendlyName
 	return tx.UpdateOnly(pc, "friendly_name", "updated_at")
