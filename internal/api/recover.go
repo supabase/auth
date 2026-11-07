@@ -69,6 +69,12 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		return a.sendPasswordRecovery(r, tx, user, flowType)
 	})
 	if err != nil {
+		// The mailer rejects reserved/undeliverable domains; only reachable
+		// for accounts that exist, so it would leak account existence.
+		// Respond identically to the unknown-user path instead.
+		if herr, ok := err.(*apierrors.HTTPError); ok && herr.ErrorCode == apierrors.ErrorCodeEmailAddressInvalid {
+			return sendJSON(w, http.StatusOK, map[string]string{})
+		}
 		return err
 	}
 
