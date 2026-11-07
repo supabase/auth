@@ -18,6 +18,7 @@ import (
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/conf/confload"
 	"github.com/supabase/auth/internal/crypto"
@@ -151,6 +152,58 @@ func (ts *RefreshTokenV2Suite) TestNormalUse() {
 
 		refreshTokenToUse = nrt.RefreshToken
 	}
+}
+
+// TestCorruptHmacKeyDoesNotLeakInternalErrorToClient covers what happens
+// when a v2 refresh token's session has a refresh_token_hmac_key that can
+// no longer be decoded, for example because the value on disk got
+// corrupted or the encryption key used to protect it was rotated away.
+// RefreshTokenGrant must still fail with a 500, but the raw Go error text
+// (which can contain implementation details clients have no business
+// seeing) must not end up in the "msg" field of the response that is sent
+// back to the caller. It belongs in InternalError instead, which is only
+// used for server side logging.
+func (ts *RefreshTokenV2Suite) TestCorruptHmacKeyDoesNotLeakInternalErrorToClient() {
+	config := ts.config()
+	require.Equal(ts.T(), 2, config.Security.RefreshTokenAlgorithmVersion)
+
+	srv := NewService(config, &panicHookManager{})
+
+	req, err := http.NewRequest("POST", "https://example.com/", nil)
+	require.NoError(ts.T(), err)
+	req = req.WithContext(context.Background())
+	responseHeaders := make(http.Header)
+
+	at, err := srv.IssueRefreshToken(
+		req,
+		responseHeaders,
+		ts.Conn,
+		ts.User,
+		models.PasswordGrant,
+		models.GrantParams{},
+	)
+	require.NoError(ts.T(), err)
+
+	prt, err := crypto.ParseRefreshToken(at.RefreshToken)
+	require.NoError(ts.T(), err)
+
+	session, err := models.FindSessionByID(ts.Conn, prt.SessionID, false)
+	require.NoError(ts.T(), err)
+
+	corrupted := "not valid base64 !!!"
+	session.RefreshTokenHmacKey = &corrupted
+	require.NoError(ts.T(), ts.Conn.UpdateOnly(session, "refresh_token_hmac_key"))
+
+	_, err = srv.RefreshTokenGrant(context.Background(), ts.Conn, req, make(http.Header), RefreshTokenGrantParams{
+		RefreshToken: at.RefreshToken,
+	})
+	require.Error(ts.T(), err)
+
+	var httpErr *apierrors.HTTPError
+	require.ErrorAs(ts.T(), err, &httpErr)
+	require.Equal(ts.T(), http.StatusInternalServerError, httpErr.HTTPStatus)
+	require.NotContains(ts.T(), httpErr.Message, "base64", "the client facing message must not contain the raw decode error")
+	require.NotNil(ts.T(), httpErr.InternalError, "the real decode error should be kept server side via InternalError")
 }
 
 func (ts *RefreshTokenV2Suite) TestUpdatesLastSignInAt() {
