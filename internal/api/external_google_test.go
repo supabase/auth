@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/models"
 )
 
 const (
@@ -120,6 +122,31 @@ func (ts *ExternalTestSuite) TestSignupExternalGoogleDisableSignupSuccessWithPri
 	u := performAuthorization(ts, "google", code, "")
 
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "google@example.com", "Google Test", "googleTestId", "http://example.com/avatar")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalGoogleUpdatesIdentityLastSignInAt() {
+	ts.Config.DisableSignup = true
+
+	ts.createUserWithIdentity("google", "googleTestId", "google@example.com", "Google Test", "http://example.com/avatar", "")
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, "googleTestId", "google")
+	ts.Require().NoError(err)
+
+	previousLastSignInAt := time.Now().Add(-24 * time.Hour)
+	identity.LastSignInAt = &previousLastSignInAt
+	ts.Require().NoError(ts.API.db.UpdateOnly(identity, "last_sign_in_at"))
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := GoogleTestSignupSetup(ts, &tokenCount, &userCount, code, googleUser)
+	defer server.Close()
+
+	u := performAuthorization(ts, "google", code, "")
+
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "google@example.com", "Google Test", "googleTestId", "http://example.com/avatar")
+	identity, err = models.FindIdentityByIdAndProvider(ts.API.db, "googleTestId", "google")
+	ts.Require().NoError(err)
+	ts.Require().NotNil(identity.LastSignInAt)
+	ts.Require().True(identity.LastSignInAt.After(previousLastSignInAt), "expected identity last_sign_in_at to be updated after sign in")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalGoogleSuccessWhenMatchingToken() {
