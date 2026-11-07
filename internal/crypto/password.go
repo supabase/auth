@@ -395,12 +395,14 @@ func GeneratePassword(requiredChars []string, length int) string {
 	passwordBuilder := strings.Builder{}
 	passwordBuilder.Grow(length)
 
-	// Add required characters
+	// Add required characters. Pick whole runes so multi-byte characters
+	// (e.g. "äöü" or "€") are not split into invalid UTF-8.
 	for _, group := range requiredChars {
 		if len(group) > 0 {
-			randomIndex := secureRandomInt(len(group))
+			runes := []rune(group)
+			randomIndex := secureRandomInt(len(runes))
 
-			passwordBuilder.WriteByte(group[randomIndex])
+			passwordBuilder.WriteRune(runes[randomIndex])
 		}
 	}
 
@@ -413,15 +415,15 @@ func GeneratePassword(requiredChars []string, length int) string {
 		passwordBuilder.WriteByte(allChars[randomIndex])
 	}
 
-	// Convert to byte slice for shuffling
-	passwordBytes := []byte(passwordBuilder.String())
+	// Convert to rune slice for shuffling
+	passwordRunes := []rune(passwordBuilder.String())
 
 	// Secure shuffling
-	for i := len(passwordBytes) - 1; i > 0; i-- {
+	for i := len(passwordRunes) - 1; i > 0; i-- {
 		j := secureRandomInt(i + 1)
 
-		passwordBytes[i], passwordBytes[j] = passwordBytes[j], passwordBytes[i]
+		passwordRunes[i], passwordRunes[j] = passwordRunes[j], passwordRunes[i]
 	}
 
-	return string(passwordBytes)
+	return string(passwordRunes)
 }
