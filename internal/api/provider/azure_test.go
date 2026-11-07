@@ -74,6 +74,11 @@ func TestNewAzureProviderExpectedIssuer(t *testing.T) {
 			expectedIssuer: "",
 		},
 		{
+			name:           "consumers endpoint is not pinned",
+			url:            "https://login.microsoftonline.com/consumers",
+			expectedIssuer: "",
+		},
+		{
 			name:           "non-Azure URL is not pinned",
 			url:            "http://localhost:3000",
 			expectedIssuer: "",
