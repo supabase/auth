@@ -5,6 +5,23 @@ import (
 	"net/http"
 )
 
+// OAuthErrorCode is a value for the "error" field of an OAuth2 error response, defined in RFC 6749.
+type OAuthErrorCode = string
+
+const (
+	// Error codes for the authorization endpoint (RFC 6749 Section 4.1.2.1) and the token endpoint (RFC 6749 Section 5.2).
+	OAuthErrorCodeInvalidRequest          OAuthErrorCode = "invalid_request"
+	OAuthErrorCodeInvalidClient           OAuthErrorCode = "invalid_client"
+	OAuthErrorCodeInvalidGrant            OAuthErrorCode = "invalid_grant"
+	OAuthErrorCodeUnauthorizedClient      OAuthErrorCode = "unauthorized_client"
+	OAuthErrorCodeUnsupportedGrantType    OAuthErrorCode = "unsupported_grant_type"
+	OAuthErrorCodeInvalidScope            OAuthErrorCode = "invalid_scope"
+	OAuthErrorCodeAccessDenied            OAuthErrorCode = "access_denied"
+	OAuthErrorCodeUnsupportedResponseType OAuthErrorCode = "unsupported_response_type"
+	OAuthErrorCodeServerError             OAuthErrorCode = "server_error"
+	OAuthErrorCodeTemporarilyUnavailable  OAuthErrorCode = "temporarily_unavailable"
+)
+
 // OAuthError is the JSON handler for OAuth2 error responses
 type OAuthError struct {
 	Err             string `json:"error"`
@@ -13,7 +30,7 @@ type OAuthError struct {
 	InternalMessage string `json:"-"`
 }
 
-func NewOAuthError(err string, description string) *OAuthError {
+func NewOAuthError(err OAuthErrorCode, description string) *OAuthError {
 	return &OAuthError{Err: err, Description: description}
 }
 
