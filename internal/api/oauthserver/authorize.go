@@ -40,6 +40,7 @@ type AuthorizationDetailsResponse struct {
 	Client          ClientDetailsResponse `json:"client,omitempty"`
 	User            UserDetailsResponse   `json:"user,omitempty"`
 	Scope           string                `json:"scope,omitempty"`
+	Resource        string                `json:"resource,omitempty"`
 }
 
 // ClientDetailsResponse represents client details in authorization response
@@ -78,7 +79,13 @@ const (
 	oAuth2ErrorInvalidRequest = "invalid_request"
 	oAuth2ErrorServerError    = "server_error"
 	oAuth2ErrorAccessDenied   = "access_denied"
+
+	// RFC 8707 error code for invalid resource indicators
+	oAuth2ErrorInvalidTarget = "invalid_target"
 )
+
+// maxResourceLength matches the length limit of the resource columns
+const maxResourceLength = 2048
 
 // OAuthServerAuthorize handles GET /oauth/authorize
 func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) error {
@@ -131,6 +138,18 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	// validate all other parameters - now we can redirect errors
 	if err := s.validateRemainingAuthorizeParams(params); err != nil {
 		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorInvalidRequest, err.Error(), params.State)
+		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
+		return nil
+	}
+
+	// Resource indicator errors use the invalid_target code (RFC 8707)
+	if len(query["resource"]) > 1 {
+		err = errors.New("only one resource parameter is supported")
+	} else {
+		err = s.validateResourceParam(params.Resource)
+	}
+	if err != nil {
+		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorInvalidTarget, err.Error(), params.State)
 		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
 		return nil
 	}
@@ -291,7 +310,8 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 			ID:    user.ID.String(),
 			Email: user.Email.String(),
 		},
-		Scope: authorization.Scope,
+		Scope:    authorization.Scope,
+		Resource: utilities.StringValue(authorization.Resource),
 	}
 
 	return shared.SendJSON(w, http.StatusOK, response)
@@ -462,11 +482,6 @@ func (s *Server) validateRemainingAuthorizeParams(params *AuthorizeParams) error
 		return err
 	}
 
-	// Resource parameter validation (per RFC 8707)
-	if err := s.validateResourceParam(params.Resource); err != nil {
-		return err
-	}
-
 	// PKCE validation
 	if err := s.validatePKCEParams(params.CodeChallengeMethod, params.CodeChallenge); err != nil {
 		return err
@@ -500,6 +515,10 @@ func (s *Server) validateResourceParam(resource string) error {
 	// Resource parameter is optional
 	if resource == "" {
 		return nil
+	}
+
+	if len(resource) > maxResourceLength {
+		return fmt.Errorf("resource must be at most %d characters", maxResourceLength)
 	}
 
 	// Parse URL to validate it's an absolute URI
