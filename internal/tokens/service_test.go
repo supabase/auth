@@ -1125,6 +1125,41 @@ func (ts *IDTokenTestSuite) TestIDTokenWithMultipleScopes() {
 	require.False(ts.T(), hasPhone || (phoneNumber != nil && phoneNumber != ""), "phone_number claim should not be present without phone scope")
 }
 
+func (ts *IDTokenTestSuite) TestIDTokenAudienceIsClientIdentifier() {
+	srv := NewService(ts.Config, &panicHookManager{})
+	clientID := uuid.Must(uuid.NewV4())
+
+	// Registered clients: the client UUID
+	idToken, err := srv.GenerateIDToken(context.Background(), GenerateIDTokenParams{
+		User:     ts.User,
+		ClientID: clientID,
+		Scopes:   []string{models.ScopeOpenID},
+	})
+	require.NoError(ts.T(), err)
+	claims, err := parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+	aud, err := claims.GetAudience()
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), jwt.ClaimStrings{clientID.String()}, aud)
+	require.Equal(ts.T(), clientID.String(), claims["client_id"])
+
+	// Client ID Metadata Document clients: the URL they use as client_id
+	clientIDURL := "https://mcp-client.example.com/client.json"
+	idToken, err = srv.GenerateIDToken(context.Background(), GenerateIDTokenParams{
+		User:             ts.User,
+		ClientID:         clientID,
+		ClientIdentifier: clientIDURL,
+		Scopes:           []string{models.ScopeOpenID},
+	})
+	require.NoError(ts.T(), err)
+	claims, err = parseIDTokenClaims(idToken, ts.Config)
+	require.NoError(ts.T(), err)
+	aud, err = claims.GetAudience()
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), jwt.ClaimStrings{clientIDURL}, aud)
+	require.Equal(ts.T(), clientIDURL, claims["client_id"])
+}
+
 func TestAMRClaimUnmarshal(t *testing.T) {
 	t.Run("mixed string and object formats", func(t *testing.T) {
 		var claim AMRClaim
