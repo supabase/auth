@@ -151,3 +151,24 @@ func (ts *RecoverTestSuite) TestRecover_NoSideChannelLeak() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 }
+
+func (ts *RecoverTestSuite) TestRecover_EmailAddressInvalidNoLeak() {
+	email := "test@example.com"
+
+	// Request body
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": email,
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	// Both existing and missing users should return 200 OK without leaking account existence
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+}
