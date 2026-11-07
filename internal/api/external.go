@@ -911,6 +911,9 @@ func (a *API) createNewIdentity(tx *storage.Connection, user *models.User, provi
 	}
 
 	if terr := tx.Create(identity); terr != nil {
+		if models.IsUniqueConstraintViolatedError(terr) {
+			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked to another user").WithInternalError(terr)
+		}
 		return nil, apierrors.NewInternalServerError("Error creating identity").WithInternalError(terr)
 	}
 
