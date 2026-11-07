@@ -86,7 +86,7 @@ func (a *API) WellKnownOpenID(w http.ResponseWriter, r *http.Request) error {
 		SubjectTypesSupported:             []string{"public"},
 		IDTokenSigningAlgValuesSupported:  []string{"RS256", "HS256", "ES256"}, // TODO :: should create this based on signing key config?
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "none"},
-		CodeChallengeMethodsSupported:     []string{"S256", "plain"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
 		ScopesSupported:                   models.SupportedOAuthScopes,
 
 		// OIDC Standard Claims
