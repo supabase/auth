@@ -48,6 +48,8 @@ type GrantParams struct {
 
 	OAuthClientID *uuid.UUID
 	Scopes        *string
+	// InheritFrom is the session whose AAL, factor and AMR claims the new session copies.
+	InheritFrom *Session
 
 	UserAgent string
 	IP        string
@@ -122,6 +124,11 @@ func FindTokenBySessionID(tx *storage.Connection, sessionId *uuid.UUID) (*Refres
 
 func (s *Session) ApplyGrantParams(params *GrantParams) {
 	s.FactorID = params.FactorID
+
+	if params.InheritFrom != nil {
+		s.AAL = params.InheritFrom.AAL
+		s.FactorID = params.InheritFrom.FactorID
+	}
 
 	if params.SessionNotAfter != nil {
 		s.NotAfter = params.SessionNotAfter
