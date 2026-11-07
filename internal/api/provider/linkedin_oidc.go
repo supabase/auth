@@ -11,7 +11,11 @@ import (
 
 const (
 	defaultLinkedinOIDCAPIBase = "api.linkedin.com"
-	IssuerLinkedin             = "https://www.linkedin.com/oauth"
+	// LinkedIn's OIDC discovery document (https://www.linkedin.com/oauth/.well-known/openid-configuration)
+	// serves the authorization and token endpoints from www.linkedin.com;
+	// api.linkedin.com hosts only the resource APIs such as userinfo.
+	defaultLinkedinOIDCOAuthBase = "www.linkedin.com"
+	IssuerLinkedin               = "https://www.linkedin.com/oauth"
 )
 
 type linkedinOIDCProvider struct {
@@ -27,6 +31,7 @@ func NewLinkedinOIDCProvider(ctx context.Context, ext conf.OAuthProviderConfigur
 	}
 
 	apiPath := chooseHost(ext.URL, defaultLinkedinOIDCAPIBase)
+	oauthPath := chooseHost(ext.URL, defaultLinkedinOIDCOAuthBase)
 
 	oauthScopes := []string{
 		"openid",
@@ -49,8 +54,8 @@ func NewLinkedinOIDCProvider(ctx context.Context, ext conf.OAuthProviderConfigur
 			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  apiPath + "/oauth/v2/authorization",
-				TokenURL: apiPath + "/oauth/v2/accessToken",
+				AuthURL:  oauthPath + "/oauth/v2/authorization",
+				TokenURL: oauthPath + "/oauth/v2/accessToken",
 			},
 			Scopes:      oauthScopes,
 			RedirectURL: ext.RedirectURI,
