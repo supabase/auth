@@ -77,15 +77,13 @@ HTTP handlers and a real PostgreSQL 17 database, including actual lock waits and
 user/identity/session counters. It is not a mocked resolver or JWT generator.
 Run alongside the existing `TestWeb3`, `TestOtp`, and `TestToken` suites.
 
-The Winstory transport sketch is packaged separately, not wired into its hosted
-Application. The current JavaScript SDK does not serialize the new flag; it must
+The current JavaScript SDK does not serialize the new flag; it must
 gain support or use an explicit supported transport for this proposed endpoint.
 
 ## Upstream and hosted deployment
 
-The patch targets v2.197.0 as requested, not current master. Upstream contribution
-requires a feature RFC/design discussion, review of API/retention/rate-limit
-semantics, adaptation to current master, full upstream CI, SDK support and release
-approval. No publication, acceptance date or managed deployment date is assumed.
+Upstream contribution requires maintainer review of API/retention/rate-limit
+semantics, full upstream CI, SDK support and release approval. No acceptance
+date or managed deployment date is assumed.
 Do not apply this engine migration by hand to a managed project's Auth schema.
 Do not connect this local fork to a hosted project's Auth database.
