@@ -17,9 +17,11 @@ import (
 )
 
 type Web3GrantParams struct {
-	Message   string `json:"message,omitempty"`
-	Signature string `json:"signature,omitempty"`
-	Chain     string `json:"chain,omitempty"`
+	ExistingUserOnly bool   `json:"existing_user_only,omitempty"`
+	ExpectedUserID   string `json:"expected_user_id,omitempty"`
+	Message          string `json:"message,omitempty"`
+	Signature        string `json:"signature,omitempty"`
+	Chain            string `json:"chain,omitempty"`
 }
 
 func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -34,6 +36,9 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return err
 	}
 
+	if params.ExpectedUserID != "" && !params.ExistingUserOnly {
+		return web3ExistingDenied()
+	}
 	switch params.Chain {
 	case "solana":
 		if !config.External.Web3Solana.Enabled {
@@ -74,6 +79,10 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 	parsedMessage, err := siws.ParseMessage(params.Message)
 	if err != nil {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "%s", err.Error())
+	}
+
+	if params.ExistingUserOnly != (parsedMessage.RequestID == web3ExistingRequestID) {
+		return web3ExistingDenied()
 	}
 
 	if !parsedMessage.VerifySignature(signatureBytes) {
@@ -140,19 +149,28 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
-	if err := a.triggerBeforeUserCreatedExternal(r, db, &userData, providerType); err != nil {
-		return err
+	if !params.ExistingUserOnly {
+		if err := a.triggerBeforeUserCreatedExternal(r, db, &userData, providerType); err != nil {
+			return err
+		}
 	}
 
 	var user *models.User
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		var decision models.AccountLinkingDecision
-		decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
+		if params.ExistingUserOnly {
+			if parsedMessage.ExpirationTime.IsZero() {
+				return web3ExistingDenied()
+			}
+			user, terr = consumeExistingWeb3(tx, params, providerId, parsedMessage.Nonce, parsedMessage.Domain, parsedMessage.URI.String(), parsedMessage.ChainID, parsedMessage.IssuedAt, parsedMessage.ExpirationTime)
+		} else {
+			decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
+		}
 		if terr != nil {
 			return terr
 		}
-		createdUser = decision == models.CreateAccount
+		createdUser = !params.ExistingUserOnly && decision == models.CreateAccount
 
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": providerType,
@@ -222,6 +240,11 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "%s", err.Error())
 	}
 
+	signedExistingIntent := parsedMessage.RequestID != nil && *parsedMessage.RequestID == web3ExistingRequestID
+	if params.ExistingUserOnly != signedExistingIntent {
+		return web3ExistingDenied()
+	}
+
 	if !parsedMessage.VerifySignature(params.Signature) {
 		return apierrors.NewOAuthError("invalid_grant", "Signature does not match address in message")
 	}
@@ -286,19 +309,28 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
-	if err := a.triggerBeforeUserCreatedExternal(r, db, &userData, providerType); err != nil {
-		return err
+	if !params.ExistingUserOnly {
+		if err := a.triggerBeforeUserCreatedExternal(r, db, &userData, providerType); err != nil {
+			return err
+		}
 	}
 
 	var user *models.User
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		var decision models.AccountLinkingDecision
-		decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
+		if params.ExistingUserOnly {
+			if parsedMessage.ExpirationTime == nil {
+				return web3ExistingDenied()
+			}
+			user, terr = consumeExistingWeb3(tx, params, providerId, parsedMessage.Nonce, parsedMessage.Domain, parsedMessage.URI.String(), parsedMessage.ChainID, parsedMessage.IssuedAt, *parsedMessage.ExpirationTime)
+		} else {
+			decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
+		}
 		if terr != nil {
 			return terr
 		}
-		createdUser = decision == models.CreateAccount
+		createdUser = !params.ExistingUserOnly && decision == models.CreateAccount
 
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": providerType,
