@@ -11,6 +11,7 @@ import (
 
 	"github.com/crewjam/saml"
 	"github.com/fatih/structs"
+	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
@@ -74,6 +75,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 	entityId := ""
 	initiatedBy := ""
 	redirectTo := ""
+	peekDestination := ""
 	var requestIds []string
 
 	var flowState *models.FlowState
@@ -149,6 +151,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 
 		initiatedBy = "idp"
 		entityId = peekResponse.Issuer.Value
+		peekDestination = peekResponse.Destination
 		redirectTo = relayStateValue
 	} else {
 		// RelayState can't be identified, so SAML flow can't continue
@@ -171,6 +174,21 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 	idpMetadata, err := ssoProvider.SAMLProvider.EntityDescriptor()
 	if err != nil {
 		return err
+	}
+
+	// The scope this request arrived on is taken from the URL path alone, so
+	// that the ACS URL used below for cryptographic validation matches
+	// exactly what the IdP posted to. Whether ssoProvider (looked up above
+	// using an unauthenticated Issuer/entity ID peeked from the raw XML) is
+	// actually allowed to use that scope is checked only after the assertion
+	// has been cryptographically validated, further down.
+	var dedicatedScopeID *uuid.UUID
+	if routeScopeIDParam := chi.URLParam(r, "sso_provider_id"); routeScopeIDParam != "" {
+		routeScopeID, err := uuid.FromString(routeScopeIDParam)
+		if err != nil {
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLIdPNotFound, "SSO Provider does not have a SAML connection at this ACS URL")
+		}
+		dedicatedScopeID = &routeScopeID
 	}
 
 	samlMetadataModified := false
@@ -199,7 +217,28 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	serviceProvider := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKey, config.SAML.Certificate)
+	serviceProvider := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKey, config.SAML.Certificate, dedicatedScopeID)
+
+	// SECURITY: ACS confusion check. The SAML spec makes Destination
+	// optional on a Response (many real IdPs omit it, especially for
+	// IdP-initiated flows), so an empty Destination is not itself a
+	// violation and must not block the flow. But when an IdP does declare
+	// one, it must name the exact ACS URL of the endpoint this request was
+	// actually POSTed to -- whether that's the global, shared ACS URL or a
+	// provider's dedicated-scope one. The global ACS endpoint is not a
+	// catch-all for every provider's assertions: without this check, a
+	// Response built for (or replayed against) one endpoint could otherwise
+	// be accepted on another, relying solely on crewjam/saml's internal
+	// SubjectConfirmationData.Recipient check (nested inside the assertion,
+	// enforced later in ParseResponse) to catch the mismatch. That check is
+	// unconditional and would in fact already catch this once Recipient is
+	// present, but we assert the invariant explicitly and up front here, as
+	// our own first-class defense, rather than depending entirely on a
+	// third-party library's internal behavior.
+	if initiatedBy == "idp" && peekDestination != "" && peekDestination != serviceProvider.AcsURL.String() {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Response Destination does not match this SSO Provider's ACS URL")
+	}
+
 	spAssertion, err := serviceProvider.ParseResponse(r, requestIds)
 	if err != nil {
 		// During a key-rotation window the IdP may have cached the old (next)
@@ -210,7 +249,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		// If the retry also fails we return the original error so the operator
 		// sees a consistent diagnostic.
 		if config.SAML.AllowEncryptedAssertions && config.SAML.RSAPrivateKeyNext != nil {
-			fallbackSP := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKeyNext, config.SAML.CertificateNext)
+			fallbackSP := a.newSAMLServiceProvider(idpMetadata, initiatedBy == "idp", config.SAML.RSAPrivateKeyNext, config.SAML.CertificateNext, dedicatedScopeID)
 			if spAssertion2, retryErr := fallbackSP.ParseResponse(r, requestIds); retryErr == nil {
 				spAssertion = spAssertion2
 				err = nil
@@ -224,6 +263,15 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Assertion is not valid").WithInternalError(err)
 		}
+	}
+
+	// Only now that the assertion has been cryptographically validated do we
+	// check that ssoProvider is actually allowed to use the scope this
+	// request arrived on. This must not happen earlier, since until this
+	// point ssoProvider was resolved using unauthenticated data (the Issuer
+	// peeked from the raw, unverified XML in the IdP-initiated case).
+	if (dedicatedScopeID != nil) != ssoProvider.HasDedicatedScope() || (dedicatedScopeID != nil && *dedicatedScopeID != ssoProvider.ID) {
+		return apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLIdPNotFound, "SSO Provider does not have a SAML connection at this ACS URL")
 	}
 
 	assertion := SAMLAssertion{

@@ -2189,6 +2189,10 @@ paths:
                 disabled:
                   type: boolean
                   description: Whether the provider is disabled.
+                dedicated_scope:
+                  type: boolean
+                  description: >
+                    When `true`, this provider's SAML ACS URL and entity ID are scoped to its own provider ID instead of the ones shared by all SAML providers in this project. The same signing key is still used. This cannot be changed once the provider is created.
       responses:
         201:
           description: SSO provider was created.
@@ -2244,7 +2248,7 @@ paths:
     put:
       summary: Update details about a SSO provider.
       description: >
-        You can only update only one of `metadata_url` or `metadata_xml` at once. The SAML Metadata represented by these updates must advertize the same Identity Provider EntityID. Do not include the `domains` or `attribute_mapping` property to keep the existing database values.
+        You can only update only one of `metadata_url` or `metadata_xml` at once. The SAML Metadata represented by these updates must advertize the same Identity Provider EntityID. Do not include the `domains` or `attribute_mapping` property to keep the existing database values. `dedicated_scope` cannot be changed once the provider is created, and this request fails if it is included.
       tags:
         - admin
       security:
@@ -3762,6 +3766,10 @@ components:
               $ref: "#/components/schemas/SAMLAttributeMappingSchema"
             name_id_format:
               $ref: "#/components/schemas/SAMLNameIDFormatSchema"
+            dedicated_scope:
+              type: boolean
+              description: >
+                When `true`, this provider's SAML ACS URL and entity ID are scoped to its own provider ID instead of the ones shared by all SAML providers in this project. The same signing key is still used. This cannot be changed once the provider is created.
 
     AccessTokenResponseSchema:
       type: object
