@@ -264,6 +264,9 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.With(api.limitHandler(api.limiterOpts.Otp)).
 			With(api.verifyCaptcha).Post("/otp", api.Otp)
 
+		// Existing-only challenges never create a user or session.
+		r.With(api.limitHandler(api.limiterOpts.Verify)).With(api.verifyCaptcha).Post("/web3/challenge", api.Web3ExistingChallenge)
+
 		// rate limiting applied in handler
 		r.With(api.verifyCaptcha).Post("/token", api.Token)
 
