@@ -268,3 +268,97 @@ func (ts *SignupTestSuite) TestEmailSignupForPhoneConfirmedUser() {
 	err = crypto.CompareHashAndPassword(ts.T().Context(), *user.EncryptedPassword, "password1")
 	require.NoError(ts.T(), err)
 }
+
+// Check that a repeat signup removes identities that were attached to the
+// unconfirmed user before the email owner signed up.
+func (ts *SignupTestSuite) TestRepeatSignupRemovesUnconfirmedIdentities() {
+	user, err := models.NewUser("", "test@example.com", "password1", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(user))
+
+	identity, err := models.NewIdentity(user, "github", map[string]interface{}{
+		"sub":   "github-123",
+		"email": "test@example.com",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(identity))
+	require.NoError(ts.T(), user.UpdateAppMetaDataProviders(ts.API.db))
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "password2",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	identities, err := models.FindIdentitiesByUserID(ts.API.db, user.ID)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), identities, 1)
+	require.Equal(ts.T(), "email", identities[0].Provider)
+
+	user, err = models.FindUserByID(ts.API.db, user.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), []interface{}{"email"}, user.AppMetaData["providers"])
+}
+
+// Check that a repeat signup creates a new user when the unconfirmed user is
+// deleted after signup first reads it but before signup locks it.
+//
+// The before_user_created hook runs between the read and the lock, so the
+// test uses it to delete the user. This relies on the hook firing for an
+// existing unconfirmed user. If that changes, this test needs another way
+// to delete the user inside that window.
+func (ts *SignupTestSuite) TestRepeatSignupAfterUnconfirmedUserDeleted() {
+	user, err := models.NewUser("", "test@example.com", "password1", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(user))
+
+	require.NoError(ts.T(), ts.API.db.RawQuery(`
+		create or replace function auth.signup_test_delete_user(event jsonb)
+		returns jsonb language plpgsql as $$
+		begin
+			delete from auth.users where email = event->'user'->>'email';
+			return '{}'::jsonb;
+		end; $$;`).Exec())
+	defer func() {
+		require.NoError(ts.T(), ts.API.db.RawQuery(`drop function if exists auth.signup_test_delete_user(jsonb);`).Exec())
+	}()
+
+	ts.Config.Hook.BeforeUserCreated = conf.ExtensibilityPointConfiguration{
+		Enabled: true,
+		URI:     "pg-functions://postgres/auth/signup_test_delete_user",
+	}
+	require.NoError(ts.T(), ts.Config.Hook.BeforeUserCreated.PopulateExtensibilityPoint())
+	defer func() {
+		ts.Config.Hook.BeforeUserCreated = conf.ExtensibilityPointConfiguration{}
+	}()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "password2",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	_, err = models.FindUserByID(ts.API.db, user.ID)
+	require.True(ts.T(), models.IsNotFoundError(err))
+
+	newUser, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.NotEqual(ts.T(), user.ID, newUser.ID)
+
+	err = crypto.CompareHashAndPassword(ts.T().Context(), *newUser.EncryptedPassword, "password2")
+	require.NoError(ts.T(), err)
+}

@@ -214,9 +214,15 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 		if user != nil {
 			tuser, terr := models.FindUserByIDForUpdate(tx, user.ID)
-			if terr == nil {
+			switch {
+			case terr == nil:
 				user = tuser
-			} else if !models.IsNotFoundError(terr) {
+				if terr = tx.Load(user, "Identities"); terr != nil {
+					return terr
+				}
+			case models.IsNotFoundError(terr):
+				user = nil
+			default:
 				return terr
 			}
 		}
