@@ -397,7 +397,8 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	u.Identities = make([]models.Identity, 0)
 	u.UserMetaData = params.Data
 	u.Aud = params.Aud
-	u.IsSuperAdmin = false
+	isSuperAdmin := false
+	u.IsSuperAdmin = &isSuperAdmin
 
 	// sanitize app_metadata
 	u.AppMetaData = map[string]interface{}{

@@ -73,7 +73,7 @@ type User struct {
 	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous"`
 
-	IsSuperAdmin bool `json:"-" db:"is_super_admin"`
+	IsSuperAdmin *bool `json:"-" db:"is_super_admin"`
 
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
