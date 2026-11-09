@@ -267,6 +267,10 @@ type OAuthTokenParams struct {
 func (s *Server) OAuthToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
+	// Token responses carry credentials and must not be cached (RFC 6749 section 5.1,
+	// OAuth 2.1 section 3.2.3). Set before any response is written, so errors carry it too.
+	w.Header().Set("Cache-Control", "no-store")
+
 	var params OAuthTokenParams
 
 	// Handle both JSON and form-encoded requests
