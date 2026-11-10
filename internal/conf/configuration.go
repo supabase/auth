@@ -431,6 +431,11 @@ type ExperimentalConfiguration struct {
 	// one-time token is created. Ships dark: nothing reads the column yet.
 	// Env: GOTRUE_EXPERIMENTAL_ONE_TIME_TOKEN_EXPIRES_AT_WRITE_ENABLED=true
 	OneTimeTokenExpiresAtWriteEnabled bool `split_words:"true" default:"false"`
+
+	// ClientAssertion configures signed client assertions (private_key_jwt)
+	// for custom OAuth providers.
+	// Env: GOTRUE_EXPERIMENTAL_CLIENT_ASSERTION_*
+	ClientAssertion ClientAssertionConfiguration `split_words:"true"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime
@@ -1185,6 +1190,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.JWT.SigningKey = sk
 	}
 
+	if err := config.Experimental.ClientAssertion.applyDefaults(); err != nil {
+		return err
+	}
+
 	if config.JWT.ValidMethods == nil {
 		config.JWT.ValidMethods = []string{}
 		for _, key := range config.JWT.Keys {
@@ -1390,6 +1399,10 @@ func (c *GlobalConfiguration) Validate() error {
 		if err := validatable.Validate(); err != nil {
 			return err
 		}
+	}
+
+	if err := c.Experimental.ClientAssertion.validate(&c.JWT); err != nil {
+		return err
 	}
 
 	if c.Passkey.Enabled || c.MFA.WebAuthn.EnrollEnabled || c.MFA.WebAuthn.VerifyEnabled {
