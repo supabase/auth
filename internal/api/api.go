@@ -458,7 +458,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
 
 			// OAuth Token endpoint (public, with client authentication)
-			r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
+			r.With(noStore).With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
 
 			// OIDC UserInfo endpoint (requires user authentication via Bearer token)
 			r.With(api.requireAuthenticationAllowOAuthClient).Get("/userinfo", api.oauthServer.OAuthUserInfo)

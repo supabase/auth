@@ -140,6 +140,15 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 
 // requireOAuthClientAuth authenticates an OAuth client as middleware
 // Requires client_id to be present and validates client credentials
+// noStore marks a response as uncacheable. Token endpoint responses carry
+// credentials and must not be cached (RFC 6749 section 5.1, OAuth 2.1 section
+// 3.2.3). As middleware it also covers errors returned before the handler runs,
+// such as a failed client authentication.
+func noStore(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	w.Header().Set("Cache-Control", "no-store")
+	return nil, nil
+}
+
 func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 
