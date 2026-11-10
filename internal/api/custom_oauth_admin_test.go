@@ -58,6 +58,7 @@ func (ts *CustomOAuthAdminTestSuite) SetupTest() {
 	ts.Config.CustomOAuth.Enabled = true
 	ts.Config.CustomOAuth.MaxProviders = 10
 	ts.Config.Security.DBEncryption.Encrypt = true
+	ts.Config.Experimental.ClientAssertion = conf.ClientAssertionConfiguration{}
 
 	// Generate admin token
 	claims := &AccessTokenClaims{
