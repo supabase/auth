@@ -52,6 +52,8 @@ type API struct {
 	mailer       mailer.Mailer
 	oidcCache    *provider.OIDCProviderCache
 
+	clientAssertionCache *provider.ClientAssertionCache
+
 	captchaVerifier security.CaptchaVerifier
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
@@ -105,6 +107,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	}
 
 	api.oidcCache = provider.NewOIDCProviderCache(globalConfig.External.OIDCProviderCacheTTL)
+	api.clientAssertionCache = provider.NewClientAssertionCache()
 
 	for _, o := range opt {
 		o.apply(api)

@@ -739,6 +739,12 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		scopeList = customProvider.Scopes
 	}
 
+	// Fail closed before any request goes out if the provider can't be used
+	// with private_key_jwt right now.
+	if err := checkClientAssertionAvailable(customProvider, &config.Experimental.ClientAssertion); err != nil {
+		return nil, pConfig, err
+	}
+
 	// Decrypt client secret for runtime use
 	clientSecret, err := customProvider.GetClientSecret(config.Security.DBEncryption)
 	if err != nil {
@@ -806,6 +812,15 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 		return nil, pConfig, fmt.Errorf("error creating OIDC provider: %w", err)
 	}
 
+	if customProvider.ClientAuthMethod == models.ClientAuthMethodPrivateKeyJWT {
+		p.UseClientAssertion(
+			a.clientAssertionCache,
+			&config.Experimental.ClientAssertion,
+			clientAssertionRequestFor(customProvider),
+			identifier,
+		)
+	}
+
 	// Build provider configuration
 	pConfig = conf.OAuthProviderConfiguration{
 		Enabled:       true,
@@ -817,6 +832,37 @@ func (a *API) loadCustomProvider(ctx context.Context, db *storage.Connection, id
 	}
 
 	return p, pConfig, nil
+}
+
+// checkClientAssertionAvailable returns an error if customProvider uses
+// private_key_jwt but client assertions are disabled, no signing key is
+// configured, or the provider isn't OIDC.
+func checkClientAssertionAvailable(customProvider *models.CustomOAuthProvider, assertionConfig *conf.ClientAssertionConfiguration) error {
+	if customProvider.ClientAuthMethod != models.ClientAuthMethodPrivateKeyJWT {
+		return nil
+	}
+	if !assertionConfig.Enabled || assertionConfig.SigningKey == nil {
+		return fmt.Errorf("custom provider %s uses private_key_jwt, but client assertions are not enabled", customProvider.Identifier)
+	}
+	if !customProvider.IsOIDC() || customProvider.Issuer == nil {
+		return fmt.Errorf("custom provider %s uses private_key_jwt, which requires an OIDC provider with an issuer", customProvider.Identifier)
+	}
+	return nil
+}
+
+// clientAssertionRequestFor returns the assertion request for a
+// private_key_jwt provider. The audience is the configured override, or the
+// provider's issuer.
+func clientAssertionRequestFor(customProvider *models.CustomOAuthProvider) provider.ClientAssertionRequest {
+	audience := *customProvider.Issuer
+	if customProvider.ClientAssertionAudience != nil && *customProvider.ClientAssertionAudience != "" {
+		audience = *customProvider.ClientAssertionAudience
+	}
+	return provider.ClientAssertionRequest{
+		ProviderID: customProvider.ID.String(),
+		ClientID:   customProvider.ClientID,
+		Audience:   audience,
+	}
 }
 
 func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {

@@ -3,12 +3,18 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/observability"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"golang.org/x/oauth2"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -28,7 +34,34 @@ const (
 
 	// clientAssertionType is the JWT typ header for client assertions.
 	clientAssertionType = "client-authentication+jwt"
+
+	// ClientAssertionTypeJWTBearer is the client_assertion_type value for
+	// JWT client assertions (RFC 7523 section 2.2).
+	ClientAssertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" // #nosec G101 -- Not a secret value.
 )
+
+var (
+	clientAssertionSignDuration = mustFloat64Histogram(
+		"gotrue_client_assertion_sign_duration_seconds",
+		"Time taken to sign a client assertion, including KMS calls",
+	)
+	clientAssertionSignErrors = observability.ObtainMetricCounter(
+		"gotrue_client_assertion_sign_errors_total",
+		"Number of client assertion signing errors, including KMS errors",
+	)
+	clientAssertionInvalidClient = observability.ObtainMetricCounter(
+		"gotrue_client_assertion_invalid_client_total",
+		"Number of invalid_client responses to token requests authenticated with a client assertion",
+	)
+)
+
+func mustFloat64Histogram(name, desc string) metric.Float64Histogram {
+	h, err := observability.Meter("gotrue").Float64Histogram(name, metric.WithDescription(desc), metric.WithUnit("s"))
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
 
 var errClientAssertionNotConfigured = errors.New("client assertions are not enabled or no signing key is configured")
 
@@ -179,11 +212,15 @@ func (c *ClientAssertionCache) sign(ctx context.Context, config *conf.ClientAsse
 	token.Header["typ"] = clientAssertionType
 	token.Header["kid"] = config.SigningJwk.KeyID()
 
-	signingKey, err := config.SigningKey(ctx)
+	started := time.Now()
+	signed, err := signClientAssertion(ctx, config, token)
+	result := "success"
 	if err != nil {
-		return clientAssertionEntry{}, err
+		result = "error"
+		clientAssertionSignErrors.Add(ctx, 1)
 	}
-	signed, err := token.SignedString(signingKey)
+	clientAssertionSignDuration.Record(ctx, time.Since(started).Seconds(),
+		metric.WithAttributes(attribute.String("result", result)))
 	if err != nil {
 		return clientAssertionEntry{}, err
 	}
@@ -192,4 +229,67 @@ func (c *ClientAssertionCache) sign(ctx context.Context, config *conf.ClientAsse
 		assertion: signed,
 		expiresAt: time.Unix(expiresAt.Unix(), 0),
 	}, nil
+}
+
+func signClientAssertion(ctx context.Context, config *conf.ClientAssertionConfiguration, token *jwt.Token) (string, error) {
+	signingKey, err := config.SigningKey(ctx)
+	if err != nil {
+		return "", err
+	}
+	return token.SignedString(signingKey)
+}
+
+// clientAssertionSource binds a provider to the cache and the request it
+// signs assertions for.
+type clientAssertionSource struct {
+	cache        *ClientAssertionCache
+	config       *conf.ClientAssertionConfiguration
+	req          ClientAssertionRequest
+	providerName string
+}
+
+// UseClientAssertion makes the provider authenticate its token requests with
+// a client assertion (private_key_jwt) instead of a client secret. The
+// assertion goes in the form body only, never in a Basic auth header or the
+// query string.
+func (p *CustomOIDCProvider) UseClientAssertion(cache *ClientAssertionCache, config *conf.ClientAssertionConfiguration, req ClientAssertionRequest, providerName string) {
+	p.config.ClientSecret = ""
+	p.config.Endpoint.AuthStyle = oauth2.AuthStyleInParams
+	p.clientAssertion = &clientAssertionSource{
+		cache:        cache,
+		config:       config,
+		req:          req,
+		providerName: providerName,
+	}
+}
+
+func (p *CustomOIDCProvider) exchangeWithClientAssertion(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	src := p.clientAssertion
+
+	assertion, err := src.cache.Get(ctx, src.config, src.req)
+	if err != nil {
+		// fail closed: without an assertion no token request is sent
+		return nil, fmt.Errorf("unable to sign client assertion for provider %s: %w", src.providerName, err)
+	}
+
+	opts = append(opts,
+		oauth2.SetAuthURLParam("client_assertion_type", ClientAssertionTypeJWTBearer),
+		oauth2.SetAuthURLParam("client_assertion", assertion),
+	)
+	token, err := p.config.Exchange(ctx, code, opts...)
+
+	var retrieveErr *oauth2.RetrieveError
+	if errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_client" {
+		// sign a fresh assertion next time, in case this one is the problem
+		src.cache.Invalidate(src.config, src.req)
+		clientAssertionInvalidClient.Add(ctx, 1,
+			metric.WithAttributes(attribute.String("provider", src.providerName)))
+		logrus.WithFields(logrus.Fields{
+			"provider":          src.providerName,
+			"error_code":        retrieveErr.ErrorCode,
+			"error_description": retrieveErr.ErrorDescription,
+		}).Warn("token endpoint rejected the client assertion")
+	}
+
+	return token, err
 }

@@ -115,6 +115,10 @@ type CustomOIDCProvider struct {
 	attributeMapping      map[string]interface{}
 	authorizationParams   map[string]interface{}
 	customClaimsAllowlist []string
+
+	// clientAssertion is set for private_key_jwt providers; see
+	// UseClientAssertion.
+	clientAssertion *clientAssertionSource
 }
 
 // NewCustomOIDCProvider creates a new custom OIDC provider.
@@ -188,6 +192,9 @@ func (p *CustomOIDCProvider) AuthCodeURL(state string, opts ...oauth2.AuthCodeOp
 
 // GetOAuthToken exchanges the authorization code for an access token
 func (p *CustomOIDCProvider) GetOAuthToken(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	if p.clientAssertion != nil {
+		return p.exchangeWithClientAssertion(ctx, code, opts...)
+	}
 	return p.config.Exchange(ctx, code, opts...)
 }
 
