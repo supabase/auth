@@ -2,12 +2,14 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/gobwas/glob"
 	"github.com/golang-jwt/jwt/v5"
@@ -254,4 +256,44 @@ func (ts *MailTestSuite) setURIAllowListMap(uris ...string) {
 		g := glob.MustCompile(uri, '.', '/')
 		ts.Config.URIAllowListMap[uri] = g
 	}
+}
+
+func TestNotificationRequest(t *testing.T) {
+	a := &API{config: &conf.GlobalConfiguration{}}
+	a.config.API.MaxRequestDuration = 10 * time.Second
+
+	t.Run("NoRequestDeadline", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodPost, "/", nil)
+		require.Same(t, r, a.notificationRequest(r))
+	})
+
+	t.Run("LeavesPartOfTheRequestBudget", func(t *testing.T) {
+		deadline := time.Now().Add(10 * time.Second)
+		ctx, cancel := context.WithDeadline(context.Background(), deadline)
+		defer cancel()
+
+		r := httptest.NewRequest(http.MethodPost, "/", nil).WithContext(ctx)
+		got, ok := a.notificationRequest(r).Context().Deadline()
+		require.True(t, ok)
+		require.Equal(t, deadline.Add(-2*time.Second), got)
+	})
+
+	t.Run("EndsWithTheRequest", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		r := httptest.NewRequest(http.MethodPost, "/", nil).WithContext(ctx)
+		nr := a.notificationRequest(r)
+		cancel()
+
+		<-nr.Context().Done()
+		require.ErrorIs(t, nr.Context().Err(), context.Canceled)
+	})
+
+	t.Run("NoMaxRequestDuration", func(t *testing.T) {
+		b := &API{config: &conf.GlobalConfiguration{}}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		r := httptest.NewRequest(http.MethodPost, "/", nil).WithContext(ctx)
+		require.Same(t, r, b.notificationRequest(r))
+	})
 }

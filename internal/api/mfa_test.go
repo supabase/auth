@@ -1164,3 +1164,51 @@ func (ts *MFATestSuite) TestMFAFactorUnenrolledNotificationDisabled() {
 	// Assert that MFA factor unenrolled notification email was sent or not based on the config
 	require.Len(ts.T(), mockMailer.MFAFactorUnenrolledMailCalls, 0, "Expected 0 MFA factor unenrolled notification email(s) to be sent")
 }
+
+// stalledNotificationMailer blocks the MFA factor unenrolled notification
+// until the request context is done, like a mail transport that stopped
+// responding.
+type stalledNotificationMailer struct {
+	mockclient.MockMailer
+	hadDeadline bool
+}
+
+func (m *stalledNotificationMailer) MFAFactorUnenrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
+	_, m.hadDeadline = r.Context().Deadline()
+	<-r.Context().Done()
+	return r.Context().Err()
+}
+
+func (ts *MFATestSuite) TestUnenrollFactorWithStalledNotification() {
+	maxRequestDuration := ts.Config.API.MaxRequestDuration
+	notificationEnabled := ts.Config.Mailer.Notifications.MFAFactorUnenrolledEnabled
+	defer func() {
+		ts.Config.API.MaxRequestDuration = maxRequestDuration
+		ts.Config.Mailer.Notifications.MFAFactorUnenrolledEnabled = notificationEnabled
+	}()
+	ts.Config.API.MaxRequestDuration = time.Second
+	ts.Config.Mailer.Notifications.MFAFactorUnenrolledEnabled = true
+
+	mailer := &stalledNotificationMailer{}
+	api := NewAPIWithVersion(ts.Config, ts.API.db, apiTestVersion, WithMailer(mailer))
+
+	f := ts.TestUser.Factors[0]
+	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/factors/%s", f.ID), nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	start := time.Now()
+	api.handler.ServeHTTP(w, req)
+	elapsed := time.Since(start)
+
+	// The factor is removed before the notification is sent, so the
+	// response must report success instead of a request timeout.
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	require.Less(ts.T(), elapsed, ts.Config.API.MaxRequestDuration)
+	require.True(ts.T(), mailer.hadDeadline)
+
+	_, err := models.FindFactorByFactorID(ts.API.db, f.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+}
