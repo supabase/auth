@@ -150,7 +150,18 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			return a.sendEmailChange(r, tx, user, user.EmailChange, flowType)
+
+			// The pending address may have been registered by another account
+			// in the meantime: a confirmation must not be sent to an address
+			// the user doesn't own.
+			emailTaken := false
+			if duplicate, terr := models.IsDuplicatedEmail(tx, user.EmailChange, user.Aud, user, config.Experimental.ProviderLinkingDomains); terr != nil {
+				return apierrors.NewInternalServerError("Database error checking email").WithInternalError(terr)
+			} else if duplicate != nil {
+				emailTaken = true
+			}
+
+			return a.sendEmailChange(r, tx, user, user.EmailChange, flowType, emailTaken)
 		case phoneChangeVerification:
 			mID, terr := a.sendPhoneConfirmation(r, tx, user, user.PhoneChange, phoneChangeVerification, sms_provider.SMSProvider)
 			if terr != nil {
