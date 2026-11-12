@@ -127,9 +127,11 @@ func (ts *RecoveryCodesTestSuite) token(user *models.User, sessionID *uuid.UUID)
 	return token
 }
 
-// aal2Token upgrades the test session to AAL2 and mints a token for it.
+// aal2Token upgrades the test session to AAL2, records a TOTP verification on
+// it so the minted token's aal claim is aal2 too, and mints a token for it.
 func (ts *RecoveryCodesTestSuite) aal2Token() string {
 	require.NoError(ts.T(), ts.TestSession.UpdateAALAndAssociatedFactor(ts.API.db, models.AAL2, &ts.TestFactor.ID))
+	require.NoError(ts.T(), models.AddClaimToSession(ts.API.db, ts.TestSession.ID, models.TOTPSignIn))
 	return ts.token(ts.TestUser, &ts.TestSession.ID)
 }
 
