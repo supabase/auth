@@ -431,6 +431,68 @@ func (u *User) SetPassword(ctx context.Context, password string, encrypt bool, e
 	return nil
 }
 
+// ReEncryptPassword stores the password hash set by SetPassword, but only if
+// encrypted_password still holds previousHash, the value read before the
+// password was verified. This keeps a re-encryption from overwriting a
+// password change that committed in the meantime. It returns false if the
+// row was not updated.
+func (u *User) ReEncryptPassword(tx *storage.Connection, previousHash string) (bool, error) {
+	if u.EncryptedPassword == nil || previousHash == "" {
+		return false, nil
+	}
+
+	now := time.Now().Truncate(time.Microsecond)
+	count, err := tx.RawQuery(
+		"UPDATE "+u.TableName()+" SET encrypted_password = ?, updated_at = ? WHERE id = ? AND encrypted_password = ?",
+		*u.EncryptedPassword, now, u.ID, previousHash,
+	).ExecWithCount()
+	if err != nil {
+		return false, errors.Wrap(err, "error re-encrypting password")
+	}
+
+	if count == 0 {
+		return false, nil
+	}
+
+	u.UpdatedAt = now
+	return true, nil
+}
+
+// LockEncryptedPassword locks the user's row until the transaction ends and
+// returns the stored encrypted_password ("" if the user has none). A password
+// change updates this row and signs the user out in one transaction, so a
+// sign-in that locks the row and finds the hash it verified is guaranteed
+// that any such change either committed before it or will run after its
+// session exists and sign that session out.
+func (u *User) LockEncryptedPassword(tx *storage.Connection) (string, error) {
+	var row struct {
+		EncryptedPassword *string `db:"encrypted_password"`
+	}
+	if err := tx.RawQuery(
+		"SELECT encrypted_password FROM "+u.TableName()+" WHERE id = ? FOR NO KEY UPDATE",
+		u.ID,
+	).First(&row); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return "", UserNotFoundError{}
+		}
+		return "", errors.Wrap(err, "error locking user")
+	}
+	if row.EncryptedPassword == nil {
+		return "", nil
+	}
+	return *row.EncryptedPassword, nil
+}
+
+// ClearUnconfirmedPassword removes a password that was set before the user's
+// email was confirmed, since whoever set it may not own the email address.
+func (u *User) ClearUnconfirmedPassword(tx *storage.Connection) error {
+	if u.IsConfirmed() || !u.HasPassword() {
+		return nil
+	}
+	u.EncryptedPassword = nil
+	return tx.UpdateOnly(u, "encrypted_password")
+}
+
 // UpdatePassword updates the user's password. Use SetPassword outside of a transaction first!
 func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) error {
 	// These need to be reset because password change may mean the user no longer trusts the actions performed by the previous password.

@@ -16,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type AuthTestSuite struct {
@@ -365,5 +366,158 @@ func (ts *AuthTestSuite) TestRequireAuthenticationBannedUser() {
 		ctx, err := ts.API.requireAuthentication(httptest.NewRecorder(), newAuthedRequest())
 		require.NoError(ts.T(), err)
 		require.NotNil(ts.T(), getUser(ctx))
+	})
+}
+
+func (ts *AuthTestSuite) TestRequireAuthenticationOAuthClientSession() {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	client := &models.OAuthServerClient{
+		ID:               uuid.Must(uuid.NewV4()),
+		RegistrationType: "dynamic",
+		ClientType:       models.OAuthServerClientTypePublic,
+		RedirectURIs:     "https://example.com/callback",
+		GrantTypes:       "authorization_code,refresh_token",
+	}
+	require.NoError(ts.T(), models.CreateOAuthServerClient(ts.API.db, client))
+
+	newSession := func(oauthClientID *uuid.UUID) *models.Session {
+		s, err := models.NewSession(u.ID, nil)
+		require.NoError(ts.T(), err)
+		s.OAuthClientID = oauthClientID
+		require.NoError(ts.T(), ts.API.db.Create(s))
+		return s
+	}
+
+	newAuthedRequest := func(s *models.Session) *http.Request {
+		claims := &AccessTokenClaims{
+			RegisteredClaims: jwt.RegisteredClaims{
+				Subject: u.ID.String(),
+			},
+			Role:      "authenticated",
+			SessionId: s.ID.String(),
+		}
+		userJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+		require.NoError(ts.T(), err)
+
+		req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+		req.Header.Set("Authorization", "Bearer "+userJwt)
+		return req
+	}
+
+	oauthSession := newSession(&client.ID)
+	regularSession := newSession(nil)
+
+	ts.Run("OAuth client token is rejected", func() {
+		_, err := ts.API.requireAuthentication(httptest.NewRecorder(), newAuthedRequest(oauthSession))
+		require.Error(ts.T(), err)
+		httpErr, ok := err.(*HTTPError)
+		require.True(ts.T(), ok)
+		require.Equal(ts.T(), http.StatusForbidden, httpErr.HTTPStatus)
+		require.Equal(ts.T(), apierrors.ErrorCodeNoAuthorization, httpErr.ErrorCode)
+	})
+
+	ts.Run("OAuth client token is allowed on OAuth client endpoints", func() {
+		ctx, err := ts.API.requireAuthenticationAllowOAuthClient(httptest.NewRecorder(), newAuthedRequest(oauthSession))
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), oauthSession.ID, getSession(ctx).ID)
+	})
+
+	ts.Run("Regular session token is allowed", func() {
+		ctx, err := ts.API.requireAuthentication(httptest.NewRecorder(), newAuthedRequest(regularSession))
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), regularSession.ID, getSession(ctx).ID)
+
+		ctx, err = ts.API.requireAuthenticationAllowOAuthClient(httptest.NewRecorder(), newAuthedRequest(regularSession))
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), regularSession.ID, getSession(ctx).ID)
+	})
+}
+
+// TestOAuthClientTokenRouteAccess checks the router wiring: access tokens issued
+// to OAuth clients must only be accepted on endpoints intended for OAuth clients.
+func TestOAuthClientTokenRouteAccess(t *testing.T) {
+	api, config, err := setupAPIForTestWithCallback(func(config *conf.GlobalConfiguration, _ *storage.Connection) {
+		if config != nil {
+			config.OAuthServer.Enabled = true
+		}
+	})
+	require.NoError(t, err)
+	defer api.db.Close()
+
+	require.NoError(t, models.TruncateAll(api.db))
+
+	u, err := models.NewUser("", "oauth-route@example.com", "password", config.JWT.Aud, nil)
+	require.NoError(t, err)
+	require.NoError(t, api.db.Create(u))
+
+	client := &models.OAuthServerClient{
+		ID:               uuid.Must(uuid.NewV4()),
+		RegistrationType: "dynamic",
+		ClientType:       models.OAuthServerClientTypePublic,
+		RedirectURIs:     "https://example.com/callback",
+		GrantTypes:       "authorization_code,refresh_token",
+	}
+	require.NoError(t, models.CreateOAuthServerClient(api.db, client))
+
+	newToken := func(oauthClientID *uuid.UUID, role string) string {
+		s, err := models.NewSession(u.ID, nil)
+		require.NoError(t, err)
+		s.OAuthClientID = oauthClientID
+		require.NoError(t, api.db.Create(s))
+
+		claims := &AccessTokenClaims{
+			RegisteredClaims: jwt.RegisteredClaims{
+				Subject:   u.ID.String(),
+				Audience:  jwt.ClaimStrings{config.JWT.Aud},
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			},
+			Role:      role,
+			SessionId: s.ID.String(),
+		}
+		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(config.JWT.Secret))
+		require.NoError(t, err)
+		return token
+	}
+
+	oauthToken := newToken(&client.ID, "authenticated")
+	oauthAdminToken := newToken(&client.ID, "service_role")
+	regularToken := newToken(nil, "authenticated")
+	regularAdminToken := newToken(nil, "service_role")
+
+	get := func(path, token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost"+path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		api.handler.ServeHTTP(w, req)
+		return w
+	}
+
+	t.Run("OAuth client token rejected", func(t *testing.T) {
+		for _, c := range []struct{ path, token string }{
+			{"/user", oauthToken},
+			{"/admin/users", oauthAdminToken},
+		} {
+			w := get(c.path, c.token)
+			require.Equal(t, http.StatusForbidden, w.Code, "%s: %s", c.path, w.Body.String())
+			require.Contains(t, w.Body.String(), "OAuth client access tokens are not allowed", c.path)
+		}
+	})
+
+	t.Run("OAuth client token allowed on /oauth/userinfo", func(t *testing.T) {
+		w := get("/oauth/userinfo", oauthToken)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	})
+
+	t.Run("Regular token allowed", func(t *testing.T) {
+		for _, c := range []struct{ path, token string }{
+			{"/user", regularToken},
+			{"/oauth/userinfo", regularToken},
+			{"/admin/users", regularAdminToken},
+		} {
+			w := get(c.path, c.token)
+			require.Equal(t, http.StatusOK, w.Code, "%s: %s", c.path, w.Body.String())
+		}
 	})
 }
