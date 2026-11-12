@@ -76,7 +76,15 @@ func (o *Dispatcher) runPostgresHook(
 	tx *storage.Connection,
 	input any,
 ) ([]byte, error) {
-	db := o.db.WithContext(ctx)
+	// `set local` only takes effect inside a transaction block. Reuse the
+	// caller's transaction when there is one (opening a second one can exhaust
+	// the pool), otherwise open one: callers may pass a connection that is not
+	// in a transaction (tx.TX == nil), and Transaction handles both cases.
+	conn := tx
+	if conn == nil {
+		conn = o.db.WithContext(ctx)
+	}
+	inCallerTx := conn.TX != nil
 
 	request, err := json.Marshal(input)
 	if err != nil {
@@ -97,20 +105,15 @@ func (o *Dispatcher) runPostgresHook(
 			return terr
 		}
 
-		// reset the timeout
+		// commit ends `set local`, so only reset it in the caller's transaction
+		if !inCallerTx {
+			return nil
+		}
 		const q3 = "set local statement_timeout TO default;"
 		if terr := tx.RawQuery(q3).Exec(); terr != nil {
 			return terr
 		}
 		return nil
-	}
-	// `set local` only takes effect inside a transaction block. Reuse the
-	// caller's transaction when there is one (opening a second one can exhaust
-	// the pool), otherwise open one: callers may pass a connection that is not
-	// in a transaction (tx.TX == nil), and Transaction handles both cases.
-	conn := db
-	if tx != nil {
-		conn = tx
 	}
 	if err := conn.Transaction(invokeHookFunc); err != nil {
 		return nil, err

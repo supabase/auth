@@ -96,7 +96,7 @@ func TestDispatch(t *testing.T) {
 		},
 
 		{
-			desc: "fail - small sleep of 50ms within timeout (40ms)",
+			desc: "fail - small sleep of 50ms exceeds timeout (40ms)",
 			cfg: conf.ExtensibilityPointConfiguration{
 				URI:      `pg-functions://postgres/auth/v0pgfunc_test_sleep_timeout`,
 				HookName: `"auth"."v0pgfunc_test_sleep_timeout"`,
@@ -122,7 +122,7 @@ func TestDispatch(t *testing.T) {
 			// Callers such as triggerBeforeUserCreated pass a connection that
 			// is not inside a transaction (conn.TX == nil). The timeout must
 			// still apply: `set local` only works inside a transaction block.
-			desc: "fail - small sleep of 50ms within timeout (40ms) with conn outside tx",
+			desc: "fail - small sleep of 50ms exceeds timeout (40ms) with conn outside tx",
 			cfg: conf.ExtensibilityPointConfiguration{
 				URI:      `pg-functions://postgres/auth/v0pgfunc_test_sleep_timeout`,
 				HookName: `"auth"."v0pgfunc_test_sleep_timeout"`,
@@ -145,7 +145,7 @@ func TestDispatch(t *testing.T) {
 		},
 
 		{
-			desc: "fail - small sleep of 50ms within timeout (40ms) with conn inside tx",
+			desc: "fail - small sleep of 50ms exceeds timeout (40ms) with conn inside tx",
 			cfg: conf.ExtensibilityPointConfiguration{
 				URI:      `pg-functions://postgres/auth/v0pgfunc_test_sleep_timeout`,
 				HookName: `"auth"."v0pgfunc_test_sleep_timeout"`,
@@ -165,6 +165,25 @@ func TestDispatch(t *testing.T) {
 				end; $$ language plpgsql;`,
 			errStr:  `ERROR: canceling statement due to statement timeout`,
 			errCode: pgerrcode.QueryCanceled,
+		},
+
+		{
+			// The hook must run in the caller's transaction, not a second one
+			// (which can exhaust the pool): it sees the caller's local marker.
+			desc: "pass - reuses the caller's tx",
+			cfg: conf.ExtensibilityPointConfiguration{
+				URI:      `pg-functions://postgres/auth/v0pgfunc_test_tx_marker`,
+				HookName: `"auth"."v0pgfunc_test_tx_marker"`,
+			},
+			inTx: true,
+			req:  M{},
+			exp:  M{"marker": "caller-tx"},
+			sql: `
+				create or replace function v0pgfunc_test_tx_marker(input jsonb)
+				returns json as $$
+				begin
+					return json_build_object('marker', current_setting('auth_test.marker', true));
+				end; $$ language plpgsql;`,
 		},
 
 		{
@@ -302,6 +321,10 @@ func TestDispatch(t *testing.T) {
 			var err error
 			if tc.inTx {
 				err = db.Transaction(func(tx *storage.Connection) error {
+					const q = "select set_config('auth_test.marker', 'caller-tx', true);"
+					if err := tx.RawQuery(q).Exec(); err != nil {
+						return err
+					}
 					return dr.Dispatch(testCtx, &cfg, tx, tc.req, &res)
 				})
 			} else {
