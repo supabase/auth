@@ -666,3 +666,96 @@ func (ts *OAuthAuthorizeTestSuite) TestConsent_InvalidActionRejected() {
 	err := ts.Server.OAuthServerConsent(w, req)
 	ts.assertHTTPError(err, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
 }
+
+// ---------- redirect URIs stored before comma validation ----------
+
+const smuggledRedirectURI = "javascript:alert(1)//"
+
+// smuggleClientRedirectURI writes a comma-joined redirect_uris value straight
+// to the database, as a client registered before commas were rejected would have
+func (ts *OAuthAuthorizeTestSuite) smuggleClientRedirectURI(clientID uuid.UUID) {
+	require.NoError(ts.T(), ts.DB.RawQuery(
+		"UPDATE oauth_clients SET redirect_uris = ? WHERE id = ?",
+		"https://example.com/callback,"+smuggledRedirectURI,
+		clientID,
+	).Exec())
+}
+
+func (ts *OAuthAuthorizeTestSuite) smuggleAuthorizationRedirectURI(authorizationID string) {
+	require.NoError(ts.T(), ts.DB.RawQuery(
+		"UPDATE oauth_authorizations SET redirect_uri = ? WHERE authorization_id = ?",
+		smuggledRedirectURI,
+		authorizationID,
+	).Exec())
+}
+
+func (ts *OAuthAuthorizeTestSuite) TestAuthorize_RejectsStoredCommaSmuggledRedirectURI() {
+	client := ts.createClient()
+	ts.smuggleClientRedirectURI(client.ID)
+
+	q := url.Values{
+		"client_id":             []string{client.ID.String()},
+		"redirect_uri":          []string{smuggledRedirectURI},
+		"scope":                 []string{"openid"},
+		"code_challenge":        []string{"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"},
+		"code_challenge_method": []string{"S256"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+
+	err := ts.Server.OAuthServerAuthorize(w, req)
+	ts.assertHTTPError(err, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
+	assert.Empty(ts.T(), w.Header().Get("Location"))
+
+	count, err := ts.DB.Count(&models.OAuthServerAuthorization{})
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), 0, count)
+}
+
+func (ts *OAuthAuthorizeTestSuite) TestConsent_RejectsStoredInvalidRedirectURI() {
+	for _, action := range []OAuthServerConsentAction{OAuthServerConsentActionApprove, OAuthServerConsentActionDeny} {
+		ts.Run(string(action), func() {
+			user := ts.createUser("consent-smuggled-" + string(action) + "@example.com")
+			client := ts.createClient()
+			auth := ts.createAuthorization(client.ID, "openid")
+			require.NoError(ts.T(), auth.SetUser(ts.DB, user.ID))
+			ts.smuggleAuthorizationRedirectURI(auth.AuthorizationID)
+
+			req := ts.newRequest(http.MethodPost, auth.AuthorizationID, user, consentBody(action))
+			w := httptest.NewRecorder()
+
+			err := ts.Server.OAuthServerConsent(w, req)
+			ts.assertHTTPError(err, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
+			assert.Empty(ts.T(), w.Body.String())
+
+			reloaded := ts.reload(auth.AuthorizationID)
+			assert.Equal(ts.T(), models.OAuthServerAuthorizationPending, reloaded.Status)
+			assert.Nil(ts.T(), reloaded.AuthorizationCode)
+
+			stored, err := models.FindActiveOAuthServerConsentByUserAndClient(ts.DB, user.ID, client.ID)
+			require.NoError(ts.T(), err)
+			assert.Nil(ts.T(), stored)
+		})
+	}
+}
+
+func (ts *OAuthAuthorizeTestSuite) TestGetAuthorization_AutoApproveRejectsStoredInvalidRedirectURI() {
+	user := ts.createUser("auto-approve-smuggled@example.com")
+	client := ts.createClient()
+	auth := ts.createAuthorization(client.ID, "openid")
+	ts.smuggleAuthorizationRedirectURI(auth.AuthorizationID)
+
+	consent := models.NewOAuthServerConsent(user.ID, client.ID, []string{"openid"})
+	require.NoError(ts.T(), models.UpsertOAuthServerConsent(ts.DB, consent))
+
+	req := ts.newRequest(http.MethodGet, auth.AuthorizationID, user, nil)
+	w := httptest.NewRecorder()
+
+	err := ts.Server.OAuthServerGetAuthorization(w, req)
+	ts.assertHTTPError(err, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
+	assert.Empty(ts.T(), w.Body.String())
+
+	reloaded := ts.reload(auth.AuthorizationID)
+	assert.Equal(ts.T(), models.OAuthServerAuthorizationPending, reloaded.Status)
+	assert.Nil(ts.T(), reloaded.AuthorizationCode)
+}
