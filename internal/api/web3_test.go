@@ -10,6 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/gobwas/glob"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -900,4 +903,60 @@ func (ts *Web3TestSuite) TestValidationRules_BasicValidation() {
 		assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
 	}
 
+}
+
+func (ts *Web3TestSuite) TestValidationRules_ExpiredWithoutNotBefore_Ethereum() {
+	defer func() {
+		ts.API.overrideTime = nil
+	}()
+
+	ts.Config.External.Web3Ethereum.Enabled = true
+
+	key, err := ethcrypto.GenerateKey()
+	require.NoError(ts.T(), err)
+
+	// expires before MaximumValidityDuration, and has no Not Before
+	message := fmt.Sprintf("supabase.com wants you to sign in with your Ethereum account:\n%s\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nExpiration Time: 2025-03-29T00:05:00Z", ethcrypto.PubkeyToAddress(key.PublicKey).Hex())
+
+	sig, err := ethcrypto.Sign(accounts.TextHash([]byte(message)), key)
+	require.NoError(ts.T(), err)
+	sig[64] += 27
+	signature := hexutil.Encode(sig)
+
+	request := func(now string) *httptest.ResponseRecorder {
+		ts.API.overrideTime = func() time.Time {
+			t, _ := time.Parse(time.RFC3339, now)
+			return t
+		}
+
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"chain":     ChainEthereum,
+			"message":   message,
+			"signature": signature,
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=web3", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		return w
+	}
+
+	// before the signed expiry the message is accepted
+	w := request("2025-03-29T00:04:59Z")
+	assert.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+
+	// after the signed expiry, but within MaximumValidityDuration, it is rejected
+	w = request("2025-03-29T00:05:01Z")
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+
+	var result struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+	}
+	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&result))
+	assert.Equal(ts.T(), "invalid_grant", result.Error)
+	assert.Equal(ts.T(), "Signed Ethereum message is expired", result.ErrorDescription)
 }
