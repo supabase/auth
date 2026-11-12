@@ -354,6 +354,15 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.With(api.limitHandler(api.limiterOpts.SAMLAssertion)).
 					Post("/acs", api.SamlAcs)
 			})
+
+			// Dedicated endpoints for SSO providers with an isolated scope,
+			// whose ACS URL and entity ID are scoped to their own ID.
+			r.Route("/{sso_provider_id}/saml", func(r *router) {
+				r.Get("/metadata", api.SAMLMetadata)
+
+				r.With(api.limitHandler(api.limiterOpts.SAMLAssertion)).
+					Post("/acs", api.SamlAcs)
+			})
 		})
 
 		r.Route("/admin", func(r *router) {
@@ -452,7 +461,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
 
 			// OIDC UserInfo endpoint (requires user authentication via Bearer token)
-			r.With(api.requireAuthentication).Get("/userinfo", api.oauthServer.OAuthUserInfo)
+			r.With(api.requireAuthenticationAllowOAuthClient).Get("/userinfo", api.oauthServer.OAuthUserInfo)
 
 			// OAuth 2.1 Authorization endpoints
 			// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider
