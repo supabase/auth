@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -167,4 +169,21 @@ func (ts *TokenOIDCTestSuite) TestGetProviderAppleWithNonAppleIssuerInToken() {
 	// This should fail - the token's actual issuer is not appleid.apple.com
 	require.Error(ts.T(), err)
 	require.Contains(ts.T(), err.Error(), "not an Apple ID token issuer")
+}
+
+func TestOIDCNonceMatches(t *testing.T) {
+	raw := "test-nonce-value"
+	sum := sha256.Sum256([]byte(raw))
+	hexHash := hex.EncodeToString(sum[:])
+	b64Hash := base64.RawURLEncoding.EncodeToString(sum[:])
+
+	require.True(t, oidcNonceMatches(raw, hexHash))
+	require.True(t, oidcNonceMatches(raw, b64Hash))
+	require.False(t, oidcNonceMatches(raw, raw))
+	require.False(t, oidcNonceMatches(hexHash, hexHash))
+	require.False(t, oidcNonceMatches(b64Hash, b64Hash))
+	require.False(t, oidcNonceMatches(raw, "deadbeef"))
+	require.False(t, oidcNonceMatches(raw, ""))
+	require.False(t, oidcNonceMatches("", hexHash))
+	require.False(t, oidcNonceMatches(raw+"x", hexHash))
 }
