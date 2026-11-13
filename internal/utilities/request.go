@@ -91,38 +91,78 @@ func GetReferrer(r *http.Request, config *conf.GlobalConfiguration) string {
 var decimalIPAddressPattern = regexp.MustCompile("^[0-9]+$")
 var regularHostname = regexp.MustCompile("^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$")
 
+// customSchemePattern matches a URI scheme (already lowercased) plus the
+// underscore that RFC 3986 disallows but custom mobile deep-link schemes use.
+var customSchemePattern = regexp.MustCompile(`^[a-z][a-z0-9+.\-_]*$`)
+
 func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bool {
 	if redirectURL == "" {
 		return false
 	}
 
+	// Reject any redirect URL containing an ASCII control character or space.
+	// These are never valid in a URL, and HTTP clients strip leading ones, so a
+	// value such as "\thttps://2130706433/" would otherwise fail url.Parse, slip
+	// past the http(s) scheme check below, and then be resolved by the browser
+	// as a different, unchecked address.
+	if strings.ContainsFunc(redirectURL, func(r rune) bool {
+		return r <= 0x20 || r == 0x7f
+	}) {
+		return false
+	}
+
 	base, berr := url.Parse(config.SiteURL)
+	if berr != nil {
+		// SiteURL is misconfigured
+		return false
+	}
+
 	refurl, rerr := url.Parse(redirectURL)
-	if berr != nil || rerr != nil {
-		// either URL is for some reason invalid
-		return false
+	if rerr != nil {
+		// A well-formed URL parses successfully. The only redirect this function
+		// needs to accept that url.Parse rejects is a custom mobile deep-link
+		// scheme containing an underscore (e.g. com.my_cool_app.example://callback),
+		// which is invalid per RFC 3986 solely because of the underscore. Such a
+		// URL cannot run the same-site allowance or the IP/hostname safety checks
+		// below, but it must still be allowed to match the admin-configured allow
+		// list, otherwise it is silently dropped and the request falls back to
+		// SiteURL.
+		//
+		// Only permit that fall-through for a well-formed, non-http(s) custom
+		// scheme. Anything else that fails to parse — an obfuscated http(s)
+		// authority ("https://2130706433/%zz", "https:/\2130706433/"), a
+		// protocol-relative URL ("//2130706433/"), or a missing/invalid scheme —
+		// is rejected, because a browser may still resolve it to an unchecked
+		// (e.g. loopback) address, skipping the safety checks below.
+		scheme, _, hasScheme := strings.Cut(redirectURL, ":")
+		scheme = strings.ToLower(scheme)
+		if !hasScheme || scheme == "http" || scheme == "https" || !customSchemePattern.MatchString(scheme) {
+			return false
+		}
 	}
 
-	// Allow redirects back to the site: scheme, host and port must match. The port
-	// check is skipped for loopback addresses, since per RFC 8252 Section 7.3 native
-	// apps must be allowed to use variable port numbers.
-	if base.Hostname() == refurl.Hostname() &&
-		base.Scheme == refurl.Scheme &&
-		(base.Port() == refurl.Port() || isLocalhost(refurl.Hostname())) {
-		return true
-	}
+	if rerr == nil {
+		// Allow redirects back to the site: scheme, host and port must match. The port
+		// check is skipped for loopback addresses, since per RFC 8252 Section 7.3 native
+		// apps must be allowed to use variable port numbers.
+		if base.Hostname() == refurl.Hostname() &&
+			base.Scheme == refurl.Scheme &&
+			(base.Port() == refurl.Port() || isLocalhost(refurl.Hostname())) {
+			return true
+		}
 
-	scheme := strings.TrimSuffix(strings.ToLower(refurl.Scheme), ":")
-	isHTTP := scheme == "http" || scheme == "https"
+		scheme := strings.TrimSuffix(strings.ToLower(refurl.Scheme), ":")
+		isHTTP := scheme == "http" || scheme == "https"
 
-	if decimalIPAddressPattern.MatchString(refurl.Hostname()) {
-		// IP address in decimal form also not allowed in redirects!
-		return false
-	} else if ip := net.ParseIP(refurl.Hostname()); ip != nil {
-		return ip.IsLoopback()
-	} else if isHTTP && !regularHostname.MatchString(refurl.Hostname()) {
-		// hostname uses characters that are not typically used
-		return false
+		if decimalIPAddressPattern.MatchString(refurl.Hostname()) {
+			// IP address in decimal form also not allowed in redirects!
+			return false
+		} else if ip := net.ParseIP(refurl.Hostname()); ip != nil {
+			return ip.IsLoopback()
+		} else if isHTTP && !regularHostname.MatchString(refurl.Hostname()) {
+			// hostname uses characters that are not typically used
+			return false
+		}
 	}
 
 	// For case when user came from mobile app or other permitted resource - redirect back
