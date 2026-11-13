@@ -170,6 +170,12 @@ func (ts *Web3TestSuite) TestHappyPath_FullMessage() {
 			chain:     ChainEthereum,
 			message:   "localhost:5173 wants you to sign in with your Ethereum account:\n0x57c039062a750c7fe197b20E12406dB4f7d8833B\n\nSign in on localhost\n\nURI: http://localhost:5173/\nVersion: 1\nIssued At: 2025-05-16T14:52:03.613Z\n",
 			signature: "0x0ca657558a144c88d768acb48e31f92bae195d3c7feb4496bd43ad6211ff904e733a0ccc29ed96da5b9f941b2a6b4363f7551d40d3fedb9b239819301c5c42731b"},
+		{
+			now:       "2025-03-29T00:05:00Z",
+			chain:     ChainEthereum,
+			message:   "supabase.com wants you to sign in with your Ethereum account:\n0x2638aB948664548BEE93B36bebCFB1c8332dC745\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nExpiration Time: 2025-03-29T00:10:00Z",
+			signature: "0x935fb2bf70c83e89a5a85b19ac3bc33ddf798c52dca5bfdcb942f96e5bb2e0d414cce3bac387128f63c68dda77e4660a994c1b158b6e8966c18848b0d63d76801b",
+		},
 	}
 
 	for _, example := range examples {
@@ -563,6 +569,11 @@ func (ts *Web3TestSuite) TestValidationRules_ValidatedBeforeNotBefore() {
 			message:   "supabase.com wants you to sign in with your Ethereum account:\n0x4e8fB55380cDf6951B52aF778F0B8c1A4DAcE3c5\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nNot Before: 2025-03-29T00:01:00Z",
 			signature: "0xb91e34fc4a4267a1edf4350ed684a8f9a7d79e6abb609e8a3add17b25040100041b3f2506f9bf5929da75311560e469a5581574972c64dfdb7d65a4dfe96f2d41c",
 		},
+		{
+			chain:     ChainEthereum,
+			message:   "supabase.com wants you to sign in with your Ethereum account:\n0x2638aB948664548BEE93B36bebCFB1c8332dC745\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nExpiration Time: 2025-03-29T00:10:00Z\nNot Before: 2025-03-29T00:01:00Z",
+			signature: "0x9ea7e494872285d8140a4684b53b31ef094471c25cfa560303e1c599613b9c5046b1c1ca09bf47a19e4b6bff37f67a148de325588d94967480f919081757f98b1b",
+		},
 	}
 
 	for _, example := range examples {
@@ -617,6 +628,13 @@ func (ts *Web3TestSuite) TestValidationRules_Expired() {
 			chain:     ChainEthereum,
 			message:   "supabase.com wants you to sign in with your Ethereum account:\n0xDAEaF48CC1736705388Bb0cB2A22559d751FCBaC\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nExpiration Time: 2025-03-29T00:10:00Z\nNot Before: 2025-03-29T00:00:00Z",
 			signature: "0x3c1d21a56fcb057cc43f8a59a1de903022b30a31ff7bcf8e33387ba08d5f450337df6dfdd48dc941caf925e51c2e8d9987683822c9c413d16ef0ce03c6d1e12f1c"},
+		{
+			// Regression for issue #2453: ExpirationTime must be honored even
+			// when NotBefore is absent.
+			chain:     ChainEthereum,
+			message:   "supabase.com wants you to sign in with your Ethereum account:\n0x2638aB948664548BEE93B36bebCFB1c8332dC745\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nExpiration Time: 2025-03-29T00:10:00Z",
+			signature: "0x935fb2bf70c83e89a5a85b19ac3bc33ddf798c52dca5bfdcb942f96e5bb2e0d414cce3bac387128f63c68dda77e4660a994c1b158b6e8966c18848b0d63d76801b",
+		},
 	}
 
 	for _, example := range examples {
@@ -726,6 +744,11 @@ func (ts *Web3TestSuite) TestValidationRules_IssedTooLongAgo() {
 			chain:     ChainEthereum,
 			message:   "supabase.com wants you to sign in with your Ethereum account:\n0x5Af584D3902e60104FcA6016236B5bCDBc9e6F24\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nNot Before: 2025-03-29T00:00:00Z",
 			signature: "0x1b22e465a4d41c86af48973f204b363ad665b6e6aab8ecb2bd68c0ffb395ca5e055f9062ca312185230ebbc0e9c8c3af059563725ef37599552ada80d675f6e21c"},
+		{
+			chain:     ChainEthereum,
+			message:   "supabase.com wants you to sign in with your Ethereum account:\n0x2638aB948664548BEE93B36bebCFB1c8332dC745\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z",
+			signature: "0xc3b7692d5a18303c01eaf82a1808171a1ab47a3c106f1d89b23dedb9150c28cf2c9b7778c83fb9b1ca80618e27f20dda535cf811c8317d45f13f2e2f5cea1b4e1c",
+		},
 	}
 
 	for _, example := range examples {
