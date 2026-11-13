@@ -310,8 +310,11 @@ func (o *Cache) get(
 		return o.load(ctx, cfg, typ, nil)
 	}
 
+	// The def flag signals that the entry is the default template we fell
+	// back to after a failed load. Like in reloadAt, it never counts as fresh,
+	// so the configured template is retried after the retry interval below.
 	maxAge := cfg.Mailer.TemplateMaxAge
-	if now.Sub(ent.createdAt) < maxAge {
+	if !ent.def && now.Sub(ent.createdAt) < maxAge {
 		// Cache hit and the entry is not expired, return it.
 		return ent, nil
 	}
