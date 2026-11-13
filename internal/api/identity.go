@@ -75,6 +75,11 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 			if terr := tx.UpdateOnly(user, "phone_confirmed_at"); terr != nil {
 				return apierrors.NewInternalServerError("Database error updating user phone").WithInternalError(terr)
 			}
+			if terr := user.UpdateUserMetaData(tx, map[string]interface{}{
+				"phone_verified": false,
+			}); terr != nil {
+				return apierrors.NewInternalServerError("Database error updating user phone metadata").WithInternalError(terr)
+			}
 		default:
 			if terr := user.UpdateUserEmailFromIdentities(tx, config.Mailer.Autoconfirm); terr != nil {
 				if models.IsUniqueConstraintViolatedError(terr) {
