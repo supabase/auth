@@ -96,7 +96,6 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 		}
 		return apierrors.NewInternalServerError("Unable to process request").WithInternalError(err)
 	}
-
 	switch params.Type {
 	case mail.SignupVerification:
 		if user.IsConfirmed() {
@@ -118,6 +117,29 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 		if user.PhoneChange == "" {
 			return sendJSON(w, http.StatusOK, map[string]string{})
 		}
+	}
+
+	if user.IsBanned() {
+		// A banned user can't redeem the token, so don't send one. Respond as
+		// for an unknown user so the ban status isn't revealed. Still apply the
+		// per-user max frequency check the real send would have applied, so
+		// the 429 behavior is the same as for any other user. This is after
+		// the switch above so the early 200 responses stay identical too.
+		var freqErr error
+		switch params.Type {
+		case mail.SignupVerification:
+			freqErr = validateSentWithinFrequencyLimit(user.ConfirmationSentAt, config.SMTP.MaxFrequency)
+		case smsVerification:
+			freqErr = validateSMSSentWithinFrequencyLimit(user.ConfirmationSentAt, config.Sms.MaxFrequency)
+		case mail.EmailChangeVerification:
+			freqErr = validateSentWithinFrequencyLimit(user.EmailChangeSentAt, config.SMTP.MaxFrequency)
+		case phoneChangeVerification:
+			freqErr = validateSMSSentWithinFrequencyLimit(user.PhoneChangeSentAt, config.Sms.MaxFrequency)
+		}
+		if freqErr != nil {
+			return freqErr
+		}
+		return sendJSON(w, http.StatusOK, map[string]string{})
 	}
 
 	messageID := ""
