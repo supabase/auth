@@ -105,7 +105,7 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 	}
 
 	if useTestOTP {
-		ts.API.config.Sms.TestOTP = map[string]string{
+		ts.API.config.Sms.TestOTP = conf.TestOTPMap{
 			"123456789": "123456",
 		}
 	} else {
