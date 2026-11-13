@@ -272,6 +272,51 @@ func TestE2EHooks(t *testing.T) {
 			runVerifyAfterUserCreatedHook(t, inst, res)
 		})
 
+		// The opaque value a caller may attach to the request that begins a
+		// signup, so that a hook can decide on something the application knows
+		// about and this service does not.
+		t.Run("SignupEmailWithHookData", func(t *testing.T) {
+			defer inst.HookRecorder.AfterUserCreated.ClearCalls()
+			defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
+
+			req := &api.SignupParams{
+				Email:    genEmail(),
+				Password: defaultPassword,
+				HookData: "opaque-value",
+			}
+			res := new(models.User)
+			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
+			require.NoError(t, err)
+
+			calls := inst.HookRecorder.BeforeUserCreated.GetCalls()
+			require.Equal(t, 1, len(calls))
+
+			hookReq := &v0hooks.BeforeUserCreatedInput{}
+			require.NoError(t, calls[0].Unmarshal(hookReq))
+			require.Equal(t, "opaque-value", hookReq.Metadata.HookData)
+
+			// It is for the hook, not for the user: nothing about the value is
+			// written to the record that comes back.
+			require.NotContains(t, fmt.Sprintf("%v", res.UserMetaData), "opaque-value")
+		})
+
+		t.Run("SignupEmailWithoutHookData", func(t *testing.T) {
+			defer inst.HookRecorder.AfterUserCreated.ClearCalls()
+			defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
+
+			req := &api.SignupParams{
+				Email:    genEmail(),
+				Password: defaultPassword,
+			}
+			res := new(models.User)
+			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
+			require.NoError(t, err)
+
+			calls := inst.HookRecorder.BeforeUserCreated.GetCalls()
+			require.Equal(t, 1, len(calls))
+			require.NotContains(t, calls[0].Body, "hook_data")
+		})
+
 		t.Run("SignupPhone", func(t *testing.T) {
 			defer inst.HookRecorder.AfterUserCreated.ClearCalls()
 			defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
@@ -472,6 +517,45 @@ func TestE2EHooks(t *testing.T) {
 			runVerifyBeforeUserCreatedHook(t, inst, res.User)
 			runVerifyAfterUserCreatedHook(t, inst, res.User)
 
+		})
+
+		// POST /signup with no email and no phone is served by a different
+		// handler, reached through the same route and parsed into the same
+		// params struct. A caller cannot see that seam, so hook_data has to
+		// mean the same thing on both sides of it.
+		t.Run("SignupAnonymouslyWithHookData", func(t *testing.T) {
+			defer inst.HookRecorder.AfterUserCreated.ClearCalls()
+			defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
+
+			req := &api.SignupParams{HookData: "opaque-value"}
+			res := new(api.AccessTokenResponse)
+			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
+			require.NoError(t, err)
+
+			calls := inst.HookRecorder.BeforeUserCreated.GetCalls()
+			require.Equal(t, 1, len(calls))
+
+			hookReq := &v0hooks.BeforeUserCreatedInput{}
+			require.NoError(t, calls[0].Unmarshal(hookReq))
+			require.Equal(t, "opaque-value", hookReq.Metadata.HookData)
+
+			// For the hook, not the user, exactly as on the other branch.
+			require.NotContains(
+				t, fmt.Sprintf("%v", res.User.UserMetaData), "opaque-value")
+		})
+
+		t.Run("SignupAnonymouslyWithoutHookData", func(t *testing.T) {
+			defer inst.HookRecorder.AfterUserCreated.ClearCalls()
+			defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
+
+			req := &api.SignupParams{}
+			res := new(api.AccessTokenResponse)
+			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
+			require.NoError(t, err)
+
+			calls := inst.HookRecorder.BeforeUserCreated.GetCalls()
+			require.Equal(t, 1, len(calls))
+			require.NotContains(t, calls[0].Body, "hook_data")
 		})
 
 		t.Run("ExternalCallback", func(t *testing.T) {
