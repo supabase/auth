@@ -16,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
+	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -247,6 +248,47 @@ func (ts *MailTestSuite) TestGenerateLink() {
 	}
 
 	ts.API.config.Mailer.ExternalHosts = originalHosts
+}
+
+type emptyActionLinkMailer struct {
+	mail.Mailer
+}
+
+func (m emptyActionLinkMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error) {
+	return "", nil
+}
+
+func (ts *MailTestSuite) TestGenerateLinkReturnsErrorForEmptyActionLink() {
+	claims := &AccessTokenClaims{
+		Role: "supabase_admin",
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+	require.NoError(ts.T(), err, "Error generating admin jwt")
+
+	originalMailer := ts.API.mailer
+	ts.API.mailer = emptyActionLinkMailer{Mailer: originalMailer}
+	defer func() {
+		ts.API.mailer = originalMailer
+	}()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(GenerateLinkParams{
+		Email: "test@example.com",
+		Type:  "recovery",
+	}))
+	req := httptest.NewRequest(http.MethodPost, ts.Config.SiteURL+"/admin/generate_link", &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusInternalServerError, w.Code)
+
+	data := make(map[string]interface{})
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.NotContains(ts.T(), data, "action_link")
+	require.Equal(ts.T(), apierrors.ErrorCodeUnexpectedFailure, data["error_code"])
+	require.Equal(ts.T(), "Error generating email action link", data["msg"])
 }
 
 func (ts *MailTestSuite) setURIAllowListMap(uris ...string) {
