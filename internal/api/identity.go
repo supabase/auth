@@ -203,14 +203,23 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 			}
 			return nil, terr
 		}
-		if !userData.Metadata.EmailVerified {
-			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
+		// Only require email confirmation when the linked identity actually
+		// contributed an email address. An email-optional identity (for
+		// example an OIDC provider whose claim carries no email) leaves the
+		// primary email empty after UpdateUserEmailFromIdentities, so there is
+		// nothing to confirm and no confirmation email must be sent. Guarding
+		// on the resulting email keeps a confirmed phone-only user linkable to
+		// such an identity instead of failing with EmailNotConfirmed.
+		if targetUser.GetEmail() != "" {
+			if !userData.Metadata.EmailVerified {
+				if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
+					return nil, terr
+				}
+				return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))
+			}
+			if terr := targetUser.Confirm(tx); terr != nil {
 				return nil, terr
 			}
-			return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))
-		}
-		if terr := targetUser.Confirm(tx); terr != nil {
-			return nil, terr
 		}
 
 		if targetUser.IsAnonymous {
