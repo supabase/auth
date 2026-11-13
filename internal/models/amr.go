@@ -22,7 +22,14 @@ func (AMRClaim) TableName() string {
 }
 
 func (cl *AMRClaim) IsAAL2Claim() bool {
-	return *cl.AuthenticationMethod == TOTPSignIn.String() || *cl.AuthenticationMethod == MFAPhone.String() || *cl.AuthenticationMethod == MFAWebAuthn.String() || *cl.AuthenticationMethod == MFARecoveryCode.String()
+	// authentication_method is a nullable column, so guard the pointer before
+	// dereferencing it (mirroring GetAuthenticationMethod below). A claim with
+	// no authentication method does not upgrade the session to AAL2.
+	if cl.AuthenticationMethod == nil {
+		return false
+	}
+	method := *cl.AuthenticationMethod
+	return method == TOTPSignIn.String() || method == MFAPhone.String() || method == MFAWebAuthn.String() || method == MFARecoveryCode.String()
 }
 
 func AddClaimToSession(tx *storage.Connection, sessionId uuid.UUID, authenticationMethod AuthenticationMethod) error {
