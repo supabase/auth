@@ -3,8 +3,10 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -486,28 +488,58 @@ func TestOAuthClientTokenRouteAccess(t *testing.T) {
 	regularToken := newToken(nil, "authenticated")
 	regularAdminToken := newToken(nil, "service_role")
 
-	get := func(path, token string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, "http://localhost"+path, nil)
+	do := func(method, path, token, body string) *httptest.ResponseRecorder {
+		var reqBody io.Reader
+		if body != "" {
+			reqBody = strings.NewReader(body)
+		}
+		req := httptest.NewRequest(method, "http://localhost"+path, reqBody)
 		req.Header.Set("Authorization", "Bearer "+token)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
 		w := httptest.NewRecorder()
 		api.handler.ServeHTTP(w, req)
 		return w
 	}
+	get := func(path, token string) *httptest.ResponseRecorder {
+		return do(http.MethodGet, path, token, "")
+	}
 
 	t.Run("OAuth client token rejected", func(t *testing.T) {
-		for _, c := range []struct{ path, token string }{
-			{"/user", oauthToken},
-			{"/admin/users", oauthAdminToken},
+		for _, c := range []struct{ method, path, token, body string }{
+			{http.MethodPut, "/user", oauthToken, `{"data":{"foo":"bar"}}`},
+			{http.MethodGet, "/user/oauth/grants", oauthToken, ""},
+			{http.MethodDelete, "/user/oauth/grants?client_id=" + client.ID.String(), oauthToken, ""},
+			{http.MethodGet, "/user/identities/authorize?provider=google", oauthToken, ""},
+			{http.MethodPost, "/logout", oauthToken, ""},
+			{http.MethodGet, "/reauthenticate", oauthToken, ""},
+			{http.MethodPost, "/factors", oauthToken, `{"factor_type":"totp"}`},
+			{http.MethodGet, "/admin/users", oauthAdminToken, ""},
 		} {
-			w := get(c.path, c.token)
-			require.Equal(t, http.StatusForbidden, w.Code, "%s: %s", c.path, w.Body.String())
-			require.Contains(t, w.Body.String(), "OAuth client access tokens are not allowed", c.path)
+			w := do(c.method, c.path, c.token, c.body)
+			require.Equal(t, http.StatusForbidden, w.Code, "%s %s: %s", c.method, c.path, w.Body.String())
+			require.Contains(t, w.Body.String(), "OAuth client access tokens are not allowed", "%s %s", c.method, c.path)
 		}
 	})
 
-	t.Run("OAuth client token allowed on /oauth/userinfo", func(t *testing.T) {
-		w := get("/oauth/userinfo", oauthToken)
-		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	// GET /user is allowed for OAuth client tokens only temporarily, to avoid
+	// breaking existing projects. Expect this to become a 403 once /user is
+	// closed to OAuth client tokens entirely.
+	t.Run("OAuth client token allowed on read-only endpoints", func(t *testing.T) {
+		for _, path := range []string{"/oauth/userinfo", "/user"} {
+			w := get(path, oauthToken)
+			require.Equal(t, http.StatusOK, w.Code, "%s: %s", path, w.Body.String())
+		}
+	})
+
+	t.Run("OAuth client token cannot modify the user", func(t *testing.T) {
+		w := do(http.MethodPut, "/user", oauthToken, `{"data":{"foo":"bar"}}`)
+		require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+		reloaded, err := models.FindUserByID(api.db, u.ID)
+		require.NoError(t, err)
+		require.NotContains(t, reloaded.UserMetaData, "foo")
 	})
 
 	t.Run("Regular token allowed", func(t *testing.T) {
