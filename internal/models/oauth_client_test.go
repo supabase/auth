@@ -74,7 +74,14 @@ func (ts *OAuthServerClientTestSuite) TestOAuthServerClientValidation() {
 	invalidClient.RegistrationType = "invalid"
 	err = invalidClient.Validate()
 	assert.Error(ts.T(), err)
-	assert.Contains(ts.T(), err.Error(), "registration_type must be 'dynamic' or 'manual'")
+	assert.Contains(ts.T(), err.Error(), "registration_type must be 'dynamic', 'manual' or 'metadata_document'")
+
+	// Test metadata document client without its URL
+	invalidClient = *validClient
+	invalidClient.RegistrationType = OAuthServerRegistrationTypeMetadataDocument
+	err = invalidClient.Validate()
+	assert.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "client_id_url is required for metadata document clients")
 
 	// Test missing redirect URIs
 	invalidClient = *validClient
@@ -173,7 +180,7 @@ func (ts *OAuthServerClientTestSuite) TestCreateOAuthServerClientValidation() {
 
 	err := CreateOAuthServerClient(ts.db, invalidClient)
 	assert.Error(ts.T(), err)
-	assert.Contains(ts.T(), err.Error(), "registration_type must be 'dynamic' or 'manual'")
+	assert.Contains(ts.T(), err.Error(), "registration_type must be 'dynamic', 'manual' or 'metadata_document'")
 }
 
 func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByID() {

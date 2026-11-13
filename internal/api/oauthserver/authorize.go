@@ -1,6 +1,7 @@
 package oauthserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,6 +49,9 @@ type ClientDetailsResponse struct {
 	Name    string `json:"name,omitempty"`
 	URI     string `json:"uri,omitempty"`
 	LogoURI string `json:"logo_uri,omitempty"`
+	// ClientIDURL is set for Client ID Metadata Document clients. Its host
+	// should be shown on the consent screen since the metadata is self-asserted.
+	ClientIDURL string `json:"client_id_url,omitempty"`
 }
 
 // UserDetailsResponse represents user details in authorization response
@@ -107,18 +111,9 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 
-	// Parse client_id as UUID
-	clientID, err := uuid.FromString(params.ClientID)
+	client, err := s.resolveAuthorizeClient(ctx, params.ClientID)
 	if err != nil {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthClientNotFound, "invalid client_id format")
-	}
-
-	client, err := s.getOAuthServerClient(ctx, clientID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthClientNotFound, "invalid client_id")
-		}
-		return apierrors.NewInternalServerError("error validating client").WithInternalError(err)
+		return err
 	}
 
 	// validate redirect_uri matches client's registered URIs
@@ -282,10 +277,11 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 		AuthorizationID: authorization.AuthorizationID,
 		RedirectURI:     authorization.RedirectURI,
 		Client: ClientDetailsResponse{
-			ID:      client.ID.String(),
-			Name:    utilities.StringValue(client.ClientName),
-			URI:     utilities.StringValue(client.ClientURI),
-			LogoURI: utilities.StringValue(client.LogoURI),
+			ID:          client.ID.String(),
+			Name:        utilities.StringValue(client.ClientName),
+			URI:         utilities.StringValue(client.ClientURI),
+			LogoURI:     utilities.StringValue(client.LogoURI),
+			ClientIDURL: utilities.StringValue(client.ClientIDURL),
 		},
 		User: UserDetailsResponse{
 			ID:    user.ID.String(),
@@ -429,6 +425,37 @@ func (s *Server) validateRequestOrigin(r *http.Request) error {
 	}
 
 	return nil
+}
+
+// resolveAuthorizeClient returns the client for the client_id of an
+// authorization request: a registered client UUID or, when enabled, a Client
+// ID Metadata Document URL. Errors are not redirected since the redirect_uri
+// can't be trusted yet.
+func (s *Server) resolveAuthorizeClient(ctx context.Context, clientID string) (*models.OAuthServerClient, error) {
+	var client *models.OAuthServerClient
+	var err error
+
+	if id, parseErr := uuid.FromString(clientID); parseErr == nil {
+		client, err = s.getOAuthServerClient(ctx, id)
+	} else if s.config.OAuthServer.AllowClientIDMetadataDocuments {
+		client, err = s.resolveMetadataDocumentClient(ctx, clientID)
+	} else {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthClientNotFound, "invalid client_id format")
+	}
+
+	if err != nil {
+		var metadataErr *clientMetadataError
+		switch {
+		case errors.As(err, &metadataErr):
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid client_id: %s", metadataErr.Reason).WithInternalError(err)
+		case models.IsNotFoundError(err):
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthClientNotFound, "invalid client_id")
+		default:
+			return nil, apierrors.NewInternalServerError("error validating client").WithInternalError(err)
+		}
+	}
+
+	return client, nil
 }
 
 // validateBasicAuthorizeParams validates only client_id and redirect_uri (needed before we can redirect errors)
