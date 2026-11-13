@@ -395,6 +395,15 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 	scopes := authorization.Scope
 	grantParams.Scopes = &scopes
 
+	// Inherit the MFA level (AAL/AMR) of the session that approved this client.
+	if authorization.SessionID != nil {
+		approvingSession, err := models.FindSessionByID(db, *authorization.SessionID, false)
+		if err != nil && !models.IsNotFoundError(err) {
+			return apierrors.NewInternalServerError("Error finding approving session").WithInternalError(err)
+		}
+		grantParams.InheritFrom = approvingSession
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if _, terr := models.FindOAuthServerAuthorizationByIDForUpdate(tx, authorization.AuthorizationID); terr != nil {
 			if models.IsNotFoundError(terr) {
