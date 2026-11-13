@@ -76,9 +76,9 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 		tokenHash := crypto.GenerateTokenHash(user.GetEmail(), nonce)
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
-		if config.Sms.IsTwilioVerifyProvider() {
+		if config.Sms.IsVerifyServiceProvider() {
 			smsProvider, _ := sms_provider.GetSmsProvider(*config)
-			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(string(user.Phone), nonce); err != nil {
+			if err := smsProvider.VerifyOTP(string(user.Phone), nonce); err != nil {
 				return apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
 			}
 			return nil
