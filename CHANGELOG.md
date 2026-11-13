@@ -1,5 +1,52 @@
 # Changelog
 
+## [2.198.0](https://github.com/supabase/auth/compare/v2.197.0...v2.198.0) (2026-11-13)
+
+
+### Features
+
+* clear existing password on recover ([#2887](https://github.com/supabase/auth/issues/2887)) ([a7e97d6](https://github.com/supabase/auth/commit/a7e97d665b9ea03853edb66d014bcde323f7894b))
+* **mfa:** add recovery codes unenroll guards ([#2787](https://github.com/supabase/auth/issues/2787)) ([4b5069b](https://github.com/supabase/auth/commit/4b5069b3f0017b0819007f6f6f27d464bfa46a23))
+* min password length uses runes, not bytes ([#2879](https://github.com/supabase/auth/issues/2879)) ([d7955e9](https://github.com/supabase/auth/commit/d7955e9eb54003c4abbd7808e774c810d5d3e6cc))
+* **openapi:** document mfa recovery codes endpoints ([2773ca5](https://github.com/supabase/auth/commit/2773ca52abbe107a9628056414bee564a452fdf0))
+* **otp:** add link_token_hash column to one_time_tokens table ([#2800](https://github.com/supabase/auth/issues/2800)) ([4148d39](https://github.com/supabase/auth/commit/4148d39259a189d0f67830f814097dfd059e737a))
+* **otp:** add one_time_tokens query helpers ([#2797](https://github.com/supabase/auth/issues/2797)) ([f8520b4](https://github.com/supabase/auth/commit/f8520b4ade64e8fb31bc4be02e33e84a5125c082))
+* **otp:** handle test OTPs and Twilio Verify on the one_time_tokens path ([#2798](https://github.com/supabase/auth/issues/2798)) ([2e9ce6c](https://github.com/supabase/auth/commit/2e9ce6c8e46532879ced1c6f9a7acdcde3815ea6))
+* **otp:** switch one_time_tokens table to source of truth ([#2788](https://github.com/supabase/auth/issues/2788)) ([2c2acf6](https://github.com/supabase/auth/commit/2c2acf6fc9ab9ccdf4640ded5599187ad38ed845))
+* **otp:** write `expires_at` when creating `one_time_tokens` ([#2766](https://github.com/supabase/auth/issues/2766)) ([d7d6afd](https://github.com/supabase/auth/commit/d7d6afd8ad87ba5861347cdde1807ef2a8fe243e))
+* **saml:** add dedicated_scope option for SAML providers ([#2893](https://github.com/supabase/auth/issues/2893)) ([bfbe078](https://github.com/supabase/auth/commit/bfbe078ce0061e18bb4716beab63316d06efe119))
+
+
+### Bug Fixes
+
+* allow OAuth client tokens on GET /user, keep modifying actions blocked ([#2926](https://github.com/supabase/auth/issues/2926)) ([3e79d85](https://github.com/supabase/auth/commit/3e79d8513b67d7dc3f234153aacc074daf82db5f))
+* assert password is rejected after magic link/OTP ([#2896](https://github.com/supabase/auth/issues/2896)) ([9eb0924](https://github.com/supabase/auth/commit/9eb0924fdeb21ff8c9500e0565c62c241495a7f7))
+* **deps:** bump go to 1.27.3 to distrust compromised x509 intermediates ([a8d7070](https://github.com/supabase/auth/commit/a8d7070e2726420f0b5ef8d589c7f6c9e463d7a7))
+* **deps:** bump go to 1.27.4 to fix net/http server crash ([#2922](https://github.com/supabase/auth/issues/2922)) ([8872586](https://github.com/supabase/auth/commit/88725864802773ad4533e0cad28f7a2740c89a7e))
+* **deps:** bump google.golang.org/grpc to v1.83.1 for vulncheck ([#2818](https://github.com/supabase/auth/issues/2818)) ([8861440](https://github.com/supabase/auth/commit/8861440b97d1ef12de085e72fad1c104da20388b))
+* **deps:** bump otel to v1.45.0 for vulncheck ([946e3e3](https://github.com/supabase/auth/commit/946e3e3f52fa515960187447cc0a87c4df8cfc4a))
+* **deps:** bump x/net to v0.60.0 for http2 vulns ([c3348e8](https://github.com/supabase/auth/commit/c3348e8f1cb31454e9783e4eb9eab1e71ad9652f))
+* **linkedin:** avoid panic when the email response has no elements ([6311d50](https://github.com/supabase/auth/commit/6311d5050ee6cb2c6073e86c03e41bb14231b9cc))
+* make password re-encryption on sign-in conditional ([#2906](https://github.com/supabase/auth/issues/2906)) ([84ff0c0](https://github.com/supabase/auth/commit/84ff0c0564ee5316f6d01b8f6ea12e0e6cf3c2f0))
+* **mfa:** ignore verify-disabled factors in recovery codes guard ([#2824](https://github.com/supabase/auth/issues/2824)) ([79ad7b2](https://github.com/supabase/auth/commit/79ad7b2c861f06bf05cd22168b7e460ef0207a87))
+* **mfa:** regenerate duplicate recovery codes ([#2793](https://github.com/supabase/auth/issues/2793)) ([8be2691](https://github.com/supabase/auth/commit/8be26910bc1830a2af4dd760bc2901cdec4575c2))
+* **models:** exclude oauth client sessions from mfa step-up invalidation ([#2801](https://github.com/supabase/auth/issues/2801)) ([#2802](https://github.com/supabase/auth/issues/2802)) ([ae468ca](https://github.com/supabase/auth/commit/ae468cabab7359819730ca80b5c6178def3579a2))
+* only trigger after-user-created hook on account creation ([#2656](https://github.com/supabase/auth/issues/2656)) ([64cfdf2](https://github.com/supabase/auth/commit/64cfdf22e15278eb7f4e7be541156e1cf94f4431))
+* **openapi:** use ErrorSchema for identity unlink 401/403 responses ([60d4bb6](https://github.com/supabase/auth/commit/60d4bb68055c74b66338ed3bc530e48b2cec5a3e))
+* **passkeys:** count friendly_name length by runes, not bytes ([ce9a8ee](https://github.com/supabase/auth/commit/ce9a8eee0cc042be8c7a42981a7ddae631e41d91))
+* restrict OAuth client access tokens to OAuth endpoints ([#2898](https://github.com/supabase/auth/issues/2898)) ([384d83a](https://github.com/supabase/auth/commit/384d83addefe89cdefd7dbc35e8f799b3dde64da))
+* **sessions:** invalidate legacy sessions with null aal ([#2792](https://github.com/supabase/auth/issues/2792)) ([8977629](https://github.com/supabase/auth/commit/89776292a4e1b94be10dd79b4215ae16e927a0fb))
+* **tools:** bump staticcheck to read go 1.27.3 export data ([9e4f25b](https://github.com/supabase/auth/commit/9e4f25b0cebe8568b62a9833c081952ac5d882b8))
+* Update user password on each valid signup attempt ([#2868](https://github.com/supabase/auth/issues/2868)) ([004f767](https://github.com/supabase/auth/commit/004f767f3297ba766cafbd0824c69b82edf31919))
+* Update user password on each valid signup attempt (fixed) ([#2918](https://github.com/supabase/auth/issues/2918)) ([2550341](https://github.com/supabase/auth/commit/2550341d490e9123e69f08d27220c77f07fa207b))
+* **vulncheck:** ignore GO-2026-6909 (crewjam/saml, no fix available) ([#2909](https://github.com/supabase/auth/issues/2909)) ([bc90ec9](https://github.com/supabase/auth/commit/bc90ec9c80828aabb3d6baef7fb94fcb1a1c4d14))
+
+
+### Reverts
+
+* Update user password on each valid signup attempt ([#2912](https://github.com/supabase/auth/issues/2912)) ([35307ce](https://github.com/supabase/auth/commit/35307ce6c1ca59016fd820f1d77d9b6201dc2e15))
+* Update user password on each valid signup attempt (fixed)  [#2918](https://github.com/supabase/auth/issues/2918) ([#2921](https://github.com/supabase/auth/issues/2921)) ([1357a5b](https://github.com/supabase/auth/commit/1357a5b90faa0e575e25030dc690bb228fdce721))
+
 ## [2.197.0](https://github.com/supabase/auth/compare/v2.196.0...v2.197.0) (2026-09-03)
 
 
