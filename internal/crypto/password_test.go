@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -103,6 +104,26 @@ func TestGeneratePassword(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("Multi-byte required characters", func(t *testing.T) {
+		requiredChars := []string{"abc", "äöüß", "€£¥"}
+
+		for i := 0; i < 50; i++ {
+			got := GeneratePassword(requiredChars, 33)
+
+			if !utf8.ValidString(got) {
+				t.Fatalf("GeneratePassword() returned invalid UTF-8: %q", got)
+			}
+			if len(got) < 33 {
+				t.Errorf("GeneratePassword() returned password of length %d, want at least 33", len(got))
+			}
+			for _, chars := range requiredChars {
+				if !strings.ContainsAny(got, chars) {
+					t.Errorf("GeneratePassword() = %q, missing required character from set %s", got, chars)
+				}
+			}
+		}
+	})
 
 	// Check for duplicates passwords
 	passwords := make(map[string]bool)
