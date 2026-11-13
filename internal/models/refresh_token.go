@@ -48,6 +48,7 @@ type GrantParams struct {
 
 	OAuthClientID *uuid.UUID
 	Scopes        *string
+	Resource      *string
 
 	UserAgent string
 	IP        string
@@ -145,6 +146,10 @@ func (s *Session) ApplyGrantParams(params *GrantParams) {
 
 	if params.Scopes != nil && *params.Scopes != "" {
 		s.Scopes = params.Scopes
+	}
+
+	if params.Resource != nil && *params.Resource != "" {
+		s.Resource = params.Resource
 	}
 }
 
