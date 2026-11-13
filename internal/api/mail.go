@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/badoux/checkmail"
 	"github.com/fatih/structs"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
@@ -707,6 +706,11 @@ func (a *API) sendMFAFactorUnenrolledNotification(r *http.Request, tx *storage.C
 	return nil
 }
 
+// emailFormatPattern matches a "valid e-mail address" as defined by the
+// WHATWG HTML spec:
+// https://html.spec.whatwg.org/multipage/input.html#valid-e-mail-address
+var emailFormatPattern = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+
 func (a *API) validateEmail(email string) (string, error) {
 	if email == "" {
 		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is required")
@@ -714,8 +718,8 @@ func (a *API) validateEmail(email string) (string, error) {
 	if len(email) > 255 {
 		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is too long")
 	}
-	if err := checkmail.ValidateFormat(email); err != nil {
-		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: %s", err.Error())
+	if !emailFormatPattern.MatchString(email) {
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format")
 	}
 
 	return strings.ToLower(email), nil
