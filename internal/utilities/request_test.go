@@ -333,6 +333,16 @@ func TestGetReferrer(t *tst.T) {
 			r := httptest.NewRequest("GET", "http://localhost?redirect_to="+c.redirectURL, nil)
 			referrer := GetReferrer(r, &config)
 			require.Equal(t, c.expected, referrer)
+
+			r2 := httptest.NewRequest("GET", "http://localhost", nil)
+			r2.Header.Set("redirect-to", c.redirectURL)
+			referrer2 := GetReferrer(r2, &config)
+			require.Equal(t, c.expected, referrer2)
+
+			r3 := httptest.NewRequest("GET", "http://localhost", nil)
+			r3.Header.Set("redirect_to", c.redirectURL)
+			referrer3 := GetReferrer(r3, &config)
+			require.Equal(t, c.expected, referrer3)
 		})
 	}
 }
