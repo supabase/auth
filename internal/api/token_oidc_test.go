@@ -8,9 +8,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/gobuffalo/pop/v6/slices"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 type TokenOIDCTestSuite struct {
@@ -69,6 +73,112 @@ func (ts *TokenOIDCTestSuite) TestGetProvider() {
 	require.False(ts.T(), emailOptional)
 	require.Equal(ts.T(), params.Provider, providerType)
 	require.NotEmpty(ts.T(), acceptableClientIds)
+}
+
+// setupTLSOIDCDiscoveryServer starts a TLS test server that serves an OIDC
+// discovery document only at discoveryPath and answers 404 everywhere else.
+// custom_oauth_providers requires https issuer and discovery URLs, hence TLS.
+// It also routes the SSRF-protected discovery fetcher to the server's own
+// client, which trusts the test certificate.
+func (ts *TokenOIDCTestSuite) setupTLSOIDCDiscoveryServer(discoveryPath string) *httptest.Server {
+	var server *httptest.Server
+	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != discoveryPath {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"issuer":"` + server.URL + `","authorization_endpoint":"` + server.URL + `/authorize","token_endpoint":"` + server.URL + `/token","jwks_uri":"` + server.URL + `/jwks"}`))
+	}))
+	ts.T().Cleanup(server.Close)
+
+	ts.T().Cleanup(utilities.SetOIDCDiscoveryHTTPFetcherForTest(
+		func(ctx context.Context, discoveryURL string) (*http.Response, error) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil)
+			if err != nil {
+				return nil, err
+			}
+			return server.Client().Do(req)
+		},
+	))
+	return server
+}
+
+func (ts *TokenOIDCTestSuite) createCustomOIDCProvider(identifier, issuer string, discoveryURL *string) {
+	provider := &models.CustomOAuthProvider{
+		ProviderType:        models.ProviderTypeOIDC,
+		Identifier:          identifier,
+		Name:                "Test OIDC provider",
+		ClientID:            "test-client-id",
+		ClientSecret:        "test-client-secret",
+		Enabled:             true,
+		Issuer:              &issuer,
+		DiscoveryURL:        discoveryURL,
+		AttributeMapping:    slices.Map{},
+		AuthorizationParams: slices.Map{},
+	}
+	require.NoError(ts.T(), models.CreateCustomOAuthProvider(ts.API.db, provider))
+	ts.T().Cleanup(func() {
+		require.NoError(ts.T(), models.DeleteCustomOAuthProvider(ts.API.db, provider.ID))
+	})
+}
+
+// supabase/auth#2899: the browser flow builds a custom OIDC provider from its
+// configured discovery_url, but the native id_token grant looked the provider
+// up by issuer only, i.e. {issuer}/.well-known/openid-configuration.
+func (ts *TokenOIDCTestSuite) TestGetProviderCustomOIDCUsesConfiguredDiscoveryURL() {
+	const discoveryPath = "/custom/discovery"
+	server := ts.setupTLSOIDCDiscoveryServer(discoveryPath)
+	discoveryURL := server.URL + discoveryPath
+	ts.createCustomOIDCProvider("custom:discovery-override", server.URL, &discoveryURL)
+
+	prevEnabled := ts.Config.CustomOAuth.Enabled
+	ts.Config.CustomOAuth.Enabled = true
+	ts.T().Cleanup(func() { ts.Config.CustomOAuth.Enabled = prevEnabled })
+
+	params := &IdTokenGrantParams{
+		IdToken:  "test-id-token",
+		Nonce:    "test-nonce",
+		Provider: "custom:discovery-override",
+	}
+
+	// The default HTTP client does not trust the test certificate, so give the
+	// OIDC library the TLS server's client for the issuer-based lookup path.
+	ctx := oidc.ClientContext(context.Background(), server.Client())
+	req := httptest.NewRequest(http.MethodPost, "http://localhost", nil)
+	oidcProvider, skipNonceCheck, providerType, acceptableClientIds, _, err := params.getProvider(ctx, ts.API.db, ts.Config, req, ts.API.oidcCache)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), oidcProvider)
+	require.False(ts.T(), skipNonceCheck)
+	require.Equal(ts.T(), "custom:discovery-override", providerType)
+	require.Contains(ts.T(), acceptableClientIds, "test-client-id")
+	// The endpoints come from the document served at the override URL.
+	require.Equal(ts.T(), server.URL+"/authorize", oidcProvider.Endpoint().AuthURL)
+}
+
+// A custom OIDC provider without a discovery_url override keeps using the
+// standard {issuer}/.well-known/openid-configuration location.
+func (ts *TokenOIDCTestSuite) TestGetProviderCustomOIDCWithoutDiscoveryURLUsesIssuer() {
+	server := ts.setupTLSOIDCDiscoveryServer("/.well-known/openid-configuration")
+	ts.createCustomOIDCProvider("custom:standard-discovery", server.URL, nil)
+
+	prevEnabled := ts.Config.CustomOAuth.Enabled
+	ts.Config.CustomOAuth.Enabled = true
+	ts.T().Cleanup(func() { ts.Config.CustomOAuth.Enabled = prevEnabled })
+
+	params := &IdTokenGrantParams{
+		IdToken:  "test-id-token",
+		Nonce:    "test-nonce",
+		Provider: "custom:standard-discovery",
+	}
+
+	ctx := oidc.ClientContext(context.Background(), server.Client())
+	req := httptest.NewRequest(http.MethodPost, "http://localhost", nil)
+	oidcProvider, _, providerType, _, _, err := params.getProvider(ctx, ts.API.db, ts.Config, req, ts.API.oidcCache)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), oidcProvider)
+	require.Equal(ts.T(), "custom:standard-discovery", providerType)
+	require.Equal(ts.T(), server.URL+"/authorize", oidcProvider.Endpoint().AuthURL)
 }
 
 // createFakeIDToken creates a fake JWT token with a specific issuer claim for testing
