@@ -48,12 +48,17 @@ func recoverer(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rvr := recover(); rvr != nil {
+				panicValue, stack := rvr, debug.Stack()
+				if hp, ok := rvr.(handlerPanic); ok {
+					panicValue, stack = hp.value, hp.stack
+				}
+
 				logEntry := observability.GetLogEntry(r)
 				if logEntry != nil {
-					logEntry.Panic(rvr, debug.Stack())
+					logEntry.Panic(panicValue, stack)
 				} else {
-					fmt.Fprintf(os.Stderr, "Panic: %+v\n", rvr)
-					debug.PrintStack()
+					fmt.Fprintf(os.Stderr, "Panic: %+v\n", panicValue)
+					_, _ = os.Stderr.Write(stack)
 				}
 
 				se := &HTTPError{
