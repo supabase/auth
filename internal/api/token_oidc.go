@@ -334,7 +334,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 		var decision models.AccountLinkingDecision
 		if params.LinkIdentity {
-			user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType)
+			user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType, emailOptional)
 		} else {
 			decision, user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional)
 		}
