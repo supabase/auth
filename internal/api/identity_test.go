@@ -92,7 +92,7 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 	// request is just used as a placeholder in the function
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
 	r.RemoteAddr = "192.0.2.1:1234"
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "test")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "test", false)
 	require.NoError(ts.T(), err)
 
 	// load associated identities for the user
@@ -121,13 +121,92 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 			Subject: u.ID.String(),
 		},
 	}
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email", false)
 	require.ErrorIs(ts.T(), err, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked"))
 	require.Nil(ts.T(), u)
 
 	logs, err = models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), logs, 1, "an already-linked identity must not emit another audit log")
+}
+
+func (ts *IdentityTestSuite) TestLinkIdentityToUserWithoutEmail() {
+	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
+	require.True(ts.T(), ok, "Mailer is not of type *MockMailer")
+
+	// request is just used as a placeholder in the function
+	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
+
+	newAnonymousUser := func() *models.User {
+		params := &SignupParams{
+			Aud:      ts.Config.JWT.Aud,
+			Provider: "anonymous",
+		}
+		u, err := params.ToUserModel(false)
+		require.NoError(ts.T(), err, "Error creating test user model")
+		require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new anonymous test user")
+		return u
+	}
+
+	ts.Run("email optional and no email", func() {
+		mockMailer.Reset()
+		ctx := withTargetUser(context.Background(), newAnonymousUser())
+		userData := &provider.UserProvidedData{
+			Metadata: &provider.Claims{
+				Subject: "no_email_subject",
+			},
+		}
+
+		u, err := ts.API.linkIdentityToUser(r, ctx, ts.API.db, userData, "custom:line", true)
+		require.NoError(ts.T(), err)
+		require.Empty(ts.T(), mockMailer.ConfirmationMailCalls, "there is no email to confirm")
+
+		u, err = models.FindUserByID(ts.API.db, u.ID)
+		require.NoError(ts.T(), err)
+		require.False(ts.T(), u.IsAnonymous)
+		require.Empty(ts.T(), u.GetEmail())
+		require.Nil(ts.T(), u.EmailConfirmedAt)
+		require.Equal(ts.T(), []interface{}{"custom:line"}, u.AppMetaData["providers"])
+
+		_, err = models.FindIdentityByIdAndProvider(ts.API.db, userData.Metadata.Subject, "custom:line")
+		require.NoError(ts.T(), err)
+	})
+
+	ts.Run("email optional and unverified email", func() {
+		mockMailer.Reset()
+		ctx := withTargetUser(context.Background(), newAnonymousUser())
+		userData := &provider.UserProvidedData{
+			Metadata: &provider.Claims{
+				Subject: "unverified_email_subject",
+				Email:   "unverified@example.com",
+			},
+		}
+
+		u, err := ts.API.linkIdentityToUser(r, ctx, ts.API.db, userData, "custom:line", true)
+		require.Nil(ts.T(), u)
+		require.ErrorContains(ts.T(), err, "Unverified email with custom:line")
+		require.Len(ts.T(), mockMailer.ConfirmationMailCalls, 1)
+		require.Equal(ts.T(), "unverified@example.com", mockMailer.ConfirmationMailCalls[0].User.GetEmail())
+	})
+
+	ts.Run("email required and no email", func() {
+		mockMailer.Reset()
+		anonymous := newAnonymousUser()
+		ctx := withTargetUser(context.Background(), anonymous)
+		userData := &provider.UserProvidedData{
+			Metadata: &provider.Claims{
+				Subject: "required_email_subject",
+			},
+		}
+
+		u, err := ts.API.linkIdentityToUser(r, ctx, ts.API.db, userData, "test", false)
+		require.Nil(ts.T(), u)
+		require.ErrorContains(ts.T(), err, "Unverified email with test")
+
+		u, err = models.FindUserByID(ts.API.db, anonymous.ID)
+		require.NoError(ts.T(), err)
+		require.True(ts.T(), u.IsAnonymous)
+	})
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
@@ -438,7 +517,7 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailEnabled() {
 		},
 	}
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "google")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "google", false)
 	require.NoError(ts.T(), err)
 
 	// Assert that identity linked notification email was sent
@@ -469,7 +548,7 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailDisabled() {
 		},
 	}
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
-	_, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "facebook")
+	_, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "facebook", false)
 	require.NoError(ts.T(), err)
 
 	// Assert that identity linked notification email was not sent
