@@ -278,18 +278,26 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Get("/", api.Reauthenticate)
 		})
 
-		r.With(api.requireAuthentication).Route("/user", func(r *router) {
-			r.Get("/", api.UserGet)
-			r.With(api.limitHandler(api.limiterOpts.User)).Put("/", api.UserUpdate)
+		// Authentication is applied per route here: OAuth client access tokens
+		// may read the user (GET /user) but must not modify it. Every other
+		// /user route must use requireAuthentication.
+		//
+		// TEMPORARY: GET /user accepts OAuth client tokens only so that existing
+		// projects reading the user with them (e.g. supabase.auth.getUser()) keep
+		// working. OAuth clients should use GET /oauth/userinfo instead; this
+		// will be revisited soon to reject OAuth client tokens on /user entirely.
+		r.Route("/user", func(r *router) {
+			r.With(api.requireAuthenticationAllowOAuthClient).Get("/", api.UserGet)
+			r.With(api.requireAuthentication).With(api.limitHandler(api.limiterOpts.User)).Put("/", api.UserUpdate)
 
-			r.Route("/identities", func(r *router) {
+			r.With(api.requireAuthentication).Route("/identities", func(r *router) {
 				r.Use(api.requireManualLinkingEnabled)
 				r.Get("/authorize", api.LinkIdentity)
 				r.Delete("/{identity_id}", api.DeleteIdentity)
 			})
 
 			// OAuth grant management endpoints
-			r.Route("/oauth/grants", func(r *router) {
+			r.With(api.requireAuthentication).Route("/oauth/grants", func(r *router) {
 				r.Use(api.requireOAuthServerEnabled)
 				r.Get("/", api.oauthServer.UserListOAuthGrants)
 				r.Delete("/", api.oauthServer.UserRevokeOAuthGrant)
