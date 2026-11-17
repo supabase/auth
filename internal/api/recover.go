@@ -56,6 +56,17 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		}
 		return apierrors.NewInternalServerError("Unable to process request").WithInternalError(err)
 	}
+	if user.IsBanned() {
+		// A banned user can't redeem the recovery link, so don't send one.
+		// Respond as for an unknown email so the ban status isn't revealed.
+		// Still apply the per-user max frequency check sendPasswordRecovery
+		// would have applied, so the 429 behavior is the same as for any
+		// other user.
+		if err := validateSentWithinFrequencyLimit(user.RecoverySentAt, config.SMTP.MaxFrequency); err != nil {
+			return err
+		}
+		return sendJSON(w, http.StatusOK, map[string]string{})
+	}
 	if isPKCEFlow(flowType) {
 		if _, err := generateFlowState(db, models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID)); err != nil {
 			return err

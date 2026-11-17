@@ -442,3 +442,121 @@ func (ts *OtpTestSuite) TestOtpKeepsConfirmedPassword() {
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), user.HasPassword())
 }
+
+func (ts *OtpTestSuite) TestOtpBannedUser() {
+	ts.Config.SMTP.MaxFrequency = 0
+	ts.Config.Sms.MaxFrequency = 0
+	ts.Config.External.Phone.Enabled = true
+	ts.Config.Sms.TestOTP = map[string]string{"123456789": "000000"}
+	defer func() {
+		ts.Config.Sms.TestOTP = nil
+	}()
+
+	u, err := models.NewUser("123456789", "banned@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(u))
+	require.NoError(ts.T(), u.Confirm(ts.API.db))
+	require.NoError(ts.T(), u.ConfirmPhone(ts.API.db))
+	require.NoError(ts.T(), u.Ban(ts.API.db, time.Hour))
+
+	cases := []struct {
+		desc string
+		path string
+		body map[string]interface{}
+	}{
+		{
+			desc: "Magic link via /otp",
+			path: "/otp",
+			body: map[string]interface{}{"email": u.GetEmail()},
+		},
+		{
+			desc: "Magic link via /magiclink",
+			path: "/magiclink",
+			body: map[string]interface{}{"email": u.GetEmail()},
+		},
+		{
+			desc: "SMS OTP via /otp",
+			path: "/otp",
+			body: map[string]interface{}{"phone": u.GetPhone()},
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+			req := httptest.NewRequest(http.MethodPost, c.path, &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+			require.JSONEq(ts.T(), "{}", w.Body.String())
+
+			dbUser, err := models.FindUserByID(ts.API.db, u.ID)
+			require.NoError(ts.T(), err)
+			require.Empty(ts.T(), dbUser.RecoveryToken)
+			require.Nil(ts.T(), dbUser.RecoverySentAt)
+			require.Empty(ts.T(), dbUser.ConfirmationToken)
+			require.Nil(ts.T(), dbUser.ConfirmationSentAt)
+		})
+	}
+
+	ts.Run("Expired ban sends magic link again", func() {
+		pastBan := time.Now().Add(-time.Hour)
+		u.BannedUntil = &pastBan
+		require.NoError(ts.T(), ts.API.db.UpdateOnly(u, "banned_until"))
+
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{"email": u.GetEmail()}))
+		req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		dbUser, err := models.FindUserByID(ts.API.db, u.ID)
+		require.NoError(ts.T(), err)
+		require.NotEmpty(ts.T(), dbUser.RecoveryToken)
+		require.NotNil(ts.T(), dbUser.RecoverySentAt)
+	})
+}
+
+func (ts *OtpTestSuite) TestOtpBannedUserMaxFrequency() {
+	origSMTP, origSms := ts.Config.SMTP.MaxFrequency, ts.Config.Sms.MaxFrequency
+	ts.Config.SMTP.MaxFrequency = time.Minute
+	ts.Config.Sms.MaxFrequency = time.Minute
+	ts.Config.External.Phone.Enabled = true
+	defer func() {
+		ts.Config.SMTP.MaxFrequency = origSMTP
+		ts.Config.Sms.MaxFrequency = origSms
+	}()
+
+	sentAt := time.Now().Add(-10 * time.Second)
+	u, err := models.NewUser("987654321", "banned-freq@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	u.RecoverySentAt = &sentAt
+	u.ConfirmationSentAt = &sentAt
+	require.NoError(ts.T(), ts.API.db.Create(u))
+	require.NoError(ts.T(), u.Confirm(ts.API.db))
+	require.NoError(ts.T(), u.ConfirmPhone(ts.API.db))
+	require.NoError(ts.T(), u.Ban(ts.API.db, time.Hour))
+
+	for _, c := range []struct {
+		path string
+		body map[string]interface{}
+	}{
+		{"/otp", map[string]interface{}{"email": u.GetEmail()}},
+		{"/magiclink", map[string]interface{}{"email": u.GetEmail()}},
+		{"/otp", map[string]interface{}{"phone": u.GetPhone()}},
+	} {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+		req := httptest.NewRequest(http.MethodPost, c.path, &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusTooManyRequests, w.Code, c.path)
+	}
+}
