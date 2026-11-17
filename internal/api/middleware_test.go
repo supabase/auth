@@ -14,6 +14,7 @@ import (
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -420,6 +421,28 @@ func TestTimeoutResponseWriter(t *testing.T) {
 	redirectHandler.ServeHTTP(w2, req)
 
 	require.Equal(t, w1.Result(), w2.Result())
+}
+
+func TestTimeoutMiddlewarePreservesPanicStack(t *testing.T) {
+	// A handler panicking behind recoverer and timeoutMiddleware must log
+	// the stack from the panic site, not the re-panic inside the middleware.
+	var logBuf bytes.Buffer
+	origOut := logrus.StandardLogger().Out
+	logrus.SetOutput(&logBuf)
+	defer logrus.SetOutput(origOut)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("boom")
+	})
+	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+	w := httptest.NewRecorder()
+
+	recoverer(timeoutMiddleware(time.Second*10)(handler)).ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	// Only the stack captured in the handler goroutine names the panicking
+	// handler; the re-panic stack never mentions it.
+	require.Contains(t, logBuf.String(), "TestTimeoutMiddlewarePreservesPanicStack.func")
 }
 
 func (ts *MiddlewareTestSuite) TestPerformRateLimitingWithSBFF() {

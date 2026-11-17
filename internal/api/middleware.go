@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -550,6 +551,14 @@ func limitRequestBody(maxBytes int64) func(http.Handler) http.Handler {
 	}
 }
 
+// handlerPanic carries a panic recovered in the handler goroutine together
+// with the stack captured at the panic site, so the outer recoverer can log
+// where the panic actually happened instead of the re-panic line.
+type handlerPanic struct {
+	value any
+	stack []byte
+}
+
 func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -560,12 +569,12 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 				header: make(http.Header),
 			}
 
-			panicChan := make(chan any, 1)
+			panicChan := make(chan handlerPanic, 1)
 			serverDone := make(chan struct{})
 			go func() {
 				defer func() {
 					if p := recover(); p != nil {
-						panicChan <- p
+						panicChan <- handlerPanic{value: p, stack: debug.Stack()}
 					}
 				}()
 
@@ -574,8 +583,8 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 			}()
 
 			select {
-			case p := <-panicChan:
-				panic(p)
+			case hp := <-panicChan:
+				panic(hp)
 
 			case <-serverDone:
 				timeoutWriter.finallyWrite(w)
