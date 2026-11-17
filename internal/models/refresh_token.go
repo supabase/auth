@@ -48,6 +48,9 @@ type GrantParams struct {
 
 	OAuthClientID *uuid.UUID
 	Scopes        *string
+	// OAuthClientIdentifier is the client_id claim value when it differs from
+	// OAuthClientID (Client ID Metadata Document URL). Not stored on the session.
+	OAuthClientIdentifier string
 
 	UserAgent string
 	IP        string

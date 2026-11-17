@@ -84,6 +84,13 @@ type OAuthServerConfiguration struct {
 	AuthorizationTTL         time.Duration `json:"authorization_ttl" split_words:"true" default:"10m"`
 	// Placeholder for now, for (near) future extensibility
 	DefaultScope string `json:"default_scope" split_words:"true" default:"email"`
+
+	// AllowClientIDMetadataDocuments lets clients use an HTTPS URL pointing
+	// to a Client ID Metadata Document as their client_id, without registering.
+	AllowClientIDMetadataDocuments bool `json:"allow_client_id_metadata_documents" split_words:"true"`
+	// ClientIDMetadataDocumentAllowedHosts restricts which hosts can serve
+	// Client ID Metadata Documents. Empty allows any public host.
+	ClientIDMetadataDocumentAllowedHosts []string `json:"client_id_metadata_document_allowed_hosts" split_words:"true"`
 }
 
 type AnonymousProviderConfiguration struct {
