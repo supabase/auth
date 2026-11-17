@@ -270,6 +270,37 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	}
 }
 
+func (ts *MFATestSuite) TestEnrollTOTPFactorAccountName() {
+	ts.Run("TOTP: email users keep their email as the account name", func() {
+		token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+		w := performEnrollFlow(ts, token, "email_user", models.TOTP, ts.TestDomain, "", http.StatusOK)
+		enrollResp := EnrollFactorResponse{}
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
+		key, err := otp.NewKeyFromURL(enrollResp.TOTP.URI)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), ts.TestEmail, key.AccountName())
+	})
+
+	ts.Run("TOTP: phone-only users can enroll and are labeled with their phone", func() {
+		phoneUser, err := models.NewUser("15555550100", "", "", ts.Config.JWT.Aud, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.API.db.Create(phoneUser))
+		session, err := models.NewSession(phoneUser.ID, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.API.db.Create(session))
+
+		token := ts.generateAAL1Token(phoneUser, &session.ID)
+		w := performEnrollFlow(ts, token, "phone_only_user", models.TOTP, ts.TestDomain, "", http.StatusOK)
+		enrollResp := EnrollFactorResponse{}
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
+		require.NotNil(ts.T(), enrollResp.TOTP)
+		key, err := otp.NewKeyFromURL(enrollResp.TOTP.URI)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), phoneUser.GetPhone(), key.AccountName())
+		require.Equal(ts.T(), ts.TestDomain, key.Issuer())
+	})
+}
+
 func (ts *MFATestSuite) TestDuplicateEnrollPhoneFactor() {
 	testPhoneNumber := "+12345677889"
 	altPhoneNumber := "+987412444444"

@@ -260,6 +260,20 @@ func (a *API) enrollWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 	})
 }
 
+// totpAccountName returns the account name shown next to the issuer in
+// authenticator apps. Users who signed up with a phone number have no email,
+// and totp.Generate rejects an empty account name, so fall back to the phone
+// number and, as a last resort, to the user ID.
+func totpAccountName(user *models.User) string {
+	if email := user.GetEmail(); email != "" {
+		return email
+	}
+	if phone := user.GetPhone(); phone != "" {
+		return phone
+	}
+	return user.ID.String()
+}
+
 func (a *API) enrollTOTPFactor(w http.ResponseWriter, r *http.Request, params *EnrollFactorParams) error {
 	ctx := r.Context()
 	user := getUser(ctx)
@@ -286,7 +300,7 @@ func (a *API) enrollTOTPFactor(w http.ResponseWriter, r *http.Request, params *E
 	var key *otp.Key
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      issuer,
-		AccountName: user.GetEmail(),
+		AccountName: totpAccountName(user),
 	})
 	if err != nil {
 		return apierrors.NewInternalServerError(QRCodeGenerationErrorMessage).WithInternalError(err)
