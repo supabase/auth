@@ -214,6 +214,7 @@ func TestClientAssertionConcurrentRequestsSignOnce(t *testing.T) {
 	release := make(chan struct{})
 	var signs atomic.Int32
 	config := &conf.ClientAssertionConfiguration{
+		Enabled:    true,
 		SigningJwk: newTestSigningJwk(t, key, "assertion-key"),
 		SigningKey: func(context.Context) (any, error) {
 			signs.Add(1)
@@ -246,6 +247,57 @@ func TestClientAssertionConcurrentRequestsSignOnce(t *testing.T) {
 		require.NoError(t, errs[i])
 		require.Equal(t, results[0], results[i])
 	}
+}
+
+func TestClientAssertionCanceledCallerDoesNotFailOthers(t *testing.T) {
+	key := newTestRSAKey(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var signCtxErr error
+	config := &conf.ClientAssertionConfiguration{
+		Enabled:    true,
+		SigningJwk: newTestSigningJwk(t, key, "assertion-key"),
+		SigningKey: func(ctx context.Context) (any, error) {
+			close(started)
+			<-release
+			signCtxErr = ctx.Err()
+			return key, nil
+		},
+	}
+	cache := newTestCache(newTestClock())
+
+	// the first caller starts the signing call, then its request is canceled
+	firstCtx, cancelFirst := context.WithCancel(context.Background())
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := cache.Get(firstCtx, config, testAssertionRequest)
+		firstDone <- err
+	}()
+	<-started
+
+	// a second caller joins the in-flight signing call
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := cache.Get(context.Background(), config, testAssertionRequest)
+		secondDone <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+
+	cancelFirst()
+	close(release)
+
+	require.NoError(t, <-secondDone)
+	require.NoError(t, <-firstDone)
+	require.NoError(t, signCtxErr, "the shared signing call must not see the first caller's cancellation")
+}
+
+func TestClientAssertionDisabled(t *testing.T) {
+	config, signs := newTestAssertionConfig(t, newTestRSAKey(t), "assertion-key")
+	config.Enabled = false
+
+	_, err := newTestCache(newTestClock()).Get(context.Background(), config, testAssertionRequest)
+	require.ErrorIs(t, err, errClientAssertionNotConfigured)
+	require.EqualValues(t, 0, signs.Load())
 }
 
 func TestClientAssertionInvalidate(t *testing.T) {
@@ -287,6 +339,7 @@ func TestClientAssertionSigningErrors(t *testing.T) {
 	sentinel := errors.New("signing unavailable")
 	fail := true
 	config := &conf.ClientAssertionConfiguration{
+		Enabled:    true,
 		SigningJwk: newTestSigningJwk(t, key, "assertion-key"),
 		SigningKey: func(context.Context) (any, error) {
 			if fail {
@@ -328,6 +381,7 @@ func TestClientAssertionKMSKey(t *testing.T) {
 
 	fake := &fakeKMS{key: key}
 	config := &conf.ClientAssertionConfiguration{
+		Enabled:    true,
 		SigningJwk: signingJwk,
 		SigningKey: func(ctx context.Context) (any, error) {
 			return &awskmsjwk.RS256Key{Ctx: ctx, KMS: fake, KeyID: arn, Raw: &key.PublicKey}, nil

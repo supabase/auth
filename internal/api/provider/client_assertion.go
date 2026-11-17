@@ -21,11 +21,16 @@ const (
 	// that is about to expire.
 	clientAssertionRefreshBefore = 5 * time.Minute
 
+	// clientAssertionSignTimeout bounds one signing call. The call is detached
+	// from the caller's context (see Get), so this is what stops a stuck KMS
+	// call from blocking every waiting request.
+	clientAssertionSignTimeout = 10 * time.Second
+
 	// clientAssertionType is the JWT typ header for client assertions.
 	clientAssertionType = "client-authentication+jwt"
 )
 
-var errClientAssertionNotConfigured = errors.New("client assertion signing key is not configured")
+var errClientAssertionNotConfigured = errors.New("client assertions are not enabled or no signing key is configured")
 
 // ClientAssertionRequest identifies the provider an assertion is signed for.
 type ClientAssertionRequest struct {
@@ -107,7 +112,7 @@ func (c *ClientAssertionCache) put(key string, entry clientAssertionEntry) {
 // Get returns a client assertion for req, signing a new one if there is no
 // cached assertion or it has less than clientAssertionRefreshBefore left.
 func (c *ClientAssertionCache) Get(ctx context.Context, config *conf.ClientAssertionConfiguration, req ClientAssertionRequest) (string, error) {
-	if config.SigningJwk == nil || config.SigningKey == nil {
+	if !config.Enabled || config.SigningJwk == nil || config.SigningKey == nil {
 		return "", errClientAssertionNotConfigured
 	}
 
@@ -122,7 +127,12 @@ func (c *ClientAssertionCache) Get(ctx context.Context, config *conf.ClientAsser
 			return assertion, nil
 		}
 
-		entry, err := c.sign(ctx, config, req)
+		// every request waiting on this key shares the signing call, so it
+		// must not fail because the first caller's request was canceled
+		signCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), clientAssertionSignTimeout)
+		defer cancel()
+
+		entry, err := c.sign(signCtx, config, req)
 		if err != nil {
 			return nil, err
 		}
