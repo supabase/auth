@@ -23,6 +23,18 @@ const (
 	ProviderTypeOIDC   ProviderType = "oidc"
 )
 
+// ClientAuthMethod is how Auth authenticates to a custom provider's token
+// endpoint.
+type ClientAuthMethod string
+
+const (
+	// ClientAuthMethodClientSecret sends the stored client secret.
+	ClientAuthMethodClientSecret ClientAuthMethod = "client_secret"
+	// ClientAuthMethodPrivateKeyJWT sends a signed client assertion (RFC 7523).
+	// No client secret is stored.
+	ClientAuthMethodPrivateKeyJWT ClientAuthMethod = "private_key_jwt"
+)
+
 // CustomOAuthProvider represents a custom OAuth2 or OIDC provider configuration
 type CustomOAuthProvider struct {
 	ID           uuid.UUID    `db:"id" json:"id"`
@@ -32,7 +44,6 @@ type CustomOAuthProvider struct {
 	Identifier          string        `db:"identifier" json:"identifier"`
 	Name                string        `db:"name" json:"name"`
 	ClientID            string        `db:"client_id" json:"client_id"`
-	ClientSecret        string        `db:"client_secret" json:"-"` // Encrypted via EncryptedString, never expose in JSON
 	AcceptableClientIDs slices.String `db:"acceptable_client_ids" json:"acceptable_client_ids"`
 	Scopes              slices.String `db:"scopes" json:"scopes"`
 	PKCEEnabled         bool          `db:"pkce_enabled" json:"pkce_enabled"`
@@ -43,6 +54,15 @@ type CustomOAuthProvider struct {
 	AuthorizationParams   slices.Map    `db:"authorization_params" json:"authorization_params"`
 	Enabled               bool          `db:"enabled" json:"enabled"`
 	EmailOptional         bool          `db:"email_optional" json:"email_optional"`
+
+	// Client authentication to the token endpoint.
+	ClientAuthMethod ClientAuthMethod `db:"client_auth_method" json:"client_auth_method"`
+	// ClientSecret is encrypted via EncryptedString and never exposed in JSON.
+	// It is empty for private_key_jwt providers.
+	ClientSecret string `db:"client_secret" json:"-"`
+	// ClientAssertionAudience overrides the aud claim of client assertions,
+	// which defaults to the provider's issuer. Only used with private_key_jwt.
+	ClientAssertionAudience *string `db:"client_assertion_audience" json:"client_assertion_audience,omitempty"`
 
 	// OIDC-specific fields (null for OAuth2 providers)
 	Issuer            *string        `db:"issuer" json:"issuer,omitempty"`
@@ -88,16 +108,18 @@ func (p *CustomOAuthProvider) SetClientSecret(secret string, dbEncryption conf.D
 // GetClientSecret decrypts and returns the client secret using the configured
 // database decryption keys. It expects the client secret to be stored in
 // encrypted form when encryption is enabled, but will also handle plaintext
-// secrets (for deployments where encryption is not yet configured).
+// secrets (for deployments where encryption is not yet configured). It returns
+// an empty string for providers without a secret (private_key_jwt).
 func (p *CustomOAuthProvider) GetClientSecret(dbEncryption conf.DatabaseEncryptionConfiguration) (string, error) {
-	if p.ClientSecret == "" {
+	secret := p.ClientSecret
+	if secret == "" {
 		return "", nil
 	}
 
-	es := crypto.ParseEncryptedString(p.ClientSecret)
+	es := crypto.ParseEncryptedString(secret)
 	if es == nil {
 		// Not an encrypted string – treat as plaintext.
-		return p.ClientSecret, nil
+		return secret, nil
 	}
 
 	if dbEncryption.DecryptionKeys == nil {
@@ -287,6 +309,10 @@ func CreateCustomOAuthProvider(tx *storage.Connection, provider *CustomOAuthProv
 	}
 	if provider.CustomClaimsAllowlist == nil {
 		provider.CustomClaimsAllowlist = slices.String{}
+	}
+	// pop inserts every column, so the column default doesn't apply
+	if provider.ClientAuthMethod == "" {
+		provider.ClientAuthMethod = ClientAuthMethodClientSecret
 	}
 
 	if err := tx.Create(provider); err != nil {
