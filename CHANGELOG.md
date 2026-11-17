@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.199.0](https://github.com/supabase/auth/compare/v2.198.0...v2.199.0) (2026-11-17)
+
+
+### Features
+
+* add client auth method to custom OAuth providers ([#2934](https://github.com/supabase/auth/issues/2934)) ([034e4ec](https://github.com/supabase/auth/commit/034e4ec0ce75f6da8b975115cc0f40533e236d96)), closes [#2932](https://github.com/supabase/auth/issues/2932) [#2933](https://github.com/supabase/auth/issues/2933) [#2935](https://github.com/supabase/auth/issues/2935) [#2936](https://github.com/supabase/auth/issues/2936)
+* add experimental config for client assertion signing keys ([#2932](https://github.com/supabase/auth/issues/2932)) ([782c2d0](https://github.com/supabase/auth/commit/782c2d0a8c042450e8cd34cbca0e62d6997c7062)), closes [#2933](https://github.com/supabase/auth/issues/2933) [#2934](https://github.com/supabase/auth/issues/2934) [#2935](https://github.com/supabase/auth/issues/2935) [#2936](https://github.com/supabase/auth/issues/2936)
+* gate private_key_jwt in the custom provider admin API ([#2935](https://github.com/supabase/auth/issues/2935)) ([f78a61d](https://github.com/supabase/auth/commit/f78a61d55bc0cef065dea40751007a1f32de7c16)), closes [#2932](https://github.com/supabase/auth/issues/2932) [#2933](https://github.com/supabase/auth/issues/2933) [#2934](https://github.com/supabase/auth/issues/2934) [#2936](https://github.com/supabase/auth/issues/2936)
+* sign and cache private_key_jwt client assertions ([#2933](https://github.com/supabase/auth/issues/2933)) ([7d8f364](https://github.com/supabase/auth/commit/7d8f3643175a5c3b1b27a9bc61fb185600a10447)), closes [#2932](https://github.com/supabase/auth/issues/2932) [#2934](https://github.com/supabase/auth/issues/2934) [#2935](https://github.com/supabase/auth/issues/2935) [#2936](https://github.com/supabase/auth/issues/2936)
+* use client assertions in the custom OIDC token exchange ([#2936](https://github.com/supabase/auth/issues/2936)) ([10ef107](https://github.com/supabase/auth/commit/10ef10789d1ee4fb422b448047e67e3e264c0482)), closes [#2932](https://github.com/supabase/auth/issues/2932) [#2933](https://github.com/supabase/auth/issues/2933) [#2934](https://github.com/supabase/auth/issues/2934) [#2935](https://github.com/supabase/auth/issues/2935)
+
 ## [2.198.0](https://github.com/supabase/auth/compare/v2.197.0...v2.198.0) (2026-11-13)
 
 
