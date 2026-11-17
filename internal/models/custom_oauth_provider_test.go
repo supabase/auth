@@ -559,21 +559,8 @@ func (ts *CustomOAuthProviderTestSuite) TestPrivateKeyJWTProviderRoundTrip() {
 }
 
 func (ts *CustomOAuthProviderTestSuite) TestClientAuthMethodConstraints() {
-	// private_key_jwt providers must not have a secret
-	withSecret := ts.newPrivateKeyJWTProvider("pkjwt-with-secret")
-	require.NoError(ts.T(), withSecret.SetClientSecret("test-client-secret", ts.config.Security.DBEncryption))
-	assert.Error(ts.T(), CreateCustomOAuthProvider(ts.db, withSecret))
-
-	// client_secret providers must have a secret
-	withoutSecret := ts.newPrivateKeyJWTProvider("secret-missing")
-	withoutSecret.ClientAuthMethod = ClientAuthMethodClientSecret
-	assert.Error(ts.T(), CreateCustomOAuthProvider(ts.db, withoutSecret))
-
-	// an empty secret counts as missing
-	emptySecret := ts.newPrivateKeyJWTProvider("secret-empty")
-	emptySecret.ClientAuthMethod = ClientAuthMethodClientSecret
-	require.NoError(ts.T(), emptySecret.SetClientSecret("", conf.DatabaseEncryptionConfiguration{}))
-	assert.Error(ts.T(), CreateCustomOAuthProvider(ts.db, emptySecret))
+	// whether a method needs a secret is enforced by the admin API; the
+	// database only checks the method and the audience
 
 	// unknown methods are rejected
 	unknown := ts.newPrivateKeyJWTProvider("unknown-method")
@@ -593,10 +580,8 @@ func (ts *CustomOAuthProviderTestSuite) TestClientAuthMethodConstraints() {
 func (ts *CustomOAuthProviderTestSuite) TestSwitchClientAuthMethod() {
 	provider := ts.createTestProvider(ProviderTypeOIDC, "custom:switch-method")
 
-	// to private_key_jwt: the secret has to be cleared
+	// to private_key_jwt, clearing the secret as the admin API does
 	provider.ClientAuthMethod = ClientAuthMethodPrivateKeyJWT
-	assert.Error(ts.T(), UpdateCustomOAuthProvider(ts.db, provider))
-
 	provider.ClientSecret = ""
 	require.NoError(ts.T(), UpdateCustomOAuthProvider(ts.db, provider))
 
@@ -605,10 +590,8 @@ func (ts *CustomOAuthProviderTestSuite) TestSwitchClientAuthMethod() {
 	assert.Equal(ts.T(), ClientAuthMethodPrivateKeyJWT, found.ClientAuthMethod)
 	assert.Empty(ts.T(), found.ClientSecret)
 
-	// back to client_secret: a secret is required again
+	// back to client_secret with a new secret
 	found.ClientAuthMethod = ClientAuthMethodClientSecret
-	assert.Error(ts.T(), UpdateCustomOAuthProvider(ts.db, found))
-
 	require.NoError(ts.T(), found.SetClientSecret("new-client-secret", ts.config.Security.DBEncryption))
 	require.NoError(ts.T(), UpdateCustomOAuthProvider(ts.db, found))
 

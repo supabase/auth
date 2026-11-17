@@ -5,6 +5,9 @@
 -- client_secret stays NOT NULL: private_key_jwt providers store an empty
 -- string instead, so versions that predate this migration can still read every
 -- row during a rolling deploy or after a rollback.
+--
+-- Which methods need a secret is enforced by the admin API, not by a check
+-- constraint, so adding a method later doesn't need a constraint migration.
 /* auth_migration: 20261116120000 */
 do $$ begin
 
@@ -22,20 +25,6 @@ do $$ begin
         alter table only {{ index .Options "Namespace" }}.custom_oauth_providers
             add constraint custom_oauth_providers_client_auth_method_check check (
                 client_auth_method in ('client_secret', 'private_key_jwt')
-            );
-    end if;
-
-    -- client_secret providers must have a secret, private_key_jwt providers
-    -- must not (an empty string).
-    if not exists (
-        select 1 from pg_constraint
-        where conname = 'custom_oauth_providers_client_secret_matches_auth_method'
-          and conrelid = '{{ index .Options "Namespace" }}.custom_oauth_providers'::regclass
-    ) then
-        alter table only {{ index .Options "Namespace" }}.custom_oauth_providers
-            add constraint custom_oauth_providers_client_secret_matches_auth_method check (
-                (client_auth_method = 'client_secret' and client_secret <> '') or
-                (client_auth_method = 'private_key_jwt' and client_secret = '')
             );
     end if;
 
