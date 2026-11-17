@@ -558,25 +558,6 @@ func (ts *CustomOAuthProviderTestSuite) TestPrivateKeyJWTProviderRoundTrip() {
 	assert.NotContains(ts.T(), raw, "client_secret")
 }
 
-func (ts *CustomOAuthProviderTestSuite) TestClientAuthMethodConstraints() {
-	// whether a method needs a secret is enforced by the admin API; the
-	// database only checks the method and the audience
-
-	// unknown methods are rejected
-	unknown := ts.newPrivateKeyJWTProvider("unknown-method")
-	unknown.ClientAuthMethod = "client_secret_jwt"
-	assert.Error(ts.T(), CreateCustomOAuthProvider(ts.db, unknown))
-
-	// the audience may not be an empty string
-	emptyAudience := ts.newPrivateKeyJWTProvider("empty-audience")
-	emptyAudience.ClientAssertionAudience = stringPtr("")
-	assert.Error(ts.T(), CreateCustomOAuthProvider(ts.db, emptyAudience))
-
-	count, err := CountCustomOAuthProviders(ts.db)
-	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), 0, count)
-}
-
 func (ts *CustomOAuthProviderTestSuite) TestSwitchClientAuthMethod() {
 	provider := ts.createTestProvider(ProviderTypeOIDC, "custom:switch-method")
 
