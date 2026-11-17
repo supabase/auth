@@ -117,7 +117,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 			if err != nil {
 				return "", apierrors.NewInternalServerError("error generating sms template").WithInternalError(err)
 			}
-			messageID, err := smsProvider.SendMessage(phone, message, channel, otp)
+			messageID, err = smsProvider.SendMessage(phone, message, channel, otp)
 			if err != nil {
 				return messageID, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSMSSendFailed, "Error sending %s OTP to provider: %v", otpType, err)
 			}
