@@ -577,7 +577,7 @@ func (s *Server) buildSuccessRedirectURL(authorization *models.OAuthServerAuthor
 		q.Set("state", *authorization.State)
 	}
 	u.RawQuery = q.Encode()
-	return u.String()
+	return utilities.PreserveEmptyAuthority(authorization.RedirectURI, u)
 }
 
 // buildErrorRedirectURL builds an error redirect URL with the given parameters
@@ -590,7 +590,7 @@ func (s *Server) buildErrorRedirectURL(redirectURI, errorCode, errorDescription,
 		q.Set("state", state)
 	}
 	u.RawQuery = q.Encode()
-	return u.String()
+	return utilities.PreserveEmptyAuthority(redirectURI, u)
 }
 
 // buildAuthorizationURL safely joins a base URL with a path, handling slashes correctly
