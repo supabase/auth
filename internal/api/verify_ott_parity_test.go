@@ -226,6 +226,14 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 		Phone:          parityPhone,
 	}
 
+	phoneLoggedIn := otpParityOutcome{
+		Status:         http.StatusOK,
+		Action:         string(models.LoginAction),
+		PhoneConfirmed: true,
+		Email:          parityEmail,
+		Phone:          parityPhone,
+	}
+
 	phoneChanged := otpParityOutcome{
 		Status:         http.StatusOK,
 		Action:         string(models.UserModifiedAction),
@@ -241,6 +249,16 @@ func (ts *VerifyTestSuite) TestVerifyOTPParityPhoneFlows() {
 			},
 			requestBody: phoneOTPBody(smsVerification, parityPhone),
 			expected:    phoneSignedUp,
+		},
+		// An existing user signing in with an SMS code is a login. Only the
+		// verification that first confirms the phone is a signup.
+		"sms with a valid code signs a confirmed user in": {
+			seed: func(u *models.User) {
+				u.PhoneConfirmedAt = &now
+				ts.seedChallenge(u, models.ConfirmationToken, parityPhone, phoneHash, now, time.Hour)
+			},
+			requestBody: phoneOTPBody(smsVerification, parityPhone),
+			expected:    phoneLoggedIn,
 		},
 		"sms with an expired code is rejected": {
 			seed: func(u *models.User) {
