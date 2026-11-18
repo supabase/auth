@@ -59,6 +59,43 @@ tags:
   - name: general
     description: General APIs.
 paths:
+  /web3/challenge:
+    post:
+      summary: Issue a one-use challenge for an existing Web3 identity
+      description: No user or session is created. Requires an enabled Web3 provider and existing verified provider identity. Expires in five minutes. Subject to CAPTCHA and rate limits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chain, address, chain_id, domain, uri]
+              properties:
+                chain: {type: string, enum: [ethereum, solana]}
+                address: {type: string}
+                chain_id: {type: string}
+                domain: {type: string}
+                uri: {type: string, format: uri}
+                expected_user_id: {type: string, format: uuid}
+                gotrue_meta_security:
+                  $ref: "#/components/schemas/GoTrueSecurity"
+      responses:
+        200:
+          description: A challenge bound to an existing identity and user, not a login or ownership attestation.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [nonce, request_id, issued_at, expires_at]
+                properties:
+                  nonce: {type: string}
+                  request_id: {type: string, enum: [WEB3_EXISTING_USER_ONLY]}
+                  issued_at: {type: string, format: date-time}
+                  expires_at: {type: string, format: date-time}
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        429:
+          description: Too many requests
   /token:
     post:
       summary: Issues access and refresh tokens based on grant type.
@@ -166,6 +203,14 @@ paths:
                     The signature of the message for Web3 authentication. 
                     For Solana: Base64 or Base64-URL encoded. 
                     For Ethereum: hexadecimal string with 0x prefix.
+                existing_user_only:
+                  type: boolean
+                  default: false
+                  description: Require a pre-existing Web3 identity and consume a server challenge; never enter signup. Sign Request ID WEB3_EXISTING_USER_ONLY.
+                expected_user_id:
+                  type: string
+                  format: uuid
+                  description: Optional identity assertion, allowed only with existing_user_only. It is checked against the signed identity and challenge, never used to select an account.
                 chain:
                   type: string
                   description: What blockchain is the Web3 message and signature for.
