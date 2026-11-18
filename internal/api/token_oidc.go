@@ -211,16 +211,16 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if params.IdToken == "" {
-		return apierrors.NewOAuthError("invalid request", "id_token required")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidRequest, "id_token required")
 	}
 
 	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
-		return apierrors.NewOAuthError("invalid request", "provider or client_id and issuer required")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidRequest, "provider or client_id and issuer required")
 	}
 
 	if params.LinkIdentity {
 		if r.Header.Get("Authorization") == "" {
-			return apierrors.NewOAuthError("invalid request", "Linking requires a valid user access token in Authorization")
+			return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidRequest, "Linking requires a valid user access token in Authorization")
 		}
 
 		requireAuthCtx, err := a.requireAuthentication(w, r)
@@ -230,7 +230,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 		targetUser := getUser(requireAuthCtx)
 		if targetUser == nil {
-			return apierrors.NewOAuthError("invalid request", "Linking requires a valid user authentication")
+			return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidRequest, "Linking requires a valid user authentication")
 		}
 
 		// set it so linkIdentityToUser works below
@@ -256,7 +256,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		AccessToken:          params.AccessToken,
 	})
 	if err != nil {
-		return apierrors.NewOAuthError("invalid request", "Bad ID token").WithInternalError(err)
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidRequest, "Bad ID token").WithInternalError(err)
 	}
 
 	userData.Metadata.EmailVerified = false
@@ -272,7 +272,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if idToken.Subject == "" {
-		return apierrors.NewOAuthError("invalid request", "Missing sub claim in id_token")
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidRequest, "Missing sub claim in id_token")
 	}
 
 	correctAudience := false
@@ -288,7 +288,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if !correctAudience {
-		return apierrors.NewOAuthError("invalid request", fmt.Sprintf("Unacceptable audience in id_token: %v", idToken.Audience))
+		return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidRequest, fmt.Sprintf("Unacceptable audience in id_token: %v", idToken.Audience))
 	}
 
 	if !skipNonceCheck {
@@ -296,12 +296,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		paramsHasNonce := params.Nonce != ""
 
 		if tokenHasNonce != paramsHasNonce {
-			return apierrors.NewOAuthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
+			return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidRequest, "Passed nonce and nonce in id_token should either both exist or not.")
 		} else if tokenHasNonce && paramsHasNonce {
 			// verify nonce to mitigate replay attacks
 			hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
 			if hash != idToken.Nonce {
-				return apierrors.NewOAuthError("invalid nonce", "Nonces mismatch")
+				return apierrors.NewOAuthError(apierrors.OAuthErrorCodeInvalidRequest, "Nonces mismatch")
 			}
 		}
 	}
@@ -356,7 +356,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		case *HTTPError:
 			return err
 		default:
-			return apierrors.NewOAuthError("server_error", "Internal Server Error").WithInternalError(err)
+			return apierrors.NewOAuthError(apierrors.OAuthErrorCodeServerError, "Internal Server Error").WithInternalError(err)
 		}
 	}
 	if createdUser {

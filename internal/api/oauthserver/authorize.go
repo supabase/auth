@@ -73,13 +73,6 @@ const (
 	OAuthServerConsentActionDeny    OAuthServerConsentAction = "deny"
 )
 
-// OAuth2 error codes per RFC 6749
-const (
-	oAuth2ErrorInvalidRequest = "invalid_request"
-	oAuth2ErrorServerError    = "server_error"
-	oAuth2ErrorAccessDenied   = "access_denied"
-)
-
 // OAuthServerAuthorize handles GET /oauth/authorize
 func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -130,7 +123,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	// From this point on, we have valid client + redirect_uri + all params, so we can redirect errors
 	// validate all other parameters - now we can redirect errors
 	if err := s.validateRemainingAuthorizeParams(params); err != nil {
-		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorInvalidRequest, err.Error(), params.State)
+		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, apierrors.OAuthErrorCodeInvalidRequest, err.Error(), params.State)
 		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
 		return nil
 	}
@@ -150,7 +143,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 
 	if err := models.CreateOAuthServerAuthorization(db, authorization); err != nil {
 		// Error creating authorization - redirect with server_error
-		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorServerError, "error creating authorization", params.State)
+		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, apierrors.OAuthErrorCodeServerError, "error creating authorization", params.State)
 		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
 		return nil
 	}
@@ -161,7 +154,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	// Redirect to authorization path with authorization_id
 	if config.OAuthServer.AuthorizationPath == "" {
 		// OAuth authorization path not configured - redirect with server_error
-		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorServerError, "oauth authorization path not configured", params.State)
+		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, apierrors.OAuthErrorCodeServerError, "oauth authorization path not configured", params.State)
 		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
 		return nil
 	}
@@ -392,7 +385,7 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 			if authorization.State != nil {
 				state = *authorization.State
 			}
-			redirectURL = s.buildErrorRedirectURL(authorization.RedirectURI, oAuth2ErrorAccessDenied, "User denied the request", state)
+			redirectURL = s.buildErrorRedirectURL(authorization.RedirectURI, apierrors.OAuthErrorCodeAccessDenied, "User denied the request", state)
 
 			observability.LogEntrySetField(r, "oauth_consent_action", string(OAuthServerConsentActionDeny))
 		}
