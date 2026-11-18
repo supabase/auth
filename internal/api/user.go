@@ -131,11 +131,21 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	// An email address that is already registered must not be reported back to
+	// the client, otherwise anyone with an account can find out whether a
+	// given address belongs to one (see supabase/supabase#19071). When the
+	// address is taken the request is handled like any other email change and
+	// is only rejected once the change is confirmed.
+	emailTaken := false
 	if params.Email != "" && user.GetEmail() != params.Email {
 		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user, config.Experimental.ProviderLinkingDomains); err != nil {
 			return apierrors.NewInternalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
-			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
+			if !config.Security.HideEmailExists {
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
+			}
+
+			emailTaken = true
 		}
 	}
 
@@ -252,6 +262,13 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			if user.IsAnonymous && config.Mailer.Autoconfirm {
 				// anonymous users can add an email with automatic confirmation, which is similar to signing up
 				// permanent users always need to verify their email address when changing it
+				if emailTaken {
+					// The address is applied to the account right away, so
+					// there is no confirmation step that could be used to
+					// hide whether the address is taken.
+					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
+				}
+
 				user.EmailChange = params.Email
 				if _, terr := a.emailChangeVerify(r, tx, &VerifyParams{
 					Type:  mailer.EmailChangeVerification,
@@ -269,7 +286,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 					}
 
 				}
-				if terr = a.sendEmailChange(r, tx, user, params.Email, flowType); terr != nil {
+				if terr = a.sendEmailChange(r, tx, user, params.Email, flowType, emailTaken); terr != nil {
 					return terr
 				}
 			}
