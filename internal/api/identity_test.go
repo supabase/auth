@@ -92,7 +92,7 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 	// request is just used as a placeholder in the function
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
 	r.RemoteAddr = "192.0.2.1:1234"
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "test")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "test", false)
 	require.NoError(ts.T(), err)
 
 	// load associated identities for the user
@@ -121,13 +121,39 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 			Subject: u.ID.String(),
 		},
 	}
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email", false)
 	require.ErrorIs(ts.T(), err, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked"))
 	require.Nil(ts.T(), u)
 
 	logs, err = models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), logs, 1, "an already-linked identity must not emit another audit log")
+}
+
+func (ts *IdentityTestSuite) TestLinkIdentityToUserEmailOptionalWithoutEmail() {
+	// An anonymous user has no email, and a custom OIDC identity with
+	// email_optional (e.g. one using only the openid scope) carries none
+	// either, so there is nothing to confirm and linking must succeed
+	// instead of trying to send a confirmation email to an empty address.
+	u, err := models.NewUser("", "", "", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating anonymous test user model")
+	u.IsAnonymous = true
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new anonymous test user")
+
+	ctx := withTargetUser(context.Background(), u)
+	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
+	r.RemoteAddr = "192.0.2.1:1234"
+
+	testUserData := &provider.UserProvidedData{
+		Metadata: &provider.Claims{
+			Subject: "line_subject_no_email",
+		},
+	}
+	linkedUser, err := ts.API.linkIdentityToUser(r, ctx, ts.API.db, testUserData, "custom:line", true)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), linkedUser)
+	require.False(ts.T(), linkedUser.IsAnonymous, "linking an email-less identity should convert an anonymous user")
+	require.True(ts.T(), linkedUser.IsConfirmed())
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
@@ -438,7 +464,7 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailEnabled() {
 		},
 	}
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "google")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "google", false)
 	require.NoError(ts.T(), err)
 
 	// Assert that identity linked notification email was sent
@@ -469,7 +495,7 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailDisabled() {
 		},
 	}
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
-	_, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "facebook")
+	_, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "facebook", false)
 	require.NoError(ts.T(), err)
 
 	// Assert that identity linked notification email was not sent
