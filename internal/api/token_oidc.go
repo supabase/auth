@@ -34,6 +34,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 
 	var cfg *conf.OAuthProviderConfiguration
 	var issuer string
+	var discoveryURL string
 	var providerType string
 	var acceptableClientIDs []string
 
@@ -151,6 +152,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 
 		providerType = p.Provider
 		issuer = *customProvider.Issuer
+		discoveryURL = customProvider.GetDiscoveryURL()
 		acceptableClientIDs = append(acceptableClientIDs, customProvider.ClientID)
 		acceptableClientIDs = append(acceptableClientIDs, customProvider.AcceptableClientIDs...)
 
@@ -190,7 +192,13 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, db *storage.Connec
 		oidcCtx = oidc.InsecureIssuerURLContext(ctx, issuer)
 	}
 
-	oidcProvider, err := cache.GetProvider(oidcCtx, issuer)
+	var oidcProvider *oidc.Provider
+	var err error
+	if discoveryURL != "" {
+		oidcProvider, err = cache.GetProviderFromURL(oidcCtx, issuer, discoveryURL)
+	} else {
+		oidcProvider, err = cache.GetProvider(oidcCtx, issuer)
+	}
 	if err != nil {
 		return nil, false, "", nil, cfg.EmailOptional, err
 	}
