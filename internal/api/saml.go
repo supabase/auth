@@ -73,6 +73,11 @@ func (a *API) newSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 		u.Path += dedicatedScopeID.String() + "/"
 	}
 
+	entityID := ""
+	if identityProvider != nil {
+		entityID = identityProvider.EntityID
+	}
+
 	provider := samlsp.DefaultServiceProvider(samlsp.Options{
 		URL:               *u,
 		Key:               key,
@@ -80,6 +85,7 @@ func (a *API) newSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 		SignRequest:       true,
 		AllowIDPInitiated: idpInitiated,
 		IDPMetadata:       identityProvider,
+		EntityID:          entityID,
 	})
 
 	provider.AuthnNameIDFormat = saml.PersistentNameIDFormat
