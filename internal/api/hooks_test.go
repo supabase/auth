@@ -333,14 +333,15 @@ func (ts *HooksTestSuite) TestAccountChangesNotificationsHookPayload() {
 		JSON(v0hooks.SendEmailOutput{})
 
 	testCases := []struct {
-		description        string
-		expectedActionType string
-		expectedProvider   string
-		expectedOldEmail   string
-		expectedOldPhone   string
-		expectedFactorType string
-		setupFunc          func() error
-		enableNotification func()
+		description            string
+		expectedActionType     string
+		expectedProvider       string
+		expectedOldEmail       string
+		expectedOldPhone       string
+		expectedFactorType     string
+		expectedRecipientEmail string
+		setupFunc              func() error
+		enableNotification     func()
 	}{
 		{
 			description:        "IdentityLinkedNotification contains provider",
@@ -358,9 +359,10 @@ func (ts *HooksTestSuite) TestAccountChangesNotificationsHookPayload() {
 			},
 		},
 		{
-			description:        "IdentityUnlinkedNotification contains provider",
-			expectedActionType: mail.IdentityUnlinkedNotification,
-			expectedProvider:   "github",
+			description:            "IdentityUnlinkedNotification preserves explicit recipient",
+			expectedRecipientEmail: "notification@example.com",
+			expectedActionType:     mail.IdentityUnlinkedNotification,
+			expectedProvider:       "github",
 			enableNotification: func() {
 				ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = true
 			},
@@ -370,6 +372,20 @@ func (ts *HooksTestSuite) TestAccountChangesNotificationsHookPayload() {
 				require.NoError(ts.T(), err)
 				req = req.WithContext(withExternalHost(req.Context(), externalHost))
 				return ts.API.sendIdentityUnlinkedNotification(req, ts.API.db, ts.TestUser, "github", "notification@example.com")
+			},
+		},
+		{
+			description:            "IdentityUnlinkedNotification falls back to current email when no recipient is supplied",
+			expectedActionType:     mail.IdentityUnlinkedNotification,
+			expectedProvider:       "github",
+			expectedRecipientEmail: ts.TestUser.GetEmail(),
+			enableNotification:     func() { ts.Config.Mailer.Notifications.IdentityUnlinkedEnabled = true },
+			setupFunc: func() error {
+				req := httptest.NewRequest("DELETE", "/identities/123", nil)
+				externalHost, err := url.Parse("http://example.com")
+				require.NoError(ts.T(), err)
+				req = req.WithContext(withExternalHost(req.Context(), externalHost))
+				return ts.API.sendIdentityUnlinkedNotification(req, ts.API.db, ts.TestUser, "github", "")
 			},
 		},
 		{
@@ -451,6 +467,8 @@ func (ts *HooksTestSuite) TestAccountChangesNotificationsHookPayload() {
 
 			// Verify email action type
 			require.Equal(ts.T(), tc.expectedActionType, capturedPayload.EmailData.EmailActionType)
+
+			require.Equal(ts.T(), tc.expectedRecipientEmail, capturedPayload.EmailData.RecipientEmail)
 
 			// Verify notification-specific fields
 			if tc.expectedProvider != "" {

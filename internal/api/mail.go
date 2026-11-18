@@ -862,10 +862,10 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		case mail.PhoneChangedNotification:
 			emailData.OldPhone = params.oldPhone
 		case mail.IdentityLinkedNotification, mail.IdentityUnlinkedNotification:
-			// TODO(fm): propagate recipientEmail in the hook payload;
-			// consumers currently deliver identity_unlinked to user.email, which
-			// may be a different (promoted) address after unlinking.
 			emailData.Provider = params.provider
+			if params.emailActionType == mail.IdentityUnlinkedNotification {
+				emailData.RecipientEmail = recipientEmail
+			}
 		case mail.MFAFactorEnrolledNotification, mail.MFAFactorUnenrolledNotification:
 			emailData.FactorType = params.factorType
 		}
