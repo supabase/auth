@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
@@ -76,7 +77,10 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 		tokenHash := crypto.GenerateTokenHash(user.GetEmail(), nonce)
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
-		if config.Sms.IsTwilioVerifyProvider() {
+		// sendPhoneConfirmation stores the OTP locally when it goes through the
+		// Send SMS hook or is a test OTP, so Twilio Verify never saw it.
+		_, isTestOTP := config.Sms.GetTestOTP(user.GetPhone(), time.Now())
+		if !config.Hook.SendSMS.Enabled && !isTestOTP && config.Sms.IsTwilioVerifyProvider() {
 			smsProvider, _ := sms_provider.GetSmsProvider(*config)
 			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(string(user.Phone), nonce); err != nil {
 				return apierrors.NewForbiddenError(apierrors.ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)

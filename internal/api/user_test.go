@@ -13,11 +13,13 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/mailer/mockclient"
 	"github.com/supabase/auth/internal/models"
+	"gopkg.in/h2non/gock.v1"
 )
 
 type UserTestSuite struct {
@@ -615,6 +617,92 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.True(ts.T(), isAuthenticated)
 	require.Empty(ts.T(), u.ReauthenticationToken)
 	require.Nil(ts.T(), u.ReauthenticationSentAt)
+}
+
+func (ts *UserTestSuite) TestUserUpdatePasswordReauthenticationPhoneTwilioVerify() {
+	ts.Config.Security.UpdatePasswordRequireReauthentication = true
+	ts.Config.Security.UpdatePasswordRequireCurrentPassword = false
+
+	previousProvider := ts.Config.Sms.Provider
+	previousTwilioVerify := ts.Config.Sms.TwilioVerify
+	previousMock := sms_provider.MockProvider
+	defer func() {
+		ts.Config.Sms.Provider = previousProvider
+		ts.Config.Sms.TwilioVerify = previousTwilioVerify
+		sms_provider.MockProvider = previousMock
+		ts.Config.Hook.SendSMS.Enabled = false
+		ts.Config.Sms.TestOTP = nil
+	}()
+
+	ts.Config.Sms.Provider = "twilio_verify"
+	ts.Config.Sms.TwilioVerify = conf.TwilioVerifyProviderConfiguration{
+		AccountSid:        "AC-test",
+		AuthToken:         "test-token",
+		MessageServiceSid: "VA-test",
+	}
+	sms_provider.MockProvider = nil
+
+	phone := "15555550100"
+	cases := []struct {
+		desc        string
+		hookEnabled bool
+		testOTP     map[string]string
+	}{
+		{
+			desc:        "OTP sent through the Send SMS hook",
+			hookEnabled: true,
+		},
+		{
+			desc:    "Test OTP",
+			testOTP: map[string]string{phone: "123456"},
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			defer gock.OffAll()
+			ts.Config.Hook.SendSMS.Enabled = c.hookEnabled
+			ts.Config.Sms.TestOTP = c.testOTP
+
+			// Twilio Verify never issued this OTP, so it must not be asked to check it.
+			gock.New("https://verify.twilio.com/v2/Services/VA-test/VerificationCheck").
+				Post("").
+				Reply(http.StatusOK).
+				JSON(map[string]interface{}{"status": "pending", "valid": false})
+
+			u, err := models.NewUser(phone, "", "password", ts.Config.JWT.Aud, nil)
+			require.NoError(ts.T(), err)
+			now := time.Now()
+			u.PhoneConfirmedAt = &now
+			u.ReauthenticationToken = crypto.GenerateTokenHash(phone, "123456")
+			u.ReauthenticationSentAt = &now
+			require.NoError(ts.T(), ts.API.db.Create(u))
+			defer func() { require.NoError(ts.T(), ts.API.db.Destroy(u)) }()
+
+			r, err := models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), ts.API.db.RawQuery(
+				"update "+models.Session{}.TableName()+" set created_at = ? where id = ?",
+				time.Now().Add(-24*time.Hour),
+				*r.SessionId).Exec(),
+			)
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"password": "newpassword123",
+				"nonce":    "123456",
+			}))
+
+			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.generateToken(u, r.SessionId)))
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+			require.True(ts.T(), gock.IsPending(), "Twilio Verify should not have been called")
+		})
+	}
 }
 
 func (ts *UserTestSuite) TestUserUpdatePasswordLogoutOtherSessions() {
