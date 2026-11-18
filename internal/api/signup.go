@@ -14,6 +14,7 @@ import (
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // SignupParams are the parameters the Signup endpoint accepts
@@ -383,6 +384,10 @@ func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*model
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = tx.Create(user); terr != nil {
+			if pgErr := utilities.NewPostgresError(terr); pgErr != nil && pgErr.IsUniqueConstraintViolated() {
+				// A concurrent request created the same user first
+				return apierrors.NewConflictError(apierrors.ErrorCodeUserAlreadyExists, "User already exists").WithInternalError(terr)
+			}
 			return apierrors.NewInternalServerError("Database error saving new user").WithInternalError(terr)
 		}
 		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
