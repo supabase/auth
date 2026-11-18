@@ -128,7 +128,6 @@ require (
 	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b
 	github.com/aws/aws-sdk-go-v2/config v1.32.18
 	github.com/aws/aws-sdk-go-v2/service/kms v1.52.0
-	github.com/badoux/checkmail v0.0.0-20170203135005-d0a759655d62
 	github.com/bits-and-blooms/bloom/v3 v3.6.0
 	github.com/bombsimon/logrusr/v3 v3.0.0
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc
