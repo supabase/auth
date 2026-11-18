@@ -80,8 +80,18 @@ func (m *Client) Mail(
 			m.Logger.WithFields(fields).Info("mail.send")
 		}()
 	}
-	if err := dial.DialAndSend(mail); err != nil {
+	// gomail has no way to abort a send in progress, so the caller stops
+	// waiting when ctx is done. The send itself is not cancelled: the
+	// goroutine exits once the SMTP exchange ends on its own.
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- dial.DialAndSend(mail)
+	}()
+
+	select {
+	case err := <-errCh:
 		return err
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return nil
 }
