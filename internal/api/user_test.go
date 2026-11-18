@@ -3,16 +3,20 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gofrs/uuid"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/mailer"
@@ -763,4 +767,168 @@ func (ts *UserTestSuite) TestUserUpdatePasswordSendsNotificationEmail() {
 			}
 		})
 	}
+}
+
+func (ts *UserTestSuite) putUserPassword(token string) *httptest.ResponseRecorder {
+	var body bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&body).Encode(map[string]interface{}{
+		"password": "newpassword123",
+	}))
+
+	req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	return w
+}
+
+func (ts *UserTestSuite) requireErrorCode(w *httptest.ResponseRecorder, status int, errorCode string) {
+	require.Equal(ts.T(), status, w.Code, "unexpected status, body: %s", w.Body.String())
+
+	data := make(map[string]interface{})
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.Equal(ts.T(), errorCode, data["error_code"])
+}
+
+// A customize_access_token hook may set session_id to a value that
+// maybeLoadUserOrSession treats as "no session", since the token schema requires
+// the claim to be present but does not constrain its value. The token Auth issues
+// in that case must not be able to panic UserUpdate.
+func (ts *UserTestSuite) TestUserUpdateWithSessionlessTokenFromHook() {
+	cases := []struct {
+		desc     string
+		fnName   string
+		sqlValue string
+	}{
+		{"blank session_id", "custom_access_token_blank_session", `'""'::jsonb`},
+		{"nil uuid session_id", "custom_access_token_nil_session", `'"00000000-0000-0000-0000-000000000000"'::jsonb`},
+	}
+
+	for _, c := range cases {
+		ts.T().Run(c.desc, func(t *testing.T) {
+			require.NoError(t, models.TruncateAll(ts.API.db))
+
+			u, err := models.NewUser("", "sessionless@example.com", "password", ts.Config.JWT.Aud, nil)
+			require.NoError(t, err)
+			now := time.Now()
+			u.EmailConfirmedAt = &now
+			require.NoError(t, ts.API.db.Create(u))
+
+			refreshToken, err := models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
+			require.NoError(t, err)
+
+			require.NoError(t, ts.API.db.RawQuery(fmt.Sprintf(`create or replace function %s(input jsonb) returns jsonb as $$
+declare result jsonb;
+begin
+  input := jsonb_set(input, '{claims,session_id}', %s, true);
+  result := jsonb_build_object('claims', input->'claims');
+  return result;
+end; $$ language plpgsql;`, c.fnName, c.sqlValue)).Exec())
+
+			ts.Config.Hook.CustomAccessToken.Enabled = true
+			ts.Config.Hook.CustomAccessToken.URI = "pg-functions://postgres/auth/" + c.fnName
+			require.NoError(t, ts.Config.Hook.CustomAccessToken.PopulateExtensibilityPoint())
+
+			ts.Config.Security.UpdatePasswordRequireCurrentPassword = true
+			ts.Config.Security.UpdatePasswordRequireReauthentication = false
+
+			defer func() {
+				ts.Config.Hook.CustomAccessToken.Enabled = false
+				ts.Config.Security.UpdatePasswordRequireCurrentPassword = false
+				_ = ts.API.db.RawQuery("drop function if exists " + c.fnName).Exec()
+			}()
+
+			var buf bytes.Buffer
+			require.NoError(t, json.NewEncoder(&buf).Encode(map[string]interface{}{
+				"refresh_token": refreshToken.Token,
+			}))
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buf)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(t, http.StatusOK, w.Code, "hook output should pass claim validation, body: %s", w.Body.String())
+
+			var tokenResponse struct {
+				AccessToken string `json:"access_token"`
+			}
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&tokenResponse))
+
+			parts := strings.Split(tokenResponse.AccessToken, ".")
+			require.Len(t, parts, 3)
+			payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+			require.NoError(t, err)
+			issued := make(map[string]interface{})
+			require.NoError(t, json.Unmarshal(payload, &issued))
+			require.Equal(t, u.ID.String(), issued["sub"])
+
+			ts.requireErrorCode(ts.putUserPassword(tokenResponse.AccessToken),
+				http.StatusBadRequest, apierrors.ErrorCodeCurrentPasswordRequired)
+		})
+	}
+}
+
+// Asserting the specific 401 and 400 rather than just "not a 500" is deliberate:
+// a guard that failed open would also stop the panic, but would let the password
+// through with no AAL2 and no current password.
+func (ts *UserTestSuite) TestUserUpdateNilSessionFailsClosed() {
+	mintSessionless := func(userID uuid.UUID, sessionID string) string {
+		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, &AccessTokenClaims{
+			RegisteredClaims: jwt.RegisteredClaims{Subject: userID.String()},
+			Role:             "authenticated",
+			SessionId:        sessionID,
+		}).SignedString([]byte(ts.Config.JWT.Secret))
+		require.NoError(ts.T(), err)
+		return token
+	}
+
+	sessionIDs := []struct{ desc, value string }{
+		{"no session_id claim", ""},
+		{"nil uuid session_id", uuid.Nil.String()},
+	}
+
+	ts.T().Run("AAL2 check when MFA is enabled", func(t *testing.T) {
+		require.NoError(t, models.TruncateAll(ts.API.db))
+
+		u, err := models.NewUser("", "nilsession-aal@example.com", "password", ts.Config.JWT.Aud, nil)
+		require.NoError(t, err)
+		require.NoError(t, ts.API.db.Create(u))
+
+		f := models.NewTOTPFactor(u, "test-factor")
+		require.NoError(t, f.SetSecret("secretkey",
+			ts.Config.Security.DBEncryption.Encrypt,
+			ts.Config.Security.DBEncryption.EncryptionKeyID,
+			ts.Config.Security.DBEncryption.EncryptionKey))
+		require.NoError(t, ts.API.db.Create(f))
+		require.NoError(t, f.UpdateStatus(ts.API.db, models.FactorStateVerified))
+
+		for _, s := range sessionIDs {
+			t.Run(s.desc, func(t *testing.T) {
+				ts.requireErrorCode(ts.putUserPassword(mintSessionless(u.ID, s.value)),
+					http.StatusUnauthorized, apierrors.ErrorCodeInsufficientAAL)
+			})
+		}
+	})
+
+	ts.T().Run("current password check without MFA", func(t *testing.T) {
+		require.NoError(t, models.TruncateAll(ts.API.db))
+
+		ts.Config.Security.UpdatePasswordRequireCurrentPassword = true
+		ts.Config.Security.UpdatePasswordRequireReauthentication = false
+		defer func() {
+			ts.Config.Security.UpdatePasswordRequireCurrentPassword = false
+		}()
+
+		u, err := models.NewUser("", "nilsession-password@example.com", "password", ts.Config.JWT.Aud, nil)
+		require.NoError(t, err)
+		require.NoError(t, ts.API.db.Create(u))
+
+		for _, s := range sessionIDs {
+			t.Run(s.desc, func(t *testing.T) {
+				ts.requireErrorCode(ts.putUserPassword(mintSessionless(u.ID, s.value)),
+					http.StatusBadRequest, apierrors.ErrorCodeCurrentPasswordRequired)
+			})
+		}
+	})
 }
