@@ -1,6 +1,9 @@
 package security
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,4 +61,31 @@ func TestUnsupportedProvider(t *testing.T) {
 	_, err := v.Verify(t.Context(), testToken, "127.0.0.1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "recaptcha")
+}
+
+func TestFCaptchaSuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "verify-secret", r.Form.Get("secret"))
+		assert.Equal(t, "token", r.Form.Get("response"))
+		assert.Equal(t, "127.0.0.1", r.Form.Get("remoteip"))
+		_ = json.NewEncoder(w).Encode(VerificationResponse{Success: true, Hostname: "example.com"})
+	}))
+	defer server.Close()
+
+	v := NewCaptchaVerifier(&conf.CaptchaConfiguration{
+		Provider:    "fcaptcha",
+		Secret:      "verify-secret",
+		ProviderURL: server.URL,
+	})
+	resp, err := v.Verify(t.Context(), "token", "127.0.0.1")
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+	assert.Equal(t, "example.com", resp.Hostname)
+}
+
+func TestFCaptchaRequiresProviderURL(t *testing.T) {
+	v := newTestVerifier("fcaptcha", "verify-secret")
+	_, err := v.Verify(t.Context(), "token", "127.0.0.1")
+	require.ErrorContains(t, err, "provider URL is empty")
 }
