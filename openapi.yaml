@@ -410,12 +410,17 @@ paths:
                   enum:
                     - plain
                     - s256
+                create_session:
+                  type: boolean
+                  description: >
+                    (Optional) If set to false, prevents creating a session/issuing tokens upon signup even when confirmation is disabled or autoconfirm is enabled. Defaults to true.
+                  default: true
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueSecurity"
       responses:
         200:
           description: >
-            A user already exists and is not confirmed (in which case a user object is returned). A user did not exist and is signed up. If email or phone confirmation is enabled, returns a user object. If confirmation is disabled, returns an access token and refresh token response.
+            A user already exists and is not confirmed (in which case a user object is returned). A user did not exist and is signed up. If email or phone confirmation is enabled, returns a user object. If confirmation is disabled, returns an access token and refresh token response. If `create_session` is false, returns a user object regardless of confirmation settings.
           content:
             application/json:
               schema:
