@@ -130,6 +130,81 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 	require.Len(ts.T(), logs, 1, "an already-linked identity must not emit another audit log")
 }
 
+// TestLinkIdentityToUserEmailOptional covers linking an email-optional
+// identity (e.g. an OIDC provider whose claim carries no email) to a confirmed
+// phone-only user. UpdateUserEmailFromIdentities leaves the primary email empty
+// in that case, so no email confirmation must be attempted and linking must
+// succeed. The unverified-email case is kept as a control to show the
+// confirmation path is still exercised when an email is actually present.
+func (ts *IdentityTestSuite) TestLinkIdentityToUserEmailOptional() {
+	newPhoneOnlyUser := func(phone string) *models.User {
+		u, err := models.NewUser(phone, "", "", ts.Config.JWT.Aud, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.API.db.Create(u))
+		require.NoError(ts.T(), u.ConfirmPhone(ts.API.db))
+
+		i, err := models.NewIdentity(u, "phone", map[string]interface{}{
+			"sub":   u.ID.String(),
+			"phone": u.GetPhone(),
+		})
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.API.db.Create(i))
+		return u
+	}
+
+	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
+
+	ts.Run("no email in the identity links without confirmation", func() {
+		u := newPhoneOnlyUser("15551230001")
+		ctx := withTargetUser(context.Background(), u)
+
+		data := &provider.UserProvidedData{
+			Metadata: &provider.Claims{
+				Subject:       "oidc_no_email_subject",
+				Email:         "",
+				EmailVerified: false,
+			},
+		}
+		linked, err := ts.API.linkIdentityToUser(r, ctx, ts.API.db, data, "custom_oidc")
+		require.NoError(ts.T(), err)
+		require.NotNil(ts.T(), linked)
+		require.Equal(ts.T(), "", linked.GetEmail(), "email must stay empty when the linked identity has none")
+		require.Equal(ts.T(), "15551230001", linked.GetPhone(), "the confirmed phone must be preserved")
+
+		_, err = models.FindIdentityByIdAndProvider(ts.API.db, "oidc_no_email_subject", "custom_oidc")
+		require.NoError(ts.T(), err, "the email-optional identity must be linked")
+	})
+
+	ts.Run("unverified email in the identity still requires confirmation", func() {
+		// A user with no email and no email-less identity: linking an
+		// identity that DOES carry an unverified email promotes that email,
+		// so confirmation must still be required. This is the control that
+		// shows the fix does not suppress confirmation whenever an email is
+		// actually adopted. (A phone-only user is unsuitable here: its
+		// empty-email phone identity makes UpdateUserEmailFromIdentities keep
+		// the empty email, so no email is ever promoted.)
+		u, err := models.NewUser("", "", "", ts.Config.JWT.Aud, nil)
+		require.NoError(ts.T(), err)
+		u.IsAnonymous = true
+		require.NoError(ts.T(), ts.API.db.Create(u))
+		ctx := withTargetUser(context.Background(), u)
+
+		data := &provider.UserProvidedData{
+			Metadata: &provider.Claims{
+				Subject:       "oidc_unverified_email_subject",
+				Email:         "unverified@example.com",
+				EmailVerified: false,
+			},
+		}
+		_, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, data, "custom_oidc")
+		require.Error(ts.T(), err)
+		// The confirmation path returns the HTTPError wrapped in a
+		// storage.CommitWithError (which exposes Cause, not Unwrap), so assert
+		// on the stable user-facing message rather than unwrapping.
+		require.Contains(ts.T(), err.Error(), "Unverified email")
+	})
+}
+
 func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
 	manualLinkingEnabled := ts.Config.Security.ManualLinkingEnabled
 	ts.Config.Security.ManualLinkingEnabled = true
