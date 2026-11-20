@@ -525,7 +525,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 
 			if _, ok := c.expected["password"]; ok {
 				expectedPassword := fmt.Sprintf("%v", c.expected["password"])
-				isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, expectedPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+				isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, expectedPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID, nil)
 				require.NoError(ts.T(), err)
 				require.Equal(ts.T(), c.expected["isAuthenticated"], isAuthenticated)
 			}

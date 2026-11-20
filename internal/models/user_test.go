@@ -907,7 +907,7 @@ func (ts *UserTestSuite) TestAuthenticate() {
 			require.NoError(ts.T(), ts.db.Create(u))
 			require.NotNil(ts.T(), u)
 
-			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.db, "test", nil, false, "")
+			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.db, "test", nil, false, "", nil)
 			require.NoError(ts.T(), err)
 			require.True(ts.T(), isAuthenticated)
 
@@ -933,7 +933,7 @@ func (ts *UserTestSuite) TestReEncryptPassword() {
 	// login re-encrypts the password the same way the password grant does
 	login := func(u *User, password string) bool {
 		storedHash := *u.EncryptedPassword
-		ok, shouldReEncrypt, err := u.Authenticate(ctx, ts.db, password, enc.DecryptionKeys, true, enc.EncryptionKeyID)
+		ok, shouldReEncrypt, err := u.Authenticate(ctx, ts.db, password, enc.DecryptionKeys, true, enc.EncryptionKeyID, nil)
 		require.NoError(ts.T(), err)
 		require.True(ts.T(), ok)
 		require.True(ts.T(), shouldReEncrypt)
@@ -944,7 +944,7 @@ func (ts *UserTestSuite) TestReEncryptPassword() {
 	}
 
 	authenticates := func(id uuid.UUID, password string) bool {
-		ok, _, err := loadUser(id).Authenticate(ctx, ts.db, password, enc.DecryptionKeys, false, "")
+		ok, _, err := loadUser(id).Authenticate(ctx, ts.db, password, enc.DecryptionKeys, false, "", nil)
 		require.NoError(ts.T(), err)
 		return ok
 	}

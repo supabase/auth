@@ -15,8 +15,10 @@ import (
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -526,7 +528,7 @@ func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) erro
 }
 
 // Authenticate a user from a password
-func (u *User) Authenticate(ctx context.Context, tx *storage.Connection, password string, decryptionKeys map[string]string, encrypt bool, encryptionKeyID string) (bool, bool, error) {
+func (u *User) Authenticate(ctx context.Context, tx *storage.Connection, password string, decryptionKeys map[string]string, encrypt bool, encryptionKeyID string, hashPolicy *conf.PasswordHashPolicy) (bool, bool, error) {
 	if u.EncryptedPassword == nil {
 		return false, false, nil
 	}
@@ -545,6 +547,18 @@ func (u *User) Authenticate(ctx context.Context, tx *storage.Connection, passwor
 		}
 
 		hash = string(h)
+	}
+
+	// reject disallowed hashes before doing any expensive hashing work
+	if err := crypto.CheckPasswordHashPolicy(hash, hashPolicy); err != nil {
+		return false, false, err
+	}
+
+	if params, nonDefault := crypto.NonDefaultHashParameters(hash); nonDefault {
+		observability.GetLogEntryFromContext(ctx).Entry.WithFields(logrus.Fields{
+			"user_id":              u.ID.String(),
+			"password_hash_params": params,
+		}).Warn("comparing password against a non-default password hash")
 	}
 
 	compareErr := crypto.CompareHashAndPassword(ctx, hash, password)

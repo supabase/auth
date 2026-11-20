@@ -302,6 +302,30 @@ func (ts *TokenTestSuite) TestTokenPasswordGrantSuccess() {
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
+func (ts *TokenTestSuite) TestTokenPasswordGrantHashNotPermitted() {
+	// the test user's bcrypt hash must be rejected when bcrypt is disabled
+	original := ts.Config.Password.HashComputePolicy
+	ts.Config.Password.HashComputePolicy = conf.PasswordHashPolicy{Bcrypt: &conf.BcryptHashPolicy{Disabled: true}}
+	defer func() { ts.Config.Password.HashComputePolicy = original }()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "password",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+
+	var body map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&body))
+	require.Equal(ts.T(), string(apierrors.ErrorCodePasswordResetRequired), body["error_code"])
+}
+
 func (ts *TokenTestSuite) TestTokenRefreshTokenGrantSuccess() {
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -970,7 +994,7 @@ func (ts *TokenTestSuite) TestReverifyPassword() {
 		require.NoError(ts.T(), u.SetPassword(ctx, "password", true, enc.EncryptionKeyID, enc.EncryptionKey))
 		require.NoError(ts.T(), db.UpdateOnly(u, "encrypted_password"))
 
-		ok, hash, err := reverifyPassword(ctx, db, ts.User.ID, "password", enc.DecryptionKeys)
+		ok, hash, err := reverifyPassword(ctx, db, ts.User.ID, "password", enc.DecryptionKeys, nil)
 		require.NoError(ts.T(), err)
 		require.True(ts.T(), ok)
 		require.Equal(ts.T(), *u.EncryptedPassword, hash, "should return the stored hash it checked against")
@@ -982,7 +1006,7 @@ func (ts *TokenTestSuite) TestReverifyPassword() {
 		require.NoError(ts.T(), u.SetPassword(ctx, "new-password", true, enc.EncryptionKeyID, enc.EncryptionKey))
 		require.NoError(ts.T(), u.UpdatePassword(db, nil))
 
-		ok, _, err := reverifyPassword(ctx, db, ts.User.ID, "password", enc.DecryptionKeys)
+		ok, _, err := reverifyPassword(ctx, db, ts.User.ID, "password", enc.DecryptionKeys, nil)
 		require.NoError(ts.T(), err)
 		require.False(ts.T(), ok)
 	})
@@ -990,7 +1014,7 @@ func (ts *TokenTestSuite) TestReverifyPassword() {
 	ts.Run("rejects when the user no longer exists", func() {
 		require.NoError(ts.T(), db.Destroy(ts.User))
 
-		ok, hash, err := reverifyPassword(ctx, db, ts.User.ID, "password", enc.DecryptionKeys)
+		ok, hash, err := reverifyPassword(ctx, db, ts.User.ID, "password", enc.DecryptionKeys, nil)
 		require.NoError(ts.T(), err)
 		require.False(ts.T(), ok)
 		require.Empty(ts.T(), hash)

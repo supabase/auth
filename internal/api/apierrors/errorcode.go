@@ -128,4 +128,9 @@ const (
 	ErrorCodeWebAuthnChallengeExpired   ErrorCode = "webauthn_challenge_expired"
 	ErrorCodeWebAuthnVerificationFailed ErrorCode = "webauthn_verification_failed"
 	ErrorCodeWebAuthnCredentialExists   ErrorCode = "webauthn_credential_exists" // #nosec G101 -- not a credential
+
+	// ErrorCodePasswordResetRequired is returned when the stored password hash
+	// is not permitted by the server's hash compute policy and the user must
+	// reset their password.
+	ErrorCodePasswordResetRequired ErrorCode = "password_reset_required"
 )
