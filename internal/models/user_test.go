@@ -15,7 +15,6 @@ import (
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const modelsTestConfig = "../../hack/test.env"
@@ -884,19 +883,16 @@ func (ts *UserTestSuite) TestNewUserWithPasswordHashFailure() {
 func (ts *UserTestSuite) TestAuthenticate() {
 	// every case uses "test" as the password
 	cases := []struct {
-		desc             string
-		hash             string
-		expectedHashCost int
+		desc string
+		hash string
 	}{
 		{
-			desc:             "Invalid bcrypt hash cost of 11",
-			hash:             "$2y$11$4lH57PU7bGATpRcx93vIoObH3qDmft/pytbOzDG9/1WsyNmN5u4di",
-			expectedHashCost: bcrypt.MinCost,
+			desc: "bcrypt hash cost of 11",
+			hash: "$2y$11$4lH57PU7bGATpRcx93vIoObH3qDmft/pytbOzDG9/1WsyNmN5u4di",
 		},
 		{
-			desc:             "Valid bcrypt hash cost of 10",
-			hash:             "$2y$10$va66S4MxFrH6G6L7BzYl0.QgcYgvSr/F92gc.3botlz7bG4p/g/1i",
-			expectedHashCost: bcrypt.DefaultCost,
+			desc: "bcrypt hash cost of 10",
+			hash: "$2y$10$va66S4MxFrH6G6L7BzYl0.QgcYgvSr/F92gc.3botlz7bG4p/g/1i",
 		},
 	}
 
@@ -907,14 +903,17 @@ func (ts *UserTestSuite) TestAuthenticate() {
 			require.NoError(ts.T(), ts.db.Create(u))
 			require.NotNil(ts.T(), u)
 
-			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.db, "test", nil, false, "")
+			// a wrong password does not authenticate and never replaces the hash
+			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.db, "wrong", nil, false, "")
+			require.NoError(ts.T(), err)
+			require.False(ts.T(), isAuthenticated)
+			require.Equal(ts.T(), c.hash, *u.EncryptedPassword)
+
+			// the correct password authenticates and leaves the hash as it is
+			isAuthenticated, _, err = u.Authenticate(context.Background(), ts.db, "test", nil, false, "")
 			require.NoError(ts.T(), err)
 			require.True(ts.T(), isAuthenticated)
-
-			// check hash cost
-			hashCost, err := bcrypt.Cost([]byte(*u.EncryptedPassword))
-			require.NoError(ts.T(), err)
-			require.Equal(ts.T(), c.expectedHashCost, hashCost)
+			require.Equal(ts.T(), c.hash, *u.EncryptedPassword)
 		})
 	}
 }

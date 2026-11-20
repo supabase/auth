@@ -550,18 +550,10 @@ func (u *User) Authenticate(ctx context.Context, tx *storage.Connection, passwor
 	compareErr := crypto.CompareHashAndPassword(ctx, hash, password)
 
 	if !strings.HasPrefix(hash, crypto.Argon2Prefix) && !strings.HasPrefix(hash, crypto.FirebaseScryptPrefix) {
-		// check if cost exceeds default cost or is too low
-		cost, err := bcrypt.Cost([]byte(hash))
-		if err != nil {
+		// A stored bcrypt hash that cannot be parsed is an error, not a
+		// plain password mismatch.
+		if _, err := bcrypt.Cost([]byte(hash)); err != nil {
 			return compareErr == nil, false, err
-		}
-
-		if cost > bcrypt.DefaultCost || cost == bcrypt.MinCost {
-			// don't bother with encrypting the password in Authenticate
-			// since it's handled separately
-			if err := u.SetPassword(ctx, password, false, "", ""); err != nil {
-				return compareErr == nil, false, err
-			}
 		}
 	}
 
