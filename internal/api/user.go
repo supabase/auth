@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -176,18 +178,26 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 						if params.CurrentPassword == nil || *params.CurrentPassword == "" {
 							return apierrors.NewBadRequestError(apierrors.ErrorCodeCurrentPasswordRequired, "Current password required when setting new password.")
 						}
-						isCurrentPasswordCorrect, _, err := user.Authenticate(ctx, db, *params.CurrentPassword, config.Security.DBEncryption.DecryptionKeys, false, "")
+						isCurrentPasswordCorrect, _, err := user.Authenticate(ctx, db, *params.CurrentPassword, config.Security.DBEncryption.DecryptionKeys, false, "", &config.Password.HashComputePolicy)
 						if err != nil {
-							return err
+							return passwordHashError(err)
 						}
 						if !isCurrentPasswordCorrect {
 							return apierrors.NewBadRequestError(apierrors.ErrorCodeCurrentPasswordMismatch, "Current password required when setting new password.")
 						}
 					}
 				}
-				auth, _, err := user.Authenticate(ctx, db, password, config.Security.DBEncryption.DecryptionKeys, false, "")
+				auth, _, err := user.Authenticate(ctx, db, password, config.Security.DBEncryption.DecryptionKeys, false, "", &config.Password.HashComputePolicy)
+				if session.IsRecovery() && errors.Is(err, crypto.ErrPasswordHashNotPermitted) {
+					// Password reset flow: the old hash can't be checked under
+					// the hash compute policy, so the new password can't be
+					// treated as the same one. This must not block the reset
+					// that replaces the hash. Outside of a recovery session the
+					// error is returned so the user is told to reset.
+					auth, err = false, nil
+				}
 				if err != nil {
-					return err
+					return passwordHashError(err)
 				}
 
 				isSamePassword = auth

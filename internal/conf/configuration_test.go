@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/require"
@@ -1311,6 +1312,84 @@ func TestApplyDefaultsClampsOtpExp(t *testing.T) {
 			// negative duration, which would expire every token at creation
 			require.Positive(t, time.Duration(cfg.Mailer.OtpExp)*time.Second) // #nosec G115
 			require.Positive(t, time.Duration(cfg.Sms.OtpExp)*time.Second)    // #nosec G115
+		})
+	}
+}
+
+func TestPasswordHashPolicyEnv(t *testing.T) {
+	t.Setenv("GOTRUE_PASSWORD_HASH_COMPUTE_POLICY", `{
+		"bcrypt": { "max_cost": 10 },
+		"argon2": { "variants": ["argon2id"], "max_memory_kib": 65536, "max_time": 4, "max_threads": 4 },
+		"fbscrypt": { "max_memory_cost_log2": 14, "max_rounds": 8, "max_threads": 1 }
+	}`)
+
+	var cfg PasswordConfiguration
+	require.NoError(t, envconfig.Process("gotrue_password", &cfg))
+
+	require.Equal(t, PasswordHashPolicy{
+		Allowlist:      true,
+		Bcrypt:         &BcryptHashPolicy{MaxCost: 10},
+		Argon2:         &Argon2HashPolicy{Variants: []string{"argon2id"}, MaxMemoryKiB: 65536, MaxTime: 4, MaxThreads: 4},
+		FirebaseScrypt: &FirebaseScryptHashPolicy{MaxMemoryCostLog2: 14, MaxRounds: 8, MaxThreads: 1},
+	}, cfg.HashComputePolicy)
+}
+
+func TestPasswordHashPolicyEnvAllowlist(t *testing.T) {
+	// unset: permissive
+	var cfg PasswordConfiguration
+	require.NoError(t, envconfig.Process("gotrue_password", &cfg))
+	require.False(t, cfg.HashComputePolicy.Allowlist)
+
+	// set to an empty object: an (empty) allowlist
+	t.Setenv("GOTRUE_PASSWORD_HASH_COMPUTE_POLICY", `{}`)
+	cfg = PasswordConfiguration{}
+	require.NoError(t, envconfig.Process("gotrue_password", &cfg))
+	require.True(t, cfg.HashComputePolicy.Allowlist)
+	require.Nil(t, cfg.HashComputePolicy.Bcrypt)
+
+	// mentioning an algorithm with {} allows it without limits
+	t.Setenv("GOTRUE_PASSWORD_HASH_COMPUTE_POLICY", `{"bcrypt": {}}`)
+	cfg = PasswordConfiguration{}
+	require.NoError(t, envconfig.Process("gotrue_password", &cfg))
+	require.True(t, cfg.HashComputePolicy.Allowlist)
+	require.Equal(t, &BcryptHashPolicy{}, cfg.HashComputePolicy.Bcrypt)
+	require.Nil(t, cfg.HashComputePolicy.Argon2)
+}
+
+func TestPasswordHashPolicyEnvIgnoresUnknownKeys(t *testing.T) {
+	t.Setenv("GOTRUE_PASSWORD_HASH_COMPUTE_POLICY", `{
+		"future_algorithm": { "max_cost": 1 },
+		"bcrypt": { "max_cost": 10, "future_key": true },
+		"argon2": { "variants": ["argon2id", "argon2d"], "max_time": 4, "future_key": [1, 2] },
+		"future_top_level": 1
+	}`)
+
+	var cfg PasswordConfiguration
+	require.NoError(t, envconfig.Process("gotrue_password", &cfg))
+
+	require.True(t, cfg.HashComputePolicy.Allowlist)
+	require.Equal(t, &BcryptHashPolicy{MaxCost: 10}, cfg.HashComputePolicy.Bcrypt)
+	require.Equal(t, &Argon2HashPolicy{Variants: []string{"argon2id", "argon2d"}, MaxTime: 4}, cfg.HashComputePolicy.Argon2)
+	require.Nil(t, cfg.HashComputePolicy.FirebaseScrypt)
+}
+
+func TestPasswordHashPolicyEnvInvalid(t *testing.T) {
+	cases := map[string]string{
+		"not json":          `not json`,
+		"not an object":     `["bcrypt"]`,
+		"algorithm not obj": `{"bcrypt": true}`,
+		"wrong type":        `{"bcrypt": {"max_cost": "10"}}`,
+		"disabled not bool": `{"bcrypt": {"disabled": "yes"}}`,
+		"negative":          `{"argon2": {"max_time": -1}}`,
+		"fractional":        `{"argon2": {"max_time": 1.5}}`,
+		"bcrypt above max":  `{"bcrypt": {"max_cost": 32}}`,
+	}
+
+	for name, value := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("GOTRUE_PASSWORD_HASH_COMPUTE_POLICY", value)
+			var cfg PasswordConfiguration
+			require.Error(t, envconfig.Process("gotrue_password", &cfg))
 		})
 	}
 }

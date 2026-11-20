@@ -350,6 +350,11 @@ type PasswordConfiguration struct {
 	RequiredCharacters PasswordRequiredCharacters `json:"required_characters" split_words:"true"`
 
 	HIBP HIBPConfiguration `json:"hibp"`
+
+	// HashComputePolicy limits which password hashing algorithms (and their
+	// maximum cost parameters) the server will verify. A user whose stored
+	// hash violates the policy is told to reset their password.
+	HashComputePolicy PasswordHashPolicy `json:"hash_compute_policy" envconfig:"HASH_COMPUTE_POLICY"`
 }
 
 type AuditLogConfiguration struct {

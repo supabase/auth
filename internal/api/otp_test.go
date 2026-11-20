@@ -320,7 +320,7 @@ func (ts *OtpTestSuite) TestSubsequentOtp() {
 // users, so the invariant is that the attacker's password is gone, not that
 // the user has no password at all.
 func (ts *OtpTestSuite) requirePasswordRejected(user *models.User, password string) {
-	ok, _, err := user.Authenticate(context.Background(), ts.API.db, password, ts.Config.Security.DBEncryption.DecryptionKeys, false, "")
+	ok, _, err := user.Authenticate(context.Background(), ts.API.db, password, ts.Config.Security.DBEncryption.DecryptionKeys, false, "", nil)
 	require.NoError(ts.T(), err)
 	require.False(ts.T(), ok)
 }

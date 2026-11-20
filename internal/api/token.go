@@ -7,6 +7,7 @@ import (
 	"github.com/gofrs/uuid"
 
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/metering"
@@ -129,9 +130,9 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	// for. The session is only created while the row still has this value.
 	verifiedHash := storedHash
 
-	isValidPassword, shouldReEncrypt, err := user.Authenticate(ctx, db, params.Password, config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
+	isValidPassword, shouldReEncrypt, err := user.Authenticate(ctx, db, params.Password, config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, &config.Password.HashComputePolicy)
 	if err != nil {
-		return err
+		return passwordHashError(err)
 	}
 
 	var weakPasswordError *WeakPasswordError
@@ -166,9 +167,9 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 				// a password change or another sign-in re-encrypting it.
 				// Check the password again so a password change made
 				// during this sign-in is not bypassed.
-				isValidPassword, verifiedHash, err = reverifyPassword(ctx, db, user.ID, params.Password, config.Security.DBEncryption.DecryptionKeys)
+				isValidPassword, verifiedHash, err = reverifyPassword(ctx, db, user.ID, params.Password, config.Security.DBEncryption.DecryptionKeys, &config.Password.HashComputePolicy)
 				if err != nil {
-					return err
+					return passwordHashError(err)
 				}
 				if !isValidPassword {
 					observability.GetLogEntry(r).Entry.Warn("Rejected sign-in because the password changed before re-encryption")
@@ -262,7 +263,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 // reverifyPassword checks password against the user's currently stored hash.
 // It returns false if the user no longer exists or the password doesn't match.
 // The returned hash is the stored value the check ran against.
-func reverifyPassword(ctx context.Context, db *storage.Connection, userID uuid.UUID, password string, decryptionKeys map[string]string) (bool, string, error) {
+func reverifyPassword(ctx context.Context, db *storage.Connection, userID uuid.UUID, password string, decryptionKeys map[string]string, hashPolicy *conf.PasswordHashPolicy) (bool, string, error) {
 	current, err := models.FindUserByID(db, userID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -278,7 +279,7 @@ func reverifyPassword(ctx context.Context, db *storage.Connection, userID uuid.U
 		storedHash = *current.EncryptedPassword
 	}
 
-	isValid, _, err := current.Authenticate(ctx, db, password, decryptionKeys, false, "")
+	isValid, _, err := current.Authenticate(ctx, db, password, decryptionKeys, false, "", hashPolicy)
 	if err != nil {
 		return false, "", err
 	}
