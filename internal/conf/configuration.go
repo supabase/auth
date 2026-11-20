@@ -436,6 +436,14 @@ type ExperimentalConfiguration struct {
 	// for custom OAuth providers.
 	// Env: GOTRUE_EXPERIMENTAL_CLIENT_ASSERTION_*
 	ClientAssertion ClientAssertionConfiguration `split_words:"true"`
+
+	// RejectUnverifiedEmailInUseEnabled refuses an external provider login with
+	// 422 email_exists, saving nothing, when the provider reports an unverified
+	// email that already belongs to another user. Without it, such a login
+	// creates a separate user with no email. The user is expected to sign in to
+	// the existing account and link the identity manually.
+	// Env: GOTRUE_EXPERIMENTAL_REJECT_UNVERIFIED_EMAIL_IN_USE_ENABLED=true
+	RejectUnverifiedEmailInUseEnabled bool `split_words:"true" default:"false"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime

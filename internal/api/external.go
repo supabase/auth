@@ -205,7 +205,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	inviteToken := getInviteToken(ctx)
 	if targetUser == nil && inviteToken == "" {
 		if err := a.triggerBeforeUserCreatedExternal(
-			r, db, userData, providerType); err != nil {
+			r, db, userData, providerType, emailOptional); err != nil {
 			return err
 		}
 	}
@@ -299,6 +299,19 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
+// rejectUnverifiedEmailInUse reports whether an external login should be
+// refused with email_exists instead of creating a separate user with no email.
+// It applies only when GOTRUE_EXPERIMENTAL_REJECT_UNVERIFIED_EMAIL_IN_USE_ENABLED
+// is on and the provider's unverified email already belongs to another user.
+func rejectUnverifiedEmailInUse(config *conf.GlobalConfiguration, decision models.AccountLinkingResult, emailOptional bool) bool {
+	return config.Experimental.RejectUnverifiedEmailInUseEnabled &&
+		decision.Decision == models.CreateAccount &&
+		decision.EmailTaken &&
+		decision.LinkingDomain == "default" &&
+		!emailOptional &&
+		!config.Mailer.AllowUnverifiedEmailSignIns
+}
+
 func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string, emailOptional bool) (models.AccountLinkingDecision, *models.User, error) {
 	ctx := r.Context()
 	aud := a.requestAud(ctx, r)
@@ -341,6 +354,15 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		}
 
 	case models.CreateAccount:
+		if rejectUnverifiedEmailInUse(config, decision, emailOptional) {
+			// A plain error rolls back the transaction, so no emailless
+			// user is left behind.
+			return 0, nil, apierrors.NewUnprocessableEntityError(
+				apierrors.ErrorCodeEmailExists,
+				"Unverified email with %v already belongs to an existing account. Sign in to that account to link %v",
+				providerType, providerType)
+		}
+
 		if config.DisableSignup {
 			return 0, nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSignupDisabled, "Signups not allowed for this instance")
 		}
@@ -900,6 +922,10 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger, q ur
 		} else if e.ErrorCode == apierrors.ErrorCodeUserBanned {
 			q.Set("error", "access_denied")
 		} else if e.ErrorCode == apierrors.ErrorCodeProviderEmailNeedsVerification {
+			q.Set("error", "access_denied")
+		} else if e.ErrorCode == apierrors.ErrorCodeEmailExists && e.HTTPStatus == http.StatusUnprocessableEntity {
+			// only the 422 from rejectUnverifiedEmailInUse; identity
+			// linking returns email_exists as a 400 (invalid_request)
 			q.Set("error", "access_denied")
 		} else if str, ok := oauthErrorMap[e.HTTPStatus]; ok {
 			q.Set("error", str)

@@ -361,7 +361,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 
 	providerType := "sso:" + ssoProvider.ID.String()
 	if err := a.triggerBeforeUserCreatedExternal(
-		r, db, &userProvidedData, providerType); err != nil {
+		r, db, &userProvidedData, providerType, false); err != nil {
 		return err
 	}
 
