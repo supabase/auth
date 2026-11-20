@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -280,6 +281,20 @@ func (m *Mailer) EmailChangeMail(r *http.Request, user *models.User, otpNew, otp
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+
+	// The mails below are sent concurrently, so when one address fails
+	// validation the mail to the other one has already gone out, with a link
+	// that can never be used because the caller does not store the tokens on
+	// an error. Validate every address before sending to any of them. Mail
+	// validates each address again, and a client that sends in the background
+	// is not a Validator: it never returned a validation error to begin with.
+	if v, ok := m.mc.(mailer.Validator); ok && len(emails) > 1 {
+		for _, email := range emails {
+			if err := v.Validate(ctx, email.Address); err != nil {
+				return err
+			}
+		}
+	}
 
 	errors := make(chan error, len(emails))
 	for _, email := range emails {

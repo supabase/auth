@@ -61,6 +61,12 @@ type Client interface {
 	) error
 }
 
+// Validator is implemented by a Client that checks an address before it
+// sends to it. Validate runs that check without sending anything.
+type Validator interface {
+	Validate(ctx context.Context, to string) error
+}
+
 type EmailData struct {
 	Token           string `json:"token"`
 	TokenHash       string `json:"token_hash"`
