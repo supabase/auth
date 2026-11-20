@@ -158,6 +158,12 @@ func (o *emailValidatorMailClient) Mail(
 	)
 }
 
+// Validate implements mailer.Validator interface by running the validation
+// Mail runs before it passes a mail along, without sending anything.
+func (o *emailValidatorMailClient) Validate(ctx context.Context, to string) error {
+	return o.ev.Validate(ctx, to)
+}
+
 type emailValidator struct {
 	extended         bool
 	serviceURL       string
