@@ -71,9 +71,9 @@ type FirebaseScryptHashPolicy struct {
 	MaxThreads uint64 `json:"max_threads"`
 }
 
-// passwordHashPolicySchema is the JSON schema every
+// hashComputePolicySchema is the JSON schema every
 // GOTRUE_PASSWORD_HASH_COMPUTE_POLICY value must satisfy before it is decoded.
-const passwordHashPolicySchema = `{
+const hashComputePolicySchema = `{
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
@@ -111,7 +111,7 @@ const passwordHashPolicySchema = `{
   }
 }`
 
-var passwordHashPolicySchemaLoader = gojsonschema.NewStringLoader(passwordHashPolicySchema)
+var hashComputePolicySchemaLoader = gojsonschema.NewStringLoader(hashComputePolicySchema)
 
 // Decode implements envconfig.Decoder so the whole policy can be provided as a
 // single JSON object in one environment variable, e.g.
@@ -124,7 +124,7 @@ func (p *PasswordHashPolicy) Decode(value string) error {
 		return nil
 	}
 
-	result, err := gojsonschema.Validate(passwordHashPolicySchemaLoader, gojsonschema.NewStringLoader(value))
+	result, err := gojsonschema.Validate(hashComputePolicySchemaLoader, gojsonschema.NewStringLoader(value))
 	if err != nil {
 		return fmt.Errorf("conf: invalid password hash compute policy JSON: %w", err)
 	}
