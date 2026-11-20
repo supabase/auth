@@ -92,6 +92,157 @@ func (ts *ExternalTestSuite) TestAutomaticLinkIdentityWritesAuditLog() {
 	require.Len(ts.T(), logs, 1, "signing in with an existing identity must not emit another audit log")
 }
 
+// TestUnverifiedEmailInUseReturnsEmailExists signs in with GitHub reporting an
+// unverified email that already belongs to a user, with the opt-in flag on. The
+// login must be refused with email_exists, the before-user-created hook must
+// not run, and nothing may be saved.
+func (ts *ExternalTestSuite) TestUnverifiedEmailInUseReturnsEmailExists() {
+	ts.Config.Mailer.AllowUnverifiedEmailSignIns = false
+	ts.Config.Experimental.RejectUnverifiedEmailInUseEnabled = true
+	defer func() { ts.Config.Experimental.RejectUnverifiedEmailInUseEnabled = false }()
+
+	existingUser, err := ts.createUser("", "github@example.com", "", "", "")
+	ts.Require().NoError(err)
+	ts.Require().NoError(existingUser.Confirm(ts.API.db))
+
+	var hookCalls int
+	hookServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hookCalls++
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	}))
+	defer hookServer.Close()
+	ts.Config.Hook.BeforeUserCreated = conf.ExtensibilityPointConfiguration{Enabled: true, URI: hookServer.URL}
+	defer func() { ts.Config.Hook.BeforeUserCreated = conf.ExtensibilityPointConfiguration{} }()
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": false}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+
+	v, err := url.ParseQuery(u.RawQuery)
+	ts.Require().NoError(err)
+	ts.Require().Equal("access_denied", v.Get("error"))
+	ts.Require().Equal("email_exists", v.Get("error_code"))
+	ts.Require().Equal("Unverified email with github already belongs to an existing account. Sign in to that account to link github", v.Get("error_description"))
+
+	ts.Require().Equal(0, hookCalls, "before-user-created hook must be skipped")
+
+	_, err = models.FindIdentityByIdAndProvider(ts.API.db, "123", "github")
+	ts.Require().True(models.IsNotFoundError(err), "no github identity may be saved")
+
+	var users []models.User
+	ts.Require().NoError(ts.API.db.All(&users))
+	ts.Require().Len(users, 1, "no emailless user may be saved")
+	ts.Require().Equal(existingUser.ID, users[0].ID)
+}
+
+// TestUnverifiedEmailInUseFlagDisabled keeps today's behavior when the opt-in
+// flag is off: the login is refused with provider_email_needs_verification and
+// a separate emailless user is saved.
+func (ts *ExternalTestSuite) TestUnverifiedEmailInUseFlagDisabled() {
+	ts.Config.Mailer.AllowUnverifiedEmailSignIns = false
+	ts.Config.Experimental.RejectUnverifiedEmailInUseEnabled = false
+
+	existingUser, err := ts.createUser("", "github@example.com", "", "", "")
+	ts.Require().NoError(err)
+	ts.Require().NoError(existingUser.Confirm(ts.API.db))
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": false}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+
+	v, err := url.ParseQuery(u.RawQuery)
+	ts.Require().NoError(err)
+	ts.Require().Equal("access_denied", v.Get("error"))
+	ts.Require().Equal("provider_email_needs_verification", v.Get("error_code"))
+
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, "123", "github")
+	ts.Require().NoError(err)
+	ts.Require().NotEqual(existingUser.ID, identity.UserID)
+}
+
+// TestUnverifiedEmailInUseWithAllowUnverifiedSignIns keeps the existing behavior
+// when unverified email sign-ins are allowed, even with the opt-in flag on: a
+// separate emailless user is created and signed in.
+func (ts *ExternalTestSuite) TestUnverifiedEmailInUseWithAllowUnverifiedSignIns() {
+	ts.Config.Mailer.AllowUnverifiedEmailSignIns = true
+	ts.Config.Experimental.RejectUnverifiedEmailInUseEnabled = true
+	defer func() {
+		ts.Config.Mailer.AllowUnverifiedEmailSignIns = false
+		ts.Config.Experimental.RejectUnverifiedEmailInUseEnabled = false
+	}()
+
+	existingUser, err := ts.createUser("", "github@example.com", "", "", "")
+	ts.Require().NoError(err)
+	ts.Require().NoError(existingUser.Confirm(ts.API.db))
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": false}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+
+	v, err := url.ParseQuery(u.Fragment)
+	ts.Require().NoError(err)
+	ts.Require().NotEmpty(v.Get("access_token"))
+
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, "123", "github")
+	ts.Require().NoError(err)
+	ts.Require().NotEqual(existingUser.ID, identity.UserID)
+}
+
+func TestRejectUnverifiedEmailInUse(t *testing.T) {
+	taken := models.AccountLinkingResult{
+		Decision:      models.CreateAccount,
+		LinkingDomain: "default",
+		EmailTaken:    true,
+	}
+
+	cases := []struct {
+		desc            string
+		decision        func(models.AccountLinkingResult) models.AccountLinkingResult
+		flagDisabled    bool
+		emailOptional   bool
+		allowUnverified bool
+		expected        bool
+	}{
+		{desc: "unverified email in use", expected: true},
+		{desc: "flag disabled", flagDisabled: true},
+		{desc: "email not taken", decision: func(d models.AccountLinkingResult) models.AccountLinkingResult { d.EmailTaken = false; return d }},
+		{desc: "non-default linking domain", decision: func(d models.AccountLinkingResult) models.AccountLinkingResult { d.LinkingDomain = "social"; return d }},
+		{desc: "sso linking domain", decision: func(d models.AccountLinkingResult) models.AccountLinkingResult { d.LinkingDomain = "sso:abc"; return d }},
+		{desc: "not a create decision", decision: func(d models.AccountLinkingResult) models.AccountLinkingResult {
+			d.Decision = models.AccountExists
+			return d
+		}},
+		{desc: "email optional", emailOptional: true},
+		{desc: "unverified sign-ins allowed", allowUnverified: true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			config := &conf.GlobalConfiguration{}
+			config.Mailer.AllowUnverifiedEmailSignIns = c.allowUnverified
+			config.Experimental.RejectUnverifiedEmailInUseEnabled = !c.flagDisabled
+			decision := taken
+			if c.decision != nil {
+				decision = c.decision(decision)
+			}
+			require.Equal(t, c.expected, rejectUnverifiedEmailInUse(config, decision, c.emailOptional))
+		})
+	}
+}
+
 func (ts *ExternalTestSuite) createUser(providerId string, email string, name string, avatar string, confirmationToken string) (*models.User, error) {
 	// Cleanup existing user, if they already exist
 	if u, _ := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud); u != nil {
