@@ -313,6 +313,13 @@ func CleanupExpiredOAuthServerAuthorizations(tx *storage.Connection) error {
 	return tx.RawQuery(query, OAuthServerAuthorizationExpired, OAuthServerAuthorizationPending).Exec()
 }
 
+// DeleteApprovedOAuthServerAuthorizations removes unexchanged authorization
+// codes issued to one user for one client.
+func DeleteApprovedOAuthServerAuthorizations(tx *storage.Connection, userID, clientID uuid.UUID) error {
+	query := "DELETE FROM " + (&OAuthServerAuthorization{}).TableName() + " WHERE user_id = ? AND client_id = ? AND status = ?"
+	return tx.RawQuery(query, userID, clientID, OAuthServerAuthorizationApproved).Exec()
+}
+
 // Error types for OAuth authorization operations
 
 type OAuthServerAuthorizationNotFoundError struct{}
