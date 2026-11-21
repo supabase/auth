@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/conf/confload"
@@ -709,6 +711,81 @@ func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrant() {
 	deletedSession, err := models.FindSessionByID(ts.DB, session.ID, false)
 	assert.Error(ts.T(), err, "session should be deleted")
 	assert.Nil(ts.T(), deletedSession)
+}
+
+func (ts *OAuthClientTestSuite) exchangeAuthorizationCode(client *models.OAuthServerClient, code string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", nil)
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	err := ts.Server.handleAuthorizationCodeGrant(ctx, w, req, &OAuthTokenParams{
+		GrantType: GrantTypeAuthorizationCode,
+		Code:      code,
+	})
+	if err != nil {
+		ts.T().Fatalf("exchange: %v", err)
+	}
+	return w
+}
+
+func (ts *OAuthClientTestSuite) TestRevokeOAuthGrantRejectsUnexchangedCode() {
+	owner := ts.createTestUser("revoke-code-owner@example.com")
+	otherUser := ts.createTestUser("revoke-code-other@example.com")
+	client, _ := ts.createTestOAuthClient()
+	otherClient, _ := ts.createTestOAuthClient()
+
+	ts.createTestConsent(owner.ID.String(), client.ID.String(), []string{"profile"})
+	ts.createTestConsent(owner.ID.String(), otherClient.ID.String(), []string{"profile"})
+	ts.createTestConsent(otherUser.ID.String(), client.ID.String(), []string{"profile"})
+
+	// Same client, same user, exchanged before the revoke. Proves this grant can mint tokens.
+	issued := ts.exchangeAuthorizationCode(client, ts.mintApprovedCode(client.ID, owner.ID))
+	assert.Equal(ts.T(), http.StatusOK, issued.Code)
+	var issuedBody map[string]any
+	require.NoError(ts.T(), json.Unmarshal(issued.Body.Bytes(), &issuedBody))
+	assert.NotEmpty(ts.T(), issuedBody["access_token"])
+	assert.NotEmpty(ts.T(), issuedBody["refresh_token"])
+
+	unused := ts.mintApprovedCode(client.ID, owner.ID)
+	otherClientCode := ts.mintApprovedCode(otherClient.ID, owner.ID)
+	otherUserCode := ts.mintApprovedCode(client.ID, otherUser.ID)
+
+	pending := models.NewOAuthServerAuthorization(models.NewOAuthServerAuthorizationParams{
+		ClientID:    client.ID,
+		RedirectURI: "https://example.com/callback",
+		Scope:       "profile",
+		TTL:         time.Hour,
+	})
+	require.NoError(ts.T(), models.CreateOAuthServerAuthorization(ts.DB, pending))
+	require.NoError(ts.T(), pending.SetUser(ts.DB, owner.ID))
+
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants?client_id="+client.ID.String(), nil)
+	req = req.WithContext(shared.WithUser(req.Context(), owner))
+	w := httptest.NewRecorder()
+	require.NoError(ts.T(), ts.Server.UserRevokeOAuthGrant(w, req))
+	assert.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	exchangeReq := httptest.NewRequest(http.MethodPost, "/oauth/token", nil)
+	exchangeCtx := shared.WithOAuthServerClient(exchangeReq.Context(), client)
+	exchangeReq = exchangeReq.WithContext(exchangeCtx)
+	exchangeW := httptest.NewRecorder()
+	err := ts.Server.handleAuthorizationCodeGrant(exchangeCtx, exchangeW, exchangeReq, &OAuthTokenParams{
+		GrantType: GrantTypeAuthorizationCode,
+		Code:      unused,
+	})
+	var oauthErr *apierrors.OAuthError
+	require.ErrorAs(ts.T(), err, &oauthErr)
+	assert.Equal(ts.T(), "invalid_grant", oauthErr.Err)
+
+	stillOtherClient := ts.exchangeAuthorizationCode(otherClient, otherClientCode)
+	assert.Equal(ts.T(), http.StatusOK, stillOtherClient.Code)
+	stillOtherUser := ts.exchangeAuthorizationCode(client, otherUserCode)
+	assert.Equal(ts.T(), http.StatusOK, stillOtherUser.Code)
+
+	kept, err := models.FindOAuthServerAuthorizationByID(ts.DB, pending.AuthorizationID)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), models.OAuthServerAuthorizationPending, kept.Status)
+	assert.Nil(ts.T(), kept.AuthorizationCode)
 }
 
 func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantNotFound() {
