@@ -135,6 +135,15 @@ type emailValidatorMailClient struct {
 	mc mailer.Client
 }
 
+// RecipientValidationError identifies the address rejected by the mail validator.
+type RecipientValidationError struct {
+	Recipient string
+	Err       error
+}
+
+func (e *RecipientValidationError) Error() string { return e.Err.Error() }
+func (e *RecipientValidationError) Unwrap() error { return e.Err }
+
 // Mail implements mailer.MailClient interface by calling validate before
 // passing the mail request to the next MailClient.
 func (o *emailValidatorMailClient) Mail(
@@ -146,7 +155,7 @@ func (o *emailValidatorMailClient) Mail(
 	typ string,
 ) error {
 	if err := o.ev.Validate(ctx, to); err != nil {
-		return err
+		return &RecipientValidationError{Recipient: to, Err: err}
 	}
 	return o.mc.Mail(
 		ctx,

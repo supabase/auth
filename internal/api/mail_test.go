@@ -16,8 +16,8 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/mailer/mockclient"
-	"github.com/supabase/auth/internal/mailer/validateclient"
+	mail "github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -258,48 +258,69 @@ func (ts *MailTestSuite) setURIAllowListMap(uris ...string) {
 	}
 }
 
-type invalidEmailChangeMailer struct {
-	mockclient.MockMailer
-}
-
-func (m *invalidEmailChangeMailer) EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error {
-	return validateclient.ErrInvalidEmailAddress
-}
-
-func (ts *MailTestSuite) TestSendEmailChangeInvalidAddressError() {
-	originalMailer := ts.API.mailer
-	ts.API.mailer = &invalidEmailChangeMailer{}
-	defer func() { ts.API.mailer = originalMailer }()
+func TestSendEmailChangeInvalidAddressError(t *testing.T) {
+	const currentEmail = "current@example.com"
+	const newEmail = "new@example.com"
 
 	cases := []struct {
 		desc         string
 		currentEmail string
 		isAnonymous  bool
+		rejected     string
 	}{
 		{
 			desc:        "anonymous user without an email",
 			isAnonymous: true,
+			rejected:    newEmail,
 		},
 		{
-			desc:         "user with an existing email",
-			currentEmail: "current@example.com",
+			desc:         "new address rejected during secure email change",
+			currentEmail: currentEmail,
+			rejected:     newEmail,
+		},
+		{
+			desc:         "current address rejected during secure email change",
+			currentEmail: currentEmail,
+			rejected:     currentEmail,
 		},
 	}
 
 	for _, c := range cases {
-		ts.Run(c.desc, func() {
-			u, err := models.NewUser("", c.currentEmail, "", ts.Config.JWT.Aud, nil)
-			require.NoError(ts.T(), err)
+		t.Run(c.desc, func(t *testing.T) {
+			validator := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request struct {
+					Email string `json:"email"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Errorf("invalid validation request: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				fmt.Fprintf(w, `{"valid":%t}`, request.Email != c.rejected)
+			}))
+			defer validator.Close()
+
+			config := &conf.GlobalConfiguration{}
+			config.Mailer.EmailValidationServiceURL = validator.URL
+			config.Mailer.SecureEmailChangeEnabled = true
+			config.Mailer.Autoconfirm = true
+			config.RateLimitEmailSent.Events = 1
+			api := &API{config: config, mailer: templatemailer.FromConfig(config, templatemailer.NewCache())}
+
+			u, err := models.NewUser("", c.currentEmail, "", "", nil)
+			require.NoError(t, err)
 			u.IsAnonymous = c.isAnonymous
+			u.EmailChange = newEmail
 
 			req := httptest.NewRequest(http.MethodPut, "/user", nil)
-			err = ts.API.sendEmailChange(req, ts.API.db, u, "new@example.com", models.ImplicitFlow)
+			req = req.WithContext(withExternalHost(req.Context(), req.URL))
+			err = api.sendEmail(req, nil, u, sendEmailParams{emailActionType: mail.EmailChangeVerification})
 
 			httpErr := &HTTPError{}
-			require.ErrorAs(ts.T(), err, &httpErr)
-			require.Equal(ts.T(), http.StatusBadRequest, httpErr.HTTPStatus)
-			require.Equal(ts.T(), apierrors.ErrorCodeEmailAddressInvalid, httpErr.ErrorCode)
-			require.Equal(ts.T(), `Email address "new@example.com" is invalid`, httpErr.Message)
+			require.ErrorAs(t, err, &httpErr)
+			require.Equal(t, http.StatusBadRequest, httpErr.HTTPStatus)
+			require.Equal(t, apierrors.ErrorCodeEmailAddressInvalid, httpErr.ErrorCode)
+			require.Equal(t, fmt.Sprintf("Email address %q is invalid", c.rejected), httpErr.Message)
 		})
 	}
 }
