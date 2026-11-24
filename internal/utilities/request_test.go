@@ -104,6 +104,57 @@ func TestIsRedirectURLValidSameOrigin(t *tst.T) {
 	}
 }
 
+func TestIsRedirectURLValidAllowListedIP(t *tst.T) {
+	config := conf.GlobalConfiguration{
+		SiteURL: "https://example.com",
+		URIAllowList: []string{
+			"exp://**",
+			"http://192.168.1.20/cb",
+			"http://2130706433/cb",
+		},
+		JWT: conf.JWTConfiguration{Secret: "testsecret"},
+	}
+	require.NoError(t, config.ApplyDefaults())
+
+	cases := []struct {
+		desc        string
+		redirectURL string
+		want        bool
+	}{
+		{
+			desc:        "expo go deep link on a private IP is allow-listed",
+			redirectURL: "exp://192.168.22.47:8081/--/auth",
+			want:        true,
+		},
+		{
+			desc:        "exact allow-listed IPv4 redirect",
+			redirectURL: "http://192.168.1.20/cb",
+			want:        true,
+		},
+		{
+			desc:        "non-loopback IP not on the allow list stays rejected",
+			redirectURL: "http://192.168.1.21/cb",
+			want:        false,
+		},
+		{
+			desc:        "decimal IP literal stays rejected even when that URL is allow-listed",
+			redirectURL: "http://2130706433/cb",
+			want:        false,
+		},
+		{
+			desc:        "loopback IP remains allowed without an allow-list entry",
+			redirectURL: "http://127.0.0.1:9999/callback",
+			want:        true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *tst.T) {
+			require.Equal(t, c.want, IsRedirectURLValid(&config, c.redirectURL))
+		})
+	}
+}
+
 func TestGetIPAddressWithSBFF(t *tst.T) {
 	testCases := []struct {
 		name       string

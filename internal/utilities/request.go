@@ -118,8 +118,13 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 	if decimalIPAddressPattern.MatchString(refurl.Hostname()) {
 		// IP address in decimal form also not allowed in redirects!
 		return false
-	} else if ip := net.ParseIP(refurl.Hostname()); ip != nil {
-		return ip.IsLoopback()
+	}
+	if ip := net.ParseIP(refurl.Hostname()); ip != nil {
+		// Loopback is always allowed. Any other IP is not implicit: it must
+		// still match the allow list, so exp://** can permit Expo Go.
+		if ip.IsLoopback() {
+			return true
+		}
 	} else if isHTTP && !regularHostname.MatchString(refurl.Hostname()) {
 		// hostname uses characters that are not typically used
 		return false
