@@ -167,7 +167,12 @@ func RequestTracing() func(http.Handler) http.Handler {
 			}
 		}
 
-		otelHandler := otelhttp.NewHandler(http.HandlerFunc(fn), "api")
+		otelHandler := otelhttp.NewHandler(
+			http.HandlerFunc(fn),
+			"api",
+			// keep spans named "api": newer otelhttp names them by method and route instead of the operation
+			otelhttp.WithSpanNameFormatter(func(op string, _ *http.Request) string { return op }),
+		)
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// there is a vulnerability with otelhttp where
