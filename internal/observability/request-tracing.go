@@ -157,17 +157,17 @@ func RequestTracing() func(http.Handler) http.Handler {
 
 			next.ServeHTTP(&writer, r)
 
+			// chi fills in the route pattern during routing, so label after next returns
+			labeler, _ := otelhttp.LabelerFromContext(r.Context())
+			labeler.Add(addMetricAttributes(r)...)
+
 			if originalUserAgent != "" {
 				r.Header.Set("X-Gotrue-Original-User-Agent", originalUserAgent)
 				r.Header.Set("User-Agent", "stripped")
 			}
 		}
 
-		otelHandler := otelhttp.NewHandler(
-			http.HandlerFunc(fn),
-			"api",
-			otelhttp.WithMetricAttributesFn(addMetricAttributes),
-		)
+		otelHandler := otelhttp.NewHandler(http.HandlerFunc(fn), "api")
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// there is a vulnerability with otelhttp where
