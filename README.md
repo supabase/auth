@@ -801,6 +801,13 @@ Default Content (if template is unavailable):
 
 Whether to send a notification email when a sign-in method is removed from a user's account. Defaults to `false`.
 
+When the Send Email Hook is enabled, `email_data.recipient_email` contains the notification's
+recipient address before unlinking. Use this field for `identity_unlinked_notification` instead of
+`user.email`: removing an identity can promote a different identity's email onto the user record.
+The `user` object continues to describe the account after unlinking. `recipient_email` is omitted
+for other email action types; their existing recipient and token mappings are unchanged.
+
+
 `GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
 
 URL path to an email template to use when notifying a user that a new verification method has been added to their account. (e.g. `https://www.example.com/path-to-email-template.html`)
