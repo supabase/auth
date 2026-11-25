@@ -413,7 +413,10 @@ GOTRUE_JWT_AUD=netlify
 
 `JWT_SECRET` - `string` **required**
 
-The secret used to sign JWT tokens with.
+The secret used to sign JWT tokens with. The value is used verbatim as the
+HMAC signing key; it is not base64-decoded. When verifying tokens with an
+external tool (for example jwt.io), enter the secret exactly as configured
+and do not enable any "secret base64 encoded" option.
 
 `JWT_EXP` - `number`
 
