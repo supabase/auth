@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/require"
@@ -1313,4 +1314,25 @@ func TestApplyDefaultsClampsOtpExp(t *testing.T) {
 			require.Positive(t, time.Duration(cfg.Sms.OtpExp)*time.Second)    // #nosec G115
 		})
 	}
+}
+
+func TestUnsetJWTDefaultGroupName(t *testing.T) {
+	const key = "GOTRUE_JWT_DEFAULT_GROUP_NAME"
+	prev, had := os.LookupEnv(key)
+	require.NoError(t, os.Unsetenv(key))
+	t.Cleanup(func() {
+		if had {
+			os.Setenv(key, prev)
+		}
+	})
+	t.Setenv("GOTRUE_JWT_SECRET", "secret")
+
+	var jwt JWTConfiguration
+	require.NoError(t, envconfig.Process("gotrue_jwt", &jwt))
+	require.Equal(t, "authenticated", jwt.DefaultGroupName)
+
+	t.Setenv(key, "custom_role")
+	var custom JWTConfiguration
+	require.NoError(t, envconfig.Process("gotrue_jwt", &custom))
+	require.Equal(t, "custom_role", custom.DefaultGroupName)
 }

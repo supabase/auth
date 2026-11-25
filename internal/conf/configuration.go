@@ -147,7 +147,7 @@ type JWTConfiguration struct {
 	Aud              string         `json:"aud"`
 	AdminGroupName   string         `json:"admin_group_name" split_words:"true"`
 	AdminRoles       []string       `json:"admin_roles" split_words:"true"`
-	DefaultGroupName string         `json:"default_group_name" split_words:"true"`
+	DefaultGroupName string         `json:"default_group_name" split_words:"true" default:"authenticated"`
 	Issuer           string         `json:"issuer"`
 	KeyID            string         `json:"key_id" split_words:"true"`
 	Keys             JwtKeysDecoder `json:"keys"`
