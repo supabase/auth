@@ -188,9 +188,12 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	var blockUserSession bool
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if user != nil {
+			blockUserSession = user.IsConfirmed() || user.IsPhoneConfirmed()
+
 			if (params.Provider == EmailProvider && user.IsConfirmed()) || (params.Provider == PhoneProvider && user.IsPhoneConfirmed()) {
 				return UserExistsError
 			}
@@ -202,10 +205,10 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), params.Provider)
-		if terr != nil {
-			if !models.IsNotFoundError(terr) {
-				return terr
-			}
+		if terr != nil && !models.IsNotFoundError(terr) {
+			return terr
+		}
+		if identity == nil && !blockUserSession {
 			identityData := structs.Map(provider.Claims{
 				Subject: user.ID.String(),
 				Email:   user.GetEmail(),
@@ -223,7 +226,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		}
-		user.Identities = []models.Identity{*identity}
+		if identity != nil {
+			user.Identities = []models.Identity{*identity}
+		}
 
 		if params.Provider == EmailProvider && !user.IsConfirmed() {
 			if config.Mailer.Autoconfirm {
@@ -293,13 +298,13 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if config.Mailer.Autoconfirm || config.Sms.Autoconfirm {
 				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeUserAlreadyExists, "User already registered")
 			}
-			sanitizedUser, err := sanitizeUser(user, params)
-			if err != nil {
-				return err
-			}
-			return sendJSON(w, http.StatusOK, sanitizedUser)
+			return sendJSON(w, http.StatusOK, obfuscatedSignupUser(params))
 		}
 		return err
+	}
+
+	if blockUserSession {
+		return sendJSON(w, http.StatusOK, obfuscatedSignupUser(params))
 	}
 
 	// handles case where Mailer.Autoconfirm is true or Phone.Autoconfirm is true
@@ -344,37 +349,32 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, user)
 }
 
-// sanitizeUser removes all user sensitive information from the user object
-// Should be used whenever we want to prevent information about whether a user is registered or not from leaking
-func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
+// obfuscatedSignupUser returns a user built only from the signup params.
+func obfuscatedSignupUser(params *SignupParams) *models.User {
 	now := time.Now()
 
-	u.ID = uuid.Must(uuid.NewV4())
-
-	u.Role, u.EmailChange = "", ""
-	u.CreatedAt, u.UpdatedAt, u.ConfirmationSentAt = now, now, &now
-	u.LastSignInAt, u.ConfirmedAt, u.EmailChangeSentAt, u.EmailConfirmedAt, u.PhoneConfirmedAt = nil, nil, nil, nil, nil
-	u.Identities = make([]models.Identity, 0)
-	u.UserMetaData = params.Data
-	u.Aud = params.Aud
-
-	// sanitize app_metadata
-	u.AppMetaData = map[string]interface{}{
-		"provider":  params.Provider,
-		"providers": []string{params.Provider},
+	u := &models.User{
+		ID:                 uuid.Must(uuid.NewV4()),
+		Aud:                params.Aud,
+		ConfirmationSentAt: &now,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+		UserMetaData:       params.Data,
+		AppMetaData: map[string]interface{}{
+			"provider":  params.Provider,
+			"providers": []string{params.Provider},
+		},
+		Identities: make([]models.Identity, 0),
 	}
 
-	// sanitize param fields
 	switch params.Provider {
 	case EmailProvider:
-		u.Phone = ""
+		u.Email = storage.NullString(params.Email)
 	case PhoneProvider:
-		u.Email = ""
-	default:
-		u.Phone, u.Email = "", ""
+		u.Phone = storage.NullString(params.Phone)
 	}
 
-	return u, nil
+	return u
 }
 
 func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*models.User, error) {

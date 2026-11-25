@@ -442,3 +442,56 @@ func (ts *OtpTestSuite) TestOtpKeepsConfirmedPassword() {
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), user.HasPassword())
 }
+
+func TestOtpPartiallyConfirmedUser(t *testing.T) {
+	e := setupPartialConfirm(t)
+
+	for _, emailConfirmed := range []bool{true, false} {
+		for _, mailerAutoconfirm := range []bool{false, true} {
+			for _, smsAutoconfirm := range []bool{false, true} {
+				desc := fmt.Sprintf("email confirmed %v, mailer autoconfirm %v, sms autoconfirm %v", emailConfirmed, mailerAutoconfirm, smsAutoconfirm)
+				t.Run(desc, func(t *testing.T) {
+					user := e.newUser(t, emailConfirmed)
+					e.config.Mailer.Autoconfirm, e.config.Sms.Autoconfirm = mailerAutoconfirm, smsAutoconfirm
+					defer func() { e.config.Mailer.Autoconfirm, e.config.Sms.Autoconfirm = false, false }()
+
+					var verify map[string]interface{}
+					if emailConfirmed {
+						code, data := e.post(t, "/otp", map[string]interface{}{"phone": partialConfirmPhone})
+						require.Equal(t, http.StatusOK, code, data)
+						require.NotContains(t, data, "access_token")
+						require.Len(t, e.sms.otps, 1)
+						verify = map[string]interface{}{"type": "sms", "phone": partialConfirmPhone, "token": e.sms.otps[0]}
+					} else {
+						code, data := e.post(t, "/otp", map[string]interface{}{"email": partialConfirmEmail})
+						require.Equal(t, http.StatusOK, code, data)
+						require.NotContains(t, data, "access_token")
+						sent := len(e.mailer.ConfirmationMailCalls) + len(e.mailer.MagicLinkMailCalls)
+						require.Equal(t, 1, sent)
+						if len(e.mailer.ConfirmationMailCalls) == 1 {
+							assert.Equal(t, user.ID, e.mailer.ConfirmationMailCalls[0].User.ID)
+							verify = map[string]interface{}{"type": "signup", "email": partialConfirmEmail, "token": e.mailer.ConfirmationMailCalls[0].OTP}
+						} else {
+							assert.Equal(t, user.ID, e.mailer.MagicLinkMailCalls[0].User.ID)
+							verify = map[string]interface{}{"type": "magiclink", "email": partialConfirmEmail, "token": e.mailer.MagicLinkMailCalls[0].OTP}
+						}
+					}
+					require.Equal(t, 0, e.sessionCount(t, user))
+
+					code, data := e.post(t, "/verify", verify)
+					require.Equal(t, http.StatusOK, code, data)
+					require.NotEmpty(t, data["access_token"])
+					signedIn, ok := data["user"].(map[string]interface{})
+					require.True(t, ok)
+					assert.Equal(t, user.ID.String(), signedIn["id"])
+					require.Equal(t, 1, e.sessionCount(t, user))
+
+					got, err := models.FindUserByID(e.api.db, user.ID)
+					require.NoError(t, err)
+					assert.True(t, got.IsConfirmed())
+					assert.True(t, got.IsPhoneConfirmed())
+				})
+			}
+		}
+	}
+}
