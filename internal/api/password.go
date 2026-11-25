@@ -2,13 +2,25 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/crypto"
 )
+
+// passwordHashError converts a crypto.ErrPasswordHashNotPermitted returned
+// from User.Authenticate into an HTTP error that tells the client the user
+// must reset their password. Other errors are returned unchanged.
+func passwordHashError(err error) error {
+	if errors.Is(err, crypto.ErrPasswordHashNotPermitted) {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodePasswordResetRequired, "Your password must be reset before you can sign in.").WithInternalError(err)
+	}
+	return err
+}
 
 // BCrypt hashed passwords have a 72 character limit
 const MaxPasswordLength = 72
