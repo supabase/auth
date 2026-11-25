@@ -1128,15 +1128,13 @@ func (ts *IDTokenTestSuite) TestIDTokenWithMultipleScopes() {
 func TestAMRClaimUnmarshal(t *testing.T) {
 	t.Run("mixed string and object formats", func(t *testing.T) {
 		var claim AMRClaim
-		before := time.Now().Unix()
 
 		err := json.Unmarshal([]byte(`["password", {"method":"totp","timestamp":123,"provider":"webauthn"}]`), &claim)
 		require.NoError(t, err)
 		require.Len(t, claim, 2)
 
 		require.Equal(t, "password", claim[0].Method)
-		require.GreaterOrEqual(t, claim[0].Timestamp, before)
-		require.LessOrEqual(t, claim[0].Timestamp, time.Now().Unix())
+		require.Zero(t, claim[0].Timestamp, "string format has no timestamp")
 		require.Empty(t, claim[0].Provider, "string format should not have provider")
 
 		require.Equal(t, "totp", claim[1].Method)
@@ -1166,13 +1164,13 @@ func TestAMRClaimUnmarshal(t *testing.T) {
 
 	t.Run("all strings", func(t *testing.T) {
 		var claim AMRClaim
-		before := time.Now().Unix()
 		err := json.Unmarshal([]byte(`["password", "totp"]`), &claim)
 		require.NoError(t, err)
 		require.Len(t, claim, 2)
 		require.Equal(t, "password", claim[0].Method)
 		require.Equal(t, "totp", claim[1].Method)
-		require.GreaterOrEqual(t, claim[0].Timestamp, before)
+		require.Zero(t, claim[0].Timestamp)
+		require.Zero(t, claim[1].Timestamp)
 		require.Empty(t, claim[0].Provider)
 		require.Empty(t, claim[1].Provider)
 	})

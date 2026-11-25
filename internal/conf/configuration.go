@@ -216,6 +216,10 @@ type MFAConfiguration struct {
 	TOTP                        TOTPFactorTypeConfiguration          `split_words:"true"`
 	WebAuthn                    MFAFactorTypeConfiguration           `split_words:"true"`
 	RecoveryCodes               RecoveryCodesFactorTypeConfiguration `split_words:"true"`
+	// UnenrollMaxVerificationAge, when non-zero, requires the access token
+	// used to unenroll a verified factor to carry an MFA verification (AMR
+	// entry) no older than this duration. Zero disables the requirement.
+	UnenrollMaxVerificationAge time.Duration `json:"unenroll_max_verification_age" split_words:"true" default:"0"`
 }
 
 type WebAuthnConfiguration struct {
@@ -1304,6 +1308,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if config.MFA.FactorExpiryDuration < defaultFactorExpiryDuration {
 		config.MFA.FactorExpiryDuration = defaultFactorExpiryDuration
+	}
+
+	if config.MFA.UnenrollMaxVerificationAge < 0 {
+		config.MFA.UnenrollMaxVerificationAge = 0
 	}
 
 	if config.MFA.Phone.MaxFrequency == 0 {

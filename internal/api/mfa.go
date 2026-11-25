@@ -1053,6 +1053,25 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 }
 
+// hasRecentMFAVerification reports whether the access token's AMR claim holds
+// a second-factor verification performed within maxAge of now. AMR timestamps
+// are carried over unchanged on token refresh, so refreshing does not count as
+// a new verification.
+func hasRecentMFAVerification(claims *AccessTokenClaims, maxAge time.Duration, now time.Time) bool {
+	for _, entry := range claims.AuthenticationMethodReference {
+		// A zero timestamp means the time of verification is unknown (string-form
+		// AMR), which never counts as recent.
+		if !models.IsAAL2AuthenticationMethod(entry.Method) || entry.Timestamp == 0 {
+			continue
+		}
+		verifiedAt := time.Unix(entry.Timestamp, 0)
+		if !verifiedAt.After(now) && now.Sub(verifiedAt) <= maxAge {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
@@ -1070,8 +1089,19 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeValidationFailed, "Recovery codes cannot be unenrolled with this endpoint, use DELETE /factors/recovery-codes")
 	}
 
-	if factor.IsVerified() && !session.IsAAL2() {
-		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeInsufficientAAL, "AAL2 required to unenroll verified factor")
+	if factor.IsVerified() {
+		// The check must use the claims of the presented access token, not
+		// the session's AAL in the database: once a session reaches AAL2, any
+		// AAL1 access token previously issued for it is still valid and would
+		// otherwise be able to remove the user's second factor.
+		claims := getClaims(ctx)
+		if claims == nil || claims.AuthenticatorAssuranceLevel != models.AAL2.String() || !session.IsAAL2() {
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeInsufficientAAL, "AAL2 required to unenroll verified factor")
+		}
+
+		if maxAge := config.MFA.UnenrollMaxVerificationAge; maxAge > 0 && !hasRecentMFAVerification(claims, maxAge, time.Now()) {
+			return apierrors.NewForbiddenError(apierrors.ErrorCodeReauthenticationNeeded, "A recent MFA verification is required to unenroll a verified factor")
+		}
 	}
 
 	factorType := factor.FactorType
