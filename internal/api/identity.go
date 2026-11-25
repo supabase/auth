@@ -170,7 +170,7 @@ func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
+func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, providerType string, emailOptional bool) (*models.User, error) {
 	targetUser := getTargetUser(ctx)
 	identity, terr := models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType)
 	if terr != nil {
@@ -203,7 +203,12 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 			}
 			return nil, terr
 		}
-		if !userData.Metadata.EmailVerified {
+		// When the provider is email_optional and linking left the user without
+		// an email (e.g. a custom OIDC identity with only the openid scope),
+		// there's no address to confirm, so this must behave like the sign-in
+		// path and skip the confirmation requirement.
+		hasEmail := !emailOptional || targetUser.GetEmail() != ""
+		if hasEmail && !userData.Metadata.EmailVerified {
 			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
 				return nil, terr
 			}

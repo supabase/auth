@@ -216,7 +216,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if targetUser != nil {
-			if user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType); terr != nil {
+			if user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType, emailOptional); terr != nil {
 				return terr
 			}
 		} else if inviteToken != "" {
