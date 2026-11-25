@@ -205,3 +205,34 @@ func (ts *FactorTestSuite) TestDowngradeSessionsToAAL1RemovesAMRClaim() {
 		})
 	}
 }
+
+// TestConsumeTOTPTimeStep pins the compare-and-swap that makes a TOTP code
+// single-use: only a strictly greater time step is consumed, so a replayed code
+// and a stale row read by a losing concurrent verification are both refused.
+func (ts *FactorTestSuite) TestConsumeTOTPTimeStep() {
+	require.Nil(ts.T(), ts.TestFactor.LastTOTPStep)
+
+	fresh, err := ts.TestFactor.ConsumeTOTPTimeStep(ts.db, 100)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), fresh)
+	require.Equal(ts.T(), int64(100), *ts.TestFactor.LastTOTPStep)
+
+	// A second reader holding an older row stands for the concurrent verification
+	// that loses the race, and for a captured code replayed against a new challenge.
+	stale := &Factor{ID: ts.TestFactor.ID}
+	fresh, err = stale.ConsumeTOTPTimeStep(ts.db, 100)
+	require.NoError(ts.T(), err)
+	require.False(ts.T(), fresh)
+
+	fresh, err = stale.ConsumeTOTPTimeStep(ts.db, 99)
+	require.NoError(ts.T(), err)
+	require.False(ts.T(), fresh)
+
+	fresh, err = stale.ConsumeTOTPTimeStep(ts.db, 101)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), fresh)
+
+	stored, err := FindFactorByFactorID(ts.db, ts.TestFactor.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), int64(101), *stored.LastTOTPStep)
+}
