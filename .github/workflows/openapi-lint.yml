@@ -1,0 +1,31 @@
+name: OpenAPI Lint
+
+on:
+  pull_request:
+    paths:
+      - "openapi.yaml"
+      - ".spectral.yaml"
+      - ".github/workflows/openapi-lint.yml"
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openapi-lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  spectral:
+    name: Spectral lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: stoplightio/spectral-action@6416fd018ae38e60136775066eb3e98172143141 # v0.8.13
+        with:
+          file_glob: openapi.yaml
+          spectral_ruleset: .spectral.yaml

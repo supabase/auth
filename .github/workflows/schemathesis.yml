@@ -1,0 +1,132 @@
+name: Schemathesis
+
+on:
+  pull_request:
+    paths:
+      - "openapi.yaml"
+      - "internal/api/**"
+      - "cmd/**"
+      - "hack/test.env"
+      - ".github/workflows/schemathesis.yml"
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schemathesis-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract_test:
+    name: Contract test (Schemathesis)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Init database
+        run: psql -f hack/init_postgres.sql postgresql://postgres:root@localhost:5432/postgres
+
+      - name: Run migrations
+        run: make migrate_dev
+
+      - name: Build auth
+        run: make auth
+
+      - name: Start auth server
+        run: |
+          ./auth -c=hack/test.env > auth.log 2>&1 &
+          echo $! > auth.pid
+          echo "auth started with pid $(cat auth.pid)"
+
+      - name: Wait for auth /health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:9999/health > /dev/null; then
+              echo "auth is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "auth did not come up in 30s; last log lines:"
+          tail -n 100 auth.log || true
+          exit 1
+
+      - name: Install Schemathesis
+        run: pip install --upgrade 'schemathesis>=3.36,<4' PyJWT
+
+      - name: Mint test JWT
+        id: jwt
+        run: |
+          TOKEN=$(python3 - <<'PY'
+          import jwt
+          token = jwt.encode(
+              {"role": "anon", "aud": "authenticated", "iss": "supabase"},
+              "testsecret",
+              algorithm="HS256",
+          )
+          print(token)
+          PY
+          )
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Run Schemathesis
+        id: schemathesis
+        continue-on-error: true
+        run: |
+          schemathesis run openapi.yaml \
+            --url=http://localhost:9999 \
+            --header="apikey: ${{ steps.jwt.outputs.token }}" \
+            --exclude-path-regex='^/(recover|resend|magiclink|otp|invite|authorize|callback|saml/acs|admin)($|/)' \
+            --hypothesis-max-examples=50 \
+            --checks=all \
+            --junit-xml=schemathesis-report.xml
+
+      - name: Stop auth server
+        if: always()
+        run: |
+          if [ -f auth.pid ]; then
+            kill "$(cat auth.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: schemathesis-output
+          path: |
+            schemathesis-report.xml
+            auth.log
+          if-no-files-found: warn
