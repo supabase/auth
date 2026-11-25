@@ -1,4 +1,4 @@
-# Setup: see CONTRIBUTING.md.
+# Setup: see DEVELOPMENT.md.
 pre-commit:
   parallel: true
   commands:
