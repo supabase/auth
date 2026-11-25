@@ -323,7 +323,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	grantParams.FillGrantParams(r)
 
 	if !params.LinkIdentity {
-		if err := a.triggerBeforeUserCreatedExternal(r, db, userData, providerType); err != nil {
+		if err := a.triggerBeforeUserCreatedExternal(r, db, userData, providerType, emailOptional); err != nil {
 			return err
 		}
 	}
