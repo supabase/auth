@@ -634,6 +634,57 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	}
 }
 
+// TestAdminUserGetByEmail tests API /admin/users/by-email route
+func (ts *AdminTestSuite) TestAdminUserGetByEmail() {
+	// Create a test user
+	u, err := models.NewUser("12345678", "test@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	// Test successful lookup
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/users/by-email?email=test@example.com", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	data := map[string]interface{}{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	assert.Equal(ts.T(), u.ID.String(), data["id"])
+	assert.Equal(ts.T(), "test@example.com", data["email"])
+}
+
+// TestAdminUserGetByEmail_NotFound tests API /admin/users/by-email route with non-existent email
+func (ts *AdminTestSuite) TestAdminUserGetByEmail_NotFound() {
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/users/by-email?email=nonexistent@example.com", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusNotFound, w.Code)
+}
+
+// TestAdminUserGetByEmail_MissingEmail tests API /admin/users/by-email route without email parameter
+func (ts *AdminTestSuite) TestAdminUserGetByEmail_MissingEmail() {
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/users/by-email", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
+// TestAdminUserGetByEmail_InvalidEmail tests API /admin/users/by-email route with invalid email
+func (ts *AdminTestSuite) TestAdminUserGetByEmail_InvalidEmail() {
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/users/by-email?email=not-an-email", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
 // TestAdminUserUpdateClearsPendingTokensOnEmailChange verifies that
 // reassigning a user's email via the admin update endpoint invalidates any
 // outstanding recovery token, so a recovery link issued before the change

@@ -386,6 +386,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Route("/users", func(r *router) {
 				r.Get("/", api.adminUsers)
 				r.Post("/", api.adminUserCreate)
+				r.Get("/by-email", api.adminUserGetByEmail)
 
 				r.Route("/{user_id}", func(r *router) {
 					r.Use(api.loadUser)
