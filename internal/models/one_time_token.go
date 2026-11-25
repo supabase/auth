@@ -319,6 +319,31 @@ func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, a
 	return user, nil
 }
 
+// FindUserForPhoneChange finds the user requesting a phone change by the
+// change token. phone_change is not unique across users — several users can be
+// mid-change to the same number — so resolving by phone alone can return a
+// user whose token never matches. Resolve by token first, and fall back to the
+// phone lookup for flows that don't compare a locally stored token, such as
+// Twilio Verify or test OTPs.
+func FindUserForPhoneChange(tx *storage.Connection, phone, token, aud string) (*User, error) {
+	ott, err := FindOneTimeToken(tx, token, PhoneChangeToken)
+	if err != nil && !IsNotFoundError(err) {
+		return nil, err
+	}
+
+	if ott != nil {
+		user, err := FindUserByID(tx, ott.UserID)
+		if err != nil {
+			return nil, err
+		}
+			if user.Aud == aud && user.PhoneChange == phone && !user.IsSSOUser {
+			return user, nil
+		}
+	}
+
+	return FindUserByPhoneChangeAndAudience(tx, phone, aud)
+}
+
 // FindUserForEmailChange finds a user requesting for an email change
 func FindUserForEmailChange(tx *storage.Connection, email, token, aud string, secureEmailChangeEnabled bool) (*User, error) {
 	if secureEmailChangeEnabled {
