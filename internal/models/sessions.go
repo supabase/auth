@@ -94,7 +94,8 @@ type Session struct {
 
 	Tag           *string    `json:"tag" db:"tag"`
 	OAuthClientID *uuid.UUID `json:"oauth_client_id" db:"oauth_client_id"`
-	Scopes        *string    `json:"scopes,omitempty" db:"scopes"` // OAuth scopes granted for this session
+	Scopes        *string    `json:"scopes,omitempty" db:"scopes"`     // OAuth scopes granted for this session
+	Resource      *string    `json:"resource,omitempty" db:"resource"` // RFC 8707 resource indicator granted for this session
 
 	RefreshTokenHmacKey *string `json:"-" db:"refresh_token_hmac_key"`
 	RefreshTokenCounter *int64  `json:"-" db:"refresh_token_counter"`
