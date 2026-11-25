@@ -644,7 +644,7 @@ func (ts *OAuthAuthorizeTestSuite) TestConsent_NonPendingStatusRejected() {
 	client := ts.createClient()
 	auth := ts.createAuthorization(client.ID, "openid")
 	require.NoError(ts.T(), auth.SetUser(ts.DB, user.ID))
-	require.NoError(ts.T(), auth.Approve(ts.DB))
+	require.NoError(ts.T(), auth.Approve(ts.DB, nil))
 
 	req := ts.newRequest(http.MethodPost, auth.AuthorizationID, user, consentBody(OAuthServerConsentActionApprove))
 	w := httptest.NewRecorder()

@@ -941,6 +941,12 @@ func (s *Service) IssueRefreshToken(r *http.Request, responseHeaders http.Header
 			return terr
 		}
 
+		if grantParams.InheritFrom != nil {
+			if terr := models.CopyAMRClaimsToSession(tx, sessionID, grantParams.InheritFrom.AMRClaims); terr != nil {
+				return apierrors.NewInternalServerError("Database error copying AMR claims").WithInternalError(terr)
+			}
+		}
+
 		tokenString, expiresAt, terr = s.GenerateAccessToken(r, tx, GenerateAccessTokenParams{
 			User:                 user,
 			SessionID:            &sessionID,
