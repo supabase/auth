@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/crewjam/saml"
-	"github.com/crewjam/saml/samlsp"
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -163,7 +162,7 @@ func parseSAMLMetadata(rawMetadata []byte) (*saml.EntityDescriptor, error) {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Metadata XML contains invalid UTF-8 characters, which are not supported at this time")
 	}
 
-	metadata, err := samlsp.ParseMetadata(rawMetadata)
+	metadata, err := models.ParseSAMLMetadata(rawMetadata)
 	if err != nil {
 		return nil, err
 	}
