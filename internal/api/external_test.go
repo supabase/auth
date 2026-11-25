@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
@@ -786,4 +787,43 @@ func (ts *ExternalTestSuite) TestAfterUserCreatedHookNotFiredOnIdentityLinking()
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
 
 	ts.Require().Equal(0, hookCalls(), "hook must not fire when an identity is linked to an existing user")
+}
+
+// TestRepeatedOAuthSignInUpdatesIdentityLastSignInAt verifies that signing in
+// again with an existing external identity refreshes identity.LastSignInAt.
+func (ts *ExternalTestSuite) TestRepeatedOAuthSignInUpdatesIdentityLastSignInAt() {
+	userData := &provider.UserProvidedData{
+		Metadata: &provider.Claims{
+			Subject:       "repeat-oauth-subject",
+			Email:         "repeat-oauth@example.com",
+			EmailVerified: true,
+		},
+		Emails: []provider.Email{{
+			Email:    "repeat-oauth@example.com",
+			Primary:  true,
+			Verified: true,
+		}},
+	}
+	r := httptest.NewRequest(http.MethodGet, "/callback", nil)
+
+	decision, _, err := ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "github", false)
+	ts.Require().NoError(err)
+	ts.Require().Equal(models.CreateAccount, decision)
+
+	firstIdentity, err := models.FindIdentityByIdAndProvider(ts.API.db, userData.Metadata.Subject, "github")
+	ts.Require().NoError(err)
+	ts.Require().NotNil(firstIdentity.LastSignInAt)
+
+	past := time.Now().Add(-time.Hour).UTC()
+	firstIdentity.LastSignInAt = &past
+	ts.Require().NoError(ts.API.db.UpdateOnly(firstIdentity, "last_sign_in_at"))
+
+	decision, _, err = ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "github", false)
+	ts.Require().NoError(err)
+	ts.Require().Equal(models.AccountExists, decision)
+
+	updatedIdentity, err := models.FindIdentityByIdAndProvider(ts.API.db, userData.Metadata.Subject, "github")
+	ts.Require().NoError(err)
+	ts.Require().NotNil(updatedIdentity.LastSignInAt)
+	ts.Require().True(updatedIdentity.LastSignInAt.After(past), "identity.LastSignInAt should advance on subsequent OAuth sign-ins")
 }
