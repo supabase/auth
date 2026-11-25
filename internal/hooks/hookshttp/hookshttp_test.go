@@ -306,6 +306,25 @@ func TestDispatch(t *testing.T) {
 	}
 }
 
+func TestBadRequestHookReturnsErrorObject(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	const msg = "Signups from this email domain are not allowed."
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, `{"error":{"message":"`+msg+`","http_code":400}}`)
+	}))
+	defer srv.Close()
+
+	dr := New(WithTimeout(time.Second), WithRetries(1), WithBackoff(time.Millisecond))
+	cfg := conf.ExtensibilityPointConfiguration{URI: srv.URL}
+	res := M{}
+	err := dr.Dispatch(ctx, &cfg, M{"user": M{}}, &res)
+	require.EqualError(t, err, "400: "+msg)
+}
+
 type mockHandler struct {
 	status int
 	ctype  string

@@ -240,6 +240,11 @@ func (o *Dispatcher) runHTTPHook(
 			return nil, apierrors.NewInternalServerError(
 				"Service currently unavailable due to hook")
 		case http.StatusBadRequest:
+			// A bare 400 means the payload we sent was invalid. A 4xx error
+			// object in the body is a hook rejection and must be returned.
+			if err := hookRejectionError(rsp.Body, o.limitResponse); err != nil {
+				return nil, err
+			}
 			return nil, apierrors.NewInternalServerError(
 				"Invalid payload sent to hook")
 		case http.StatusUnauthorized:
@@ -254,6 +259,21 @@ func (o *Dispatcher) runHTTPHook(
 	// Previously this returned nil, nil when retryAfterHeader was present
 	return nil, apierrors.NewInternalServerError(
 		"Service currently unavailable due to hook")
+}
+
+// hookRejectionError returns a 4xx hook error carried in a non-success body.
+// Bodies that are not that object are left for the caller to handle.
+func hookRejectionError(body io.Reader, limit int64) error {
+	b, err := io.ReadAll(io.LimitReader(body, limit))
+	if err != nil || len(b) == 0 {
+		return nil
+	}
+	err = hookserrors.Check(b)
+	httpErr, ok := err.(*apierrors.HTTPError)
+	if !ok || httpErr.HTTPStatus < 400 || httpErr.HTTPStatus >= 500 {
+		return nil
+	}
+	return httpErr
 }
 
 func generateSignatures(
