@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/crewjam/saml"
-	"github.com/crewjam/saml/samlsp"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/storage"
@@ -158,7 +157,7 @@ func (p SAMLProvider) TableName() string {
 }
 
 func (p SAMLProvider) EntityDescriptor() (*saml.EntityDescriptor, error) {
-	return samlsp.ParseMetadata([]byte(p.MetadataXML))
+	return ParseSAMLMetadata([]byte(p.MetadataXML))
 }
 
 type SSODomain struct {
