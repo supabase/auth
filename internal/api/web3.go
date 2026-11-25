@@ -140,7 +140,7 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
-	if err := a.triggerBeforeUserCreatedExternal(r, db, &userData, providerType); err != nil {
+	if err := a.triggerBeforeUserCreatedExternal(r, db, &userData, providerType, true); err != nil {
 		return err
 	}
 
@@ -286,7 +286,7 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
-	if err := a.triggerBeforeUserCreatedExternal(r, db, &userData, providerType); err != nil {
+	if err := a.triggerBeforeUserCreatedExternal(r, db, &userData, providerType, true); err != nil {
 		return err
 	}
 
