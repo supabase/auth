@@ -346,3 +346,102 @@ func (ts *ResendTestSuite) TestResendPKCESuccess() {
 		require.True(ts.T(), strings.HasPrefix(dbUser.EmailChangeTokenNew, PKCEPrefix), "expected pkce_ prefix on EmailChangeTokenNew, got: %s", dbUser.EmailChangeTokenNew)
 	})
 }
+
+func (ts *ResendTestSuite) TestResendBannedUser() {
+	// Avoid max freq limit error
+	sentAt := time.Now().Add(-1 * time.Minute)
+
+	// disable secure email change
+	ts.Config.Mailer.SecureEmailChangeEnabled = false
+
+	u, err := models.NewUser("", "banned@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	u.ConfirmationToken = "123456"
+	u.ConfirmationSentAt = &sentAt
+	u.EmailChange = "new@example.com"
+	u.EmailChangeTokenNew = "654321"
+	u.EmailChangeSentAt = &sentAt
+	require.NoError(ts.T(), ts.API.db.Create(u))
+	require.NoError(ts.T(), u.Ban(ts.API.db, time.Hour))
+
+	cases := []struct {
+		desc   string
+		params map[string]interface{}
+	}{
+		{
+			desc:   "Resend signup confirmation",
+			params: map[string]interface{}{"type": "signup", "email": u.GetEmail()},
+		},
+		{
+			desc:   "Resend email change",
+			params: map[string]interface{}{"type": "email_change", "email": u.GetEmail()},
+		},
+	}
+
+	doResend := func(params map[string]interface{}) *httptest.ResponseRecorder {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(params))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/resend", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		return w
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			w := doResend(c.params)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+			require.JSONEq(ts.T(), "{}", w.Body.String())
+
+			dbUser, err := models.FindUserByID(ts.API.db, u.ID)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), u.ConfirmationToken, dbUser.ConfirmationToken)
+			require.WithinDuration(ts.T(), sentAt, *dbUser.ConfirmationSentAt, time.Second)
+			require.Equal(ts.T(), u.EmailChangeTokenNew, dbUser.EmailChangeTokenNew)
+			require.WithinDuration(ts.T(), sentAt, *dbUser.EmailChangeSentAt, time.Second)
+		})
+	}
+
+	ts.Run("Expired ban resends signup confirmation", func() {
+		pastBan := time.Now().Add(-time.Hour)
+		u.BannedUntil = &pastBan
+		require.NoError(ts.T(), ts.API.db.UpdateOnly(u, "banned_until"))
+
+		w := doResend(map[string]interface{}{"type": "signup", "email": u.GetEmail()})
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		dbUser, err := models.FindUserByID(ts.API.db, u.ID)
+		require.NoError(ts.T(), err)
+		require.NotEqual(ts.T(), u.ConfirmationToken, dbUser.ConfirmationToken)
+		require.WithinDuration(ts.T(), time.Now(), *dbUser.ConfirmationSentAt, time.Second)
+	})
+}
+
+func (ts *ResendTestSuite) TestResendBannedUserMaxFrequency() {
+	origFreq := ts.Config.SMTP.MaxFrequency
+	ts.Config.SMTP.MaxFrequency = time.Minute
+	defer func() { ts.Config.SMTP.MaxFrequency = origFreq }()
+
+	sentAt := time.Now().Add(-10 * time.Second)
+	u, err := models.NewUser("", "banned-freq@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	u.ConfirmationToken = "123456"
+	u.ConfirmationSentAt = &sentAt
+	require.NoError(ts.T(), ts.API.db.Create(u))
+
+	doResend := func() int {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{"type": "signup", "email": u.GetEmail()}))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/resend", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	require.Equal(ts.T(), http.StatusTooManyRequests, doResend())
+
+	require.NoError(ts.T(), u.Ban(ts.API.db, time.Hour))
+	require.Equal(ts.T(), http.StatusTooManyRequests, doResend())
+}
