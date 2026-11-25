@@ -622,6 +622,13 @@ func (s *Server) UserRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) er
 			return terr
 		}
 
+		// Drop unexchanged codes before sessions. An exchange that already
+		// locked one of these rows finishes and inserts its session first;
+		// the session delete below then removes that session too.
+		if terr := models.DeleteApprovedOAuthServerAuthorizations(tx, user.ID, clientID); terr != nil {
+			return terr
+		}
+
 		// Delete all sessions associated with this OAuth client for this user
 		// This will invalidate all refresh tokens for those sessions
 		if terr := models.RevokeOAuthSessions(tx, user.ID, clientID); terr != nil {
