@@ -542,6 +542,79 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 	}
 }
 
+func (ts *AdminTestSuite) TestAdminUserCreateBanDuration() {
+	phoneEnabled := ts.Config.External.Phone.Enabled
+	ts.Config.External.Phone.Enabled = true
+	ts.T().Cleanup(func() { ts.Config.External.Phone.Enabled = phoneEnabled })
+
+	cases := []struct {
+		desc         string
+		params       map[string]interface{}
+		wantBanned   bool
+		wantBadInput bool
+	}{
+		{desc: "omitted"},
+		{desc: "empty", params: map[string]interface{}{"ban_duration": ""}},
+		{desc: "none", params: map[string]interface{}{"ban_duration": "none"}},
+		{desc: "zero", params: map[string]interface{}{"ban_duration": "0s"}},
+		{desc: "unconfirmed email", params: map[string]interface{}{"ban_duration": "24h"}, wantBanned: true},
+		{desc: "confirmed email", params: map[string]interface{}{"ban_duration": "24h", "email_confirm": true}, wantBanned: true},
+		{desc: "confirmed phone", params: map[string]interface{}{"ban_duration": "24h", "email": "", "phone": "123456789", "phone_confirm": true}, wantBanned: true},
+		{desc: "invalid", params: map[string]interface{}{"ban_duration": "invalid"}, wantBadInput: true},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			id := uuid.Must(uuid.NewV4())
+			params := map[string]interface{}{
+				"id":       id.String(),
+				"email":    "banned@example.com",
+				"password": "test123",
+			}
+			for key, value := range c.params {
+				params[key] = value
+			}
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(params))
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+			before := time.Now()
+			ts.API.handler.ServeHTTP(w, req)
+			after := time.Now()
+			if c.wantBadInput {
+				require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+				_, err := models.FindUserByID(ts.API.db, id)
+				require.True(ts.T(), models.IsNotFoundError(err))
+				return
+			}
+			require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+
+			var data models.User
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			u, err := models.FindUserByID(ts.API.db, id)
+			require.NoError(ts.T(), err)
+			ts.T().Cleanup(func() { require.NoError(ts.T(), ts.API.db.Destroy(u)) })
+
+			if c.wantBanned {
+				require.NotNil(ts.T(), data.BannedUntil)
+				require.NotNil(ts.T(), u.BannedUntil)
+				assert.False(ts.T(), data.BannedUntil.Before(before.Add(24*time.Hour)))
+				assert.False(ts.T(), data.BannedUntil.After(after.Add(24*time.Hour)))
+				// PostgreSQL stores timestamps with microsecond precision.
+				assert.WithinDuration(ts.T(), *data.BannedUntil, *u.BannedUntil, time.Microsecond)
+				assert.True(ts.T(), u.IsBanned())
+			} else {
+				assert.Nil(ts.T(), data.BannedUntil)
+				assert.Nil(ts.T(), u.BannedUntil)
+				assert.False(ts.T(), u.IsBanned())
+			}
+		})
+	}
+}
+
 // TestAdminUserGet tests API /admin/user route (GET)
 func (ts *AdminTestSuite) TestAdminUserGet() {
 	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test Get User"})
