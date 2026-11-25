@@ -35,6 +35,9 @@ type Mailer interface {
 	ConfirmationMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
 	RecoveryMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
 	MagicLinkMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	// EmailChangeMail sends the email change confirmation. When otpNew is
+	// empty, no confirmation is sent to the new address, which is the case
+	// when the address is already registered to another account.
 	EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
 	ReauthenticateMail(r *http.Request, user *models.User, otp string) error
 	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)

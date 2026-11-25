@@ -521,7 +521,13 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models.User, email string, flowType models.FlowType) error {
+//
+// When newEmailTaken is true the new email address is already registered to
+// another account. Nothing is sent to that address (it belongs to someone
+// else) and no token is created for it, so the change can never be
+// completed. The current address still receives its confirmation, which keeps
+// the request indistinguishable from a regular email change.
+func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models.User, email string, flowType models.FlowType, newEmailTaken bool) error {
 	config := a.config
 	otpLength := config.Mailer.OtpLength
 
@@ -546,11 +552,20 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
 
+	if newEmailTaken {
+		// The new address belongs to another account: don't send a
+		// confirmation to it and don't create a token that could be used to
+		// claim it.
+		otpNew = ""
+		u.EmailChangeTokenNew = ""
+	}
+
 	err := a.sendEmail(r, tx, u, sendEmailParams{
 		emailActionType:     mail.EmailChangeVerification,
 		otp:                 otpCurrent,
 		otpNew:              otpNew,
 		tokenHashWithPrefix: u.EmailChangeTokenNew,
+		newEmailTaken:       newEmailTaken,
 	})
 	if err != nil {
 		if errors.Is(err, EmailRateLimitExceeded) {
@@ -757,6 +772,10 @@ type sendEmailParams struct {
 	provider            string
 	factorType          string
 	recipientEmail      string
+	// newEmailTaken is set when the new email address of an email change is
+	// already registered to another account. The address must not be used as
+	// a recipient and it has no token.
+	newEmailTaken bool
 }
 
 func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, params sendEmailParams) error {
@@ -870,13 +889,42 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			emailData.FactorType = params.factorType
 		}
 
+		hookUser := u
+		if params.newEmailTaken {
+			// The new address belongs to another account, so it must not be
+			// used as a recipient. The hook is given a user without a
+			// pending address, the same way the built-in mailer leaves the
+			// new address out.
+			userWithoutPendingEmail := *u
+			userWithoutPendingEmail.EmailChange = ""
+			hookUser = &userWithoutPendingEmail
+		}
+
 		input := v0hooks.NewSendEmailInput(
 			r,
-			u,
+			hookUser,
 			emailData,
 		)
 		output := v0hooks.SendEmailOutput{}
-		return a.hooksMgr.InvokeHook(tx, r, input, &output)
+		if err := a.hooksMgr.InvokeHook(tx, r, input, &output); err != nil {
+			if params.emailActionType == mail.EmailChangeVerification {
+				// The response to an email change must not depend on the
+				// outcome of the hook. The hook is given a different payload
+				// when the new address is already registered (no pending
+				// address and no token for it), so a hook that fails on that
+				// payload fails only the request for the taken address.
+				// Failing the request for the taken case only, or for the
+				// available case only, would turn the status code into an
+				// oracle that discloses whether the address is registered.
+				// The failure is therefore only logged here.
+				observability.GetLogEntry(r).Entry.WithError(err).Warn("Unable to send email change email")
+				return nil
+			}
+
+			return err
+		}
+
+		return nil
 	}
 
 	// Increment email send operations here, since this metric is meant to count number of mail
