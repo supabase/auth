@@ -75,8 +75,8 @@ func (o *Manager) InvokeHook(
 	return o.invokeHook(conn, r, input, output)
 }
 
-// invokeHook invokes the hook code. conn can be nil, in which case a new
-// transaction is opened. If calling invokeHook within a transaction, always
+// invokeHook invokes the hook code. If conn is nil or not in a transaction, a
+// new transaction is opened. If calling invokeHook within a transaction, always
 // pass the current transaction, as pool-exhaustion deadlocks are very easy to
 // trigger.
 func (o *Manager) invokeHook(
