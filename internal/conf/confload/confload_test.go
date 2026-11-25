@@ -427,3 +427,46 @@ func TestLoading(t *testing.T) {
 		require.NotNil(t, cfg)
 	}
 }
+
+// TestGlobalSAMLDisabledDoesNotReportNextKeyConfigured is a regression test
+// for the envconfig library allocating zero-value structs for all nil
+// pointer-to-struct fields on every config load (including the six pointer
+// fields on SAMLConfiguration), regardless of whether SAML is enabled or any
+// matching env var is set. Previously PopulateGlobal only reset these
+// pointers back to nil on the SAML.Enabled branch, so with SAML disabled
+// (the common/default case) CertificateNext stayed a non-nil zero-value
+// pointer and the /settings endpoint incorrectly reported
+// saml_private_key_next_configured: true.
+func TestGlobalSAMLDisabledDoesNotReportNextKeyConfigured(t *testing.T) {
+	defer os.Clearenv()
+	os.Clearenv()
+	os.Setenv("GOTRUE_SITE_URL", "http://localhost:8080")
+	os.Setenv("GOTRUE_DB_DRIVER", "postgres")
+	os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
+	os.Setenv("GOTRUE_OPERATOR_TOKEN", "token")
+	os.Setenv("GOTRUE_JWT_SECRET", "secret")
+	os.Setenv("API_EXTERNAL_URL", "http://localhost:9999")
+	// GOTRUE_SAML_ENABLED is intentionally left unset so SAML defaults to
+	// disabled, exercising the PopulateGlobal else branch.
+
+	cfg, err := LoadGlobalFromEnv()
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	assert.False(t, cfg.SAML.Enabled)
+	assert.Nil(t, cfg.SAML.RSAPrivateKey)
+	assert.Nil(t, cfg.SAML.RSAPublicKey)
+	assert.Nil(t, cfg.SAML.Certificate)
+	assert.Nil(t, cfg.SAML.RSAPrivateKeyNext)
+	assert.Nil(t, cfg.SAML.RSAPublicKeyNext)
+	assert.Nil(t, cfg.SAML.CertificateNext)
+
+	// Also verify with GOTRUE_SAML_ENABLED explicitly set to false.
+	os.Setenv("GOTRUE_SAML_ENABLED", "false")
+	cfg, err = LoadGlobalFromEnv()
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	assert.False(t, cfg.SAML.Enabled)
+	assert.Nil(t, cfg.SAML.CertificateNext)
+}
