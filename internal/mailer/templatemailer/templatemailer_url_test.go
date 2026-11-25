@@ -3,9 +3,12 @@ package templatemailer
 import (
 	"net/url"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 )
 
 var urlRegexp = regexp.MustCompile(`^https?://[^/]+`)
@@ -36,7 +39,7 @@ func TestGetPath(t *testing.T) {
 			SiteURL:  "https://test.example.com/removedpath",
 			Path:     "/templates/confirm.html",
 			Params:   nil,
-			Expected: "https://test.example.com/templates/confirm.html",
+			Expected: "https://test.example.com/removedpath/templates/confirm.html",
 		},
 		{
 			SiteURL:  "https://test.example.com/",
@@ -65,8 +68,43 @@ func TestGetPath(t *testing.T) {
 		path, err := getPath(c.Path, c.Params)
 
 		assert.NoError(t, err)
-		assert.Equal(t, c.Expected, u.ResolveReference(path).String())
+		assert.Equal(t, c.Expected, resolveEmailURL(u, path))
 	}
+}
+
+func TestGetEmailActionLinkKeepsExternalURLPath(t *testing.T) {
+	cfg := &conf.GlobalConfiguration{}
+	cfg.Mailer.URLPaths.Recovery = "/verify"
+	cfg.Mailer.URLPaths.Confirmation = "/verify"
+	cfg.Mailer.URLPaths.Invite = "/verify"
+	cfg.Mailer.URLPaths.EmailChange = "/verify"
+	m := &Mailer{cfg: cfg}
+	user := &models.User{
+		RecoveryToken:           "tok",
+		ConfirmationToken:       "ctok",
+		EmailChangeTokenNew:     "ntok",
+		EmailChangeTokenCurrent: "otok",
+	}
+
+	external, err := url.Parse("http://127.0.0.1:54321/auth/v1")
+	assert.NoError(t, err)
+	link, err := m.GetEmailActionLink(user, "magiclink", "https://app.example/welcome", external)
+	assert.NoError(t, err)
+	assert.True(t, strings.HasPrefix(link, "http://127.0.0.1:54321/auth/v1/verify?"), link)
+	assert.Contains(t, link, "token=tok")
+	assert.Contains(t, link, "type=magiclink")
+
+	origin, err := url.Parse("https://project.supabase.co")
+	assert.NoError(t, err)
+	link, err = m.GetEmailActionLink(user, "signup", "https://app.example/welcome", origin)
+	assert.NoError(t, err)
+	assert.True(t, strings.HasPrefix(link, "https://project.supabase.co/verify?"), link)
+
+	absolute, err := url.Parse("https://gateway.example/auth/v1/")
+	assert.NoError(t, err)
+	link, err = m.GetEmailActionLink(user, "recovery", "https://app.example/welcome", absolute)
+	assert.NoError(t, err)
+	assert.True(t, strings.HasPrefix(link, "https://gateway.example/auth/v1/verify?"), link)
 }
 
 func TestRelativeURL(t *testing.T) {
