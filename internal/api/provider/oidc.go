@@ -442,11 +442,36 @@ func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserPro
 	return token, &data, nil
 }
 
+// standardClaimsForGenericOIDC contains the list of claims to be removed
+// from the CustomClaims map by parseGenericIDToken.
+var standardClaimsForGenericOIDC = []string{
+	"iss", "sub", "aud", "iat", "exp", "nbf", "jti",
+	"name", "family_name", "given_name", "middle_name", "nickname",
+	"preferred_username", "profile", "picture", "website",
+	"gender", "birthdate", "zoneinfo", "locale", "updated_at",
+	"email", "email_verified", "phone", "phone_verified",
+	"custom_claims",
+	"full_name", "avatar_url", "slug", "provider_id", "user_name",
+	"azp", "amr", "auth_time", "nonce", "at_hash", "c_hash", "sid",
+	"client_id", "ver", "rh", "uti", "aio",
+}
+
 func parseGenericIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
 	var data UserProvidedData
 
 	if err := token.Claims(&data.Metadata); err != nil {
 		return nil, nil, err
+	}
+
+	data.Metadata.CustomClaims = make(map[string]interface{})
+	if err := token.Claims(&data.Metadata.CustomClaims); err != nil {
+		return nil, nil, err
+	}
+	for _, k := range standardClaimsForGenericOIDC {
+		delete(data.Metadata.CustomClaims, k)
+	}
+	if len(data.Metadata.CustomClaims) < 1 {
+		data.Metadata.CustomClaims = nil
 	}
 
 	if data.Metadata.Email != "" {
