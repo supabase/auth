@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"regexp"
 	"strings"
@@ -586,6 +587,28 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	}
 
 	return nil
+}
+
+// notificationRequest returns r with a context that expires before the last
+// fifth of the request budget (API.MaxRequestDuration). It is meant for
+// notification emails sent after the change they report has been committed: a
+// slow mail transport must not push the response past the request timeout,
+// otherwise the client sees a timeout for a change that already happened and
+// a retry fails with a confusing error (see #2888).
+//
+// The returned context is not cancelled when the caller returns, because the
+// mail may still be in flight on a background task (EmailBackgroundSending).
+// It ends at its deadline or together with the request.
+func (a *API) notificationRequest(r *http.Request) *http.Request {
+	maxDuration := a.config.API.MaxRequestDuration
+	deadline, ok := r.Context().Deadline()
+	if maxDuration <= 0 || !ok {
+		return r
+	}
+
+	ctx, cancel := context.WithDeadline(r.Context(), deadline.Add(-maxDuration/5))
+	context.AfterFunc(r.Context(), cancel)
+	return r.WithContext(ctx)
 }
 
 func (a *API) sendPasswordChangedNotification(r *http.Request, tx *storage.Connection, u *models.User) error {

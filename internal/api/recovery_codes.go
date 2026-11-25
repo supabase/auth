@@ -177,7 +177,7 @@ func (a *API) RecoveryCodesGenerate(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	if config.Mailer.Notifications.MFAFactorEnrolledEnabled && user.GetEmail() != "" {
-		if err := a.sendMFAFactorEnrolledNotification(r, db, user, factor.FactorType); err != nil {
+		if err := a.sendMFAFactorEnrolledNotification(a.notificationRequest(r), db, user, factor.FactorType); err != nil {
 			logrus.WithError(err).Warn("Unable to send MFA factor enrolled notification email")
 		}
 	}
@@ -498,7 +498,7 @@ func (a *API) RecoveryCodesDelete(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	if config.Mailer.Notifications.MFAFactorUnenrolledEnabled && user.GetEmail() != "" {
-		if err := a.sendMFAFactorUnenrolledNotification(r, db, user, factor.FactorType); err != nil {
+		if err := a.sendMFAFactorUnenrolledNotification(a.notificationRequest(r), db, user, factor.FactorType); err != nil {
 			logrus.WithError(err).Warn("Unable to send MFA factor unenrolled notification email")
 		}
 	}
