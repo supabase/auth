@@ -68,39 +68,77 @@ func (g notionProvider) RequiresPKCE() bool {
 }
 
 func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var u notionUser
+	// Notion's token response already includes owner.user. /v1/users/me rejects
+	// some OAuth tokens with 403, so prefer the token payload when it is present.
+	if u, ok := notionUserFromToken(tok); ok {
+		return notionProvidedData(g.APIPath, u), nil
+	}
 
-	// Perform http request, because we need to set the Notion-Version header
-	req, err := http.NewRequest("GET", g.APIPath+"/v1/users/me", nil)
-
+	u, err := g.fetchNotionUser(ctx, tok)
 	if err != nil {
 		return nil, err
 	}
+	return notionProvidedData(g.APIPath, u), nil
+}
 
-	// set headers
+func notionUserFromToken(tok *oauth2.Token) (notionUser, bool) {
+	if tok == nil {
+		return notionUser{}, false
+	}
+	owner := tok.Extra("owner")
+	if owner == nil {
+		return notionUser{}, false
+	}
+	raw, err := json.Marshal(map[string]any{
+		"bot": map[string]any{"owner": owner},
+	})
+	if err != nil {
+		return notionUser{}, false
+	}
+	var u notionUser
+	if err := json.Unmarshal(raw, &u); err != nil {
+		return notionUser{}, false
+	}
+	if u.Bot.Owner.User.ID == "" && u.Bot.Owner.User.Person.Email == "" && u.Bot.Owner.User.Name == "" {
+		return notionUser{}, false
+	}
+	return u, true
+}
+
+func (g notionProvider) fetchNotionUser(ctx context.Context, tok *oauth2.Token) (notionUser, error) {
+	var u notionUser
+
+	// Perform http request, because we need to set the Notion-Version header
+	req, err := http.NewRequestWithContext(ctx, "GET", g.APIPath+"/v1/users/me", nil)
+	if err != nil {
+		return u, err
+	}
+
 	req.Header.Set("Notion-Version", notionApiVersion)
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 
 	client := &http.Client{Timeout: defaultTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return u, err
 	}
 	defer utilities.SafeClose(resp.Body)
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("a %v error occurred with retrieving user from notion", resp.StatusCode)
+		return u, fmt.Errorf("a %v error occurred with retrieving user from notion", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return u, err
 	}
-	err = json.Unmarshal(body, &u)
-	if err != nil {
-		return nil, err
+	if err := json.Unmarshal(body, &u); err != nil {
+		return u, err
 	}
+	return u, nil
+}
 
+func notionProvidedData(issuer string, u notionUser) *UserProvidedData {
 	data := &UserProvidedData{}
 	if u.Bot.Owner.User.Person.Email != "" {
 		data.Emails = []Email{{
@@ -111,7 +149,7 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	data.Metadata = &Claims{
-		Issuer:  g.APIPath,
+		Issuer:  issuer,
 		Subject: u.Bot.Owner.User.ID,
 		Name:    u.Bot.Owner.User.Name,
 		Picture: u.Bot.Owner.User.AvatarURL,
@@ -121,5 +159,5 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		FullName:   u.Bot.Owner.User.Name,
 		ProviderId: u.Bot.Owner.User.ID,
 	}
-	return data, nil
+	return data
 }
