@@ -5,6 +5,7 @@ import (
 	tst "testing"
 
 	"github.com/crewjam/saml"
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,11 +21,11 @@ func TestNewSAMLServiceProvider(t *tst.T) {
 	require.NotNil(t, cfg.RSAPrivateKeyNext)
 	require.NotNil(t, cfg.CertificateNext)
 
-	primary := api.newSAMLServiceProvider(nil, false, cfg.RSAPrivateKey, cfg.Certificate)
+	primary := api.newSAMLServiceProvider(nil, false, cfg.RSAPrivateKey, cfg.Certificate, nil)
 	require.Same(t, cfg.RSAPrivateKey, primary.Key)
 	require.Equal(t, cfg.Certificate.Raw, primary.Certificate.Raw)
 
-	next := api.newSAMLServiceProvider(nil, false, cfg.RSAPrivateKeyNext, cfg.CertificateNext)
+	next := api.newSAMLServiceProvider(nil, false, cfg.RSAPrivateKeyNext, cfg.CertificateNext, nil)
 	require.Same(t, cfg.RSAPrivateKeyNext, next.Key)
 	require.Equal(t, cfg.CertificateNext.Raw, next.Certificate.Raw)
 
@@ -93,14 +94,43 @@ func TestNewSAMLServiceProvider_SameURLBase(t *tst.T) {
 
 	cfg := api.config.SAML
 
-	primary := api.newSAMLServiceProvider(nil, false, cfg.RSAPrivateKey, cfg.Certificate)
-	withKey := api.newSAMLServiceProvider(nil, false, cfg.RSAPrivateKeyNext, cfg.CertificateNext)
+	primary := api.newSAMLServiceProvider(nil, false, cfg.RSAPrivateKey, cfg.Certificate, nil)
+	withKey := api.newSAMLServiceProvider(nil, false, cfg.RSAPrivateKeyNext, cfg.CertificateNext, nil)
 
 	// ACS URLs must be the same — rotation must not change the endpoint.
 	primaryACS := acsURLsFrom(primary)
 	withKeyACS := acsURLsFrom(withKey)
 	require.Equal(t, primaryACS, withKeyACS,
 		"ACS URLs must be identical regardless of which key is used")
+}
+
+// TestNewSAMLServiceProvider_DedicatedScope verifies that passing a dedicated
+// scope ID scopes the ACS URL (and therefore the entity ID, which defaults
+// to the metadata URL) to that ID, while the key/cert pair is unaffected.
+func TestNewSAMLServiceProvider_DedicatedScope(t *tst.T) {
+	api, err := newSAMLTestAPI(t, samlTestPrimaryKey, samlTestNextKey, false)
+	require.NoError(t, err)
+
+	cfg := api.config.SAML
+
+	scopeID, err := uuid.NewV4()
+	require.NoError(t, err)
+
+	global := api.newSAMLServiceProvider(nil, false, cfg.RSAPrivateKey, cfg.Certificate, nil)
+	scoped := api.newSAMLServiceProvider(nil, false, cfg.RSAPrivateKey, cfg.Certificate, &scopeID)
+
+	globalACS := acsURLsFrom(global)
+	scopedACS := acsURLsFrom(scoped)
+
+	require.NotEqual(t, globalACS, scopedACS, "dedicated scope must change the ACS URL")
+	for _, u := range scopedACS {
+		require.Contains(t, u, scopeID.String(), "scoped ACS URL must contain the provider ID")
+	}
+
+	require.NotEqual(t, global.Metadata().EntityID, scoped.Metadata().EntityID,
+		"dedicated scope must also change the entity ID presented to the IdP")
+
+	require.Equal(t, scoped.Key, global.Key, "the signing key must be unchanged by isolated scope")
 }
 
 // acsURLsFrom collects all AssertionConsumerService Location strings from a SP.

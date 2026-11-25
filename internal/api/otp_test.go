@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -314,6 +315,16 @@ func (ts *OtpTestSuite) TestSubsequentOtp() {
 	require.Empty(ts.T(), user.EmailConfirmedAt)
 }
 
+// requirePasswordRejected asserts that password no longer authenticates the
+// user. Signup now stores the magic link's temporary password on unconfirmed
+// users, so the invariant is that the attacker's password is gone, not that
+// the user has no password at all.
+func (ts *OtpTestSuite) requirePasswordRejected(user *models.User, password string) {
+	ok, _, err := user.Authenticate(context.Background(), ts.API.db, password, ts.Config.Security.DBEncryption.DecryptionKeys, false, "")
+	require.NoError(ts.T(), err)
+	require.False(ts.T(), ok)
+}
+
 func (ts *OtpTestSuite) TestOtpClearsUnconfirmedPassword() {
 	ts.Config.SMTP.MaxFrequency = 0
 	ts.Config.Mailer.Autoconfirm = false
@@ -351,7 +362,7 @@ func (ts *OtpTestSuite) TestOtpClearsUnconfirmedPassword() {
 
 	user, err = models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	require.False(ts.T(), user.HasPassword())
+	ts.requirePasswordRejected(user, attackerPassword)
 	require.NotEmpty(ts.T(), user.ConfirmationToken)
 
 	// email owner confirms through the link
@@ -364,7 +375,7 @@ func (ts *OtpTestSuite) TestOtpClearsUnconfirmedPassword() {
 	user, err = models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), user.IsConfirmed())
-	require.False(ts.T(), user.HasPassword())
+	ts.requirePasswordRejected(user, attackerPassword)
 
 	// attacker can no longer sign in with their password
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -404,7 +415,7 @@ func (ts *OtpTestSuite) TestOtpClearsUnconfirmedPasswordWithAutoconfirm() {
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), user.IsConfirmed())
-	require.False(ts.T(), user.HasPassword())
+	ts.requirePasswordRejected(user, "attacker-password-123")
 }
 
 func (ts *OtpTestSuite) TestOtpKeepsConfirmedPassword() {

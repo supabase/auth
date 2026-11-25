@@ -134,15 +134,32 @@ func GetSigningJwk(config *JWTConfiguration) (jwk.Key, error) {
 	return nil, fmt.Errorf("no signing key found")
 }
 
-func getSigningKey(k jwk.Key) (func(context.Context) (any, error), error) {
-	if value, isKMS := k.Get("aws:kms:arn"); isKMS && k.KeyOps()[0] == jwk.KeyOpSign {
-		kmsARN, ok := value.(string)
-		if !ok {
-			return nil, fmt.Errorf("conf: jwk key has aws:kms:arn but is not a string %v", value)
-		}
+// kmsKeyARN returns the aws:kms:arn of a KMS-backed key and its region.
+// isKMS is false if the key has no aws:kms:arn. An error is returned if the
+// value is not a string or not a full ARN.
+func kmsKeyARN(k jwk.Key) (arn, region string, isKMS bool, err error) {
+	value, isKMS := k.Get("aws:kms:arn")
+	if !isKMS {
+		return "", "", false, nil
+	}
 
-		parts := strings.SplitN(kmsARN, ":", 5)
-		region := parts[3]
+	arn, ok := value.(string)
+	if !ok {
+		return "", "", true, fmt.Errorf("invalid aws:kms:arn: not a string")
+	}
+	// arn:partition:service:region:account-id:resource
+	parts := strings.SplitN(arn, ":", 5)
+	if len(parts) != 5 {
+		return "", "", true, fmt.Errorf("invalid aws:kms:arn %q", arn)
+	}
+	return arn, parts[3], true, nil
+}
+
+func getSigningKey(k jwk.Key) (func(context.Context) (any, error), error) {
+	if kmsARN, region, isKMS, err := kmsKeyARN(k); isKMS && k.KeyOps()[0] == jwk.KeyOpSign {
+		if err != nil {
+			return nil, fmt.Errorf("conf: jwk key: %w", err)
+		}
 
 		cfg, err := config.LoadDefaultConfig(
 			context.Background(),

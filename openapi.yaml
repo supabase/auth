@@ -1964,13 +1964,25 @@ paths:
       security:
         - APIKeyAuth: []
           AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                should_soft_delete:
+                  type: boolean
+                  default: false
+                  description: Soft delete the user instead of permanently deleting their account.
       responses:
         200:
-          description: User's account data.
+          description: Empty JSON object. No user data is returned after hard or soft deletion.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserSchema"
+                type: object
+                additionalProperties: false
+                example: {}
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
@@ -2136,6 +2148,10 @@ paths:
                     format: hostname
                 attribute_mapping:
                   $ref: "#/components/schemas/SAMLAttributeMappingSchema"
+                dedicated_scope:
+                  type: boolean
+                  description: >
+                    When `true`, this provider's SAML ACS URL and entity ID are scoped to its own provider ID instead of the ones shared by all SAML providers in this project. The same signing key is still used. This cannot be changed once the provider is created.
       responses:
         200:
           description: SSO provider was created.
@@ -2185,7 +2201,7 @@ paths:
     put:
       summary: Update details about a SSO provider.
       description: >
-        You can only update only one of `metadata_url` or `metadata_xml` at once. The SAML Metadata represented by these updates must advertize the same Identity Provider EntityID. Do not include the `domains` or `attribute_mapping` property to keep the existing database values.
+        You can only update only one of `metadata_url` or `metadata_xml` at once. The SAML Metadata represented by these updates must advertize the same Identity Provider EntityID. Do not include the `domains` or `attribute_mapping` property to keep the existing database values. `dedicated_scope` cannot be changed once the provider is created, and this request fails if it is included.
       tags:
         - admin
       security:
@@ -2631,7 +2647,6 @@ paths:
                 - identifier
                 - name
                 - client_id
-                - client_secret
               properties:
                 provider_type:
                   type: string
@@ -2653,7 +2668,21 @@ paths:
                   description: OAuth client ID from the provider
                 client_secret:
                   type: string
-                  description: OAuth client secret (will be encrypted at rest)
+                  description: OAuth client secret (will be encrypted at rest). Required when client_auth_method is 'client_secret', and must not be set when it is 'private_key_jwt'.
+                client_auth_method:
+                  type: string
+                  enum:
+                    - client_secret
+                    - private_key_jwt
+                  default: client_secret
+                  description: >
+                    How the server authenticates to the provider's token endpoint. 'private_key_jwt' sends a signed
+                    client assertion (RFC 7523) instead of a client secret. It is currently only available for OIDC providers,
+                    and only when client assertions are enabled on the server; otherwise the request is rejected with 400.
+                client_assertion_audience:
+                  type: string
+                  maxLength: 2048
+                  description: Overrides the aud claim of client assertions, which defaults to the provider's issuer. Only allowed with client_auth_method 'private_key_jwt'.
                 acceptable_client_ids:
                   type: array
                   items:
@@ -2890,7 +2919,20 @@ paths:
                   description: OAuth client ID
                 client_secret:
                   type: string
-                  description: OAuth client secret (only provide if changing, will be encrypted)
+                  description: OAuth client secret (only provide if changing, will be encrypted). Required when switching client_auth_method to 'client_secret', and must not be set for 'private_key_jwt' providers.
+                client_auth_method:
+                  type: string
+                  enum:
+                    - client_secret
+                    - private_key_jwt
+                  description: >
+                    How the server authenticates to the provider's token endpoint. Switching to 'private_key_jwt' clears
+                    the stored client secret, and switching to 'client_secret' clears client_assertion_audience.
+                    'private_key_jwt' is currently only available for OIDC providers, and only when client assertions are enabled on the server.
+                client_assertion_audience:
+                  type: string
+                  maxLength: 2048
+                  description: Overrides the aud claim of client assertions. An empty string clears the override. Only allowed for 'private_key_jwt' providers.
                 acceptable_client_ids:
                   type: array
                   items:
@@ -3658,6 +3700,10 @@ components:
               type: string
             attribute_mapping:
               $ref: "#/components/schemas/SAMLAttributeMappingSchema"
+            dedicated_scope:
+              type: boolean
+              description: >
+                When `true`, this provider's SAML ACS URL and entity ID are scoped to its own provider ID instead of the ones shared by all SAML providers in this project. The same signing key is still used. This cannot be changed once the provider is created.
 
     AccessTokenResponseSchema:
       type: object
@@ -4150,6 +4196,15 @@ components:
         client_id:
           type: string
           description: OAuth client ID
+        client_auth_method:
+          type: string
+          enum:
+            - client_secret
+            - private_key_jwt
+          description: How the server authenticates to the provider's token endpoint. The client secret itself is never returned.
+        client_assertion_audience:
+          type: string
+          description: Override for the aud claim of client assertions. Omitted when not set.
         acceptable_client_ids:
           type: array
           items:

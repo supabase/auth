@@ -265,6 +265,7 @@ func (ts *AccountLinkingTestSuite) TestLinkingScenarios() {
 					Verified: false,
 					Primary:  true,
 				},
+				EmailTaken: true,
 			},
 		},
 		{
@@ -297,6 +298,7 @@ func (ts *AccountLinkingTestSuite) TestLinkingScenarios() {
 			require.Equal(ts.T(), c.decision.CandidateEmail.Email, decision.CandidateEmail.Email)
 			require.Equal(ts.T(), c.decision.CandidateEmail.Verified, decision.CandidateEmail.Verified)
 			require.Equal(ts.T(), c.decision.CandidateEmail.Primary, decision.CandidateEmail.Primary)
+			require.Equal(ts.T(), c.decision.EmailTaken, decision.EmailTaken)
 		})
 	}
 

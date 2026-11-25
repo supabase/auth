@@ -401,6 +401,49 @@ func (ts *SSOTestSuite) TestAdminCreateSSOProvider() {
 	}
 }
 
+func (ts *SSOTestSuite) TestAdminCreateSSOProviderWithDedicatedScope() {
+	body, err := json.Marshal(map[string]interface{}{
+		"type":            "saml",
+		"metadata_xml":    validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-DEDICATED-SCOPE"),
+		"dedicated_scope": true,
+	})
+	require.NoError(ts.T(), err)
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/admin/sso/providers", bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer "+ts.AdminJWT)
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusCreated, w.Code)
+
+	response, err := io.ReadAll(w.Body)
+	require.NoError(ts.T(), err)
+
+	var provider struct {
+		ID   string `json:"id"`
+		SAML struct {
+			DedicatedScope bool `json:"dedicated_scope"`
+		} `json:"saml"`
+	}
+	require.NoError(ts.T(), json.Unmarshal(response, &provider))
+	require.True(ts.T(), provider.SAML.DedicatedScope)
+
+	// dedicated_scope cannot be changed after creation, even to the same value
+	updateBody, err := json.Marshal(map[string]interface{}{
+		"dedicated_scope": true,
+	})
+	require.NoError(ts.T(), err)
+
+	req = httptest.NewRequest(http.MethodPut, "http://localhost/admin/sso/providers/"+provider.ID, bytes.NewBuffer(updateBody))
+	req.Header.Set("Authorization", "Bearer "+ts.AdminJWT)
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
 func (ts *SSOTestSuite) TestAdminUpdateSSOProvider() {
 	providers := []struct {
 		ID      string
@@ -487,6 +530,13 @@ func (ts *SSOTestSuite) TestAdminUpdateSSOProvider() {
 						},
 					},
 				},
+			},
+		},
+		{
+			ID:     providers[1].ID,
+			Status: http.StatusBadRequest, // dedicated_scope cannot be changed after creation
+			Request: map[string]interface{}{
+				"dedicated_scope": true,
 			},
 		},
 	}

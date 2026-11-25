@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/gobuffalo/pop/v6/slices"
@@ -171,6 +172,7 @@ func (ts *CustomOAuthProviderTestSuite) TestStringSliceSerialization() {
 		Identifier:          "custom:string-slice-test",
 		Name:                "String Slice Test",
 		ClientID:            "client-id",
+		ClientSecret:        "test-client-secret",
 		Scopes:              slices.String{"openid", "profile", "email"},
 		AcceptableClientIDs: slices.String{"ios-client", "android-client", "web-client"},
 		AuthorizationURL:    stringPtr("https://example.com/authorize"),
@@ -205,6 +207,7 @@ func (ts *CustomOAuthProviderTestSuite) TestCustomClaimsAllowlistSerialization()
 		Identifier:            "custom:allowlist-test",
 		Name:                  "Allowlist Test",
 		ClientID:              "client-id",
+		ClientSecret:          "test-client-secret",
 		AuthorizationURL:      stringPtr("https://example.com/authorize"),
 		TokenURL:              stringPtr("https://example.com/token"),
 		UserinfoURL:           stringPtr("https://example.com/userinfo"),
@@ -254,6 +257,7 @@ func (ts *CustomOAuthProviderTestSuite) TestAttributeMappingSerialization() {
 		Identifier:       "custom:mapping-test",
 		Name:             "Mapping Test",
 		ClientID:         "client-id",
+		ClientSecret:     "test-client-secret",
 		AuthorizationURL: stringPtr("https://example.com/authorize"),
 		TokenURL:         stringPtr("https://example.com/token"),
 		UserinfoURL:      stringPtr("https://example.com/userinfo"),
@@ -286,6 +290,7 @@ func (ts *CustomOAuthProviderTestSuite) TestAuthorizationParamsSerialization() {
 		Identifier:          "custom:params-test",
 		Name:                "Params Test",
 		ClientID:            "client-id",
+		ClientSecret:        "test-client-secret",
 		AuthorizationURL:    stringPtr("https://example.com/authorize"),
 		TokenURL:            stringPtr("https://example.com/token"),
 		UserinfoURL:         stringPtr("https://example.com/userinfo"),
@@ -324,6 +329,7 @@ func (ts *CustomOAuthProviderTestSuite) TestOIDCDiscoverySerialization() {
 		Identifier:      "custom:oidc-discovery-test",
 		Name:            "OIDC Discovery Test",
 		ClientID:        "client-id",
+		ClientSecret:    "test-client-secret",
 		Issuer:          &issuer,
 		CachedDiscovery: discovery,
 		PKCEEnabled:     true,
@@ -371,6 +377,7 @@ func (ts *CustomOAuthProviderTestSuite) TestGetDiscoveryURL() {
 		Identifier:   "custom:oidc-auto-discovery",
 		Name:         "OIDC Auto Discovery",
 		ClientID:     "client-id",
+		ClientSecret: "test-client-secret",
 		Issuer:       &issuer1,
 		PKCEEnabled:  true,
 		Enabled:      true,
@@ -389,6 +396,7 @@ func (ts *CustomOAuthProviderTestSuite) TestGetDiscoveryURL() {
 		Identifier:   "custom:oidc-explicit-discovery",
 		Name:         "OIDC Explicit Discovery",
 		ClientID:     "client-id",
+		ClientSecret: "test-client-secret",
 		Issuer:       &issuer2,
 		DiscoveryURL: &explicitDiscoveryURL,
 		PKCEEnabled:  true,
@@ -489,6 +497,90 @@ func (ts *CustomOAuthProviderTestSuite) TestClientSecretRoundTripThroughDB() {
 	decrypted, err := found.GetClientSecret(ts.config.Security.DBEncryption)
 	require.NoError(ts.T(), err)
 	assert.Equal(ts.T(), secret, decrypted)
+}
+
+// Client auth method
+
+func (ts *CustomOAuthProviderTestSuite) newPrivateKeyJWTProvider(identifier string) *CustomOAuthProvider {
+	issuer := "https://oidc-" + identifier + ".example.com"
+	return &CustomOAuthProvider{
+		ProviderType:     ProviderTypeOIDC,
+		Identifier:       "custom:" + identifier,
+		Name:             "Private Key JWT Provider",
+		ClientID:         "test-client-id",
+		Issuer:           &issuer,
+		ClientAuthMethod: ClientAuthMethodPrivateKeyJWT,
+		PKCEEnabled:      true,
+		Enabled:          true,
+	}
+}
+
+func (ts *CustomOAuthProviderTestSuite) TestClientAuthMethodDefaultsToClientSecret() {
+	provider := ts.createTestProvider(ProviderTypeOIDC, "custom:default-method")
+
+	found, err := FindCustomOAuthProviderByID(ts.db, provider.ID)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), ClientAuthMethodClientSecret, found.ClientAuthMethod)
+	assert.Nil(ts.T(), found.ClientAssertionAudience)
+	assert.NotEmpty(ts.T(), found.ClientSecret)
+}
+
+func (ts *CustomOAuthProviderTestSuite) TestPrivateKeyJWTProviderRoundTrip() {
+	provider := ts.newPrivateKeyJWTProvider("pkjwt-roundtrip")
+	provider.ClientAssertionAudience = stringPtr("https://issuer.example.com/token")
+	require.NoError(ts.T(), CreateCustomOAuthProvider(ts.db, provider))
+
+	found, err := FindCustomOAuthProviderByID(ts.db, provider.ID)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), ClientAuthMethodPrivateKeyJWT, found.ClientAuthMethod)
+	assert.Equal(ts.T(), "https://issuer.example.com/token", *found.ClientAssertionAudience)
+	assert.Empty(ts.T(), found.ClientSecret)
+
+	// stored as an empty string, never NULL, so versions that predate
+	// client_auth_method can still read the row
+	var secretIsNull bool
+	require.NoError(ts.T(), ts.db.RawQuery(
+		"select client_secret is null from "+provider.TableName()+" where id = ?", provider.ID,
+	).First(&secretIsNull))
+	assert.False(ts.T(), secretIsNull)
+
+	secret, err := found.GetClientSecret(ts.config.Security.DBEncryption)
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), secret)
+
+	// the method and audience are exposed in JSON, the secret never is
+	data, err := json.Marshal(found)
+	require.NoError(ts.T(), err)
+	var raw map[string]any
+	require.NoError(ts.T(), json.Unmarshal(data, &raw))
+	assert.Equal(ts.T(), "private_key_jwt", raw["client_auth_method"])
+	assert.Equal(ts.T(), "https://issuer.example.com/token", raw["client_assertion_audience"])
+	assert.NotContains(ts.T(), raw, "client_secret")
+}
+
+func (ts *CustomOAuthProviderTestSuite) TestSwitchClientAuthMethod() {
+	provider := ts.createTestProvider(ProviderTypeOIDC, "custom:switch-method")
+
+	// to private_key_jwt, clearing the secret as the admin API does
+	provider.ClientAuthMethod = ClientAuthMethodPrivateKeyJWT
+	provider.ClientSecret = ""
+	require.NoError(ts.T(), UpdateCustomOAuthProvider(ts.db, provider))
+
+	found, err := FindCustomOAuthProviderByID(ts.db, provider.ID)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), ClientAuthMethodPrivateKeyJWT, found.ClientAuthMethod)
+	assert.Empty(ts.T(), found.ClientSecret)
+
+	// back to client_secret with a new secret
+	found.ClientAuthMethod = ClientAuthMethodClientSecret
+	require.NoError(ts.T(), found.SetClientSecret("new-client-secret", ts.config.Security.DBEncryption))
+	require.NoError(ts.T(), UpdateCustomOAuthProvider(ts.db, found))
+
+	found, err = FindCustomOAuthProviderByID(ts.db, provider.ID)
+	require.NoError(ts.T(), err)
+	secret, err := found.GetClientSecret(ts.config.Security.DBEncryption)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "new-client-secret", secret)
 }
 
 func TestGetDiscoveryURLStripsTrailingSlashes(t *testing.T) {

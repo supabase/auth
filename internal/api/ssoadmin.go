@@ -87,8 +87,9 @@ type CreateSSOProviderParams struct {
 	AttributeMapping models.SAMLAttributeMapping `json:"attribute_mapping"`
 	NameIDFormat     string                      `json:"name_id_format"`
 
-	ResourceID *string `json:"resource_id,omitempty"`
-	Disabled   *bool   `json:"disabled,omitempty"`
+	ResourceID     *string `json:"resource_id,omitempty"`
+	Disabled       *bool   `json:"disabled,omitempty"`
+	DedicatedScope *bool   `json:"dedicated_scope,omitempty"`
 }
 
 func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
@@ -124,6 +125,10 @@ func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
 			string(saml.TransientNameIDFormat),
 			string(saml.UnspecifiedNameIDFormat),
 		}, ", "))
+	}
+
+	if forUpdate && p.DedicatedScope != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "dedicated_scope cannot be changed after the SSO provider is created, as doing so changes the entity ID presented to the Identity Provider")
 	}
 
 	return nil
@@ -248,6 +253,9 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 	}
 	if params.Disabled != nil {
 		provider.Disabled = params.Disabled
+	}
+	if params.DedicatedScope != nil {
+		provider.SAMLProvider.DedicatedScope = params.DedicatedScope
 	}
 	if params.MetadataURL != "" {
 		provider.SAMLProvider.MetadataURL = &params.MetadataURL
@@ -413,6 +421,9 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 			modified = true
 		}
 	}
+
+	// dedicated_scope cannot be changed on update; validate() above already
+	// rejects the request if params.DedicatedScope is set.
 
 	if modified {
 		if err := db.Transaction(func(tx *storage.Connection) error {
