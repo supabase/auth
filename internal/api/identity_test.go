@@ -17,6 +17,7 @@ import (
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/mailer/mockclient"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type IdentityTestSuite struct {
@@ -92,7 +93,7 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 	// request is just used as a placeholder in the function
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
 	r.RemoteAddr = "192.0.2.1:1234"
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "test")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "test", false)
 	require.NoError(ts.T(), err)
 
 	// load associated identities for the user
@@ -121,13 +122,118 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 			Subject: u.ID.String(),
 		},
 	}
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email", false)
 	require.ErrorIs(ts.T(), err, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked"))
 	require.Nil(ts.T(), u)
 
 	logs, err = models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), logs, 1, "an already-linked identity must not emit another audit log")
+}
+
+// supabase/auth#2925: linking to a user who has no email. Email-optional
+// providers (e.g. a custom OIDC provider for LINE) may return an identity
+// without an email, in which case there is no address to confirm.
+func (ts *IdentityTestSuite) TestLinkIdentityToUserWithoutEmail() {
+	mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
+	require.True(ts.T(), ok, "Mailer is not of type *MockMailer")
+
+	cases := []struct {
+		desc                  string
+		emailOptional         bool
+		identityEmail         string
+		identityEmailVerified bool
+		expectedErrorCode     apierrors.ErrorCode
+		expectedConfirmations int
+		// set where the number of confirmation emails is existing behaviour
+		// that this test does not pin down
+		confirmationsNotAsserted bool
+		expectedEmail            string
+		expectedConfirmed        bool
+		expectedAnonymous        bool
+	}{
+		{
+			desc:              "email-optional provider, identity without email",
+			emailOptional:     true,
+			expectedAnonymous: false,
+		},
+		{
+			desc:                  "email-optional provider, identity with unverified email",
+			emailOptional:         true,
+			identityEmail:         "unverified-link@example.com",
+			expectedErrorCode:     apierrors.ErrorCodeEmailNotConfirmed,
+			expectedConfirmations: 1,
+			expectedEmail:         "unverified-link@example.com",
+			expectedAnonymous:     true,
+		},
+		{
+			desc:                  "email-optional provider, identity with verified email",
+			emailOptional:         true,
+			identityEmail:         "verified-link@example.com",
+			identityEmailVerified: true,
+			expectedEmail:         "verified-link@example.com",
+			expectedConfirmed:     true,
+			expectedAnonymous:     false,
+		},
+		{
+			desc:                     "provider that requires an email, identity without email",
+			emailOptional:            false,
+			expectedErrorCode:        apierrors.ErrorCodeEmailNotConfirmed,
+			confirmationsNotAsserted: true,
+			expectedAnonymous:        true,
+		},
+	}
+
+	for i, c := range cases {
+		ts.Run(c.desc, func() {
+			mockMailer.Reset()
+
+			u, err := models.NewUser("", "", "", ts.Config.JWT.Aud, nil)
+			require.NoError(ts.T(), err)
+			u.IsAnonymous = true
+			require.NoError(ts.T(), ts.API.db.Create(u))
+
+			subject := fmt.Sprintf("email-less-link-%d", i)
+			userData := &provider.UserProvidedData{
+				Metadata: &provider.Claims{
+					Subject:       subject,
+					Email:         c.identityEmail,
+					EmailVerified: c.identityEmailVerified,
+				},
+			}
+			ctx := withTargetUser(context.Background(), u)
+			r := httptest.NewRequest(http.MethodPost, "/token?grant_type=id_token", nil)
+
+			err = ts.API.db.Transaction(func(tx *storage.Connection) error {
+				_, terr := ts.API.linkIdentityToUser(r, ctx, tx, userData, "custom:test", c.emailOptional)
+				return terr
+			})
+
+			if c.expectedErrorCode == "" {
+				require.NoError(ts.T(), err)
+			} else {
+				// the identity is stored and the caller is told to confirm
+				var commitErr *storage.CommitWithError
+				require.ErrorAs(ts.T(), err, &commitErr)
+				var httpErr *apierrors.HTTPError
+				require.ErrorAs(ts.T(), commitErr.Err, &httpErr)
+				require.Equal(ts.T(), c.expectedErrorCode, httpErr.ErrorCode)
+			}
+			if !c.confirmationsNotAsserted {
+				require.Len(ts.T(), mockMailer.ConfirmationMailCalls, c.expectedConfirmations)
+			}
+
+			identity, err := models.FindIdentityByIdAndProvider(ts.API.db, subject, "custom:test")
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), u.ID, identity.UserID)
+
+			u, err = models.FindUserByID(ts.API.db, u.ID)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), c.expectedEmail, u.GetEmail())
+			require.Equal(ts.T(), c.expectedConfirmed, u.EmailConfirmedAt != nil)
+			require.Equal(ts.T(), c.expectedAnonymous, u.IsAnonymous)
+		})
+	}
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
@@ -438,7 +544,7 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailEnabled() {
 		},
 	}
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "google")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "google", false)
 	require.NoError(ts.T(), err)
 
 	// Assert that identity linked notification email was sent
@@ -469,7 +575,7 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailDisabled() {
 		},
 	}
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
-	_, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "facebook")
+	_, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "facebook", false)
 	require.NoError(ts.T(), err)
 
 	// Assert that identity linked notification email was not sent
