@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/models"
@@ -218,6 +219,49 @@ func (ts *PasskeyTestSuite) TestRegisterVerifyCapEnforcedAtVerifyTime() {
 	var errResp map[string]any
 	require.NoError(ts.T(), json.NewDecoder(v2.Body).Decode(&errResp))
 	ts.Equal("too_many_passkeys", errResp["error_code"])
+}
+
+// TestRegisterVerifyDuplicateCredential covers a registration response that
+// carries a credential ID which is already stored, e.g. a custom client that
+// ignores excludeCredentials or two verify calls racing on the same
+// credential. The INSERT hits webauthn_credentials_credential_id_key and must
+// come back as webauthn_credential_exists, not a 500.
+func (ts *PasskeyTestSuite) TestRegisterVerifyDuplicateCredential() {
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
+	authenticator := &virtualAuthenticator{
+		rpID:   ts.Config.WebAuthn.RPID,
+		origin: ts.Config.WebAuthn.RPOrigins[0],
+	}
+
+	w := ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/options", nil, withBearerToken(token))
+	ts.Require().Equal(http.StatusOK, w.Code)
+	var opts PasskeyRegistrationOptionsResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&opts))
+
+	credResp, err := authenticator.createCredential(opts.Options)
+	require.NoError(ts.T(), err)
+
+	// store the same credential ID before the verify call reaches the database
+	for _, stored := range authenticator.credentials {
+		existing := models.NewWebAuthnCredential(ts.TestUser.ID, &webauthn.Credential{
+			ID:        stored.credentialID,
+			PublicKey: []byte("existing"),
+		}, "existing")
+		require.NoError(ts.T(), ts.API.db.Create(existing))
+	}
+
+	w = ts.makeRequest(http.MethodPost, "http://localhost/passkeys/registration/verify", map[string]any{
+		"challenge_id": opts.ChallengeID,
+		"credential":   json.RawMessage(credResp.JSON),
+	}, withBearerToken(token))
+	ts.Equal(http.StatusUnprocessableEntity, w.Code)
+	var errResp map[string]any
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&errResp))
+	ts.Equal("webauthn_credential_exists", errResp["error_code"])
+
+	creds, err := models.FindWebAuthnCredentialsByUserID(ts.API.db, ts.TestUser.ID)
+	require.NoError(ts.T(), err)
+	ts.Len(creds, 1)
 }
 
 // TestRegisterVerifyChallengeNotFound tests that a missing challenge returns the correct error.
