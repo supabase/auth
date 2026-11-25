@@ -25,6 +25,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"gopkg.in/h2non/gock.v1"
 )
 
 type MFATestSuite struct {
@@ -652,6 +653,60 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			}
 		})
 	}
+}
+
+func (ts *MFATestSuite) TestMFAVerifyPhoneFactorSendSMSHookTwilioVerify() {
+	previousProvider := ts.Config.Sms.Provider
+	previousTwilioVerify := ts.Config.Sms.TwilioVerify
+	previousMock := sms_provider.MockProvider
+	defer func() {
+		ts.Config.Sms.Provider = previousProvider
+		ts.Config.Sms.TwilioVerify = previousTwilioVerify
+		sms_provider.MockProvider = previousMock
+		ts.Config.Hook.SendSMS.Enabled = false
+		gock.OffAll()
+	}()
+
+	ts.Config.Hook.SendSMS.Enabled = true
+	ts.Config.Sms.Provider = "twilio_verify"
+	ts.Config.Sms.TwilioVerify = conf.TwilioVerifyProviderConfiguration{
+		AccountSid:        "AC-test",
+		AuthToken:         "test-token",
+		MessageServiceSid: "VA-test",
+	}
+	sms_provider.MockProvider = nil
+
+	// The challenge was sent through the Send SMS hook, so Twilio Verify must not be asked to check it.
+	gock.New("https://verify.twilio.com/v2/Services/VA-test/VerificationCheck").
+		Post("").
+		Reply(http.StatusOK).
+		JSON(map[string]interface{}{"status": "pending", "valid": false})
+
+	r, err := models.GrantAuthenticatedUser(ts.API.db, ts.TestUser, models.GrantParams{})
+	require.NoError(ts.T(), err)
+	token := ts.generateAAL1Token(ts.TestUser, r.SessionId)
+
+	f := models.NewPhoneFactor(ts.TestUser, "+15555550101", "phone-factor")
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new SMS factor")
+
+	var buffer bytes.Buffer
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", f.ID), &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	code := "123456"
+	c, err := f.CreatePhoneChallenge(utilities.GetIPAddress(req), code, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
+
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"challenge_id": c.ID,
+		"code":         code,
+	}))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	require.True(ts.T(), gock.IsPending(), "Twilio Verify should not have been called")
 }
 
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
