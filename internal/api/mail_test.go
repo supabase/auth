@@ -81,6 +81,84 @@ func (ts *MailTestSuite) TestValidateEmail() {
 			expectedEmail: "",
 			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is too long"),
 		},
+		{
+			desc:          "valid email with an apostrophe, a plus label and subdomains",
+			email:         "O'Reilly+label@Mail.Example.co.uk",
+			expectedEmail: "o'reilly+label@mail.example.co.uk",
+			expectedError: nil,
+		},
+		{
+			desc:          "valid email with a dotless domain",
+			email:         "user@localhost",
+			expectedEmail: "user@localhost",
+			expectedError: nil,
+		},
+		{
+			desc:          "valid email with a 63-character domain label",
+			email:         "user@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+			expectedEmail: "user@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+			expectedError: nil,
+		},
+		{
+			desc:          "email without an at sign",
+			email:         "plainaddress",
+			expectedEmail: "",
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format"),
+		},
+		{
+			desc:          "email without a local part",
+			email:         "@example.com",
+			expectedEmail: "",
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format"),
+		},
+		{
+			desc:          "email without a domain",
+			email:         "user@",
+			expectedEmail: "",
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format"),
+		},
+		{
+			desc:          "email with two at signs",
+			email:         "user@@example.com",
+			expectedEmail: "",
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format"),
+		},
+		{
+			desc:          "email with a space",
+			email:         "user name@example.com",
+			expectedEmail: "",
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format"),
+		},
+		{
+			desc:          "email with a domain label starting with a hyphen",
+			email:         "user@-example.com",
+			expectedEmail: "",
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format"),
+		},
+		{
+			desc:          "email with a domain label ending with a hyphen",
+			email:         "user@example-.com",
+			expectedEmail: "",
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format"),
+		},
+		{
+			desc:          "email with an underscore in the domain",
+			email:         "user@exa_mple.com",
+			expectedEmail: "",
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format"),
+		},
+		{
+			desc:          "email with an empty domain label",
+			email:         "user@example..com",
+			expectedEmail: "",
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format"),
+		},
+		{
+			desc:          "email with a 64-character domain label",
+			email:         "user@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+			expectedEmail: "",
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to validate email address: invalid format"),
+		},
 	}
 
 	for _, c := range cases {
