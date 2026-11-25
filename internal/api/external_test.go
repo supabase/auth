@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
@@ -635,4 +636,50 @@ func (ts *ExternalTestSuite) TestAfterUserCreatedHookNotFiredOnIdentityLinking()
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
 
 	ts.Require().Equal(0, hookCalls(), "hook must not fire when an identity is linked to an existing user")
+}
+
+func (ts *ExternalTestSuite) TestAccountExistsUpdatesLastSignInAt() {
+	existingUser, err := ts.createUser("", "last-sign-in@example.com", "", "", "")
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), existingUser.Confirm(ts.API.db))
+
+	userData := &provider.UserProvidedData{
+		Metadata: &provider.Claims{
+			Subject:       "last-sign-in-subject",
+			Email:         existingUser.GetEmail(),
+			EmailVerified: true,
+		},
+		Emails: []provider.Email{{
+			Email:    existingUser.GetEmail(),
+			Primary:  true,
+			Verified: true,
+		}},
+	}
+	r := httptest.NewRequest(http.MethodGet, "/callback", nil)
+
+	// First sign-in creates the identity
+	decision, _, err := ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.LinkAccount, decision)
+
+	identity, err := models.FindIdentityByIdAndProvider(ts.API.db, userData.Metadata.Subject, "google")
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), identity.LastSignInAt, "LastSignInAt must be set on creation")
+	firstSignIn := *identity.LastSignInAt
+
+	// Wait to ensure time difference
+	time.Sleep(10 * time.Millisecond)
+
+	// Second sign-in triggers AccountExists branch
+	decision, _, err = ts.API.createAccountFromExternalIdentity(ts.API.db, r, userData, "google", false)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.AccountExists, decision)
+
+	// Reload identity from database
+	updatedIdentity, err := models.FindIdentityByIdAndProvider(ts.API.db, userData.Metadata.Subject, "google")
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), updatedIdentity.LastSignInAt, "LastSignInAt must remain set after update")
+	require.True(ts.T(), updatedIdentity.LastSignInAt.After(firstSignIn),
+		"LastSignInAt must be updated on subsequent sign-in: got %v, want > %v",
+		updatedIdentity.LastSignInAt, firstSignIn)
 }
