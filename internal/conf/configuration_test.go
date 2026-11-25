@@ -1314,3 +1314,12 @@ func TestApplyDefaultsClampsOtpExp(t *testing.T) {
 		})
 	}
 }
+
+func TestUnsetJWTDefaultGroupName(t *testing.T) {
+	unset := JWTConfiguration{}
+	require.Equal(t, "", unset.DefaultGroupName)
+	require.Equal(t, "authenticated", unset.RoleForNewUser())
+
+	custom := JWTConfiguration{DefaultGroupName: "custom_role"}
+	require.Equal(t, "custom_role", custom.RoleForNewUser())
+}

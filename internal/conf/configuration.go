@@ -156,6 +156,18 @@ type JWTConfiguration struct {
 	SigningKey func(context.Context) (any, error) `json:"-"`
 }
 
+// RoleForNewUser is the Postgres role stored on a new user.
+// GOTRUE_JWT_DEFAULT_GROUP_NAME is deprecated. When it is unset, the role
+// is authenticated, which is the role PostgREST expects. An explicit value
+// is kept, and the field itself stays empty so the deprecation warning does
+// not fire for installs that never set the variable.
+func (c JWTConfiguration) RoleForNewUser() string {
+	if c.DefaultGroupName == "" {
+		return "authenticated"
+	}
+	return c.DefaultGroupName
+}
+
 type MFAFactorTypeConfiguration struct {
 	EnrollEnabled bool `json:"enroll_enabled" split_words:"true" default:"false"`
 	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"false"`
