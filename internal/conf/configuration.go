@@ -147,13 +147,25 @@ type JWTConfiguration struct {
 	Aud              string         `json:"aud"`
 	AdminGroupName   string         `json:"admin_group_name" split_words:"true"`
 	AdminRoles       []string       `json:"admin_roles" split_words:"true"`
-	DefaultGroupName string         `json:"default_group_name" split_words:"true" default:"authenticated"`
+	DefaultGroupName string         `json:"default_group_name" split_words:"true"`
 	Issuer           string         `json:"issuer"`
 	KeyID            string         `json:"key_id" split_words:"true"`
 	Keys             JwtKeysDecoder `json:"keys"`
 	ValidMethods     []string       `json:"-" split_words:"true"`
 
 	SigningKey func(context.Context) (any, error) `json:"-"`
+}
+
+// RoleForNewUser is the Postgres role stored on a new user.
+// GOTRUE_JWT_DEFAULT_GROUP_NAME is deprecated. When it is unset, the role
+// is authenticated, which is the role PostgREST expects. An explicit value
+// is kept, and the field itself stays empty so the deprecation warning does
+// not fire for installs that never set the variable.
+func (c JWTConfiguration) RoleForNewUser() string {
+	if c.DefaultGroupName == "" {
+		return "authenticated"
+	}
+	return c.DefaultGroupName
 }
 
 type MFAFactorTypeConfiguration struct {
