@@ -92,6 +92,13 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	user := getUser(ctx)
 	session := getSession(ctx)
+	claims := getClaims(ctx)
+
+	if claims != nil && claims.PendingPasswordSet {
+		if params.Email != "" || params.Phone != "" || params.Data != nil || params.AppData != nil {
+			return apierrors.NewForbiddenError(apierrors.ErrorCodeUserNotAllowed, "Session requires password to be set before updating other fields")
+		}
+	}
 
 	if err := a.validateUserUpdateParams(ctx, params); err != nil {
 		return err
