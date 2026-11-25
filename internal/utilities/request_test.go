@@ -104,6 +104,142 @@ func TestIsRedirectURLValidSameOrigin(t *tst.T) {
 	}
 }
 
+func TestIsRedirectURLValidAllowList(t *tst.T) {
+	cases := []struct {
+		desc         string
+		uriAllowList []string
+		redirectURL  string
+		want         bool
+	}{
+		// url.Parse rejects an underscore in the scheme, which previously made
+		// IsRedirectURLValid return false before ever reaching the allow list,
+		// silently dropping an explicitly allow-listed deep link (#2447).
+		{
+			desc:         "allow-listed underscore scheme accepted",
+			uriAllowList: []string{"com.my_cool_app.example://callback"},
+			redirectURL:  "com.my_cool_app.example://callback",
+			want:         true,
+		},
+		{
+			desc:         "allow-listed underscore scheme via glob accepted",
+			uriAllowList: []string{"com.my_cool_app.example://**"},
+			redirectURL:  "com.my_cool_app.example://callback/path",
+			want:         true,
+		},
+		{
+			desc:         "underscore scheme not on allow list rejected",
+			uriAllowList: []string{"com.other.app://callback"},
+			redirectURL:  "com.my_cool_app.example://callback",
+			want:         false,
+		},
+		{
+			desc:         "unparseable url with empty allow list rejected",
+			uriAllowList: []string{},
+			redirectURL:  "com.my_cool_app.example://callback",
+			want:         false,
+		},
+		// The allow list must not become a way around the IP-based rejections
+		// for URLs that do parse: a parseable URL takes the same code path as
+		// before, so a decimal-form IP is still rejected before the allow list
+		// is consulted.
+		{
+			desc:         "allow-listed decimal IP still rejected",
+			uriAllowList: []string{"https://2130706433/**"},
+			redirectURL:  "https://2130706433/callback",
+			want:         false,
+		},
+		{
+			desc:         "regular allow-listed https deep link accepted",
+			uriAllowList: []string{"https://example.com/**"},
+			redirectURL:  "https://example.com/auth/callback",
+			want:         true,
+		},
+		// An http(s) URL that is deliberately malformed so url.Parse fails (here
+		// a decimal-form IP with an invalid percent-escape) must not skip the
+		// IP/hostname safety checks by falling through to the allow list.
+		{
+			desc:         "unparseable https url with decimal IP rejected despite allow list",
+			uriAllowList: []string{"https://**", "*"},
+			redirectURL:  "https://2130706433/%zz",
+			want:         false,
+		},
+		{
+			desc:         "unparseable http url rejected despite allow list",
+			uriAllowList: []string{"http://**", "*"},
+			redirectURL:  "http://example.com/%zz",
+			want:         false,
+		},
+		// A leading control character (tab) makes url.Parse fail and, browsers
+		// strip it, so it must be rejected rather than reach the allow list.
+		{
+			desc:         "leading tab before https decimal IP rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  "\thttps://2130706433/",
+			want:         false,
+		},
+		{
+			desc:         "embedded newline rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  "https://example.com/\n/cb",
+			want:         false,
+		},
+		{
+			desc:         "leading space before https decimal IP rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  " https://2130706433/",
+			want:         false,
+		},
+		// Backslash obfuscation of the authority: url.Parse fails, but browsers
+		// normalize "\" to "/" and resolve it as https://2130706433/.
+		{
+			desc:         "backslash-obfuscated https authority rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  `https:/\2130706433/%zz`,
+			want:         false,
+		},
+		{
+			desc:         "backslash-obfuscated http authority rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  `http:\\2130706433/%zz`,
+			want:         false,
+		},
+		// A custom deep-link scheme that merely shares the "http" prefix is not
+		// falsely rejected.
+		{
+			desc:         "custom scheme starting with http not falsely rejected",
+			uriAllowList: []string{"httpfoo://callback"},
+			redirectURL:  "httpfoo://callback",
+			want:         true,
+		},
+		// A protocol-relative URL that fails to parse must not fall through; a
+		// browser resolves "//2130706433" to a decimal-IP host (127.0.0.1).
+		{
+			desc:         "unparseable protocol-relative url rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  "//2130706433/%zz",
+			want:         false,
+		},
+		{
+			desc:         "unparseable url with no scheme rejected",
+			uriAllowList: []string{"**", "*"},
+			redirectURL:  "2130706433/%zz",
+			want:         false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *tst.T) {
+			config := conf.GlobalConfiguration{
+				SiteURL:      "https://site.example.com",
+				URIAllowList: c.uriAllowList,
+				JWT:          conf.JWTConfiguration{Secret: "testsecret"},
+			}
+			require.NoError(t, config.ApplyDefaults())
+			require.Equal(t, c.want, IsRedirectURLValid(&config, c.redirectURL))
+		})
+	}
+}
+
 func TestGetIPAddressWithSBFF(t *tst.T) {
 	testCases := []struct {
 		name       string
