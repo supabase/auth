@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	googleUser           string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","email":"google@example.com","verified_email":true}}`
-	googleUserWrongEmail string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","email":"other@example.com","verified_email":true}}`
-	googleUserNoEmail    string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","verified_email":false}}`
+	googleUser           string = `{"id":"googleTestId","name":"Google Test","given_name":"Google","family_name":"Test","picture":"http://example.com/avatar","email":"google@example.com","verified_email":true,"locale":"en"}`
+	googleUserWrongEmail string = `{"id":"googleTestId","name":"Google Test","given_name":"Google","family_name":"Test","picture":"http://example.com/avatar","email":"other@example.com","verified_email":true,"locale":"en"}`
+	googleUserNoEmail    string = `{"id":"googleTestId","name":"Google Test","given_name":"Google","family_name":"Test","picture":"http://example.com/avatar","verified_email":false}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalGoogle() {
