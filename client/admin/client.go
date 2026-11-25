@@ -95,8 +95,9 @@ func (e OAuthClientSchemaGrantTypes) Valid() bool {
 
 // Defines values for OAuthClientSchemaRegistrationType.
 const (
-	Dynamic OAuthClientSchemaRegistrationType = "dynamic"
-	Manual  OAuthClientSchemaRegistrationType = "manual"
+	Dynamic          OAuthClientSchemaRegistrationType = "dynamic"
+	Manual           OAuthClientSchemaRegistrationType = "manual"
+	MetadataDocument OAuthClientSchemaRegistrationType = "metadata_document"
 )
 
 // Valid indicates whether the value is a known member of the OAuthClientSchemaRegistrationType enum.
@@ -105,6 +106,8 @@ func (e OAuthClientSchemaRegistrationType) Valid() bool {
 	case Dynamic:
 		return true
 	case Manual:
+		return true
+	case MetadataDocument:
 		return true
 	default:
 		return false
@@ -495,6 +498,9 @@ type MFAFactorSchema struct {
 type OAuthClientSchema struct {
 	// ClientId Unique client identifier
 	ClientId *string `json:"client_id,omitempty"`
+
+	// ClientIdUrl Client ID Metadata Document URL the client uses as its client_id (only for `metadata_document` clients)
+	ClientIdUrl *string `json:"client_id_url,omitempty"`
 
 	// ClientName Human-readable name of the client application
 	ClientName *string `json:"client_name,omitempty"`

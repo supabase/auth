@@ -20,6 +20,13 @@ const (
 	OAuthServerClientTypeConfidential = "confidential"
 )
 
+// OAuth client registration type constants
+const (
+	OAuthServerRegistrationTypeDynamic          = "dynamic"
+	OAuthServerRegistrationTypeManual           = "manual"
+	OAuthServerRegistrationTypeMetadataDocument = "metadata_document"
+)
+
 // OAuth token endpoint authentication method constants
 const (
 	TokenEndpointAuthMethodNone              = "none"
@@ -40,6 +47,7 @@ type OAuthServerClient struct {
 	ClientName   *string    `json:"client_name,omitempty" db:"client_name"`
 	ClientURI    *string    `json:"client_uri,omitempty" db:"client_uri"`
 	LogoURI      *string    `json:"logo_uri,omitempty" db:"logo_uri"`
+	ClientIDURL  *string    `json:"client_id_url,omitempty" db:"client_id_url"` // Client ID Metadata Document URL, if any
 	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
@@ -62,8 +70,14 @@ func (c *OAuthServerClient) Validate() error {
 		return fmt.Errorf("id is required")
 	}
 
-	if c.RegistrationType != "dynamic" && c.RegistrationType != "manual" {
-		return fmt.Errorf("registration_type must be 'dynamic' or 'manual'")
+	switch c.RegistrationType {
+	case OAuthServerRegistrationTypeDynamic, OAuthServerRegistrationTypeManual:
+	case OAuthServerRegistrationTypeMetadataDocument:
+		if c.ClientIDURL == nil || *c.ClientIDURL == "" {
+			return fmt.Errorf("client_id_url is required for metadata document clients")
+		}
+	default:
+		return fmt.Errorf("registration_type must be 'dynamic', 'manual' or 'metadata_document'")
 	}
 
 	if c.ClientType != OAuthServerClientTypePublic && c.ClientType != OAuthServerClientTypeConfidential {
@@ -139,6 +153,15 @@ func (c *OAuthServerClient) GetGrantTypes() []string {
 // SetGrantTypes sets the grant types from a slice
 func (c *OAuthServerClient) SetGrantTypes(types []string) {
 	c.GrantTypes = strings.Join(types, ",")
+}
+
+// Identifier returns the client_id the client uses in OAuth requests: its
+// Client ID Metadata Document URL if it has one, otherwise its ID.
+func (c *OAuthServerClient) Identifier() string {
+	if c.ClientIDURL != nil && *c.ClientIDURL != "" {
+		return *c.ClientIDURL
+	}
+	return c.ID.String()
 }
 
 // IsPublic returns true if the client is a public client
@@ -223,6 +246,18 @@ func (e InvalidRedirectURIError) Error() string {
 func FindOAuthServerClientByID(tx *storage.Connection, id uuid.UUID) (*OAuthServerClient, error) {
 	client := &OAuthServerClient{}
 	if err := tx.Q().Where("id = ? AND deleted_at IS NULL", id).First(client); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, OAuthServerClientNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding OAuth client")
+	}
+	return client, nil
+}
+
+// FindOAuthServerClientByClientIDURL finds an OAuth client by its Client ID Metadata Document URL
+func FindOAuthServerClientByClientIDURL(tx *storage.Connection, clientIDURL string) (*OAuthServerClient, error) {
+	client := &OAuthServerClient{}
+	if err := tx.Q().Where("client_id_url = ? AND deleted_at IS NULL", clientIDURL).First(client); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, OAuthServerClientNotFoundError{}
 		}
