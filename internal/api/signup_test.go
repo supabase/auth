@@ -169,3 +169,134 @@ func (ts *SignupTestSuite) TestSignupRequestBodyTooLarge() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 	require.Equal(ts.T(), "request_entity_too_large", data["error_code"])
 }
+
+func (ts *SignupTestSuite) TestSignup_Autoconfirm_CreateSessionFalse() {
+	ts.Config.Mailer.Autoconfirm = true
+	defer func() {
+		ts.Config.Mailer.Autoconfirm = false
+	}()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":          "nosession@example.com",
+		"password":       "test123456",
+		"create_session": false,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var user models.User
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&user))
+	assert.Equal(ts.T(), "nosession@example.com", user.GetEmail())
+	assert.NotNil(ts.T(), user.EmailConfirmedAt)
+
+	// Verify no session was created in DB
+	sessions, err := models.FindAllSessionsForUser(ts.API.db, user.ID, false)
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), sessions)
+}
+
+func (ts *SignupTestSuite) TestSignup_Autoconfirm_CreateSessionTrue() {
+	ts.Config.Mailer.Autoconfirm = true
+	defer func() {
+		ts.Config.Mailer.Autoconfirm = false
+	}()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":          "withsession@example.com",
+		"password":       "test123456",
+		"create_session": true,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var token AccessTokenResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&token))
+	assert.NotEmpty(ts.T(), token.Token)
+	assert.NotEmpty(ts.T(), token.RefreshToken)
+	assert.Equal(ts.T(), "withsession@example.com", token.User.GetEmail())
+
+	// Verify session exists in DB
+	sessions, err := models.FindAllSessionsForUser(ts.API.db, token.User.ID, false)
+	require.NoError(ts.T(), err)
+	assert.NotEmpty(ts.T(), sessions)
+}
+
+func (ts *SignupTestSuite) TestSignup_Autoconfirm_CreateSessionDefault() {
+	ts.Config.Mailer.Autoconfirm = true
+	defer func() {
+		ts.Config.Mailer.Autoconfirm = false
+	}()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    "defaultsession@example.com",
+		"password": "test123456",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var token AccessTokenResponse
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&token))
+	assert.NotEmpty(ts.T(), token.Token)
+	assert.NotEmpty(ts.T(), token.RefreshToken)
+	assert.Equal(ts.T(), "defaultsession@example.com", token.User.GetEmail())
+
+	// Verify session exists in DB
+	sessions, err := models.FindAllSessionsForUser(ts.API.db, token.User.ID, false)
+	require.NoError(ts.T(), err)
+	assert.NotEmpty(ts.T(), sessions)
+}
+
+func (ts *SignupTestSuite) TestSignup_Phone_Autoconfirm_CreateSessionFalse() {
+	ts.Config.External.Phone.Enabled = true
+	ts.Config.Sms.Autoconfirm = true
+	defer func() {
+		ts.Config.External.Phone.Enabled = false
+		ts.Config.Sms.Autoconfirm = false
+	}()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"phone":          "1234567890",
+		"password":       "test123456",
+		"create_session": false,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var user models.User
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&user))
+	assert.Equal(ts.T(), "1234567890", user.GetPhone())
+	assert.NotNil(ts.T(), user.PhoneConfirmedAt)
+
+	// Verify no session was created in DB
+	sessions, err := models.FindAllSessionsForUser(ts.API.db, user.ID, false)
+	require.NoError(ts.T(), err)
+	assert.Empty(ts.T(), sessions)
+}
