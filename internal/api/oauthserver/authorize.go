@@ -130,7 +130,10 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	// From this point on, we have valid client + redirect_uri + all params, so we can redirect errors
 	// validate all other parameters - now we can redirect errors
 	if err := s.validateRemainingAuthorizeParams(params); err != nil {
-		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorInvalidRequest, err.Error(), params.State)
+		errorRedirectURL, berr := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorInvalidRequest, err.Error(), params.State)
+		if berr != nil {
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid redirect_uri")
+		}
 		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
 		return nil
 	}
@@ -150,7 +153,10 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 
 	if err := models.CreateOAuthServerAuthorization(db, authorization); err != nil {
 		// Error creating authorization - redirect with server_error
-		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorServerError, "error creating authorization", params.State)
+		errorRedirectURL, berr := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorServerError, "error creating authorization", params.State)
+		if berr != nil {
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid redirect_uri")
+		}
 		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
 		return nil
 	}
@@ -161,7 +167,10 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	// Redirect to authorization path with authorization_id
 	if config.OAuthServer.AuthorizationPath == "" {
 		// OAuth authorization path not configured - redirect with server_error
-		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorServerError, "oauth authorization path not configured", params.State)
+		errorRedirectURL, berr := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorServerError, "oauth authorization path not configured", params.State)
+		if berr != nil {
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid redirect_uri")
+		}
 		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
 		return nil
 	}
@@ -197,6 +206,7 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 	var (
 		authorization     *models.OAuthServerAuthorization
 		shouldAutoApprove bool
+		autoApproveURL    string
 	)
 
 	// Lookup, user association, consent check, and optional auto-approve
@@ -250,6 +260,12 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 			if err := auth.Approve(tx); err != nil {
 				return apierrors.NewInternalServerError("Error auto-approving authorization").WithInternalError(err)
 			}
+
+			// built inside the transaction so an invalid redirect URI rolls back the approval
+			var berr error
+			if autoApproveURL, berr = s.buildSuccessRedirectURL(auth); berr != nil {
+				return invalidStoredRedirectURIError(berr)
+			}
 		}
 
 		authorization = auth
@@ -266,7 +282,7 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 	if shouldAutoApprove {
 		observability.LogEntrySetField(r, "auto_approved", true)
 		return shared.SendJSON(w, http.StatusOK, ConsentResponse{
-			RedirectURL: s.buildSuccessRedirectURL(authorization),
+			RedirectURL: autoApproveURL,
 		})
 	}
 
@@ -376,7 +392,10 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 			}
 
 			// Build success redirect URL
-			redirectURL = s.buildSuccessRedirectURL(authorization)
+			var berr error
+			if redirectURL, berr = s.buildSuccessRedirectURL(authorization); berr != nil {
+				return invalidStoredRedirectURIError(berr)
+			}
 
 			observability.LogEntrySetField(r, "oauth_consent_action", string(OAuthServerConsentActionApprove))
 
@@ -392,7 +411,10 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 			if authorization.State != nil {
 				state = *authorization.State
 			}
-			redirectURL = s.buildErrorRedirectURL(authorization.RedirectURI, oAuth2ErrorAccessDenied, "User denied the request", state)
+			var berr error
+			if redirectURL, berr = s.buildErrorRedirectURL(authorization.RedirectURI, oAuth2ErrorAccessDenied, "User denied the request", state); berr != nil {
+				return invalidStoredRedirectURIError(berr)
+			}
 
 			observability.LogEntrySetField(r, "oauth_consent_action", string(OAuthServerConsentActionDeny))
 		}
@@ -550,9 +572,10 @@ func (s *Server) validateScopes(scopeString string) error {
 func (s *Server) isValidRedirectURI(client *models.OAuthServerClient, redirectURI string) bool {
 	registeredURIs := client.GetRedirectURIs()
 	for _, registeredURI := range registeredURIs {
-		// exact string matching per OAuth2 spec
+		// exact string matching per OAuth2 spec; the registered URI is
+		// re-validated in case it was stored before validation was tightened
 		if registeredURI == redirectURI {
-			return true
+			return validateRedirectURI(registeredURI) == nil
 		}
 	}
 	return false
@@ -567,8 +590,11 @@ func (s *Server) consentCoversScopes(consent *models.OAuthServerConsent, request
 	return consent.HasAllScopes(requestedScopes)
 }
 
-func (s *Server) buildSuccessRedirectURL(authorization *models.OAuthServerAuthorization) string {
-	u, _ := url.Parse(authorization.RedirectURI)
+func (s *Server) buildSuccessRedirectURL(authorization *models.OAuthServerAuthorization) (string, error) {
+	u, err := parseRedirectURI(authorization.RedirectURI)
+	if err != nil {
+		return "", err
+	}
 	q := u.Query()
 	if authorization.AuthorizationCode != nil {
 		q.Set("code", *authorization.AuthorizationCode)
@@ -577,12 +603,15 @@ func (s *Server) buildSuccessRedirectURL(authorization *models.OAuthServerAuthor
 		q.Set("state", *authorization.State)
 	}
 	u.RawQuery = q.Encode()
-	return u.String()
+	return u.String(), nil
 }
 
 // buildErrorRedirectURL builds an error redirect URL with the given parameters
-func (s *Server) buildErrorRedirectURL(redirectURI, errorCode, errorDescription, state string) string {
-	u, _ := url.Parse(redirectURI)
+func (s *Server) buildErrorRedirectURL(redirectURI, errorCode, errorDescription, state string) (string, error) {
+	u, err := parseRedirectURI(redirectURI)
+	if err != nil {
+		return "", err
+	}
 	q := u.Query()
 	q.Set("error", errorCode)
 	q.Set("error_description", errorDescription)
@@ -590,7 +619,20 @@ func (s *Server) buildErrorRedirectURL(redirectURI, errorCode, errorDescription,
 		q.Set("state", state)
 	}
 	u.RawQuery = q.Encode()
-	return u.String()
+	return u.String(), nil
+}
+
+// parseRedirectURI validates a redirect URI before it is handed back to a
+// client, so a URI stored before validation was tightened can't be used
+func parseRedirectURI(redirectURI string) (*url.URL, error) {
+	if err := validateRedirectURI(redirectURI); err != nil {
+		return nil, err
+	}
+	return url.Parse(redirectURI)
+}
+
+func invalidStoredRedirectURIError(err error) error {
+	return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid redirect_uri").WithInternalError(err)
 }
 
 // buildAuthorizationURL safely joins a base URL with a path, handling slashes correctly

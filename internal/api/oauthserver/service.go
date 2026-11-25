@@ -217,6 +217,12 @@ func validateRedirectURI(uri string) error {
 		return fmt.Errorf("fragment not allowed in redirect URI")
 	}
 
+	// redirect URIs are stored comma-separated; a comma would split one
+	// validated URI into several unvalidated ones
+	if strings.Contains(uri, ",") {
+		return fmt.Errorf("must not contain ','")
+	}
+
 	return nil
 }
 
