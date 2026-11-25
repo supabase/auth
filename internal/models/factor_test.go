@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
@@ -203,5 +204,24 @@ func (ts *FactorTestSuite) TestDowngradeSessionsToAAL1RemovesAMRClaim() {
 				require.NotEqual(ts.T(), c.authMethod.String(), claim.GetAuthenticationMethod())
 			}
 		})
+	}
+}
+
+// TestFactorsCanShareLastChallengedAt guards against the global unique
+// constraint on last_challenged_at (#2854): factors of two users challenged
+// at the same instant must both be recorded.
+func (ts *FactorTestSuite) TestFactorsCanShareLastChallengedAt() {
+	other, err := NewUser("", "another@example.com", "secret", "test", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(other))
+
+	otherFactor := NewTOTPFactor(other, "anothername")
+	require.NoError(ts.T(), otherFactor.SetSecret("topsecret", false, "", ""))
+	require.NoError(ts.T(), ts.db.Create(otherFactor))
+
+	now := time.Now()
+	for _, f := range []*Factor{ts.TestFactor, otherFactor} {
+		f.LastChallengedAt = &now
+		require.NoError(ts.T(), ts.db.UpdateOnly(f, "last_challenged_at"))
 	}
 }
