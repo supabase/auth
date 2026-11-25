@@ -192,6 +192,34 @@ func (a *API) adminUserGet(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, user)
 }
 
+// adminUserGetByEmail returns information about a single user by email
+func (a *API) adminUserGetByEmail(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
+	email := r.URL.Query().Get("email")
+	if email == "" {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "email query parameter is required")
+	}
+
+	email, err := a.validateEmail(email)
+	if err != nil {
+		return err
+	}
+
+	aud := a.requestAud(ctx, r)
+
+	user, err := models.FindUserByEmailAndAudience(db, email, aud)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeUserNotFound, "User not found")
+		}
+		return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
+	}
+
+	return sendJSON(w, http.StatusOK, user)
+}
+
 // adminUserUpdate updates a single user object
 func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
