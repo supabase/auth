@@ -767,7 +767,13 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	otp := params.otp
 	recipientEmail := params.recipientEmail
 	if recipientEmail == "" {
-		recipientEmail = u.GetEmail()
+		if params.emailActionType == mail.EmailChangeVerification {
+			// The change is confirmed through the new address, and an
+			// anonymous user linking an email has no current address.
+			recipientEmail = u.EmailChange
+		} else {
+			recipientEmail = u.GetEmail()
+		}
 	}
 
 	if params.emailActionType != mail.EmailChangeVerification {
@@ -921,6 +927,10 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		errors.Is(err, validateclient.ErrInvalidEmailFormat),
 		errors.Is(err, validateclient.ErrInvalidEmailDNS):
 
+		var validationErr *validateclient.RecipientValidationError
+		if errors.As(err, &validationErr) {
+			recipientEmail = validationErr.Recipient
+		}
 		emailErrorsCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("type", params.emailActionType)))
 		return apierrors.NewBadRequestError(
 			apierrors.ErrorCodeEmailAddressInvalid,
