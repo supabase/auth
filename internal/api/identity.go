@@ -170,7 +170,7 @@ func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
+func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, providerType string, emailOptional bool) (*models.User, error) {
 	targetUser := getTargetUser(ctx)
 	identity, terr := models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType)
 	if terr != nil {
@@ -203,20 +203,34 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 			}
 			return nil, terr
 		}
-		if !userData.Metadata.EmailVerified {
-			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
+
+		// If email is still empty and the provider allows optional email,
+		// skip the email confirmation flow and just update user state.
+		// This mirrors the behaviour of createAccountFromExternalIdentity
+		// which uses hasEmails := !emailOptional || email != "".
+		if targetUser.GetEmail() == "" && emailOptional {
+			if targetUser.IsAnonymous {
+				targetUser.IsAnonymous = false
+				if terr := tx.UpdateOnly(targetUser, "is_anonymous"); terr != nil {
+					return nil, terr
+				}
+			}
+		} else {
+			if !userData.Metadata.EmailVerified {
+				if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
+					return nil, terr
+				}
+				return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))
+			}
+			if terr := targetUser.Confirm(tx); terr != nil {
 				return nil, terr
 			}
-			return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))
-		}
-		if terr := targetUser.Confirm(tx); terr != nil {
-			return nil, terr
-		}
 
-		if targetUser.IsAnonymous {
-			targetUser.IsAnonymous = false
-			if terr := tx.UpdateOnly(targetUser, "is_anonymous"); terr != nil {
-				return nil, terr
+			if targetUser.IsAnonymous {
+				targetUser.IsAnonymous = false
+				if terr := tx.UpdateOnly(targetUser, "is_anonymous"); terr != nil {
+					return nil, terr
+				}
 			}
 		}
 	}
