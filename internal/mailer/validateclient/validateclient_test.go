@@ -12,6 +12,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/mailer/noopclient"
 )
 
 func TestEmalValidatorService(t *testing.T) {
@@ -343,4 +345,24 @@ func TestValidateEmailExtended(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestMailSkipsValidatedAddresses(t *testing.T) {
+	var calls atomic.Int64
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		fmt.Fprintln(w, `{"valid": true}`)
+	}))
+	defer ts.Close()
+
+	cfg := &conf.GlobalConfiguration{}
+	cfg.Mailer.EmailValidationServiceURL = ts.URL
+	mc := New(cfg, noopclient.New())
+
+	ctx := mailer.WithValidated(context.Background(), "checked@example.com")
+	require.NoError(t, mc.Mail(ctx, "checked@example.com", "subject", "body", nil, "test"))
+	require.Equal(t, int64(0), calls.Load(), "an address marked as validated is not checked again")
+
+	require.NoError(t, mc.Mail(ctx, "other@example.com", "subject", "body", nil, "test"))
+	require.Equal(t, int64(1), calls.Load(), "any other address is still checked")
 }

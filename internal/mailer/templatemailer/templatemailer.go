@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -280,6 +282,31 @@ func (m *Mailer) EmailChangeMail(r *http.Request, user *models.User, otpNew, otp
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+
+	// The mails below are sent concurrently, so when one address fails
+	// validation the mail to the other one has already gone out, with a link
+	// that can never be used because the caller does not store the tokens on
+	// an error. Validate every address before sending to any of them, all at
+	// once, and report the first rejected address in the order above, so a
+	// rejection waits for the other check to finish. Mail does not check the
+	// addresses again. A client that sends in the background is not a
+	// Validator: it never returned a validation error to begin with.
+	if v, ok := m.mc.(mailer.Validator); ok && len(emails) > 1 {
+		errs := make([]error, len(emails))
+		addresses := make([]string, len(emails))
+		var wg sync.WaitGroup
+		for i, email := range emails {
+			addresses[i] = email.Address
+			wg.Go(func() { errs[i] = v.Validate(ctx, email.Address) })
+		}
+		wg.Wait()
+		for _, err := range errs {
+			if err != nil {
+				return err
+			}
+		}
+		ctx = mailer.WithValidated(ctx, addresses...)
+	}
 
 	errors := make(chan error, len(emails))
 	for _, email := range emails {
