@@ -77,3 +77,65 @@ func TestJwks(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenIDConfigurationIssParameterSupported(t *testing.T) {
+	cases := []struct {
+		desc               string
+		path               string
+		issuer             string
+		oauthServerEnabled bool
+		expected           bool
+	}{
+		{
+			desc:               "advertised when oauth server is enabled",
+			path:               "/.well-known/oauth-authorization-server",
+			issuer:             "https://example.com/auth/v1",
+			oauthServerEnabled: true,
+			expected:           true,
+		},
+		{
+			desc:               "advertised in openid configuration",
+			path:               "/.well-known/openid-configuration",
+			issuer:             "https://example.com/auth/v1",
+			oauthServerEnabled: true,
+			expected:           true,
+		},
+		{
+			desc:               "not advertised when oauth server is disabled",
+			path:               "/.well-known/openid-configuration",
+			issuer:             "https://example.com/auth/v1",
+			oauthServerEnabled: false,
+			expected:           false,
+		},
+		{
+			desc:               "not advertised when issuer is not configured",
+			path:               "/.well-known/oauth-authorization-server",
+			issuer:             "",
+			oauthServerEnabled: true,
+			expected:           false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			mockAPI, _, err := setupAPIForTest()
+			require.NoError(t, err)
+			mockAPI.config.JWT.Issuer = c.issuer
+			mockAPI.config.OAuthServer.Enabled = c.oauthServerEnabled
+
+			req := httptest.NewRequest(http.MethodGet, c.path, nil)
+			w := httptest.NewRecorder()
+			mockAPI.handler.ServeHTTP(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+
+			var data map[string]interface{}
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&data))
+			require.Equal(t, c.issuer, data["issuer"])
+			if c.expected {
+				require.Equal(t, true, data["authorization_response_iss_parameter_supported"])
+			} else {
+				require.NotContains(t, data, "authorization_response_iss_parameter_supported")
+			}
+		})
+	}
+}

@@ -55,6 +55,9 @@ type OpenIDConfigurationResponse struct {
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
 	ClaimsSupported                   []string `json:"claims_supported,omitempty"`       // OIDC-specific
 	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"` // OAuth 2.1/PKCE
+
+	// Authorization Response Parameters (RFC 9207)
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported,omitempty"`
 }
 
 // WellKnownOpenID handles both OIDC Discovery and OAuth 2.0 Authorization Server Metadata endpoints
@@ -107,6 +110,11 @@ func (a *API) WellKnownOpenID(w http.ResponseWriter, r *http.Request) error {
 			"preferred_username",
 			"updated_at",
 		},
+	}
+
+	// Advertise the iss authorization response parameter per RFC 9207 when an issuer is configured
+	if config.OAuthServer.Enabled && config.JWT.Issuer != "" {
+		response.AuthorizationResponseIssParameterSupported = true
 	}
 
 	// Include registration endpoint if dynamic registration is enabled

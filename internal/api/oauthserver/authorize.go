@@ -576,6 +576,7 @@ func (s *Server) buildSuccessRedirectURL(authorization *models.OAuthServerAuthor
 	if authorization.State != nil && *authorization.State != "" {
 		q.Set("state", *authorization.State)
 	}
+	s.setIssuerParam(q)
 	u.RawQuery = q.Encode()
 	return u.String()
 }
@@ -589,8 +590,16 @@ func (s *Server) buildErrorRedirectURL(redirectURI, errorCode, errorDescription,
 	if state != "" {
 		q.Set("state", state)
 	}
+	s.setIssuerParam(q)
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+// setIssuerParam adds the issuer to the authorization response per RFC 9207
+func (s *Server) setIssuerParam(q url.Values) {
+	if issuer := s.config.JWT.Issuer; issuer != "" {
+		q.Set("iss", issuer)
+	}
 }
 
 // buildAuthorizationURL safely joins a base URL with a path, handling slashes correctly
