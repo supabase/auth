@@ -382,6 +382,13 @@ func (a *API) recoverVerify(r *http.Request, conn *storage.Connection, user *mod
 				return terr
 			}
 
+			// a password set before the email was confirmed may belong to
+			// someone who doesn't own the email, so it must not survive
+			// confirmation
+			if terr = user.ClearUnconfirmedPassword(tx); terr != nil {
+				return terr
+			}
+
 			if terr = user.Confirm(tx); terr != nil {
 				return terr
 			}

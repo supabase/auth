@@ -52,6 +52,8 @@ type API struct {
 	mailer       mailer.Mailer
 	oidcCache    *provider.OIDCProviderCache
 
+	clientAssertionCache *provider.ClientAssertionCache
+
 	captchaVerifier security.CaptchaVerifier
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
@@ -105,6 +107,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	}
 
 	api.oidcCache = provider.NewOIDCProviderCache(globalConfig.External.OIDCProviderCacheTTL)
+	api.clientAssertionCache = provider.NewClientAssertionCache()
 
 	for _, o := range opt {
 		o.apply(api)
@@ -278,18 +281,26 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Get("/", api.Reauthenticate)
 		})
 
-		r.With(api.requireAuthentication).Route("/user", func(r *router) {
-			r.Get("/", api.UserGet)
-			r.With(api.limitHandler(api.limiterOpts.User)).Put("/", api.UserUpdate)
+		// Authentication is applied per route here: OAuth client access tokens
+		// may read the user (GET /user) but must not modify it. Every other
+		// /user route must use requireAuthentication.
+		//
+		// TEMPORARY: GET /user accepts OAuth client tokens only so that existing
+		// projects reading the user with them (e.g. supabase.auth.getUser()) keep
+		// working. OAuth clients should use GET /oauth/userinfo instead; this
+		// will be revisited soon to reject OAuth client tokens on /user entirely.
+		r.Route("/user", func(r *router) {
+			r.With(api.requireAuthenticationAllowOAuthClient).Get("/", api.UserGet)
+			r.With(api.requireAuthentication).With(api.limitHandler(api.limiterOpts.User)).Put("/", api.UserUpdate)
 
-			r.Route("/identities", func(r *router) {
+			r.With(api.requireAuthentication).Route("/identities", func(r *router) {
 				r.Use(api.requireManualLinkingEnabled)
 				r.Get("/authorize", api.LinkIdentity)
 				r.Delete("/{identity_id}", api.DeleteIdentity)
 			})
 
 			// OAuth grant management endpoints
-			r.Route("/oauth/grants", func(r *router) {
+			r.With(api.requireAuthentication).Route("/oauth/grants", func(r *router) {
 				r.Use(api.requireOAuthServerEnabled)
 				r.Get("/", api.oauthServer.UserListOAuthGrants)
 				r.Delete("/", api.oauthServer.UserRevokeOAuthGrant)
@@ -349,6 +360,15 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				With(api.verifyCaptcha).Post("/", api.SingleSignOn)
 
 			r.Route("/saml", func(r *router) {
+				r.Get("/metadata", api.SAMLMetadata)
+
+				r.With(api.limitHandler(api.limiterOpts.SAMLAssertion)).
+					Post("/acs", api.SamlAcs)
+			})
+
+			// Dedicated endpoints for SSO providers with an isolated scope,
+			// whose ACS URL and entity ID are scoped to their own ID.
+			r.Route("/{sso_provider_id}/saml", func(r *router) {
 				r.Get("/metadata", api.SAMLMetadata)
 
 				r.With(api.limitHandler(api.limiterOpts.SAMLAssertion)).
@@ -452,7 +472,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
 
 			// OIDC UserInfo endpoint (requires user authentication via Bearer token)
-			r.With(api.requireAuthentication).Get("/userinfo", api.oauthServer.OAuthUserInfo)
+			r.With(api.requireAuthenticationAllowOAuthClient).Get("/userinfo", api.oauthServer.OAuthUserInfo)
 
 			// OAuth 2.1 Authorization endpoints
 			// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider

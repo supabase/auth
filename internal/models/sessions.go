@@ -105,6 +105,12 @@ func (Session) TableName() string {
 	return tableName
 }
 
+// IsOAuthClientSession reports whether the session was issued to a third-party
+// OAuth client through the OAuth 2.1 server.
+func (s *Session) IsOAuthClientSession() bool {
+	return s.OAuthClientID != nil && *s.OAuthClientID != uuid.Nil
+}
+
 func (s *Session) IsRecovery() bool {
 	for _, claim := range s.AMRClaims {
 		amStr := claim.GetAuthenticationMethod()
@@ -351,7 +357,7 @@ func updateFactorAssociatedSessions(tx *storage.Connection, userID, factorID uui
 }
 
 func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level string) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND (aal IS NULL OR aal < ?)", userID, level).Exec()
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND (aal IS NULL OR aal < ?) AND oauth_client_id IS NULL", userID, level).Exec()
 }
 
 // Logout deletes all sessions for a user.

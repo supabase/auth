@@ -12,6 +12,7 @@ const (
 	linkedinUserNoProfilePic string = `{"id":"linkedinTestId","firstName":{"localized":{"en_US":"Linkedin"},"preferredLocale":{"country":"US","language":"en"}},"lastName":{"localized":{"en_US":"Test"},"preferredLocale":{"country":"US","language":"en"}},"profilePicture":{"displayImage~":{"elements":[]}}}`
 	linkedinEmail            string = `{"elements": [{"handle": "","handle~": {"emailAddress": "linkedin@example.com"}}]}`
 	linkedinWrongEmail       string = `{"elements": [{"handle": "","handle~": {"emailAddress": "other@example.com"}}]}`
+	linkedinNoEmail          string = `{"elements": []}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalLinkedin() {
@@ -157,4 +158,34 @@ func (ts *ExternalTestSuite) TestSignupExternalLinkedin_MissingProfilePic() {
 	u := performAuthorization(ts, "linkedin", code, "")
 
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "linkedin@example.com", "Linkedin Test", "linkedinTestId", "")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalLinkedin_MissingEmail() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := LinkedinTestSignupSetup(ts, &tokenCount, &userCount, code, linkedinUser, linkedinNoEmail)
+	defer server.Close()
+
+	// LinkedIn returning an empty elements array for the email endpoint must
+	// not panic (index out of range) and crash the OAuth callback. The callback
+	// should redirect gracefully (here: an error because no email is available)
+	// rather than return a 500 from a recovered panic.
+	w := performAuthorizationRequest(ts, "linkedin", "")
+	ts.Require().Equal(http.StatusFound, w.Code)
+	u, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err)
+	state := u.Query().Get("state")
+
+	testURL, err := url.Parse("http://localhost/callback")
+	ts.Require().NoError(err)
+	v := testURL.Query()
+	v.Set("code", code)
+	v.Set("state", state)
+	testURL.RawQuery = v.Encode()
+
+	req := httptest.NewRequest(http.MethodGet, testURL.String(), nil)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	ts.Equal(http.StatusFound, w.Code)
 }

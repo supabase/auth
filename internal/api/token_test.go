@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -956,4 +957,42 @@ func TestRefreshTokenGrantParamsValidate(t *testing.T) {
 
 	p.RefreshToken = (&crypto.RefreshToken{}).Encode(make([]byte, 32))
 	require.NoError(t, p.Validate())
+}
+
+func (ts *TokenTestSuite) TestReverifyPassword() {
+	ctx := context.Background()
+	db := ts.API.db
+	enc := ts.Config.Security.DBEncryption
+
+	ts.Run("accepts when another sign-in re-encrypted the same password", func() {
+		u, err := models.FindUserByID(db, ts.User.ID)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), u.SetPassword(ctx, "password", true, enc.EncryptionKeyID, enc.EncryptionKey))
+		require.NoError(ts.T(), db.UpdateOnly(u, "encrypted_password"))
+
+		ok, hash, err := reverifyPassword(ctx, db, ts.User.ID, "password", enc.DecryptionKeys)
+		require.NoError(ts.T(), err)
+		require.True(ts.T(), ok)
+		require.Equal(ts.T(), *u.EncryptedPassword, hash, "should return the stored hash it checked against")
+	})
+
+	ts.Run("rejects when the password was changed", func() {
+		u, err := models.FindUserByID(db, ts.User.ID)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), u.SetPassword(ctx, "new-password", true, enc.EncryptionKeyID, enc.EncryptionKey))
+		require.NoError(ts.T(), u.UpdatePassword(db, nil))
+
+		ok, _, err := reverifyPassword(ctx, db, ts.User.ID, "password", enc.DecryptionKeys)
+		require.NoError(ts.T(), err)
+		require.False(ts.T(), ok)
+	})
+
+	ts.Run("rejects when the user no longer exists", func() {
+		require.NoError(ts.T(), db.Destroy(ts.User))
+
+		ok, hash, err := reverifyPassword(ctx, db, ts.User.ID, "password", enc.DecryptionKeys)
+		require.NoError(ts.T(), err)
+		require.False(ts.T(), ok)
+		require.Empty(ts.T(), hash)
+	})
 }

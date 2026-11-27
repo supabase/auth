@@ -209,6 +209,11 @@ func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) 
 		session := getSession(ctx)
 		user := getUser(ctx)
 
+		// Admin endpoints do not accept OAuth client access tokens.
+		if session != nil && session.IsOAuthClientSession() {
+			return nil, oauthClientTokenNotAllowedError()
+		}
+
 		if user != nil && user.IsBanned() {
 			return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 		}

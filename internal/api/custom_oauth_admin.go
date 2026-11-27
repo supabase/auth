@@ -10,6 +10,7 @@ import (
 	popslices "github.com/gobuffalo/pop/v6/slices"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -58,6 +59,15 @@ type AdminCustomOAuthProviderParams struct {
 	AuthorizationParams   map[string]interface{} `json:"authorization_params,omitempty"`
 	Enabled               *bool                  `json:"enabled,omitempty"`
 	EmailOptional         *bool                  `json:"email_optional,omitempty"`
+
+	// ClientAuthMethod is how the server authenticates to the token endpoint:
+	// "client_secret" or "private_key_jwt". It defaults to "client_secret" on
+	// create; on update, omitting it keeps the current method.
+	ClientAuthMethod string `json:"client_auth_method,omitempty"`
+	// ClientAssertionAudience sets the aud claim of client assertions, which
+	// otherwise is the provider's issuer. On update, omitting it keeps the
+	// current value and an empty string removes the override.
+	ClientAssertionAudience *string `json:"client_assertion_audience,omitempty"`
 
 	// OIDC-specific fields
 	Issuer         string  `json:"issuer,omitempty"`
@@ -162,6 +172,11 @@ func (a *API) adminCustomOAuthProviderCreate(w http.ResponseWriter, r *http.Requ
 		return err
 	}
 
+	clientAuthMethod, err := validateClientAuthParams(params, providerType, nil, &config.Experimental.ClientAssertion)
+	if err != nil {
+		return err
+	}
+
 	// Validate authorization params (no reserved OAuth parameters)
 	if err := validateAuthorizationParams(params.AuthorizationParams); err != nil {
 		return err
@@ -210,21 +225,24 @@ func (a *API) adminCustomOAuthProviderCreate(w http.ResponseWriter, r *http.Requ
 
 	// Create provider model
 	provider := buildProviderFromParams(params, providerType)
+	applyClientAuthParams(provider, params, clientAuthMethod)
 
 	// For OIDC providers, fetch and validate the discovery document before persisting.
 	// This catches misconfigurations (bad issuer URL, missing endpoints) at admin time
 	// rather than failing silently at user login time.
 	if providerType == models.ProviderTypeOIDC {
-		discovery, err := fetchAndValidateDiscovery(ctx, provider.GetDiscoveryURL(), params.Issuer)
+		discovery, err := fetchOIDCDiscovery(ctx, provider.GetDiscoveryURL(), params.Issuer)
 		if err != nil {
 			return err
 		}
 		provider.SetDiscoveryCache(discovery)
 	}
 
-	// Encrypt and store client secret
-	if err := provider.SetClientSecret(params.ClientSecret, config.Security.DBEncryption); err != nil {
-		return apierrors.NewInternalServerError("Error encrypting custom OAuth provider client secret").WithInternalError(err)
+	// Encrypt and store client secret. private_key_jwt providers have none.
+	if clientAuthMethod == models.ClientAuthMethodClientSecret {
+		if err := provider.SetClientSecret(params.ClientSecret, config.Security.DBEncryption); err != nil {
+			return apierrors.NewInternalServerError("Error encrypting custom OAuth provider client secret").WithInternalError(err)
+		}
 	}
 
 	// Create in database
@@ -309,15 +327,21 @@ func (a *API) adminCustomOAuthProviderUpdate(w http.ResponseWriter, r *http.Requ
 		oldIssuer = *provider.Issuer
 	}
 
+	clientAuthMethod, err := validateClientAuthParams(params, provider.ProviderType, provider, &config.Experimental.ClientAssertion)
+	if err != nil {
+		return err
+	}
+
 	// Update provider with new non-secret values
 	if err := updateProviderFromParams(provider, params); err != nil {
 		return err
 	}
+	applyClientAuthParams(provider, params, clientAuthMethod)
 
 	// For OIDC providers, re-validate discovery when the issuer or discovery URL changes.
 	// This network call happens outside the transaction to avoid holding it open.
 	if provider.IsOIDC() && (params.Issuer != "" || params.DiscoveryURL != nil) {
-		discovery, err := fetchAndValidateDiscovery(ctx, provider.GetDiscoveryURL(), *provider.Issuer)
+		discovery, err := fetchOIDCDiscovery(ctx, provider.GetDiscoveryURL(), *provider.Issuer)
 		if err != nil {
 			return err
 		}
@@ -431,10 +455,6 @@ func validateProviderParams(params *AdminCustomOAuthProviderParams, providerType
 	if params.ClientID == "" {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_id is required")
 	}
-	if params.ClientSecret == "" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_secret is required")
-	}
-
 	// Type-specific validations
 	switch providerType {
 	case models.ProviderTypeOIDC:
@@ -454,6 +474,97 @@ func validateProviderParams(params *AdminCustomOAuthProviderParams, providerType
 	}
 
 	return nil
+}
+
+// validateClientAuthParams validates the client authentication params of a
+// create (existing is nil) or update request and returns the method the
+// provider will use. private_key_jwt is only allowed while client assertions
+// are enabled and a signing key is configured.
+func validateClientAuthParams(
+	params *AdminCustomOAuthProviderParams,
+	providerType models.ProviderType,
+	existing *models.CustomOAuthProvider,
+	assertionConfig *conf.ClientAssertionConfiguration,
+) (models.ClientAuthMethod, error) {
+	method := models.ClientAuthMethod(params.ClientAuthMethod)
+	switch {
+	case method == "" && existing != nil:
+		method = existing.ClientAuthMethod
+	case method == "":
+		method = models.ClientAuthMethodClientSecret
+	case method != models.ClientAuthMethodClientSecret && method != models.ClientAuthMethodPrivateKeyJWT:
+		return "", apierrors.NewBadRequestError(
+			apierrors.ErrorCodeValidationFailed,
+			"client_auth_method must be either 'client_secret' or 'private_key_jwt'",
+		)
+	}
+
+	assertionsAvailable := assertionConfig.Enabled && assertionConfig.SigningKey != nil
+	if !assertionsAvailable &&
+		(params.ClientAuthMethod == string(models.ClientAuthMethodPrivateKeyJWT) || params.ClientAssertionAudience != nil) {
+		return "", apierrors.NewBadRequestError(
+			apierrors.ErrorCodeValidationFailed,
+			"private_key_jwt client authentication is not enabled",
+		)
+	}
+
+	switch method {
+	case models.ClientAuthMethodClientSecret:
+		if params.ClientAssertionAudience != nil && *params.ClientAssertionAudience != "" {
+			return "", apierrors.NewBadRequestError(
+				apierrors.ErrorCodeValidationFailed,
+				"client_assertion_audience is only supported with client_auth_method 'private_key_jwt'",
+			)
+		}
+		// required on create and when switching from private_key_jwt
+		hasSecret := existing != nil && existing.ClientAuthMethod == models.ClientAuthMethodClientSecret
+		if !hasSecret && params.ClientSecret == "" {
+			return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_secret is required")
+		}
+
+	case models.ClientAuthMethodPrivateKeyJWT:
+		if params.ClientSecret != "" {
+			return "", apierrors.NewBadRequestError(
+				apierrors.ErrorCodeValidationFailed,
+				"client_secret must not be set when client_auth_method is 'private_key_jwt'",
+			)
+		}
+		if providerType != models.ProviderTypeOIDC {
+			return "", apierrors.NewBadRequestError(
+				apierrors.ErrorCodeValidationFailed,
+				"client_auth_method 'private_key_jwt' is only supported for OIDC providers",
+			)
+		}
+		if params.ClientAssertionAudience != nil && len(*params.ClientAssertionAudience) > 2048 {
+			return "", apierrors.NewBadRequestError(
+				apierrors.ErrorCodeValidationFailed,
+				"client_assertion_audience must be at most 2048 characters",
+			)
+		}
+	}
+
+	return method, nil
+}
+
+// applyClientAuthParams sets the client auth method on provider and clears the
+// fields of the other method. The client secret itself is set by the caller.
+func applyClientAuthParams(provider *models.CustomOAuthProvider, params *AdminCustomOAuthProviderParams, method models.ClientAuthMethod) {
+	provider.ClientAuthMethod = method
+
+	switch method {
+	case models.ClientAuthMethodClientSecret:
+		provider.ClientAssertionAudience = nil
+
+	case models.ClientAuthMethodPrivateKeyJWT:
+		provider.ClientSecret = ""
+		if params.ClientAssertionAudience != nil {
+			if audience := *params.ClientAssertionAudience; audience != "" {
+				provider.ClientAssertionAudience = &audience
+			} else {
+				provider.ClientAssertionAudience = nil
+			}
+		}
+	}
 }
 
 // validateProviderURLs validates URLs with SSRF protection
@@ -686,6 +797,10 @@ func validateAuthorizationParams(params map[string]interface{}) error {
 
 	return nil
 }
+
+// fetchOIDCDiscovery is a variable so tests can create OIDC providers without
+// network access.
+var fetchOIDCDiscovery = fetchAndValidateDiscovery
 
 // fetchAndValidateDiscovery fetches the OIDC discovery document via the shared
 // utility, then applies admin-only validation: required fields per the OpenID

@@ -125,10 +125,18 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 
 	data := &UserProvidedData{}
 
-	if e.Elements[0].HandleTilde.EmailAddress != "" {
+	// LinkedIn may return an empty elements array (e.g. when the email scope is
+	// not granted), so guard against indexing an empty slice rather than
+	// panicking and failing the OAuth callback with a 500.
+	var email string
+	if len(e.Elements) > 0 {
+		email = e.Elements[0].HandleTilde.EmailAddress
+	}
+
+	if email != "" {
 		// linkedin only returns the primary email which is verified for the r_emailaddress scope.
 		data.Emails = []Email{{
-			Email:    e.Elements[0].HandleTilde.EmailAddress,
+			Email:    email,
 			Primary:  true,
 			Verified: true,
 		}}
@@ -141,7 +149,7 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 		Subject:       u.ID,
 		Name:          strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
 		Picture:       avatarURL,
-		Email:         e.Elements[0].HandleTilde.EmailAddress,
+		Email:         email,
 		EmailVerified: true,
 
 		// To be deprecated

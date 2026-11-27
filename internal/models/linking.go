@@ -51,6 +51,11 @@ type AccountLinkingResult struct {
 	Identities     []*Identity
 	LinkingDomain  string
 	CandidateEmail provider.Email
+
+	// EmailTaken is set when the provider's email is unverified and already
+	// belongs to another user, so CandidateEmail.Email was cleared instead of
+	// linking to that user.
+	EmailTaken bool
 }
 
 // DetermineAccountLinking uses the provided data and database state to compute a decision on whether:
@@ -106,13 +111,15 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 		if terr != nil {
 			return AccountLinkingResult{}, terr
 		}
-		if user != nil {
+		emailTaken := user != nil
+		if emailTaken {
 			candidateEmail.Email = ""
 		}
 		return AccountLinkingResult{
 			Decision:       CreateAccount,
 			LinkingDomain:  candidateLinkingDomain,
 			CandidateEmail: candidateEmail,
+			EmailTaken:     emailTaken,
 		}, nil
 	}
 

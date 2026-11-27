@@ -121,6 +121,14 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
+	// Authenticate may replace user.EncryptedPassword in memory (bcrypt cost
+	// rehash), so capture the stored value first for ReEncryptPassword.
+	storedHash := *user.EncryptedPassword
+
+	// verifiedHash is the stored hash this sign-in's password check holds
+	// for. The session is only created while the row still has this value.
+	verifiedHash := storedHash
+
 	isValidPassword, shouldReEncrypt, err := user.Authenticate(ctx, db, params.Password, config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
 	if err != nil {
 		return err
@@ -144,13 +152,36 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			// directly change this in the database without
 			// calling user.UpdatePassword() because this
 			// is not a password change, just encryption
-			// change in the database
-			if err := db.UpdateOnly(user, "encrypted_password"); err != nil {
+			// change in the database. The write is skipped if
+			// the stored hash changed since it was read, so a
+			// concurrent password change is never reverted.
+			updated, err := user.ReEncryptPassword(db, storedHash)
+			if err != nil {
 				return err
+			}
+			if updated {
+				verifiedHash = *user.EncryptedPassword
+			} else {
+				// The stored hash changed after it was read, either from
+				// a password change or another sign-in re-encrypting it.
+				// Check the password again so a password change made
+				// during this sign-in is not bypassed.
+				isValidPassword, verifiedHash, err = reverifyPassword(ctx, db, user.ID, params.Password, config.Security.DBEncryption.DecryptionKeys)
+				if err != nil {
+					return err
+				}
+				if !isValidPassword {
+					observability.GetLogEntry(r).Entry.Warn("Rejected sign-in because the password changed before re-encryption")
+				}
 			}
 		}
 	}
 
+	// A password changed during sign-in is reported to the hook differently
+	// depending on when it is detected: a failed re-verification above
+	// reports an invalid password, while the hash check in the session
+	// transaction below runs after the hook, which has already seen a valid
+	// password.
 	if config.Hook.PasswordVerificationAttempt.Enabled {
 		input := v0hooks.NewPasswordVerificationAttemptInput(
 			r,
@@ -186,7 +217,24 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
-		var terr error
+		// A password change updates the hash and signs the user out in one
+		// transaction. Lock the row and check the hash is still the one that
+		// was verified, so a session is never created from a password that
+		// was changed after it was checked: either the change committed
+		// first and this sign-in is rejected, or it runs after this
+		// transaction and signs the new session out.
+		currentHash, terr := user.LockEncryptedPassword(tx)
+		if terr != nil {
+			if models.IsNotFoundError(terr) {
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
+			}
+			return apierrors.NewInternalServerError("Database error querying schema").WithInternalError(terr)
+		}
+		if currentHash != verifiedHash {
+			observability.GetLogEntry(r).Entry.Warn("Rejected sign-in because the password changed before session creation")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
+		}
+
 		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": provider,
 		}); terr != nil {
@@ -209,6 +257,32 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		Provider: provider,
 	})
 	return sendJSON(w, http.StatusOK, token)
+}
+
+// reverifyPassword checks password against the user's currently stored hash.
+// It returns false if the user no longer exists or the password doesn't match.
+// The returned hash is the stored value the check ran against.
+func reverifyPassword(ctx context.Context, db *storage.Connection, userID uuid.UUID, password string, decryptionKeys map[string]string) (bool, string, error) {
+	current, err := models.FindUserByID(db, userID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return false, "", nil
+		}
+		return false, "", apierrors.NewInternalServerError("Database error querying schema").WithInternalError(err)
+	}
+
+	// Authenticate can replace the hash in memory (bcrypt cost rehash), so
+	// capture the stored value first.
+	var storedHash string
+	if current.EncryptedPassword != nil {
+		storedHash = *current.EncryptedPassword
+	}
+
+	isValid, _, err := current.Authenticate(ctx, db, password, decryptionKeys, false, "")
+	if err != nil {
+		return false, "", err
+	}
+	return isValid, storedHash, nil
 }
 
 func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) error {

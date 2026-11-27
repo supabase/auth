@@ -67,6 +67,7 @@ func (a *API) triggerBeforeUserCreatedExternal(
 	db *storage.Connection,
 	userData *provider.UserProvidedData,
 	providerType string,
+	emailOptional bool,
 ) error {
 	if !a.hooksMgr.Enabled(v0hooks.BeforeUserCreated) {
 		return nil
@@ -102,6 +103,11 @@ func (a *API) triggerBeforeUserCreatedExternal(
 	}
 
 	if decision.Decision != models.CreateAccount {
+		return nil
+	}
+	if rejectUnverifiedEmailInUse(config, decision, emailOptional) {
+		// no user will be created: createAccountFromExternalIdentity
+		// refuses this login with email_exists
 		return nil
 	}
 	if config.DisableSignup {

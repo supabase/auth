@@ -115,12 +115,6 @@ type EmailProviderConfiguration struct {
 	MagicLinkEnabled bool `json:"magic_link_enabled" default:"true" split_words:"true"`
 }
 
-type DBAdvisorConfiguration struct {
-	Enabled             bool          `json:"enabled" default:"true"`
-	SamplingInterval    time.Duration `json:"sampling_interval" split_words:"true" default:"200ms"`
-	ObservationInterval time.Duration `json:"observation_interval" split_words:"true" default:"20s"`
-}
-
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
 	Driver    string `json:"driver" required:"true"`
@@ -139,8 +133,6 @@ type DBConfiguration struct {
 	HealthCheckPeriod time.Duration `json:"health_check_period" split_words:"true"`
 	MigrationsPath    string        `json:"migrations_path" split_words:"true" default:"./migrations"`
 	CleanupEnabled    bool          `json:"cleanup_enabled" split_words:"true" default:"false"`
-
-	Advisor DBAdvisorConfiguration `json:"advisor"`
 }
 
 func (c *DBConfiguration) Validate() error {
@@ -431,6 +423,19 @@ type ExperimentalConfiguration struct {
 	// one-time token is created. Ships dark: nothing reads the column yet.
 	// Env: GOTRUE_EXPERIMENTAL_ONE_TIME_TOKEN_EXPIRES_AT_WRITE_ENABLED=true
 	OneTimeTokenExpiresAtWriteEnabled bool `split_words:"true" default:"false"`
+
+	// ClientAssertion configures signed client assertions (private_key_jwt)
+	// for custom OAuth providers.
+	// Env: GOTRUE_EXPERIMENTAL_CLIENT_ASSERTION_*
+	ClientAssertion ClientAssertionConfiguration `split_words:"true"`
+
+	// RejectUnverifiedEmailInUseEnabled refuses an external provider login with
+	// 422 email_exists, saving nothing, when the provider reports an unverified
+	// email that already belongs to another user. Without it, such a login
+	// creates a separate user with no email. The user is expected to sign in to
+	// the existing account and link the identity manually.
+	// Env: GOTRUE_EXPERIMENTAL_REJECT_UNVERIFIED_EMAIL_IN_USE_ENABLED=true
+	RejectUnverifiedEmailInUseEnabled bool `split_words:"true" default:"false"`
 }
 
 // ReloadingConfiguration holds the configuration values for runtime
@@ -1185,6 +1190,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.JWT.SigningKey = sk
 	}
 
+	if err := config.Experimental.ClientAssertion.applyDefaults(); err != nil {
+		return err
+	}
+
 	if config.JWT.ValidMethods == nil {
 		config.JWT.ValidMethods = []string{}
 		for _, key := range config.JWT.Keys {
@@ -1390,6 +1399,10 @@ func (c *GlobalConfiguration) Validate() error {
 		if err := validatable.Validate(); err != nil {
 			return err
 		}
+	}
+
+	if err := c.Experimental.ClientAssertion.validate(&c.JWT); err != nil {
+		return err
 	}
 
 	if c.Passkey.Enabled || c.MFA.WebAuthn.EnrollEnabled || c.MFA.WebAuthn.VerifyEnabled {

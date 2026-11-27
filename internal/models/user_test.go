@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -376,6 +377,26 @@ func (ts *UserTestSuite) createUserWithEmail(email string) *User {
 	require.NoError(ts.T(), ts.db.Create(identity))
 
 	return user
+}
+
+func (ts *UserTestSuite) TestClearUnconfirmedPassword() {
+	unconfirmed := ts.createUserWithEmail("unconfirmed@example.com")
+	require.True(ts.T(), unconfirmed.HasPassword())
+	require.NoError(ts.T(), unconfirmed.ClearUnconfirmedPassword(ts.db))
+	require.False(ts.T(), unconfirmed.HasPassword())
+
+	reloaded, err := FindUserByID(ts.db, unconfirmed.ID)
+	require.NoError(ts.T(), err)
+	require.False(ts.T(), reloaded.HasPassword())
+
+	confirmed := ts.createUserWithEmail("confirmed@example.com")
+	require.NoError(ts.T(), confirmed.Confirm(ts.db))
+	require.NoError(ts.T(), confirmed.ClearUnconfirmedPassword(ts.db))
+	require.True(ts.T(), confirmed.HasPassword())
+
+	reloaded, err = FindUserByID(ts.db, confirmed.ID)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), reloaded.HasPassword())
 }
 
 func (ts *UserTestSuite) TestRemoveUnconfirmedIdentities() {
@@ -896,4 +917,183 @@ func (ts *UserTestSuite) TestAuthenticate() {
 			require.Equal(ts.T(), c.expectedHashCost, hashCost)
 		})
 	}
+}
+
+func (ts *UserTestSuite) TestReEncryptPassword() {
+	ctx := context.Background()
+	enc := ts.config.Security.DBEncryption
+
+	// loadUser returns a fresh copy of the user, as a request handler would see it
+	loadUser := func(id uuid.UUID) *User {
+		u, err := FindUserByID(ts.db, id)
+		require.NoError(ts.T(), err)
+		return u
+	}
+
+	// login re-encrypts the password the same way the password grant does
+	login := func(u *User, password string) bool {
+		storedHash := *u.EncryptedPassword
+		ok, shouldReEncrypt, err := u.Authenticate(ctx, ts.db, password, enc.DecryptionKeys, true, enc.EncryptionKeyID)
+		require.NoError(ts.T(), err)
+		require.True(ts.T(), ok)
+		require.True(ts.T(), shouldReEncrypt)
+		require.NoError(ts.T(), u.SetPassword(ctx, password, true, enc.EncryptionKeyID, enc.EncryptionKey))
+		updated, err := u.ReEncryptPassword(ts.db, storedHash)
+		require.NoError(ts.T(), err)
+		return updated
+	}
+
+	authenticates := func(id uuid.UUID, password string) bool {
+		ok, _, err := loadUser(id).Authenticate(ctx, ts.db, password, enc.DecryptionKeys, false, "")
+		require.NoError(ts.T(), err)
+		return ok
+	}
+
+	ts.Run("stores the re-encrypted hash when unchanged", func() {
+		TruncateAll(ts.db)
+		user := ts.createUser()
+
+		u := loadUser(user.ID)
+		require.True(ts.T(), login(u, "secret"))
+
+		stored := loadUser(user.ID)
+		require.Equal(ts.T(), *u.EncryptedPassword, *stored.EncryptedPassword)
+		require.NotNil(ts.T(), crypto.ParseEncryptedString(*stored.EncryptedPassword))
+		require.True(ts.T(), authenticates(user.ID, "secret"))
+	})
+
+	ts.Run("does not revert a concurrent password change", func() {
+		TruncateAll(ts.db)
+		user := ts.createUser()
+
+		// the login reads the user before the password change commits
+		loginUser := loadUser(user.ID)
+
+		changed := loadUser(user.ID)
+		require.NoError(ts.T(), changed.SetPassword(ctx, "new-secret", true, enc.EncryptionKeyID, enc.EncryptionKey))
+		require.NoError(ts.T(), changed.UpdatePassword(ts.db, nil))
+
+		require.False(ts.T(), login(loginUser, "secret"))
+
+		require.Equal(ts.T(), *changed.EncryptedPassword, *loadUser(user.ID).EncryptedPassword)
+		require.True(ts.T(), authenticates(user.ID, "new-secret"))
+		require.False(ts.T(), authenticates(user.ID, "secret"))
+	})
+
+	ts.Run("skips when a concurrent login already re-encrypted", func() {
+		TruncateAll(ts.db)
+		user := ts.createUser()
+
+		first := loadUser(user.ID)
+		second := loadUser(user.ID)
+		require.True(ts.T(), login(first, "secret"))
+		require.False(ts.T(), login(second, "secret"))
+
+		require.Equal(ts.T(), *first.EncryptedPassword, *loadUser(user.ID).EncryptedPassword)
+		require.True(ts.T(), authenticates(user.ID, "secret"))
+	})
+}
+
+func (ts *UserTestSuite) TestLockEncryptedPassword() {
+	ts.Run("returns the stored hash", func() {
+		TruncateAll(ts.db)
+		user := ts.createUser()
+
+		var hash string
+		require.NoError(ts.T(), ts.db.Transaction(func(tx *storage.Connection) error {
+			var err error
+			hash, err = user.LockEncryptedPassword(tx)
+			return err
+		}))
+		require.Equal(ts.T(), *user.EncryptedPassword, hash)
+	})
+
+	ts.Run("returns empty when the user has no password", func() {
+		TruncateAll(ts.db)
+		user := ts.createUser()
+		user.EncryptedPassword = nil
+		require.NoError(ts.T(), ts.db.UpdateOnly(user, "encrypted_password"))
+
+		var hash string
+		require.NoError(ts.T(), ts.db.Transaction(func(tx *storage.Connection) error {
+			var err error
+			hash, err = user.LockEncryptedPassword(tx)
+			return err
+		}))
+		require.Empty(ts.T(), hash)
+	})
+
+	ts.Run("blocks a password change until the transaction ends", func() {
+		TruncateAll(ts.db)
+		user := ts.createUser()
+
+		var lockerPID int
+		locked := make(chan struct{})
+		release := make(chan struct{})
+		done := make(chan error, 1)
+		go func() {
+			done <- ts.db.Transaction(func(tx *storage.Connection) error {
+				if _, err := user.LockEncryptedPassword(tx); err != nil {
+					return err
+				}
+				if err := tx.Store.Get(&lockerPID, "SELECT pg_backend_pid()"); err != nil {
+					return err
+				}
+				close(locked)
+				<-release
+				return nil
+			})
+		}()
+		select {
+		case <-locked:
+		case err := <-done:
+			ts.T().Fatalf("could not lock user row: %v", err)
+		}
+
+		changed := make(chan error, 1)
+		go func() {
+			u, err := FindUserByID(ts.db, user.ID)
+			if err != nil {
+				changed <- err
+				return
+			}
+			changed <- ts.db.RawQuery("UPDATE "+u.TableName()+" SET encrypted_password = ? WHERE id = ?", "changed", u.ID).Exec()
+		}()
+
+		// Wait until Postgres reports the change blocked by the locking
+		// transaction, instead of waiting a fixed time.
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			select {
+			case err := <-changed:
+				ts.T().Fatalf("password change finished while the row was locked (err: %v)", err)
+			default:
+			}
+			var blocked int
+			require.NoError(ts.T(), ts.db.Store.Get(&blocked, "SELECT count(*) FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))", lockerPID))
+			if blocked > 0 {
+				break
+			}
+			if time.Now().After(deadline) {
+				ts.T().Fatal("timed out waiting for the password change to block on the row lock")
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+
+		close(release)
+		require.NoError(ts.T(), <-done)
+		require.NoError(ts.T(), <-changed)
+	})
+
+	ts.Run("reports a missing user", func() {
+		TruncateAll(ts.db)
+		user := ts.createUser()
+		require.NoError(ts.T(), ts.db.Destroy(user))
+
+		err := ts.db.Transaction(func(tx *storage.Connection) error {
+			_, err := user.LockEncryptedPassword(tx)
+			return err
+		})
+		require.True(ts.T(), IsNotFoundError(err))
+	})
 }
