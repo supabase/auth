@@ -67,6 +67,25 @@ type Validator interface {
 	Validate(ctx context.Context, to string) error
 }
 
+type validatedKey struct{}
+
+// WithValidated returns a copy of ctx that marks the given addresses as
+// already checked with Validate, so a validating Client's Mail does not check
+// them again.
+func WithValidated(ctx context.Context, addresses ...string) context.Context {
+	validated := make(map[string]bool, len(addresses))
+	for _, address := range addresses {
+		validated[address] = true
+	}
+	return context.WithValue(ctx, validatedKey{}, validated)
+}
+
+// IsValidated reports whether WithValidated marked address in ctx.
+func IsValidated(ctx context.Context, address string) bool {
+	validated, _ := ctx.Value(validatedKey{}).(map[string]bool)
+	return validated[address]
+}
+
 type EmailData struct {
 	Token           string `json:"token"`
 	TokenHash       string `json:"token_hash"`

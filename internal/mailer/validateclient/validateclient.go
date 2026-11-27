@@ -136,7 +136,9 @@ type emailValidatorMailClient struct {
 }
 
 // Mail implements mailer.MailClient interface by calling validate before
-// passing the mail request to the next MailClient.
+// passing the mail request to the next MailClient. An address that
+// mailer.WithValidated marked in ctx was already checked and is not checked
+// again.
 func (o *emailValidatorMailClient) Mail(
 	ctx context.Context,
 	to string,
@@ -145,8 +147,10 @@ func (o *emailValidatorMailClient) Mail(
 	headers map[string][]string,
 	typ string,
 ) error {
-	if err := o.ev.Validate(ctx, to); err != nil {
-		return err
+	if !mailer.IsValidated(ctx, to) {
+		if err := o.ev.Validate(ctx, to); err != nil {
+			return err
+		}
 	}
 	return o.mc.Mail(
 		ctx,

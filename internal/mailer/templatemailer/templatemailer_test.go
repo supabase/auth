@@ -2,11 +2,13 @@ package templatemailer
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -230,4 +232,89 @@ func TestEmailChangeMailValidatesBeforeSending(t *testing.T) {
 			require.Equal(t, tc.sent, mc.sentTo())
 		})
 	}
+}
+
+// sendEmailChange sends the email change mails for a user at current who
+// changes to change, with secure email change on.
+func sendEmailChange(t *testing.T, cfg *conf.GlobalConfiguration, mc mailer.Client, current, change string) error {
+	externalURL, err := url.Parse("https://auth.example.com")
+	require.NoError(t, err)
+	user, err := models.NewUser("", current, "", "authenticated", nil)
+	require.NoError(t, err)
+	user.EmailChange = change
+
+	req := httptest.NewRequest(http.MethodPut, "/user", nil)
+	return New(cfg, mc, NewCache()).EmailChangeMail(
+		req, user, "111111", "222222", "", externalURL)
+}
+
+func TestEmailChangeMailChecksEachAddressOnceAndTogether(t *testing.T) {
+	// The validation service answers once both addresses are being checked
+	// (or after a second), and records how many requests it had in flight.
+	var calls, inflight, maxInflight atomic.Int64
+	both := make(chan struct{})
+	var bothOnce sync.Once
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		n := inflight.Add(1)
+		defer inflight.Add(-1)
+		for {
+			m := maxInflight.Load()
+			if n <= m || maxInflight.CompareAndSwap(m, n) {
+				break
+			}
+		}
+		if n == 2 {
+			bothOnce.Do(func() { close(both) })
+		}
+		select {
+		case <-both:
+		case <-time.After(time.Second):
+		}
+		fmt.Fprintln(w, `{"valid": true}`)
+	}))
+	defer ts.Close()
+
+	cfg := &conf.GlobalConfiguration{
+		SiteURL: "https://example.com",
+		Mailer: conf.MailerConfiguration{
+			SecureEmailChangeEnabled:  true,
+			EmailValidationServiceURL: ts.URL,
+		},
+	}
+	mc := newTestMailClient()
+	err := sendEmailChange(t, cfg, validateclient.New(cfg, mc), "current@example.com", "new@example.com")
+	require.NoError(t, err)
+	require.Equal(t, []string{"current@example.com", "new@example.com"}, mc.sentTo())
+	require.Equal(t, int64(2), calls.Load(), "each address is checked once")
+	require.Equal(t, int64(2), maxInflight.Load(), "both addresses are checked at the same time")
+}
+
+// slowValidatingTestMailClient rejects every address, after the delay given
+// for it, with an error that names the address.
+type slowValidatingTestMailClient struct {
+	*testMailClient
+	delay map[string]time.Duration
+}
+
+func (c *slowValidatingTestMailClient) Validate(ctx context.Context, to string) error {
+	time.Sleep(c.delay[to])
+	return fmt.Errorf("%s: %w", to, validateclient.ErrInvalidEmailDNS)
+}
+
+func TestEmailChangeMailReportsTheFirstRejectedAddress(t *testing.T) {
+	cfg := &conf.GlobalConfiguration{
+		SiteURL: "https://example.com",
+		Mailer:  conf.MailerConfiguration{SecureEmailChangeEnabled: true},
+	}
+	// The new address comes first, so it is the one reported, even though
+	// the check of the current address fails sooner.
+	mc := newTestMailClient()
+	err := sendEmailChange(t, cfg, &slowValidatingTestMailClient{
+		testMailClient: mc,
+		delay:          map[string]time.Duration{"new@example.com": 50 * time.Millisecond},
+	}, "current@example.com", "new@example.com")
+	require.ErrorIs(t, err, validateclient.ErrInvalidEmailDNS)
+	require.ErrorContains(t, err, "new@example.com")
+	require.Empty(t, mc.sentTo())
 }
