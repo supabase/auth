@@ -92,7 +92,7 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 	// request is just used as a placeholder in the function
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
 	r.RemoteAddr = "192.0.2.1:1234"
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "test")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "test", false)
 	require.NoError(ts.T(), err)
 
 	// load associated identities for the user
@@ -121,13 +121,64 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 			Subject: u.ID.String(),
 		},
 	}
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email", false)
 	require.ErrorIs(ts.T(), err, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked"))
 	require.Nil(ts.T(), u)
 
 	logs, err = models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), logs, 1, "an already-linked identity must not emit another audit log")
+}
+
+// TestLinkIdentityToUser_EmailOptional verifies that when a provider has
+// email_optional=true and the identity carries no email, linking it to a user
+// without an email succeeds. Previously, linkIdentityToUser always triggered
+// the email-confirmation flow (sending a confirmation email and returning 422)
+// even though createAccountFromExternalIdentity respected email_optional.
+func (ts *IdentityTestSuite) TestLinkIdentityToUser_EmailOptional() {
+	// Create an anonymous user with no email.
+	anonUser, err := models.NewUser("", "", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	anonUser.IsAnonymous = true
+	require.NoError(ts.T(), ts.API.db.Create(anonUser))
+
+	// Give them a non-email identity (e.g. phone) so they can sign in.
+	phoneIdentity, err := models.NewIdentity(anonUser, "phone", map[string]interface{}{
+		"sub":   "phone-subject-abc",
+		"phone": "+15551234567",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(phoneIdentity))
+
+	ctx := withTargetUser(context.Background(), anonUser)
+	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
+	r.RemoteAddr = "192.0.2.1:5678"
+
+	// Simulate a custom OIDC identity with no email, emailOptional=true.
+	userData := &provider.UserProvidedData{
+		Metadata: &provider.Claims{
+			Subject:       "custom-oidc-subject-no-email",
+			EmailVerified: false,
+		},
+	}
+
+	linkedUser, err := ts.API.linkIdentityToUser(r, ctx, ts.API.db, userData, "custom:oidc", true)
+	require.NoError(ts.T(), err, "linking an identity without email should succeed when emailOptional=true")
+	require.NotNil(ts.T(), linkedUser)
+
+	// Verify the new identity was created.
+	newIdentity, err := models.FindIdentityByIdAndProvider(ts.API.db, "custom-oidc-subject-no-email", "custom:oidc")
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), anonUser.ID, newIdentity.UserID)
+
+	// Verify audit log was recorded.
+	logs, err := models.FindAuditLogEntries(ts.API.db, []string{"action"}, string(models.IdentityLinkAction), nil)
+	require.NoError(ts.T(), err)
+	require.Len(ts.T(), logs, 1)
+	traits, ok := logs[0].Payload["traits"].(map[string]any)
+	require.True(ts.T(), ok)
+	require.Equal(ts.T(), newIdentity.ID.String(), traits["identity_id"])
+	require.Equal(ts.T(), "custom:oidc", traits["provider"])
 }
 
 func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
@@ -438,7 +489,7 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailEnabled() {
 		},
 	}
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
-	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "google")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "google", false)
 	require.NoError(ts.T(), err)
 
 	// Assert that identity linked notification email was sent
@@ -469,7 +520,7 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailDisabled() {
 		},
 	}
 	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
-	_, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "facebook")
+	_, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "facebook", false)
 	require.NoError(ts.T(), err)
 
 	// Assert that identity linked notification email was not sent
