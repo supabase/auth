@@ -3397,6 +3397,7 @@ paths:
                   redirect_url:
                     type: string
                     format: uri
+                    description: Client redirect URI with the authorization response parameters (`code` or `error`, `state`, and `iss` per RFC 9207 when an issuer is configured)
         400:
           $ref: "#/components/responses/BadRequestResponse"
         401:

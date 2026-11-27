@@ -666,3 +666,78 @@ func (ts *OAuthAuthorizeTestSuite) TestConsent_InvalidActionRejected() {
 	err := ts.Server.OAuthServerConsent(w, req)
 	ts.assertHTTPError(err, http.StatusBadRequest, apierrors.ErrorCodeValidationFailed)
 }
+
+func (ts *OAuthAuthorizeTestSuite) TestConsent_RedirectIncludesIssuer() {
+	originalIssuer := ts.Config.JWT.Issuer
+	ts.Config.JWT.Issuer = "https://example.com/auth/v1"
+	defer func() { ts.Config.JWT.Issuer = originalIssuer }()
+
+	for _, action := range []OAuthServerConsentAction{OAuthServerConsentActionApprove, OAuthServerConsentActionDeny} {
+		user := ts.createUser("consent-issuer-" + string(action) + "@example.com")
+		client := ts.createClient()
+		auth := ts.createAuthorization(client.ID, "openid")
+		require.NoError(ts.T(), auth.SetUser(ts.DB, user.ID))
+
+		req := ts.newRequest(http.MethodPost, auth.AuthorizationID, user, consentBody(action))
+		w := httptest.NewRecorder()
+		require.NoError(ts.T(), ts.Server.OAuthServerConsent(w, req))
+
+		var resp ConsentResponse
+		require.NoError(ts.T(), json.Unmarshal(w.Body.Bytes(), &resp))
+		parsed, err := url.Parse(resp.RedirectURL)
+		require.NoError(ts.T(), err)
+		assert.Equal(ts.T(), "https://example.com/auth/v1", parsed.Query().Get("iss"), "action: %s", action)
+	}
+}
+
+func TestBuildRedirectURLIssuer(t *testing.T) {
+	code := "test-code"
+	state := "test-state"
+
+	tests := []struct {
+		name        string
+		issuer      string
+		expectedIss string
+	}{
+		{
+			name:        "Issuer is included",
+			issuer:      "https://example.com/auth/v1",
+			expectedIss: "https://example.com/auth/v1",
+		},
+		{
+			name:        "Issuer with trailing slash is not modified",
+			issuer:      "https://example.com/auth/v1/",
+			expectedIss: "https://example.com/auth/v1/",
+		},
+		{
+			name:        "Issuer is omitted when not configured",
+			issuer:      "",
+			expectedIss: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := &Server{config: &conf.GlobalConfiguration{JWT: conf.JWTConfiguration{Issuer: tt.issuer}}}
+
+			successURL, err := url.Parse(server.buildSuccessRedirectURL(&models.OAuthServerAuthorization{
+				RedirectURI:       "https://example.com/callback?foo=bar",
+				AuthorizationCode: &code,
+				State:             &state,
+			}))
+			require.NoError(t, err)
+			assert.Equal(t, "bar", successURL.Query().Get("foo"))
+
+			errorURL, err := url.Parse(server.buildErrorRedirectURL("https://example.com/callback", oAuth2ErrorAccessDenied, "User denied the request", state))
+			require.NoError(t, err)
+
+			for _, u := range []*url.URL{successURL, errorURL} {
+				if tt.expectedIss == "" {
+					assert.NotContains(t, u.Query(), "iss")
+				} else {
+					assert.Equal(t, tt.expectedIss, u.Query().Get("iss"))
+				}
+			}
+		})
+	}
+}
